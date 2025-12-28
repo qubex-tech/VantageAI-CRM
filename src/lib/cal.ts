@@ -64,16 +64,17 @@ export class CalApiClient {
     timeZone: string = 'America/New_York'
   ): Promise<Array<{ time: string; attendeeCount: number }>> {
     try {
-      // Cal.com API v1 slots endpoint
+      // Try Cal.com API v1 endpoint first (more reliable)
+      const v1BaseUrl = this.baseUrl.replace('/v2', '/v1')
       const params = new URLSearchParams({
-        eventTypeId,
+        eventTypeId: String(eventTypeId),
         startTime: dateFrom,
         endTime: dateTo,
         timeZone,
       })
       
-      const response = await fetch(
-        `${this.baseUrl}/slots?${params.toString()}`,
+      let response = await fetch(
+        `${v1BaseUrl}/slots?${params.toString()}`,
         {
           headers: {
             'Authorization': `Bearer ${this.apiKey}`,
@@ -81,6 +82,34 @@ export class CalApiClient {
           },
         }
       )
+
+      // If v1 returns 404, try v2 endpoint with POST
+      if (!response.ok && response.status === 404) {
+        const v1ErrorText = await response.text().catch(() => 'Unknown error')
+        try {
+          response = await fetch(
+            `${this.baseUrl}/slots/available`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${this.apiKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                eventTypeId: parseInt(String(eventTypeId), 10),
+                startTime: dateFrom,
+                endTime: dateTo,
+                timeZone,
+              }),
+            }
+          )
+        } catch (v2Error) {
+          // If v2 fetch fails, throw the original v1 error
+          console.error('Cal.com slots API v2 error:', v2Error)
+          console.error('Cal.com slots API v1 error response:', v1ErrorText)
+          throw new Error(`Cal.com API error: 404 Not Found`)
+        }
+      }
 
       if (!response.ok) {
         const errorText = await response.text()

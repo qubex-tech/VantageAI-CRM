@@ -26,6 +26,11 @@ interface CalEventType {
   description?: string
 }
 
+interface AvailabilitySlot {
+  time: string
+  attendeeCount: number
+}
+
 export function CalSettings({ initialIntegration, initialMappings = [] }: CalSettingsProps) {
   const [apiKey, setApiKey] = useState(initialIntegration?.apiKey || '')
   const [loading, setLoading] = useState(false)
@@ -41,6 +46,22 @@ export function CalSettings({ initialIntegration, initialMappings = [] }: CalSet
     visitTypeName: '',
   })
   const [loadingMapping, setLoadingMapping] = useState(false)
+  
+  // Availability preview state
+  const [availabilityDate, setAvailabilityDate] = useState(() => {
+    const date = new Date()
+    date.setDate(date.getDate() + 1) // Default to tomorrow
+    return date.toISOString().split('T')[0]
+  })
+  const [loadingAvailability, setLoadingAvailability] = useState(false)
+  const [availableSlots, setAvailableSlots] = useState<AvailabilitySlot[]>([])
+  const [selectedEventTypeForAvailability, setSelectedEventTypeForAvailability] = useState<string | null>(null)
+
+  // State for expanded mappings (which mapping's availability is currently shown)
+  const [expandedMapping, setExpandedMapping] = useState<string | null>(null)
+  const [mappingAvailability, setMappingAvailability] = useState<Record<string, AvailabilitySlot[]>>({})
+  const [loadingMappingAvailability, setLoadingMappingAvailability] = useState<Record<string, boolean>>({})
+  const [mappingAvailabilityDates, setMappingAvailabilityDates] = useState<Record<string, string>>({})
 
   useEffect(() => {
     setMappings(initialMappings)
@@ -119,6 +140,87 @@ export function CalSettings({ initialIntegration, initialMappings = [] }: CalSet
     }
   }
 
+  const fetchAvailability = async (eventTypeId: string, date?: string) => {
+    setLoadingAvailability(true)
+    setAvailableSlots([])
+    
+    try {
+      const dateToCheck = date || availabilityDate
+      const dateObj = new Date(dateToCheck)
+      const dateFrom = new Date(dateObj)
+      dateFrom.setHours(0, 0, 0, 0)
+      const dateTo = new Date(dateObj)
+      dateTo.setHours(23, 59, 59, 59)
+      dateTo.setDate(dateTo.getDate() + 1) // Include next day for timezone handling
+
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+      
+      const params = new URLSearchParams({
+        eventTypeId,
+        dateFrom: dateFrom.toISOString(),
+        dateTo: dateTo.toISOString(),
+        timezone,
+      })
+
+      const response = await fetch(`/api/appointments/slots?${params.toString()}`)
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch availability')
+      }
+      
+      setAvailableSlots(data.slots || [])
+    } catch (err) {
+      console.error('Error fetching availability:', err)
+      setAvailableSlots([])
+    } finally {
+      setLoadingAvailability(false)
+    }
+  }
+
+  const fetchMappingAvailability = async (mappingId: string, eventTypeId: string, date?: string) => {
+    setLoadingMappingAvailability(prev => ({ ...prev, [mappingId]: true }))
+    setMappingAvailability(prev => ({ ...prev, [mappingId]: [] }))
+    
+    try {
+      const dateToCheck = date || mappingAvailabilityDates[mappingId] || (() => {
+        const date = new Date()
+        date.setDate(date.getDate() + 1)
+        return date.toISOString().split('T')[0]
+      })()
+      
+      const dateObj = new Date(dateToCheck)
+      const dateFrom = new Date(dateObj)
+      dateFrom.setHours(0, 0, 0, 0)
+      const dateTo = new Date(dateObj)
+      dateTo.setHours(23, 59, 59, 59)
+      dateTo.setDate(dateTo.getDate() + 1)
+
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+      
+      const params = new URLSearchParams({
+        eventTypeId,
+        dateFrom: dateFrom.toISOString(),
+        dateTo: dateTo.toISOString(),
+        timezone,
+      })
+
+      const response = await fetch(`/api/appointments/slots?${params.toString()}`)
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch availability')
+      }
+      
+      setMappingAvailability(prev => ({ ...prev, [mappingId]: data.slots || [] }))
+    } catch (err) {
+      console.error('Error fetching mapping availability:', err)
+      setMappingAvailability(prev => ({ ...prev, [mappingId]: [] }))
+    } finally {
+      setLoadingMappingAvailability(prev => ({ ...prev, [mappingId]: false }))
+    }
+  }
+
   const handleCreateMapping = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
@@ -140,6 +242,8 @@ export function CalSettings({ initialIntegration, initialMappings = [] }: CalSet
       const { mapping } = await response.json()
       setMappings([...mappings, mapping])
       setNewMapping({ calEventTypeId: '', visitTypeName: '' })
+      setSelectedEventTypeForAvailability(null)
+      setAvailableSlots([])
       setSuccess('Event type mapping created successfully')
       
       // Refresh the page to update the list
@@ -168,10 +272,42 @@ export function CalSettings({ initialIntegration, initialMappings = [] }: CalSet
       setMappings(mappings.filter(m => m.id !== mappingId))
       setSuccess('Mapping deleted successfully')
       
+      // Clean up state
+      if (expandedMapping === mappingId) {
+        setExpandedMapping(null)
+      }
+      const newMappingAvailability = { ...mappingAvailability }
+      delete newMappingAvailability[mappingId]
+      setMappingAvailability(newMappingAvailability)
+      
       // Refresh the page to update the list
       window.location.reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete mapping')
+    }
+  }
+
+  const handleEventTypeSelect = (eventTypeId: string) => {
+    setNewMapping({ ...newMapping, calEventTypeId: eventTypeId })
+    setSelectedEventTypeForAvailability(eventTypeId)
+    // Automatically fetch availability for the selected event type
+    if (eventTypeId) {
+      fetchAvailability(eventTypeId)
+    }
+  }
+
+  const handleToggleMappingAvailability = (mappingId: string, eventTypeId: string) => {
+    if (expandedMapping === mappingId) {
+      setExpandedMapping(null)
+    } else {
+      setExpandedMapping(mappingId)
+      // Initialize date for this mapping if not set
+      if (!mappingAvailabilityDates[mappingId]) {
+        const date = new Date()
+        date.setDate(date.getDate() + 1)
+        setMappingAvailabilityDates(prev => ({ ...prev, [mappingId]: date.toISOString().split('T')[0] }))
+      }
+      fetchMappingAvailability(mappingId, eventTypeId)
     }
   }
 
@@ -264,7 +400,7 @@ export function CalSettings({ initialIntegration, initialMappings = [] }: CalSet
                     <Label htmlFor="calEventTypeId">Cal.com Event Type</Label>
                     <Select
                       value={newMapping.calEventTypeId}
-                      onValueChange={(value) => setNewMapping({ ...newMapping, calEventTypeId: value })}
+                      onValueChange={handleEventTypeSelect}
                     >
                       <SelectTrigger id="calEventTypeId">
                         <SelectValue placeholder="Select event type" />
@@ -289,6 +425,71 @@ export function CalSettings({ initialIntegration, initialMappings = [] }: CalSet
                     />
                   </div>
                 </div>
+
+                {/* Availability Preview */}
+                {selectedEventTypeForAvailability && (
+                  <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="flex items-center gap-4 mb-3">
+                      <div className="space-y-1 flex-1">
+                        <Label htmlFor="availabilityDate" className="text-sm font-medium">
+                          View Availability For:
+                        </Label>
+                        <Input
+                          id="availabilityDate"
+                          type="date"
+                          value={availabilityDate}
+                          onChange={(e) => {
+                            const newDate = e.target.value
+                            setAvailabilityDate(newDate)
+                            fetchAvailability(selectedEventTypeForAvailability, newDate)
+                          }}
+                          min={new Date().toISOString().split('T')[0]}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fetchAvailability(selectedEventTypeForAvailability)}
+                        disabled={loadingAvailability}
+                      >
+                        {loadingAvailability ? 'Loading...' : 'Refresh'}
+                      </Button>
+                    </div>
+
+                    {loadingAvailability ? (
+                      <p className="text-sm text-gray-500">Loading availability...</p>
+                    ) : availableSlots.length > 0 ? (
+                      <div>
+                        <p className="text-sm font-medium mb-2">
+                          Available slots ({availableSlots.length}):
+                        </p>
+                        <div className="grid grid-cols-4 gap-2 max-h-40 overflow-y-auto">
+                          {availableSlots.map((slot, index) => {
+                            const slotDate = new Date(slot.time)
+                            return (
+                              <div
+                                key={index}
+                                className="px-2 py-1 text-xs bg-white border border-gray-200 rounded text-center"
+                              >
+                                {slotDate.toLocaleTimeString('en-US', {
+                                  hour: 'numeric',
+                                  minute: '2-digit',
+                                  hour12: true,
+                                })}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500">
+                        No available slots found for this date. Try selecting a different date.
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <Button
                   type="submit"
                   disabled={loadingMapping || !newMapping.calEventTypeId || !newMapping.visitTypeName}
@@ -309,25 +510,106 @@ export function CalSettings({ initialIntegration, initialMappings = [] }: CalSet
                 <div className="space-y-2">
                   {mappings.map((mapping) => {
                     const eventType = eventTypes.find(et => String(et.id) === String(mapping.calEventTypeId))
+                    const isExpanded = expandedMapping === mapping.id
+                    const mappingSlots = mappingAvailability[mapping.id] || []
+                    const isLoading = loadingMappingAvailability[mapping.id] || false
+                    const mappingDate = mappingAvailabilityDates[mapping.id] || (() => {
+                      const date = new Date()
+                      date.setDate(date.getDate() + 1)
+                      return date.toISOString().split('T')[0]
+                    })()
+
                     return (
-                      <div
-                        key={mapping.id}
-                        className="flex items-center justify-between p-3 border rounded-lg"
-                      >
-                        <div>
-                          <p className="font-medium">{mapping.visitTypeName}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {eventType ? `${eventType.title} (${eventType.length} min)` : `Event ID: ${mapping.calEventTypeId}`}
-                          </p>
+                      <div key={mapping.id} className="border rounded-lg">
+                        <div className="flex items-center justify-between p-3">
+                          <div className="flex-1">
+                            <p className="font-medium">{mapping.visitTypeName}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {eventType ? `${eventType.title} (${eventType.length} min)` : `Event ID: ${mapping.calEventTypeId}`}
+                            </p>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleToggleMappingAvailability(mapping.id, mapping.calEventTypeId)}
+                            >
+                              {isExpanded ? 'Hide Availability' : 'View Availability'}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteMapping(mapping.id)}
+                            >
+                              Delete
+                            </Button>
+                          </div>
                         </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDeleteMapping(mapping.id)}
-                        >
-                          Delete
-                        </Button>
+
+                        {isExpanded && (
+                          <div className="p-4 bg-gray-50 border-t">
+                            <div className="flex items-center gap-4 mb-3">
+                              <div className="space-y-1 flex-1">
+                                <Label htmlFor={`mapping-availability-date-${mapping.id}`} className="text-sm font-medium">
+                                  View Availability For:
+                                </Label>
+                                <Input
+                                  id={`mapping-availability-date-${mapping.id}`}
+                                  type="date"
+                                  value={mappingDate}
+                                  onChange={(e) => {
+                                    const newDate = e.target.value
+                                    setMappingAvailabilityDates(prev => ({ ...prev, [mapping.id]: newDate }))
+                                    fetchMappingAvailability(mapping.id, mapping.calEventTypeId, newDate)
+                                  }}
+                                  min={new Date().toISOString().split('T')[0]}
+                                />
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => fetchMappingAvailability(mapping.id, mapping.calEventTypeId)}
+                                disabled={isLoading}
+                              >
+                                {isLoading ? 'Loading...' : 'Refresh'}
+                              </Button>
+                            </div>
+
+                            {isLoading ? (
+                              <p className="text-sm text-gray-500">Loading availability...</p>
+                            ) : mappingSlots.length > 0 ? (
+                              <div>
+                                <p className="text-sm font-medium mb-2">
+                                  Available slots ({mappingSlots.length}):
+                                </p>
+                                <div className="grid grid-cols-4 gap-2 max-h-40 overflow-y-auto">
+                                  {mappingSlots.map((slot, index) => {
+                                    const slotDate = new Date(slot.time)
+                                    return (
+                                      <div
+                                        key={index}
+                                        className="px-2 py-1 text-xs bg-white border border-gray-200 rounded text-center"
+                                      >
+                                        {slotDate.toLocaleTimeString('en-US', {
+                                          hour: 'numeric',
+                                          minute: '2-digit',
+                                          hour12: true,
+                                        })}
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="text-sm text-gray-500">
+                                No available slots found for this date. Try selecting a different date.
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )
                   })}
