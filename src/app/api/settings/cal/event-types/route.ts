@@ -6,10 +6,13 @@ import { getCalClient } from '@/lib/cal'
 
 /**
  * Get event type mappings for the practice
+ * If ?fetch=true, also fetches event types from Cal.com
  */
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req)
+    const searchParams = req.nextUrl.searchParams
+    const shouldFetch = searchParams.get('fetch') === 'true'
 
     const mappings = await prisma.calEventTypeMapping.findMany({
       where: { practiceId: user.practiceId },
@@ -22,6 +25,23 @@ export async function GET(req: NextRequest) {
         },
       },
     })
+
+    // If fetch=true, also get event types from Cal.com
+    if (shouldFetch) {
+      try {
+        const calClient = await getCalClient(user.practiceId)
+        const eventTypes = await calClient.getEventTypes()
+        return NextResponse.json({ mappings, eventTypes })
+      } catch (error) {
+        // If fetching event types fails, still return mappings
+        console.error('Error fetching Cal.com event types:', error)
+        return NextResponse.json({ 
+          mappings, 
+          eventTypes: [],
+          error: 'Failed to fetch event types from Cal.com'
+        })
+      }
+    }
 
     return NextResponse.json({ mappings })
   } catch (error) {

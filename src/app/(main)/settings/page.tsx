@@ -38,7 +38,10 @@ export default async function SettingsPage() {
         <p className="text-sm text-gray-500">Manage your practice settings</p>
       </div>
 
-      <CalSettings initialIntegration={integration} />
+      <CalSettings 
+        initialIntegration={integration} 
+        initialMappings={integration?.eventTypeMappings || []}
+      />
     </div>
   )
 }
