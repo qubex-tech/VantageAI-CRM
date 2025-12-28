@@ -83,6 +83,13 @@ export class CalApiClient {
         }
       )
 
+      // Check for 401 Unauthorized - this means API key is invalid
+      if (response.status === 401) {
+        const errorText = await response.text().catch(() => 'Unknown error')
+        console.error('Cal.com API 401 Unauthorized:', errorText)
+        throw new Error('Cal.com API error: 401 Unauthorized - Please check your API key')
+      }
+
       // If v1 returns 404, try v2 endpoint with POST
       if (!response.ok && response.status === 404) {
         const v1ErrorText = await response.text().catch(() => 'Unknown error')
@@ -103,6 +110,13 @@ export class CalApiClient {
               }),
             }
           )
+          
+          // Check for 401 on v2 endpoint as well
+          if (response.status === 401) {
+            const errorText = await response.text().catch(() => 'Unknown error')
+            console.error('Cal.com API v2 401 Unauthorized:', errorText)
+            throw new Error('Cal.com API error: 401 Unauthorized - Please check your API key')
+          }
         } catch (v2Error) {
           // If v2 fetch fails, throw the original v1 error
           console.error('Cal.com slots API v2 error:', v2Error)

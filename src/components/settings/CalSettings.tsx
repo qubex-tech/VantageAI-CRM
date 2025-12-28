@@ -79,8 +79,8 @@ export function CalSettings({ initialIntegration, initialMappings = [] }: CalSet
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           apiKey,
-          calOrganizationId: initialIntegration?.calOrganizationId,
-          calTeamId: initialIntegration?.calTeamId,
+          calOrganizationId: initialIntegration?.calOrganizationId || undefined,
+          calTeamId: initialIntegration?.calTeamId || undefined,
         }),
       })
 

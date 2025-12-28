@@ -68,8 +68,13 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ integration })
   } catch (error) {
-    if (error instanceof Error && error.name === 'ZodError') {
-      return NextResponse.json({ error: 'Validation error', details: error }, { status: 400 })
+    if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
+      const zodError = error as { issues: Array<{ path: (string | number)[]; message: string }> }
+      const errorMessage = zodError.issues.map(issue => {
+        const path = issue.path.join('.')
+        return `${path}: ${issue.message}`
+      }).join(', ')
+      return NextResponse.json({ error: `Validation error: ${errorMessage}` }, { status: 400 })
     }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to save Cal.com settings' },

@@ -46,8 +46,8 @@ export const bookAppointmentSchema = z.object({
 // Cal.com integration schemas
 export const calIntegrationSchema = z.object({
   apiKey: z.string().min(1, 'API key is required'),
-  calOrganizationId: z.string().optional(),
-  calTeamId: z.string().optional(),
+  calOrganizationId: z.string().optional().or(z.literal('')).transform(val => val === '' ? undefined : val),
+  calTeamId: z.string().optional().or(z.literal('')).transform(val => val === '' ? undefined : val),
 })
 
 export const calEventTypeMappingSchema = z.object({
