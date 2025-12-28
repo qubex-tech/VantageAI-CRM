@@ -1,0 +1,145 @@
+import { getServerSession } from 'next-auth'
+import { authOptions } from './auth'
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from './db'
+import crypto from 'crypto'
+
+/**
+ * Get the current user's session with practiceId
+ */
+export async function getSession() {
+  return getServerSession(authOptions)
+}
+
+/**
+ * Get the current user with practiceId
+ * Throws if not authenticated
+ */
+export async function requireAuth() {
+  const session = await getSession()
+  
+  if (!session?.user?.practiceId) {
+    throw new Error('Unauthorized')
+  }
+  
+  return session.user
+}
+
+/**
+ * Middleware helper for API routes
+ * Extracts practiceId from session and validates user
+ */
+export async function withTenant<T>(
+  handler: (req: NextRequest, context: { practiceId: string; userId: string }) => Promise<T>
+) {
+  return async (req: NextRequest): Promise<NextResponse<T> | NextResponse<{ error: string }>> => {
+    try {
+      const user = await requireAuth()
+      
+      return NextResponse.json(
+        await handler(req, { practiceId: user.practiceId, userId: user.id })
+      )
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : 'Unauthorized' },
+        { status: 401 }
+      ) as NextResponse<{ error: string }>
+    }
+  }
+}
+
+/**
+ * Rate limiting helper (simple token bucket)
+ * In production, use Redis or a dedicated rate limiting service
+ */
+const rateLimitStore = new Map<string, { count: number; resetAt: number }>()
+
+export function rateLimit(
+  identifier: string,
+  limit: number = 100,
+  windowMs: number = 60000 // 1 minute
+): boolean {
+  const now = Date.now()
+  const record = rateLimitStore.get(identifier)
+
+  if (!record || now > record.resetAt) {
+    rateLimitStore.set(identifier, {
+      count: 1,
+      resetAt: now + windowMs,
+    })
+    return true
+  }
+
+  if (record.count >= limit) {
+    return false
+  }
+
+  record.count++
+  return true
+}
+
+/**
+ * Verify RetellAI webhook signature
+ * RetellAI uses HMAC-SHA256 for webhook signature verification
+ */
+export function verifyRetellSignature(
+  payload: string,
+  signature: string,
+  secret: string
+): boolean {
+  if (!secret || !signature) {
+    return false
+  }
+
+  try {
+    // RetellAI typically sends signature in format: sha256=<hex_hash>
+    const receivedHash = signature.replace('sha256=', '')
+    
+    // Compute expected HMAC-SHA256
+    const expectedHash = crypto
+      .createHmac('sha256', secret)
+      .update(payload)
+      .digest('hex')
+
+    // Constant-time comparison to prevent timing attacks
+    return crypto.timingSafeEqual(
+      Buffer.from(receivedHash, 'hex'),
+      Buffer.from(expectedHash, 'hex')
+    )
+  } catch (error) {
+    console.error('RetellAI signature verification error:', error)
+    return false
+  }
+}
+
+/**
+ * Verify Cal.com webhook signature
+ * Cal.com uses HMAC-SHA256 for webhook signature verification
+ */
+export function verifyCalSignature(
+  payload: string,
+  signature: string,
+  secret: string
+): boolean {
+  if (!secret || !signature) {
+    return false
+  }
+
+  try {
+    // Cal.com sends signature as base64-encoded HMAC-SHA256
+    const expectedSignature = crypto
+      .createHmac('sha256', secret)
+      .update(payload)
+      .digest('base64')
+
+    // Constant-time comparison to prevent timing attacks
+    return crypto.timingSafeEqual(
+      Buffer.from(signature),
+      Buffer.from(expectedSignature)
+    )
+  } catch (error) {
+    console.error('Cal.com signature verification error:', error)
+    return false
+  }
+}
+

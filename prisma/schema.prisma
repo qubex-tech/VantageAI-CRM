@@ -1,0 +1,241 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Practice {
+  id        String   @id @default(uuid())
+  name      String
+  email     String?
+  phone     String?
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users            User[]
+  patients         Patient[]
+  insurancePolicies InsurancePolicy[]
+  appointments     Appointment[]
+  calIntegrations  CalIntegration[]
+  calEventTypeMappings CalEventTypeMapping[]
+  voiceConversations VoiceConversation[]
+  auditLogs        AuditLog[]
+
+  @@map("practices")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         String   // 'admin', 'staff', 'provider'
+  practiceId   String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  practice  Practice    @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  auditLogs AuditLog[]
+
+  @@index([practiceId])
+  @@index([email])
+  @@map("users")
+}
+
+model Patient {
+  id                     String   @id @default(uuid())
+  practiceId             String
+  name                   String
+  dateOfBirth            DateTime
+  phone                  String
+  email                  String?
+  address                String?
+  preferredContactMethod String   // 'phone', 'email', 'sms'
+  notes                  String?
+  deletedAt              DateTime?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  practice            Practice            @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  insurancePolicies   InsurancePolicy[]
+  appointments        Appointment[]
+  voiceConversations  VoiceConversation[]
+  tags                PatientTag[]
+  timelineEntries     PatientTimelineEntry[]
+
+  @@index([practiceId])
+  @@index([phone])
+  @@index([email])
+  @@index([deletedAt])
+  @@map("patients")
+}
+
+model PatientTag {
+  id        String   @id @default(uuid())
+  patientId String
+  tag       String
+  createdAt DateTime @default(now())
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, tag])
+  @@index([patientId])
+  @@map("patient_tags")
+}
+
+model PatientTimelineEntry {
+  id        String   @id @default(uuid())
+  patientId String
+  type      String   // 'appointment', 'insurance', 'call', 'note'
+  title     String
+  description String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, createdAt])
+  @@map("patient_timeline_entries")
+}
+
+model InsurancePolicy {
+  id                String    @id @default(uuid())
+  practiceId        String
+  patientId         String
+  providerName      String
+  planName          String?
+  memberId          String
+  groupId           String?
+  policyHolderName  String
+  policyHolderPhone String?
+  eligibilityStatus String    // 'active', 'inactive', 'pending', 'unknown'
+  lastVerifiedAt    DateTime?
+  fileMetadata      Json?     // Store file info (path, size, type) - actual storage TODO
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId])
+  @@index([patientId])
+  @@index([memberId])
+  @@map("insurance_policies")
+}
+
+model Appointment {
+  id           String    @id @default(uuid())
+  practiceId   String
+  patientId    String
+  providerId   String?   // For future provider assignment
+  status       String    // 'scheduled', 'confirmed', 'completed', 'cancelled', 'no_show'
+  startTime    DateTime
+  endTime      DateTime
+  timezone     String
+  visitType    String    // Maps to Cal event type name
+  reason       String?
+  notes        String?
+  calEventId   String?   // Cal.com event type ID
+  calBookingId String?   @unique // Cal.com booking ID
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId])
+  @@index([patientId])
+  @@index([startTime])
+  @@index([status])
+  @@index([calBookingId])
+  @@map("appointments")
+}
+
+model CalIntegration {
+  id                String    @id @default(uuid())
+  practiceId        String    @unique
+  apiKey            String    // Encrypted in production
+  calOrganizationId String?
+  calTeamId         String?
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  practice         Practice            @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  eventTypeMappings CalEventTypeMapping[]
+
+  @@index([practiceId])
+  @@map("cal_integrations")
+}
+
+model CalEventTypeMapping {
+  id              String   @id @default(uuid())
+  practiceId      String
+  calIntegrationId String
+  visitTypeName   String   // e.g., "Consultation", "Follow-up"
+  calEventTypeId  String   // Cal.com event type ID
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  practice      Practice      @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  calIntegration CalIntegration @relation(fields: [calIntegrationId], references: [id], onDelete: Cascade)
+
+  @@unique([practiceId, visitTypeName])
+  @@index([practiceId])
+  @@index([calEventTypeId])
+  @@map("cal_event_type_mappings")
+}
+
+model VoiceConversation {
+  id            String    @id @default(uuid())
+  practiceId    String
+  patientId     String?
+  callerPhone   String
+  retellCallId  String?
+  startedAt     DateTime
+  endedAt       DateTime?
+  transcript    String?   // Redacted PHI
+  extractedIntent String?
+  outcome       String?   // 'appointment_booked', 'information_only', 'failed', etc.
+  metadata      Json?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient  Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
+
+  @@index([practiceId])
+  @@index([patientId])
+  @@index([callerPhone])
+  @@index([startedAt])
+  @@map("voice_conversations")
+}
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  practiceId   String
+  userId       String
+  action       String   // 'create', 'update', 'delete', 'view'
+  resourceType String   // 'patient', 'appointment', 'insurance', etc.
+  resourceId   String
+  changes      Json?    // Before/after state (redacted)
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId])
+  @@index([practiceId, resourceType, resourceId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
