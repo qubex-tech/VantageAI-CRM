@@ -5,7 +5,7 @@ import { getAvailableSlotsSchema } from '@/lib/validations'
 
 export async function GET(req: NextRequest) {
   try {
-    const user = await requireAuth()
+    const user = await requireAuth(req)
     const searchParams = req.nextUrl.searchParams
 
     const params = {

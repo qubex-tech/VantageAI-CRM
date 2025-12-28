@@ -10,7 +10,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await requireAuth()
+    const user = await requireAuth(req)
 
     const patient = await prisma.patient.findFirst({
       where: {
@@ -50,7 +50,7 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await requireAuth()
+    const user = await requireAuth(req)
     const body = await req.json()
 
     // Get existing patient
@@ -140,7 +140,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await requireAuth()
+    const user = await requireAuth(req)
 
     const existing = await prisma.patient.findFirst({
       where: {

@@ -3,6 +3,8 @@ import { authOptions } from './auth'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from './db'
 import crypto from 'crypto'
+import { getSupabaseSessionFromRequest } from './auth-supabase'
+import { syncSupabaseUserToPrisma } from './sync-supabase-user'
 
 /**
  * Get the current user's session with practiceId
@@ -14,8 +16,34 @@ export async function getSession() {
 /**
  * Get the current user with practiceId
  * Throws if not authenticated
+ * 
+ * @param req Optional NextRequest for API routes. If provided, will try Supabase auth first.
  */
-export async function requireAuth() {
+export async function requireAuth(req?: NextRequest) {
+  // Try Supabase first if we have a request (API route)
+  if (req) {
+    try {
+      const { data: { session: supabaseSession }, error } = await getSupabaseSessionFromRequest(req)
+      
+      if (!error && supabaseSession?.user) {
+        const user = await syncSupabaseUserToPrisma(supabaseSession.user)
+        if (user) {
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            practiceId: user.practiceId,
+            role: user.role,
+          }
+        }
+      }
+    } catch (error) {
+      // Supabase not configured or error, fall back to NextAuth
+      console.error('Error getting Supabase session in requireAuth:', error)
+    }
+  }
+  
+  // Fallback to NextAuth
   const session = await getSession()
   
   if (!session?.user?.practiceId) {
@@ -34,7 +62,7 @@ export async function withTenant<T>(
 ) {
   return async (req: NextRequest): Promise<NextResponse<T> | NextResponse<{ error: string }>> => {
     try {
-      const user = await requireAuth()
+      const user = await requireAuth(req)
       
       return NextResponse.json(
         await handler(req, { practiceId: user.practiceId, userId: user.id })
@@ -142,4 +170,3 @@ export function verifyCalSignature(
     return false
   }
 }
-

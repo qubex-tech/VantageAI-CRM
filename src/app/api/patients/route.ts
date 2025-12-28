@@ -7,7 +7,7 @@ import { tenantScope } from '@/lib/db'
 
 export async function GET(req: NextRequest) {
   try {
-    const user = await requireAuth()
+    const user = await requireAuth(req)
     const searchParams = req.nextUrl.searchParams
     const search = searchParams.get('search') || ''
     const limit = parseInt(searchParams.get('limit') || '50')
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireAuth()
+    const user = await requireAuth(req)
     const body = await req.json()
 
     const validated = patientSchema.parse(body)

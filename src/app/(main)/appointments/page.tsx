@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getSupabaseSession } from '@/lib/auth-supabase'
+import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
 import { prisma } from '@/lib/db'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { format } from 'date-fns'
@@ -9,16 +9,30 @@ import Link from 'next/link'
 export default async function AppointmentsPage({
   searchParams,
 }: {
-  searchParams: { date?: string; status?: string }
+  searchParams: Promise<{ date?: string; status?: string }>
 }) {
-  const session = await getServerSession(authOptions)
+  const params = await searchParams
+  const supabaseSession = await getSupabaseSession()
   
-  if (!session?.user) {
+  if (!supabaseSession) {
     redirect('/login')
   }
 
-  const date = searchParams.date ? new Date(searchParams.date) : new Date()
-  const status = searchParams.status
+  const supabaseUser = supabaseSession.user
+  let user
+  try {
+    user = await syncSupabaseUserToPrisma(supabaseUser)
+  } catch (error) {
+    console.error('Error syncing user to Prisma:', error)
+    redirect('/login?error=Failed to sync user account. Please try again.')
+  }
+  
+  if (!user) {
+    redirect('/login?error=User account not found.')
+  }
+
+  const date = params.date ? new Date(params.date) : new Date()
+  const status = params.status
 
   const startOfDay = new Date(date)
   startOfDay.setHours(0, 0, 0, 0)
@@ -26,7 +40,7 @@ export default async function AppointmentsPage({
   endOfDay.setHours(23, 59, 59, 999)
 
   const where: any = {
-    practiceId: session.user.practiceId,
+    practiceId: user.practiceId,
     startTime: {
       gte: startOfDay,
       lte: endOfDay,
@@ -97,4 +111,3 @@ export default async function AppointmentsPage({
     </div>
   )
 }
-

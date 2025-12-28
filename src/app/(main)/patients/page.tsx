@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getSupabaseSession } from '@/lib/auth-supabase'
+import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
 import { prisma } from '@/lib/db'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
@@ -10,19 +10,33 @@ import { PatientsList } from '@/components/patients/PatientsList'
 export default async function PatientsPage({
   searchParams,
 }: {
-  searchParams: { search?: string }
+  searchParams: Promise<{ search?: string }>
 }) {
-  const session = await getServerSession(authOptions)
+  const params = await searchParams
+  const supabaseSession = await getSupabaseSession()
   
-  if (!session?.user) {
+  if (!supabaseSession) {
     redirect('/login')
   }
 
-  const search = searchParams.search || ''
+  const supabaseUser = supabaseSession.user
+  let user
+  try {
+    user = await syncSupabaseUserToPrisma(supabaseUser)
+  } catch (error) {
+    console.error('Error syncing user to Prisma:', error)
+    redirect('/login?error=Failed to sync user account. Please try again.')
+  }
+  
+  if (!user) {
+    redirect('/login?error=User account not found.')
+  }
+
+  const search = params.search || ''
 
   const patients = await prisma.patient.findMany({
     where: {
-      practiceId: session.user.practiceId,
+      practiceId: user.practiceId,
       deletedAt: null,
       OR: search
         ? [

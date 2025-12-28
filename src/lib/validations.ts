@@ -7,7 +7,7 @@ export const patientSchema = z.object({
   phone: z.string().min(10, 'Phone number is required'),
   email: z.string().email().optional().or(z.literal('')),
   address: z.string().optional(),
-  preferredContactMethod: z.enum(['phone', 'email', 'sms']),
+  preferredContactMethod: z.enum(['phone', 'email', 'sms', 'mail']),
   notes: z.string().optional(),
   tags: z.array(z.string()).optional(),
 })

@@ -1,18 +1,31 @@
 import { redirect } from 'next/navigation'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getSupabaseSession } from '@/lib/auth-supabase'
+import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
 import { prisma } from '@/lib/db'
 import { CalSettings } from '@/components/settings/CalSettings'
 
 export default async function SettingsPage() {
-  const session = await getServerSession(authOptions)
+  const supabaseSession = await getSupabaseSession()
   
-  if (!session?.user) {
+  if (!supabaseSession) {
     redirect('/login')
   }
 
+  const supabaseUser = supabaseSession.user
+  let user
+  try {
+    user = await syncSupabaseUserToPrisma(supabaseUser)
+  } catch (error) {
+    console.error('Error syncing user to Prisma:', error)
+    redirect('/login?error=Failed to sync user account. Please try again.')
+  }
+  
+  if (!user) {
+    redirect('/login?error=User account not found.')
+  }
+
   const integration = await prisma.calIntegration.findUnique({
-    where: { practiceId: session.user.practiceId },
+    where: { practiceId: user.practiceId },
     include: {
       eventTypeMappings: true,
     },

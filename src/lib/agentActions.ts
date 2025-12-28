@@ -244,7 +244,7 @@ export async function bookAppointment(
 
   return {
     appointmentId: appointment.id,
-    calBookingId: calBooking.id || calBooking.uid,
+    calBookingId: calBooking.id ?? calBooking.uid,
     startTime: start.toISOString(),
     endTime: end.toISOString(),
     confirmationMessage: `Your appointment has been scheduled for ${start.toLocaleString('en-US', { timeZone: timezone })}. You will receive a confirmation email shortly.`,

@@ -6,7 +6,7 @@ import { createAuditLog, createTimelineEntry } from '@/lib/audit'
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireAuth()
+    const user = await requireAuth(req)
     const body = await req.json()
 
     const validated = insurancePolicySchema.parse(body)

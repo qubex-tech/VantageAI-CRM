@@ -7,7 +7,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await requireAuth()
+    const user = await requireAuth(req)
 
     const mapping = await prisma.calEventTypeMapping.findFirst({
       where: {

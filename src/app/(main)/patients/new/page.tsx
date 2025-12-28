@@ -20,6 +20,13 @@ export default function NewPatientPage() {
   const [error, setError] = useState('')
   const [preferredContactMethod, setPreferredContactMethod] = useState('phone')
 
+  const contactMethods = [
+    { value: 'phone', label: 'Phone' },
+    { value: 'email', label: 'Email' },
+    { value: 'sms', label: 'SMS' },
+    { value: 'mail', label: 'Mail' },
+  ]
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError('')
@@ -94,13 +101,15 @@ export default function NewPatientPage() {
             <div className="space-y-2">
               <Label htmlFor="preferredContactMethod">Preferred Contact Method *</Label>
               <Select value={preferredContactMethod} onValueChange={setPreferredContactMethod} required>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select method" />
+                <SelectTrigger id="preferredContactMethod">
+                  <SelectValue placeholder="Select contact method" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="phone">Phone</SelectItem>
-                  <SelectItem value="email">Email</SelectItem>
-                  <SelectItem value="sms">SMS</SelectItem>
+                  {contactMethods.map((method) => (
+                    <SelectItem key={method.value} value={method.value}>
+                      {method.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

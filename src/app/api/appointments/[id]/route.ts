@@ -9,7 +9,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await requireAuth()
+    const user = await requireAuth(req)
 
     const appointment = await prisma.appointment.findFirst({
       where: {
@@ -39,7 +39,7 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await requireAuth()
+    const user = await requireAuth(req)
     const body = await req.json()
 
     const existing = await prisma.appointment.findFirst({
@@ -99,7 +99,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await requireAuth()
+    const user = await requireAuth(req)
 
     const existing = await prisma.appointment.findFirst({
       where: {

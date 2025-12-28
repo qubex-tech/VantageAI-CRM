@@ -9,7 +9,7 @@ import { getCalClient } from '@/lib/cal'
  */
 export async function GET(req: NextRequest) {
   try {
-    const user = await requireAuth()
+    const user = await requireAuth(req)
 
     const integration = await prisma.calIntegration.findUnique({
       where: { practiceId: user.practiceId },
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireAuth()
+    const user = await requireAuth(req)
     const body = await req.json()
 
     const validated = calIntegrationSchema.parse(body)

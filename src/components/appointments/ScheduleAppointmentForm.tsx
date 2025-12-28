@@ -195,19 +195,19 @@ export function ScheduleAppointmentForm({
           <SelectTrigger id="visitType">
             <SelectValue placeholder="Select a visit type" />
           </SelectTrigger>
-          <SelectContent>
-            {eventTypeMappings.length === 0 ? (
-              <SelectItem value="" disabled>
-                No visit types available. Please configure Cal.com event type mappings in Settings.
-              </SelectItem>
-            ) : (
-              eventTypeMappings.map((mapping) => (
-                <SelectItem key={mapping.id} value={mapping.id}>
-                  {mapping.visitTypeName}
-                </SelectItem>
-              ))
-            )}
-          </SelectContent>
+                  <SelectContent>
+                    {eventTypeMappings.length === 0 ? (
+                      <div className="px-2 py-1.5 text-sm text-gray-500">
+                        No visit types available. Please configure Cal.com event type mappings in Settings.
+                      </div>
+                    ) : (
+                      eventTypeMappings.map((mapping) => (
+                        <SelectItem key={mapping.id} value={mapping.id}>
+                          {mapping.visitTypeName}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
         </Select>
         {eventTypeMappings.length === 0 && (
           <p className="text-sm text-gray-500">

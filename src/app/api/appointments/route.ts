@@ -8,7 +8,7 @@ import { bookAppointment as bookAppointmentAction } from '@/lib/agentActions'
 
 export async function GET(req: NextRequest) {
   try {
-    const user = await requireAuth()
+    const user = await requireAuth(req)
     const searchParams = req.nextUrl.searchParams
     const date = searchParams.get('date')
     const status = searchParams.get('status')
@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireAuth()
+    const user = await requireAuth(req)
     const body = await req.json()
 
     // Check if this is a booking request (with Cal.com integration)

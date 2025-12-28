@@ -7,7 +7,7 @@ import { getCalClient } from '@/lib/cal'
  */
 export async function GET(req: NextRequest) {
   try {
-    const user = await requireAuth()
+    const user = await requireAuth(req)
 
     const calClient = await getCalClient(user.practiceId)
     const isValid = await calClient.testConnection()
