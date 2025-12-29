@@ -64,42 +64,32 @@ export class CalApiClient {
     timeZone: string = 'America/New_York'
   ): Promise<Array<{ time: string; attendeeCount: number }>> {
     try {
-      // Note: Cal.com API v2 does not have a slots/availability endpoint
-      // The v1 /slots endpoint exists but requires a v1 API key
-      // v2 API keys (which work for event types and bookings) return 401 on v1 endpoints
-      
-      // Try v1 endpoint (only endpoint that exists for slots)
-      const v1BaseUrl = this.baseUrl.replace('/v2', '/v1')
+      // Cal.com API v2 slots endpoint: GET /v2/slots
+      // Documentation: https://cal.com/docs/api-reference/v2/slots/get-available-time-slots-for-an-event-type
       const params = new URLSearchParams({
         eventTypeId: String(eventTypeId),
-        startTime: dateFrom,
-        endTime: dateTo,
+        start: dateFrom.split('T')[0], // Extract date part (YYYY-MM-DD)
+        end: dateTo.split('T')[0], // Extract date part (YYYY-MM-DD)
         timeZone,
+        format: 'range', // Use range format to get start and end times
       })
       
       const response = await fetch(
-        `${v1BaseUrl}/slots?${params.toString()}`,
+        `${this.baseUrl}/slots?${params.toString()}`,
         {
+          method: 'GET',
           headers: {
             'Authorization': `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json',
+            'cal-api-version': '2024-09-04', // Required header for v2 API
           },
         }
       )
 
-      // If we get 401, the API key is v2-only and doesn't support v1 endpoints
-      // This is expected - Cal.com v2 API doesn't provide slots endpoint
       if (response.status === 401) {
-        console.warn('Cal.com v1 slots endpoint requires v1 API key. v2 API keys are not supported for slots endpoint.')
-        console.warn('Cal.com API v2 does not provide a slots/availability endpoint.')
-        // Return empty array - users will need to enter time manually
-        return []
-      }
-      
-      // If v1 returns 404, that's fine - endpoint doesn't exist
-      if (response.status === 404) {
-        console.warn('Cal.com v1 slots endpoint returned 404. This endpoint may not be available.')
-        return []
+        const errorText = await response.text().catch(() => 'Unknown error')
+        console.error('Cal.com API v2 401 Unauthorized:', errorText)
+        throw new Error('Cal.com API error: 401 Unauthorized - Please check your API key')
       }
 
       if (!response.ok) {
@@ -109,16 +99,43 @@ export class CalApiClient {
       }
 
       const data = await response.json()
-      // Handle different response formats
-      if (Array.isArray(data)) {
-        return data
+      
+      // Cal.com v2 API returns: { status: "success", data: { "date": [{ start, end, ... }] } }
+      if (data.status === 'success' && data.data) {
+        // Flatten all slots from all dates into a single array
+        const allSlots: Array<{ time: string; attendeeCount: number }> = []
+        for (const date in data.data) {
+          const slots = data.data[date]
+          if (Array.isArray(slots)) {
+            for (const slot of slots) {
+              // With format=range, each slot has { start, end, attendeesCount?, bookingUid? }
+              allSlots.push({
+                time: slot.start || slot.time || date,
+                attendeeCount: slot.attendeesCount || 0,
+              })
+            }
+          }
+        }
+        return allSlots
       }
-      if (data.slots && Array.isArray(data.slots)) {
-        return data.slots
+      
+      // Fallback for other response formats
+      if (data.data && typeof data.data === 'object') {
+        const allSlots: Array<{ time: string; attendeeCount: number }> = []
+        for (const date in data.data) {
+          const slots = data.data[date]
+          if (Array.isArray(slots)) {
+            for (const slot of slots) {
+              allSlots.push({
+                time: slot.start || slot.time || date,
+                attendeeCount: slot.attendeesCount || 0,
+              })
+            }
+          }
+        }
+        return allSlots
       }
-      if (data.data && Array.isArray(data.data)) {
-        return data.data
-      }
+      
       return []
     } catch (error) {
       console.error('Error fetching Cal.com slots:', error)
