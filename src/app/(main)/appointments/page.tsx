@@ -31,20 +31,31 @@ export default async function AppointmentsPage({
     redirect('/login?error=User account not found.')
   }
 
-  const date = params.date ? new Date(params.date) : new Date()
+  const date = params.date ? new Date(params.date) : null
   const status = params.status
-
-  const startOfDay = new Date(date)
-  startOfDay.setHours(0, 0, 0, 0)
-  const endOfDay = new Date(date)
-  endOfDay.setHours(23, 59, 59, 999)
 
   const where: any = {
     practiceId: user.practiceId,
-    startTime: {
+  }
+
+  // If a specific date is provided, filter to that day
+  // Otherwise, show all upcoming appointments (from today onwards)
+  if (date) {
+    const startOfDay = new Date(date)
+    startOfDay.setHours(0, 0, 0, 0)
+    const endOfDay = new Date(date)
+    endOfDay.setHours(23, 59, 59, 999)
+    where.startTime = {
       gte: startOfDay,
       lte: endOfDay,
-    },
+    }
+  } else {
+    // Show all future appointments by default
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    where.startTime = {
+      gte: today,
+    }
   }
 
   if (status) {
@@ -72,7 +83,7 @@ export default async function AppointmentsPage({
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-gray-900 mb-1">Appointments</h1>
         <p className="text-sm text-gray-500">
-          {format(date, 'MMMM d, yyyy')}
+          {date ? format(date, 'MMMM d, yyyy') : 'Upcoming appointments'}
         </p>
       </div>
 
