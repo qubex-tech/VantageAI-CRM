@@ -3,6 +3,7 @@ import { getSupabaseSession } from '@/lib/auth-supabase'
 import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
 import { prisma } from '@/lib/db'
 import { CalSettings } from '@/components/settings/CalSettings'
+import { RetellSettings } from '@/components/settings/RetellSettings'
 
 export default async function SettingsPage() {
   const supabaseSession = await getSupabaseSession()
@@ -24,11 +25,15 @@ export default async function SettingsPage() {
     redirect('/login?error=User account not found.')
   }
 
-  const integration = await prisma.calIntegration.findUnique({
+  const calIntegration = await prisma.calIntegration.findUnique({
     where: { practiceId: user.practiceId },
     include: {
       eventTypeMappings: true,
     },
+  })
+
+  const retellIntegration = await prisma.retellIntegration.findUnique({
+    where: { practiceId: user.practiceId },
   })
 
   return (
@@ -38,10 +43,14 @@ export default async function SettingsPage() {
         <p className="text-sm text-gray-500">Manage your practice settings</p>
       </div>
 
-      <CalSettings 
-        initialIntegration={integration} 
-        initialMappings={integration?.eventTypeMappings || []}
-      />
+      <div className="space-y-6">
+        <CalSettings 
+          initialIntegration={calIntegration} 
+          initialMappings={calIntegration?.eventTypeMappings || []}
+        />
+
+        <RetellSettings initialIntegration={retellIntegration} />
+      </div>
     </div>
   )
 }

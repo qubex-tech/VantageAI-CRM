@@ -25,6 +25,7 @@ model Practice {
   appointments     Appointment[]
   calIntegrations  CalIntegration[]
   calEventTypeMappings CalEventTypeMapping[]
+  retellIntegrations RetellIntegration[]
   voiceConversations VoiceConversation[]
   auditLogs        AuditLog[]
 
@@ -191,6 +192,21 @@ model CalEventTypeMapping {
   @@index([practiceId])
   @@index([calEventTypeId])
   @@map("cal_event_type_mappings")
+}
+
+model RetellIntegration {
+  id                String    @id @default(uuid())
+  practiceId        String    @unique
+  apiKey            String    // Encrypted in production
+  agentId           String?   // Optional: default agent ID for this practice
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  practice         Practice  @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId])
+  @@map("retell_integrations")
 }
 
 model VoiceConversation {

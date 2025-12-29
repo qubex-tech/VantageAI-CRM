@@ -35,15 +35,9 @@ export default async function CallDetailPage({
   let error: string | null = null
 
   try {
-    const retellApiKey = process.env.RETELLAI_API_KEY
-    
-    if (!retellApiKey) {
-      error = 'RetellAI API key not configured. Please set RETELLAI_API_KEY environment variable.'
-    } else {
-      const { getRetellClient } = await import('@/lib/retell-api')
-      const retellClient = getRetellClient()
-      call = await retellClient.getCall(callId)
-    }
+    const { getRetellClient } = await import('@/lib/retell-api')
+    const retellClient = await getRetellClient(user.practiceId)
+    call = await retellClient.getCall(callId)
   } catch (err) {
     console.error('Error fetching call details:', err)
     if (err instanceof Error && err.message.includes('404')) {

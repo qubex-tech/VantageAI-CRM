@@ -49,19 +49,21 @@ export default async function CallsPage({
     const limit = params.limit ? parseInt(params.limit) : 50
 
     // Use RetellAI client directly in server component
-    // First check if API key is configured
-    const retellApiKey = process.env.RETELLAI_API_KEY
-    
-    if (!retellApiKey) {
-      error = 'RetellAI API key not configured. Please set RETELLAI_API_KEY environment variable.'
-    } else {
+    // Get API key from database (per-practice configuration)
+    try {
       const { getRetellClient } = await import('@/lib/retell-api')
-      const retellClient = getRetellClient()
+      const retellClient = await getRetellClient(user.practiceId)
       const result = await retellClient.listCalls({
         agentId,
         limit,
       })
       calls = result.calls || []
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('not configured')) {
+        error = 'RetellAI integration not configured. Please configure it in Settings.'
+      } else {
+        throw err
+      }
     }
   } catch (err) {
     console.error('Error fetching calls:', err)
@@ -108,7 +110,7 @@ export default async function CallsPage({
           <CardContent className="py-12 text-center">
             <p className="text-sm text-red-600">{error}</p>
             <p className="text-xs text-red-500 mt-2">
-              Please ensure RETELLAI_API_KEY is configured in your environment variables
+              {error.includes('not configured') && 'Please configure your RetellAI integration in Settings.'}
             </p>
           </CardContent>
         </Card>

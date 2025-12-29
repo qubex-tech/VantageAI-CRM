@@ -162,16 +162,20 @@ export class RetellApiClient {
 }
 
 /**
- * Get RetellAI client using API key from environment variable
- * In the future, this could be stored per-practice in the database like Cal.com
+ * Get RetellAI client for a practice
+ * Retrieves API key from database (stored per-practice)
  */
-export function getRetellClient(): RetellApiClient {
-  const apiKey = process.env.RETELLAI_API_KEY
+export async function getRetellClient(practiceId: string): Promise<RetellApiClient> {
+  const { prisma } = await import('./db')
   
-  if (!apiKey) {
-    throw new Error('RetellAI API key not configured. Please set RETELLAI_API_KEY environment variable.')
+  const integration = await prisma.retellIntegration.findUnique({
+    where: { practiceId },
+  })
+
+  if (!integration || !integration.isActive) {
+    throw new Error('RetellAI integration not configured for this practice. Please configure it in Settings.')
   }
 
-  return new RetellApiClient(apiKey)
+  return new RetellApiClient(integration.apiKey)
 }
 

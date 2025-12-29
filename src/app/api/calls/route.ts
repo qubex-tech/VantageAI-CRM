@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
       ? parseInt(searchParams.get('endTimestamp')!)
       : undefined
 
-    const retellClient = getRetellClient()
+    const retellClient = await getRetellClient(user.practiceId)
     const result = await retellClient.listCalls({
       agentId,
       limit,

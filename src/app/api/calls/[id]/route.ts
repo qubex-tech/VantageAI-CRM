@@ -21,7 +21,7 @@ export async function GET(
       )
     }
 
-    const retellClient = getRetellClient()
+    const retellClient = await getRetellClient(user.practiceId)
     const call = await retellClient.getCall(callId)
 
     return NextResponse.json({ call })
