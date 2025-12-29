@@ -204,11 +204,14 @@ export async function processCallDataForPatient(
       return { patientId: null, isNew: false }
     }
 
+    // Phone is required, use a placeholder if not available
+    const phoneForCreation = normalizedPhone || '000-000-0000'
+
     const newPatient = await prisma.patient.create({
       data: {
         practiceId,
         name: patientName,
-        phone: normalizedPhone || undefined,
+        phone: phoneForCreation,
         dateOfBirth: updateData.dateOfBirth || new Date('1900-01-01'),
         preferredContactMethod: 'phone',
         notes: updateData.notes || undefined,
