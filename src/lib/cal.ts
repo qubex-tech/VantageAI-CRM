@@ -169,9 +169,9 @@ export class CalApiClient {
         slotStart: params.slotStart,
       }
 
-      if (params.slotDuration !== undefined) {
-        payload.slotDuration = params.slotDuration
-      }
+      // Only include slotDuration if explicitly provided (for variable length event types)
+      // For fixed-length event types, omitting it lets it default to the event type's length
+      // Note: Including slotDuration for non-variable-length event types causes a 400 error
       if (params.reservationDuration !== undefined) {
         payload.reservationDuration = params.reservationDuration
       }
