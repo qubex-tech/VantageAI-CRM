@@ -163,7 +163,13 @@ export class CalApiClient {
         }
       })
 
-      const response = await fetch(`${this.baseUrl}/bookings`, {
+      // Cal.com API v2 bookings endpoint
+      // Note: If /v2/bookings doesn't work, we may need to use a different approach
+      // Documentation: https://cal.com/docs/api-reference/v2/bookings/create-a-booking
+      const bookingUrl = `${this.baseUrl}/bookings`
+      console.log('Cal.com booking request URL:', bookingUrl)
+      
+      const response = await fetch(bookingUrl, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
