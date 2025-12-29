@@ -63,14 +63,23 @@ export class RetellApiClient {
     endTimestamp?: number
   }): Promise<{ calls: RetellCallListItem[], total?: number }> {
     try {
-      const queryParams = new URLSearchParams()
-      if (params?.agentId) queryParams.set('agent_id', params.agentId)
-      if (params?.limit) queryParams.set('limit', String(params.limit))
-      if (params?.offset) queryParams.set('offset', String(params.offset))
-      if (params?.startTimestamp) queryParams.set('start_timestamp', String(params.startTimestamp))
-      if (params?.endTimestamp) queryParams.set('end_timestamp', String(params.endTimestamp))
-
-      const url = `${this.baseUrl}/list-calls${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+      // Build request body according to RetellAI API documentation
+      const body: any = {}
+      
+      if (params?.agentId) {
+        body.filter_criteria = {
+          agent_id: [params.agentId]
+        }
+      }
+      
+      if (params?.limit) {
+        body.limit = params.limit
+      }
+      
+      // Note: RetellAI API uses pagination_key instead of offset
+      // For now, we'll ignore offset as pagination_key requires a call_id
+      
+      const url = `${this.baseUrl}/list-calls`
       
       const response = await fetch(url, {
         method: 'POST',
@@ -78,6 +87,7 @@ export class RetellApiClient {
           'Authorization': `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
         },
+        body: Object.keys(body).length > 0 ? JSON.stringify(body) : undefined,
       })
 
       if (!response.ok) {

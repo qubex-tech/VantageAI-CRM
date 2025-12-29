@@ -44,8 +44,11 @@ export async function POST(req: NextRequest) {
     try {
       await testClient.listCalls({ limit: 1 })
     } catch (error) {
+      console.error('RetellAI API test failed:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      // Return more detailed error message to help user debug
       return NextResponse.json(
-        { error: 'Invalid API key or connection failed. Please check your RetellAI API key.' },
+        { error: `Invalid API key or connection failed: ${errorMessage}. Please check your RetellAI API key.` },
         { status: 400 }
       )
     }
