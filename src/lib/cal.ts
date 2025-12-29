@@ -232,17 +232,19 @@ export class CalApiClient {
    */
   async createBooking(params: CreateBookingParams): Promise<CalBooking> {
     try {
-      // Calculate slot duration from start and end times
+      // Calculate reservation duration from start and end times
       const start = new Date(params.start)
       const end = new Date(params.end)
-      const slotDuration = Math.round((end.getTime() - start.getTime()) / (1000 * 60)) // Convert to minutes
+      const reservationDuration = Math.round((end.getTime() - start.getTime()) / (1000 * 60)) // Convert to minutes
 
       // Reserve the slot
+      // Note: We don't pass slotDuration because it's only for variable-length event types
+      // For fixed-length event types, omitting it lets it default to the event type's length
       const reservation = await this.reserveSlot({
         eventTypeId: params.eventTypeId,
         slotStart: start.toISOString(),
-        slotDuration: slotDuration,
-        reservationDuration: slotDuration, // Reserve for the full duration
+        // Don't include slotDuration - only for variable length event types
+        reservationDuration: reservationDuration, // Reserve for the full duration
       })
 
       // Return a booking-like object using the reservation details
