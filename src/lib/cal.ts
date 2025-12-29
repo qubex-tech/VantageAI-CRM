@@ -247,10 +247,9 @@ export class CalApiClient {
         },
       }
 
-      // Include lengthInMinutes if it differs from the default (optional for fixed-length event types)
-      if (lengthInMinutes > 0) {
-        payload.lengthInMinutes = lengthInMinutes
-      }
+      // Note: lengthInMinutes should only be included for event types that support multiple lengths
+      // For fixed-length event types, Cal.com will use the event type's default length
+      // We don't include it here to avoid "BadRequestException" errors
 
       // Include notes in bookingFieldsResponses if provided
       if (params.responses.notes) {
