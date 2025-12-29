@@ -187,10 +187,12 @@ export async function processCallDataForPatient(
       action: 'update',
       resourceType: 'patient',
       resourceId: patient.id,
-      metadata: {
-        source: 'retell_call',
-        callId,
-        updatedFields: Object.keys(updateData),
+      changes: {
+        after: {
+          source: 'retell_call',
+          callId,
+          updatedFields: Object.keys(updateData),
+        },
       },
     })
 
@@ -220,9 +222,11 @@ export async function processCallDataForPatient(
       action: 'create',
       resourceType: 'patient',
       resourceId: newPatient.id,
-      metadata: {
-        source: 'retell_call',
-        callId,
+      changes: {
+        after: {
+          source: 'retell_call',
+          callId,
+        },
       },
     })
 
