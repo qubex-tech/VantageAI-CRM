@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ integration })
   } catch (error) {
     if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
-      const zodError = error as { issues: Array<{ path: (string | number)[]; message: string }> }
+      const zodError = error as unknown as { issues: Array<{ path: (string | number)[]; message: string }> }
       const errorMessage = zodError.issues.map(issue => {
         const path = issue.path.join('.')
         return `${path}: ${issue.message}`

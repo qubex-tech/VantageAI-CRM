@@ -10,7 +10,8 @@ import {
   Menu, 
   X,
   ChevronLeft,
-  LogOut
+  LogOut,
+  Phone
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useEffect } from 'react'
@@ -21,6 +22,7 @@ const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: Home },
   { href: '/patients', label: 'Patients', icon: Users },
   { href: '/appointments', label: 'Appointments', icon: Calendar },
+  { href: '/calls', label: 'Calls', icon: Phone },
   { href: '/settings', label: 'Settings', icon: Settings },
 ]
 
