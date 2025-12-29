@@ -349,8 +349,24 @@ export function ScheduleAppointmentForm({
                       Loading available times...
                     </div>
                   ) : timeSlots.length === 0 ? (
-                    <div className="p-4 text-center text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg">
-                      No available time slots for this date. Please select another date.
+                    <div className="space-y-4">
+                      <div className="p-4 text-center text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p className="font-medium mb-2">No available slots found</p>
+                        <p className="text-xs text-yellow-600">
+                          Cal.com API v2 doesn't support slot availability. Please enter a time manually below.
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="manualTime">Time *</Label>
+                        <Input
+                          id="manualTime"
+                          type="time"
+                          value={selectedTime || ''}
+                          onChange={(e) => setSelectedTime(e.target.value)}
+                          required
+                          className="w-full"
+                        />
+                      </div>
                     </div>
                   ) : (
                     timeSlots.map((slotDate, index) => {

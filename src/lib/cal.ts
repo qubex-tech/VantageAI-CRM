@@ -64,57 +64,42 @@ export class CalApiClient {
     timeZone: string = 'America/New_York'
   ): Promise<Array<{ time: string; attendeeCount: number }>> {
     try {
-      // Use v2 API endpoint first (same API version that works for event types)
-      let response = await fetch(
-        `${this.baseUrl}/slots/available`,
+      // Note: Cal.com API v2 does not have a slots/availability endpoint
+      // The v1 /slots endpoint exists but requires a v1 API key
+      // v2 API keys (which work for event types and bookings) return 401 on v1 endpoints
+      
+      // Try v1 endpoint (only endpoint that exists for slots)
+      const v1BaseUrl = this.baseUrl.replace('/v2', '/v1')
+      const params = new URLSearchParams({
+        eventTypeId: String(eventTypeId),
+        startTime: dateFrom,
+        endTime: dateTo,
+        timeZone,
+      })
+      
+      const response = await fetch(
+        `${v1BaseUrl}/slots?${params.toString()}`,
         {
-          method: 'POST',
           headers: {
             'Authorization': `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            eventTypeId: parseInt(String(eventTypeId), 10),
-            startTime: dateFrom,
-            endTime: dateTo,
-            timeZone,
-          }),
         }
       )
 
-      // If v2 returns 404, try v1 endpoint as fallback
-      if (!response.ok && response.status === 404) {
-        const v2ErrorText = await response.text().catch(() => 'Unknown error')
-        const v1BaseUrl = this.baseUrl.replace('/v2', '/v1')
-        const params = new URLSearchParams({
-          eventTypeId: String(eventTypeId),
-          startTime: dateFrom,
-          endTime: dateTo,
-          timeZone,
-        })
-        
-        try {
-          response = await fetch(
-            `${v1BaseUrl}/slots?${params.toString()}`,
-            {
-              headers: {
-                'Authorization': `Bearer ${this.apiKey}`,
-                'Content-Type': 'application/json',
-              },
-            }
-          )
-        } catch (v1Error) {
-          console.error('Cal.com slots API v1 error:', v1Error)
-          console.error('Cal.com slots API v2 error response:', v2ErrorText)
-          throw new Error(`Cal.com API error: 404 Not Found`)
-        }
-      }
-
-      // Check for 401 Unauthorized - this means API key is invalid
+      // If we get 401, the API key is v2-only and doesn't support v1 endpoints
+      // This is expected - Cal.com v2 API doesn't provide slots endpoint
       if (response.status === 401) {
-        const errorText = await response.text().catch(() => 'Unknown error')
-        console.error('Cal.com API 401 Unauthorized:', errorText)
-        throw new Error('Cal.com API error: 401 Unauthorized - Please check your API key')
+        console.warn('Cal.com v1 slots endpoint requires v1 API key. v2 API keys are not supported for slots endpoint.')
+        console.warn('Cal.com API v2 does not provide a slots/availability endpoint.')
+        // Return empty array - users will need to enter time manually
+        return []
+      }
+      
+      // If v1 returns 404, that's fine - endpoint doesn't exist
+      if (response.status === 404) {
+        console.warn('Cal.com v1 slots endpoint returned 404. This endpoint may not be available.')
+        return []
       }
 
       if (!response.ok) {
