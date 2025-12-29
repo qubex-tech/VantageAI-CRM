@@ -199,6 +199,11 @@ export async function bookAppointment(
   const start = new Date(startTime)
   const end = new Date(start.getTime() + 30 * 60 * 1000) // 30 minutes
 
+  // Validate patient has required email for Cal.com booking
+  if (!patient.email || patient.email.trim() === '') {
+    throw new Error('Patient email is required to book an appointment via Cal.com')
+  }
+
   // Create Cal.com booking
   const calClient = await getCalClient(practiceId)
   const calBooking = await calClient.createBooking({
@@ -208,8 +213,8 @@ export async function bookAppointment(
     timeZone: timezone,
     responses: {
       name: patient.name,
-      email: patient.email || '',
-      phone: patient.phone,
+      email: patient.email.trim(),
+      phone: patient.phone?.trim() || undefined,
       notes: reason,
     },
   })
