@@ -168,6 +168,7 @@ export class CalApiClient {
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
+          'cal-api-version': '2024-09-04', // Required header for v2 API
         },
         body: JSON.stringify(payload),
       })
@@ -175,11 +176,15 @@ export class CalApiClient {
       if (!response.ok) {
         const errorText = await response.text()
         console.error('Cal.com booking API error response:', errorText)
+        console.error('Cal.com booking API request payload:', JSON.stringify(payload, null, 2))
         let errorMessage = `Cal.com booking error: ${response.status} ${response.statusText}`
         try {
           const errorJson = JSON.parse(errorText)
           if (errorJson.message) {
             errorMessage = errorJson.message
+          }
+          if (errorJson.error) {
+            errorMessage = errorJson.error
           }
         } catch {
           // Use the text error as-is
