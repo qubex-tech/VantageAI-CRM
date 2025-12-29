@@ -335,7 +335,7 @@ export function CalSettings({ initialIntegration, initialMappings = [] }: CalSet
                 placeholder="Enter your Cal.com API key"
                 required
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-gray-500">
                 You can find your API key in your Cal.com settings
               </p>
             </div>
@@ -385,7 +385,7 @@ export function CalSettings({ initialIntegration, initialMappings = [] }: CalSet
                 {loadingEventTypes ? 'Loading...' : 'Fetch Cal.com Event Types'}
               </Button>
               {eventTypes.length > 0 && (
-                <p className="text-sm text-muted-foreground mt-2">
+                <p className="text-sm text-gray-500 mt-2">
                   Found {eventTypes.length} event types
                 </p>
               )}
@@ -503,7 +503,7 @@ export function CalSettings({ initialIntegration, initialMappings = [] }: CalSet
             <div>
               <h3 className="font-semibold text-sm mb-3">Existing Mappings</h3>
               {mappings.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-gray-500">
                   No mappings yet. Fetch event types and create a mapping to get started.
                 </p>
               ) : (
@@ -524,7 +524,7 @@ export function CalSettings({ initialIntegration, initialMappings = [] }: CalSet
                         <div className="flex items-center justify-between p-3">
                           <div className="flex-1">
                             <p className="font-medium">{mapping.visitTypeName}</p>
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-sm text-gray-500">
                               {eventType ? `${eventType.title} (${eventType.length} min)` : `Event ID: ${mapping.calEventTypeId}`}
                             </p>
                           </div>

@@ -68,7 +68,7 @@ export default async function PatientDetailPage({
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">{patient.name}</h1>
-          <p className="text-muted-foreground">Age: {age} years</p>
+          <p className="text-gray-500">Age: {age} years</p>
         </div>
         <Link href={`/appointments/new?patientId=${patient.id}`}>
           <Button>
@@ -85,23 +85,23 @@ export default async function PatientDetailPage({
           </CardHeader>
           <CardContent className="space-y-2">
             <div className="flex items-center gap-2">
-              <Phone className="h-4 w-4 text-muted-foreground" />
+              <Phone className="h-4 w-4 text-gray-500" />
               <span>{patient.phone}</span>
             </div>
             {patient.email && (
               <div className="flex items-center gap-2">
-                <Mail className="h-4 w-4 text-muted-foreground" />
+                <Mail className="h-4 w-4 text-gray-500" />
                 <span>{patient.email}</span>
               </div>
             )}
             {patient.address && (
               <div className="flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-muted-foreground" />
+                <MapPin className="h-4 w-4 text-gray-500" />
                 <span>{patient.address}</span>
               </div>
             )}
             <div className="pt-2">
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-gray-500">
                 Preferred: {patient.preferredContactMethod}
               </p>
             </div>
@@ -117,10 +117,10 @@ export default async function PatientDetailPage({
               {patient.insurancePolicies.map((policy: any) => (
                 <div key={policy.id} className="border-b pb-2">
                   <p className="font-medium">{policy.providerName}</p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-gray-500">
                     Member ID: {policy.memberId}
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-gray-500">
                     Status: {policy.eligibilityStatus}
                   </p>
                 </div>
@@ -139,13 +139,13 @@ export default async function PatientDetailPage({
                 <Link
                   key={apt.id}
                   href={`/appointments/${apt.id}`}
-                  className="block border-b pb-2 hover:bg-accent p-2 rounded transition-colors"
+                  className="block border-b pb-2 hover:bg-gray-100 p-2 rounded transition-colors"
                 >
                   <p className="font-medium">{apt.visitType}</p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-gray-500">
                     {format(apt.startTime, 'MMM d, yyyy h:mm a')}
                   </p>
-                  <p className="text-xs text-muted-foreground">Status: {apt.status}</p>
+                  <p className="text-xs text-gray-500">Status: {apt.status}</p>
                 </Link>
               ))}
             </CardContent>
@@ -158,15 +158,15 @@ export default async function PatientDetailPage({
           </CardHeader>
           <CardContent className="space-y-2">
             {patient.timelineEntries.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No timeline entries</p>
+              <p className="text-sm text-gray-500">No timeline entries</p>
             ) : (
               patient.timelineEntries.map((entry: any) => (
                 <div key={entry.id} className="border-b pb-2">
                   <p className="font-medium">{entry.title}</p>
                   {entry.description && (
-                    <p className="text-sm text-muted-foreground">{entry.description}</p>
+                    <p className="text-sm text-gray-500">{entry.description}</p>
                   )}
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-gray-500">
                     {format(entry.createdAt, 'MMM d, yyyy h:mm a')}
                   </p>
                 </div>
