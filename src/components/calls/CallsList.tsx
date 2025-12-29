@@ -35,15 +35,14 @@ export function CallsList({ initialCalls, error: initialError }: CallsListProps)
     setError(null)
     
     try {
-      // Refresh the server component data
-      router.refresh()
-      
-      // Also fetch directly via API for immediate update
+      // Fetch directly via API for immediate update
       const response = await fetch('/api/calls?limit=50')
       const data = await response.json()
       
       if (response.ok && data.calls) {
         setCalls(data.calls)
+        // Also refresh the server component data to keep it in sync
+        router.refresh()
       } else {
         setError(data.error || 'Failed to refresh calls')
       }
@@ -61,20 +60,32 @@ export function CallsList({ initialCalls, error: initialError }: CallsListProps)
     setError(initialError || null)
   }, [initialCalls, initialError])
 
-  // Auto-refresh when page becomes visible (user switches back to the tab)
+  // Auto-refresh when page becomes visible or window regains focus (user switches back to the tab)
   useEffect(() => {
+    let mounted = true
+    
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
+      if (mounted && document.visibilityState === 'visible') {
+        refreshCalls()
+      }
+    }
+
+    const handleFocus = () => {
+      if (mounted) {
         refreshCalls()
       }
     }
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleFocus)
+    
     return () => {
+      mounted = false
       document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleFocus)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // Only set up listener once on mount
+  }, []) // Only set up listeners once on mount
 
   const formatDuration = (ms?: number) => {
     if (!ms) return 'N/A'
