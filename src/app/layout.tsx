@@ -21,12 +21,12 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={inter.variable}>
-      <body className="font-sans antialiased">
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
+      <body className="font-sans antialiased bg-white text-gray-900">
         <SidebarProvider>
           <div className="flex min-h-screen flex-col bg-white">
             <Sidebar />
-            <main className="flex-1 pb-16 md:pb-0 md:ml-64">{children}</main>
+            <main className="flex-1 pb-16 md:pb-0 md:ml-64 bg-white">{children}</main>
           </div>
         </SidebarProvider>
       </body>
