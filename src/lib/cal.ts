@@ -180,14 +180,27 @@ export class CalApiClient {
         let errorMessage = `Cal.com booking error: ${response.status} ${response.statusText}`
         try {
           const errorJson = JSON.parse(errorText)
+          // Extract error message, handling both string and object formats
           if (errorJson.message) {
-            errorMessage = errorJson.message
+            errorMessage = typeof errorJson.message === 'string' 
+              ? errorJson.message 
+              : JSON.stringify(errorJson.message)
+          } else if (errorJson.error) {
+            errorMessage = typeof errorJson.error === 'string'
+              ? errorJson.error
+              : JSON.stringify(errorJson.error)
+          } else if (errorJson.errors && Array.isArray(errorJson.errors)) {
+            // Handle validation errors array
+            errorMessage = errorJson.errors.map((e: any) => 
+              typeof e === 'string' ? e : e.message || JSON.stringify(e)
+            ).join(', ')
+          } else {
+            // If we have the full error object, stringify it properly
+            errorMessage = JSON.stringify(errorJson)
           }
-          if (errorJson.error) {
-            errorMessage = errorJson.error
-          }
-        } catch {
-          // Use the text error as-is
+        } catch (parseError) {
+          // If JSON parsing fails, use the text as-is
+          errorMessage = errorText || errorMessage
         }
         throw new Error(errorMessage)
       }
