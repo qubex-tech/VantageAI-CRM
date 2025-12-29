@@ -226,49 +226,108 @@ export class CalApiClient {
   }
 
   /**
-   * Create a booking (uses slot reservation in v2 API)
-   * Note: Cal.com v2 API doesn't have a direct /bookings endpoint
-   * We use slot reservation instead and treat the reservationUid as the booking ID
+   * Create a booking using the Cal.com v2 bookings endpoint
+   * Documentation: https://cal.com/docs/api-reference/v2/bookings/create-a-booking
    */
   async createBooking(params: CreateBookingParams): Promise<CalBooking> {
     try {
-      // Calculate reservation duration from start and end times
       const start = new Date(params.start)
       const end = new Date(params.end)
-      const reservationDuration = Math.round((end.getTime() - start.getTime()) / (1000 * 60)) // Convert to minutes
+      const lengthInMinutes = Math.round((end.getTime() - start.getTime()) / (1000 * 60))
 
-      // Reserve the slot
-      // Note: We don't pass slotDuration because it's only for variable-length event types
-      // For fixed-length event types, omitting it lets it default to the event type's length
-      const reservation = await this.reserveSlot({
-        eventTypeId: params.eventTypeId,
-        slotStart: start.toISOString(),
-        // Don't include slotDuration - only for variable length event types
-        reservationDuration: reservationDuration, // Reserve for the full duration
+      const payload: any = {
+        start: start.toISOString(),
+        eventTypeId: typeof params.eventTypeId === 'string' ? parseInt(params.eventTypeId, 10) : params.eventTypeId,
+        attendee: {
+          name: params.responses.name,
+          email: params.responses.email,
+          timeZone: params.timeZone || 'America/New_York',
+          ...(params.responses.phone && { phoneNumber: params.responses.phone }),
+          language: 'en',
+        },
+      }
+
+      // Include lengthInMinutes if it differs from the default (optional for fixed-length event types)
+      if (lengthInMinutes > 0) {
+        payload.lengthInMinutes = lengthInMinutes
+      }
+
+      // Include notes in bookingFieldsResponses if provided
+      if (params.responses.notes) {
+        payload.bookingFieldsResponses = {
+          notes: params.responses.notes,
+        }
+      }
+
+      const response = await fetch(`${this.baseUrl}/bookings`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+          'cal-api-version': '2024-09-04', // Use latest API version
+        },
+        body: JSON.stringify(payload),
       })
 
-      // Return a booking-like object using the reservation details
-      // Note: This is a reservation, not a full booking, but it's the closest we can get with v2 API
-      return {
-        id: reservation.reservationUid,
-        uid: reservation.reservationUid,
-        startTime: reservation.slotStart,
-        endTime: reservation.slotEnd,
-        title: 'Reserved Appointment',
-        status: 'scheduled',
-        eventType: {
-          id: String(reservation.eventTypeId),
-          title: 'Appointment',
-        },
-        attendees: [
-          {
-            email: params.responses.email,
-            name: params.responses.name,
-          },
-        ],
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Cal.com booking API error response:', errorText)
+        console.error('Cal.com booking API request payload:', JSON.stringify(payload, null, 2))
+        let errorMessage = `Cal.com booking error: ${response.status} ${response.statusText}`
+        try {
+          const errorJson = JSON.parse(errorText)
+          if (errorJson.message) {
+            errorMessage = typeof errorJson.message === 'string' 
+              ? errorJson.message 
+              : JSON.stringify(errorJson.message)
+          } else if (errorJson.error) {
+            errorMessage = typeof errorJson.error === 'string'
+              ? errorJson.error
+              : JSON.stringify(errorJson.error)
+          } else if (errorJson.errors && Array.isArray(errorJson.errors)) {
+            errorMessage = errorJson.errors.map((e: any) => 
+              typeof e === 'string' ? e : e.message || JSON.stringify(e)
+            ).join(', ')
+          } else {
+            errorMessage = JSON.stringify(errorJson)
+          }
+        } catch (parseError) {
+          errorMessage = errorText || errorMessage
+        }
+        throw new Error(errorMessage)
       }
+
+      const data = await response.json()
+      
+      // Cal.com v2 API returns: { status: "success", data: { ...booking data... } }
+      if (data.status === 'success' && data.data) {
+        const booking = data.data
+        return {
+          id: String(booking.id ?? booking.uid),
+          uid: booking.uid ?? String(booking.id),
+          startTime: booking.start,
+          endTime: booking.end,
+          title: booking.title || 'Appointment',
+          status: booking.status || 'scheduled',
+          eventType: {
+            id: String(booking.eventTypeId ?? booking.eventType?.id ?? ''),
+            title: booking.eventType?.slug || 'Appointment',
+          },
+          attendees: booking.attendees?.map((a: any) => ({
+            email: a.email,
+            name: a.name,
+          })) || [
+            {
+              email: params.responses.email,
+              name: params.responses.name,
+            },
+          ],
+        }
+      }
+      
+      throw new Error('Invalid response format from Cal.com booking API')
     } catch (error) {
-      console.error('Error creating Cal.com booking (via reservation):', error)
+      console.error('Error creating Cal.com booking:', error)
       throw error
     }
   }
