@@ -334,19 +334,37 @@ export class CalApiClient {
 
   /**
    * Cancel a booking
+   * Documentation: https://cal.com/docs/api-reference/v2/bookings/cancel-a-booking
    */
   async cancelBooking(bookingId: string): Promise<void> {
     try {
-      const response = await fetch(`${this.baseUrl}/bookings/${bookingId}`, {
-        method: 'DELETE',
+      const response = await fetch(`${this.baseUrl}/bookings/${bookingId}/cancel`, {
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
+          'cal-api-version': '2024-09-04',
         },
       })
 
       if (!response.ok) {
-        throw new Error(`Cal.com cancel error: ${response.statusText}`)
+        const errorText = await response.text()
+        let errorMessage = `Cal.com cancel error: ${response.status} ${response.statusText}`
+        try {
+          const errorJson = JSON.parse(errorText)
+          if (errorJson.message) {
+            errorMessage = typeof errorJson.message === 'string' 
+              ? errorJson.message 
+              : JSON.stringify(errorJson.message)
+          } else if (errorJson.error) {
+            errorMessage = typeof errorJson.error === 'string'
+              ? errorJson.error
+              : JSON.stringify(errorJson.error)
+          }
+        } catch (parseError) {
+          errorMessage = errorText || errorMessage
+        }
+        throw new Error(errorMessage)
       }
     } catch (error) {
       console.error('Error canceling Cal.com booking:', error)
