@@ -235,14 +235,19 @@ export class CalApiClient {
       const end = new Date(params.end)
       const lengthInMinutes = Math.round((end.getTime() - start.getTime()) / (1000 * 60))
 
+      // Validate required fields
+      if (!params.responses.email || params.responses.email.trim() === '') {
+        throw new Error('Email is required for booking creation')
+      }
+
       const payload: any = {
         start: start.toISOString(),
         eventTypeId: typeof params.eventTypeId === 'string' ? parseInt(params.eventTypeId, 10) : params.eventTypeId,
         attendee: {
           name: params.responses.name,
-          email: params.responses.email,
+          email: params.responses.email.trim(),
           timeZone: params.timeZone || 'America/New_York',
-          ...(params.responses.phone && { phoneNumber: params.responses.phone }),
+          ...(params.responses.phone && params.responses.phone.trim() !== '' && { phoneNumber: params.responses.phone.trim() }),
           language: 'en',
         },
       }
