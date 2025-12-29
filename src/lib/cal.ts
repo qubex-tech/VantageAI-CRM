@@ -264,7 +264,7 @@ export class CalApiClient {
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
-          'cal-api-version': '2024-09-04', // Use latest API version
+          'cal-api-version': '2024-08-13', // Required header - must be 2024-08-13 per documentation
         },
         body: JSON.stringify(payload),
       })
