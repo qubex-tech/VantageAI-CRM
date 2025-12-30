@@ -5,6 +5,8 @@ import { prisma } from '@/lib/db'
 import { CalSettings } from '@/components/settings/CalSettings'
 import { RetellSettings } from '@/components/settings/RetellSettings'
 
+export const dynamic = 'force-dynamic'
+
 export default async function SettingsPage() {
   const supabaseSession = await getSupabaseSession()
   

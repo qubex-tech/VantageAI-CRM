@@ -8,6 +8,8 @@ import Link from 'next/link'
 import { format } from 'date-fns'
 import { Calendar, Phone, Mail, MapPin } from 'lucide-react'
 
+export const dynamic = 'force-dynamic'
+
 export default async function PatientDetailPage({
   params,
 }: {

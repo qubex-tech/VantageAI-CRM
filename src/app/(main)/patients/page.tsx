@@ -7,6 +7,8 @@ import Link from 'next/link'
 import { Plus } from 'lucide-react'
 import { PatientsList } from '@/components/patients/PatientsList'
 
+export const dynamic = 'force-dynamic'
+
 export default async function PatientsPage({
   searchParams,
 }: {

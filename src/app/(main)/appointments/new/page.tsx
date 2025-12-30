@@ -4,6 +4,8 @@ import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
 import { prisma } from '@/lib/db'
 import { ScheduleAppointmentForm } from '@/components/appointments/ScheduleAppointmentForm'
 
+export const dynamic = 'force-dynamic'
+
 export default async function NewAppointmentPage({
   searchParams,
 }: {

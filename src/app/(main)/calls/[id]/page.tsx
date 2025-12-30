@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { format } from 'date-fns'
 import { RetellCall } from '@/lib/retell-api'
 
+export const dynamic = 'force-dynamic'
+
 export default async function CallDetailPage({
   params,
 }: {

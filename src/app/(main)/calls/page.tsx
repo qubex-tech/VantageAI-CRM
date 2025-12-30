@@ -3,6 +3,8 @@ import { getSupabaseSession } from '@/lib/auth-supabase'
 import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
 import { CallsList } from '@/components/calls/CallsList'
 
+export const dynamic = 'force-dynamic'
+
 interface RetellCallListItem {
   call_id: string
   call_type: 'phone_call' | 'web_call'
