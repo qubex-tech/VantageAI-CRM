@@ -231,7 +231,7 @@ export async function bookAppointment(
       status: 'scheduled',
       reason: reason || undefined,
       calEventId: eventTypeId,
-      calBookingId: calBooking.id ?? calBooking.uid,
+      calBookingId: calBooking.uid || String(calBooking.id),
     },
   })
 
