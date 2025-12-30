@@ -35,16 +35,34 @@ export async function syncSupabaseUserToPrisma(
         
         if (!practice) {
           // Practice was deleted, create a new one
+          // Don't try to use the same ID - it might conflict
           const name = (supabaseUser.user_metadata?.name as string) || 
                        supabaseUser.user_metadata?.full_name as string || 
                        user.name || 'User'
-          practice = await prisma.practice.create({
-            data: {
-              id: user.practiceId, // Try to use the same ID
-              name: `${name}'s Practice`,
-            },
-          })
-          console.log(`Recreated practice ${practice.id} for user ${userEmail}`)
+          try {
+            practice = await prisma.practice.create({
+              data: {
+                name: `${name}'s Practice`,
+              },
+            })
+            // Update user to point to new practice
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { practiceId: practice.id },
+            })
+            console.log(`Recreated practice ${practice.id} for user ${userEmail}`)
+            // Reload user with new practice
+            user = await prisma.user.findUnique({
+              where: { email: userEmail },
+              include: { practice: true },
+            })
+            if (!user) {
+              throw new Error('Failed to reload user after practice recreation')
+            }
+          } catch (practiceError) {
+            console.error(`Failed to recreate practice for ${userEmail}:`, practiceError)
+            throw new Error(`Practice was deleted and could not be recreated: ${practiceError instanceof Error ? practiceError.message : 'Unknown error'}`)
+          }
         }
       }
       
