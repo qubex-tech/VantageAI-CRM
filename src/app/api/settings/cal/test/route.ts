@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/middleware'
 import { getCalClient } from '@/lib/cal'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * Test Cal.com API connection
  */

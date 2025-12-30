@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/middleware'
 import { getRetellClient } from '@/lib/retell-api'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * GET /api/calls
  * List calls from RetellAI

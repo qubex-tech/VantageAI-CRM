@@ -3,6 +3,8 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * Test endpoint to manually trigger user sync
  * This helps debug sync issues

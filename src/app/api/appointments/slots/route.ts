@@ -3,6 +3,8 @@ import { requireAuth } from '@/lib/middleware'
 import { getCalClient } from '@/lib/cal'
 import { getAvailableSlotsSchema } from '@/lib/validations'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req)
