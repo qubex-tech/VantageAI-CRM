@@ -84,6 +84,9 @@ export async function syncSupabaseUserToPrisma(
           practiceId: practice.id,
           role: 'admin', // First user is admin
         },
+        include: {
+          practice: true,
+        },
       })
 
       console.log(`Successfully created user ${user.id} in Prisma`)
