@@ -72,6 +72,13 @@ export async function GET(req: NextRequest) {
     console.log('Calling syncSupabaseUserToPrisma...')
     const prismaUser = await syncSupabaseUserToPrisma(session.user)
     
+    if (!prismaUser) {
+      return NextResponse.json(
+        { error: 'Failed to sync user' },
+        { status: 500 }
+      )
+    }
+    
     console.log('Sync successful! User ID:', prismaUser.id)
     
     return NextResponse.json({ 
