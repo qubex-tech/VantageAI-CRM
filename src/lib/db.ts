@@ -4,19 +4,24 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
-// Add connection limit via DATABASE_URL if not already present
-// This helps prevent hitting Supabase's max clients limit
+// Configure database URL
+// For Transaction Mode (port 6543), we don't need connection_limit - the pooler handles it
+// For Session Mode (port 5432), connection_limit helps but has low limits
 let databaseUrl = process.env.DATABASE_URL || ''
-if (databaseUrl && !databaseUrl.includes('connection_limit')) {
-  // Parse and add connection_limit parameter
-  // Handle both postgresql:// and postgres:// URLs
+const portMatch = databaseUrl.match(/:(\d+)\//)
+const port = portMatch ? portMatch[1] : ''
+
+// Only add connection_limit for Session Mode (5432), not Transaction Mode (6543)
+// Transaction Mode pooler manages connections differently and doesn't need this limit
+if (databaseUrl && port === '5432' && !databaseUrl.includes('connection_limit')) {
+  // Parse and add connection_limit parameter for Session Mode only
   const urlMatch = databaseUrl.match(/^(postgresql?:\/\/[^?]+)(\?.*)?$/)
   if (urlMatch) {
     const baseUrl = urlMatch[1]
     const existingParams = urlMatch[2] || ''
     const params = new URLSearchParams(existingParams.replace(/^\?/, ''))
     
-    // Only add if not already present
+    // Only add if not already present (Session Mode only)
     if (!params.has('connection_limit')) {
       params.set('connection_limit', '5') // Limit to 5 connections per Prisma instance
     }
