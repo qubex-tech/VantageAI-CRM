@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
     const { triggerEvent, createdAt, payload } = webhookData
 
     console.log(`Cal.com webhook received: ${triggerEvent} at ${createdAt}`)
+    console.log('Webhook payload:', JSON.stringify(payload, null, 2))
 
     // Extract booking information from payload
     const bookingId = payload?.bookingId
@@ -56,25 +57,57 @@ export async function POST(req: NextRequest) {
     const rescheduleUid = payload?.rescheduleUid
 
     // Find appointment by calBookingId (using bookingId or uid)
+    // Note: Cal.com returns both bookingId (numeric) and uid (string)
+    // The agent stores calBooking.id ?? calBooking.uid, so we need to check both formats
     const calBookingId = bookingId?.toString() || bookingUid
-    let appointment = calBookingId
+    const possibleBookingIds = [
+      bookingId?.toString(),
+      bookingUid,
+      bookingId, // In case it's stored as number
+    ].filter(Boolean)
+    
+    console.log('Searching for appointment with calBookingId:', possibleBookingIds)
+    
+    let appointment = possibleBookingIds.length > 0
       ? await prisma.appointment.findFirst({
           where: {
-            OR: [
-              { calBookingId: calBookingId },
-              { calBookingId: bookingId?.toString() },
-              { calBookingId: bookingUid },
-            ],
+            OR: possibleBookingIds.map(id => ({ calBookingId: id })),
           },
           include: { patient: true },
         })
       : null
+    
+    console.log('Found appointment:', appointment ? appointment.id : 'none')
 
     // Handle different trigger events
     switch (triggerEvent) {
       case 'BOOKING_CREATED':
-        // If appointment doesn't exist, try to find or create patient and appointment
-        if (!appointment && attendeeEmail) {
+        // If appointment already exists (created by agent), update it
+        if (appointment) {
+          console.log('Updating existing appointment:', appointment.id)
+          await prisma.appointment.update({
+            where: { id: appointment.id },
+            data: {
+              status: payload?.status === 'ACCEPTED' ? 'confirmed' : 'scheduled',
+              startTime: startTime ? new Date(startTime) : undefined,
+              endTime: endTime ? new Date(endTime) : undefined,
+              // Ensure calBookingId is set if it wasn't before
+              calBookingId: calBookingId || appointment.calBookingId,
+            },
+          })
+
+          if (appointment.patientId) {
+            await createTimelineEntry({
+              patientId: appointment.patientId,
+              type: 'appointment',
+              title: 'Appointment confirmed via Cal.com',
+              description: `Appointment for ${appointment.visitType} was confirmed`,
+              metadata: { appointmentId: appointment.id, bookingId: calBookingId },
+            })
+          }
+        } else if (attendeeEmail) {
+          // If appointment doesn't exist, try to find or create patient and appointment
+          console.log('Appointment not found, attempting to create from webhook')
           // Try to find patient by email
           const patient = await prisma.patient.findFirst({
             where: {
