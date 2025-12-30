@@ -97,8 +97,9 @@ export default function SignUpPage() {
               signUpError.message.includes('Unauthorized')) {
             errorMessage = 'Authentication service configuration error. Please verify that the Supabase API key is correct in the environment variables.'
           } else if (signUpError.message.includes('User already registered') || 
-                     signUpError.message.includes('already registered')) {
-            errorMessage = 'An account with this email already exists. Please sign in instead.'
+                     signUpError.message.includes('already registered') ||
+                     signUpError.message.includes('already been registered')) {
+            errorMessage = 'An account with this email already exists. If you are an existing user, please use "Forgot Password" to reset your password and create your Supabase account.'
           } else if (signUpError.message.includes('Password')) {
             errorMessage = signUpError.message
           } else if (signUpError.message.includes('Email rate limit')) {
