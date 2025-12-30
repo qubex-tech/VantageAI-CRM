@@ -84,25 +84,26 @@ export async function POST(req: NextRequest) {
       case 'BOOKING_CREATED':
         // If appointment already exists (created by agent), update it
         if (appointment) {
-          console.log('Updating existing appointment:', appointment.id)
+          const existingAppointment = appointment
+          console.log('Updating existing appointment:', existingAppointment.id)
           await prisma.appointment.update({
-            where: { id: appointment.id },
+            where: { id: existingAppointment.id },
             data: {
               status: payload?.status === 'ACCEPTED' ? 'confirmed' : 'scheduled',
               startTime: startTime ? new Date(startTime) : undefined,
               endTime: endTime ? new Date(endTime) : undefined,
               // Ensure calBookingId is set if it wasn't before
-              calBookingId: calBookingId || appointment.calBookingId,
+              calBookingId: calBookingId || existingAppointment.calBookingId,
             },
           })
 
-          if (appointment.patientId) {
+          if (existingAppointment.patientId) {
             await createTimelineEntry({
-              patientId: appointment.patientId,
+              patientId: existingAppointment.patientId,
               type: 'appointment',
               title: 'Appointment confirmed via Cal.com',
-              description: `Appointment for ${appointment.visitType} was confirmed`,
-              metadata: { appointmentId: appointment.id, bookingId: calBookingId },
+              description: `Appointment for ${existingAppointment.visitType} was confirmed`,
+              metadata: { appointmentId: existingAppointment.id, bookingId: calBookingId },
             })
           }
         } else if (attendeeEmail) {
