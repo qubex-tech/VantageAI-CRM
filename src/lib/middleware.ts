@@ -158,15 +158,16 @@ export function verifyCalSignature(
   try {
     // Cal.com sends signature as hex-encoded HMAC-SHA256 in x-cal-signature-256 header
     // Create HMAC using the secret key and the payload body
-    const expectedSignature = crypto
+    const expectedHash = crypto
       .createHmac('sha256', secret)
       .update(payload)
-      .digest('base64')
+      .digest('hex')
 
     // Constant-time comparison to prevent timing attacks
+    // Compare the received signature (hex) with the computed hash (hex)
     return crypto.timingSafeEqual(
-      Buffer.from(signature),
-      Buffer.from(expectedSignature)
+      Buffer.from(signature, 'hex'),
+      Buffer.from(expectedHash, 'hex')
     )
   } catch (error) {
     console.error('Cal.com signature verification error:', error)
