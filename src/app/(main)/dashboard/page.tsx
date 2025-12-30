@@ -28,8 +28,16 @@ export default async function DashboardPage() {
     console.log('[Dashboard] Sync successful, user ID:', user?.id)
   } catch (error) {
     console.error('[Dashboard] Error syncing user to Prisma:', error)
+    // Log the full error for debugging
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    const errorDetails = error instanceof Error ? error.stack : String(error)
+    console.error('[Dashboard] Error details:', errorDetails)
     // If sync fails, redirect to login with error message
-    redirect('/login?error=Failed to sync user account. Please try again.')
+    // Include the actual error message in the URL for debugging (truncated if too long)
+    const safeErrorMessage = errorMessage.length > 100 
+      ? errorMessage.substring(0, 100) + '...'
+      : errorMessage
+    redirect(`/login?error=${encodeURIComponent(`Failed to sync user account: ${safeErrorMessage}`)}`)
   }
   
   if (!user) {
