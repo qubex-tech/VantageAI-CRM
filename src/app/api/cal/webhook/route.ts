@@ -168,26 +168,6 @@ export async function POST(req: NextRequest) {
               }
             }
           }
-        } else if (appointment) {
-          // Update existing appointment
-          await prisma.appointment.update({
-            where: { id: appointment.id },
-            data: {
-              status: payload?.status === 'ACCEPTED' ? 'confirmed' : 'scheduled',
-              startTime: startTime ? new Date(startTime) : undefined,
-              endTime: endTime ? new Date(endTime) : undefined,
-            },
-          })
-
-          if (appointment.patientId) {
-            await createTimelineEntry({
-              patientId: appointment.patientId,
-              type: 'appointment',
-              title: 'Appointment confirmed',
-              description: `Appointment for ${appointment.visitType} was confirmed via Cal.com`,
-              metadata: { appointmentId: appointment.id },
-            })
-          }
         }
         break
 
