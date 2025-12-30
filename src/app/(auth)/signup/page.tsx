@@ -54,8 +54,19 @@ export default function SignUpPage() {
 
     try {
       // Check if Supabase is configured
-      if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-        setError('Supabase is not configured. Please contact support.')
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      
+      console.log('[Signup] Environment check:', {
+        hasUrl: !!supabaseUrl,
+        urlLength: supabaseUrl?.length || 0,
+        hasKey: !!supabaseAnonKey,
+        keyLength: supabaseAnonKey?.length || 0,
+        urlPreview: supabaseUrl ? `${supabaseUrl.substring(0, 30)}...` : 'missing',
+      })
+      
+      if (!supabaseUrl || !supabaseAnonKey) {
+        setError(`Supabase is not configured. URL: ${supabaseUrl ? '✓' : '✗'}, Key: ${supabaseAnonKey ? '✓' : '✗'}. Please ensure environment variables are set and rebuild the application.`)
         setLoading(false)
         return
       }
