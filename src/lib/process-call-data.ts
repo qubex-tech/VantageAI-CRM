@@ -57,6 +57,23 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
       if (!extracted.user_phone_number && customData.phone) extracted.user_phone_number = customData.phone
       if (!extracted.user_phone_number && customData.phone_number) extracted.user_phone_number = customData.phone_number
     }
+    
+    // Also check call_analysis root level for extracted fields (some APIs return them here)
+    const analysisData = call.call_analysis as Record<string, any>
+    const extractedFields = ['user_age', 'user_phone_number', 'detailed_call_summary', 'patient_name', 
+                             'selected_time', 'selected_date', 'preferred_dentist', 'call_reason',
+                             'name', 'phone', 'phone_number']
+    
+    for (const field of extractedFields) {
+      if (analysisData[field] !== undefined && analysisData[field] !== null && analysisData[field] !== '') {
+        if (field === 'name' && !extracted.patient_name) extracted.patient_name = analysisData[field]
+        else if (field === 'phone' && !extracted.user_phone_number) extracted.user_phone_number = analysisData[field]
+        else if (field === 'phone_number' && !extracted.user_phone_number) extracted.user_phone_number = analysisData[field]
+        else if (!extracted[field as keyof ExtractedCallData]) {
+          (extracted as any)[field] = analysisData[field]
+        }
+      }
+    }
   }
 
   // Check metadata field as fallback
@@ -79,8 +96,30 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
     if (!extracted.user_phone_number && metadata.phone) extracted.user_phone_number = metadata.phone
     if (!extracted.user_phone_number && metadata.phone_number) extracted.user_phone_number = metadata.phone_number
   }
+  
+  // Also check root level of call object (some APIs return extracted data here)
+  const callData = call as Record<string, any>
+  const rootExtractedFields = ['user_age', 'user_phone_number', 'detailed_call_summary', 'patient_name',
+                               'selected_time', 'selected_date', 'preferred_dentist', 'call_reason',
+                               'name', 'phone', 'phone_number']
+  
+  for (const field of rootExtractedFields) {
+    if (callData[field] !== undefined && callData[field] !== null && callData[field] !== '' && 
+        !extracted[field as keyof ExtractedCallData]) {
+      if (field === 'name' && !extracted.patient_name) extracted.patient_name = callData[field]
+      else if (field === 'phone' && !extracted.user_phone_number) extracted.user_phone_number = callData[field]
+      else if (field === 'phone_number' && !extracted.user_phone_number) extracted.user_phone_number = callData[field]
+      else {
+        (extracted as any)[field] = callData[field]
+      }
+    }
+  }
 
   console.log('[extractCallData] Final extracted data:', extracted)
+  console.log('[extractCallData] Full call object keys:', Object.keys(call))
+  if (call.call_analysis) {
+    console.log('[extractCallData] call_analysis keys:', Object.keys(call.call_analysis))
+  }
 
   return extracted
 }
