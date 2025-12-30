@@ -325,26 +325,33 @@ export class CalApiClient {
       if (data.status === 'success' && data.data) {
         const booking = data.data
         return {
-          id: String(booking.id ?? booking.uid),
+          id: booking.id ?? parseInt(booking.uid, 10) || 0,
           uid: booking.uid ?? String(booking.id),
-          startTime: booking.start,
-          endTime: booking.end,
           title: booking.title || 'Appointment',
+          description: booking.description,
           status: booking.status || 'scheduled',
+          start: booking.start,
+          end: booking.end,
+          duration: booking.duration || Math.round((new Date(booking.end).getTime() - new Date(booking.start).getTime()) / (1000 * 60)),
+          eventTypeId: booking.eventTypeId ?? booking.eventType?.id ?? 0,
           eventType: {
-            id: String(booking.eventTypeId ?? booking.eventType?.id ?? ''),
-            title: booking.eventType?.slug || 'Appointment',
+            id: booking.eventTypeId ?? booking.eventType?.id ?? 0,
+            slug: booking.eventType?.slug || 'appointment',
           },
           attendees: booking.attendees?.map((a: any) => ({
             email: a.email,
             name: a.name,
+            timeZone: a.timeZone,
+            absent: a.absent,
+            language: a.language,
+            phoneNumber: a.phoneNumber,
           })) || [
             {
               email: params.responses.email,
               name: params.responses.name,
             },
           ],
-        }
+        } as CalBooking
       }
       
       throw new Error('Invalid response format from Cal.com booking API')
