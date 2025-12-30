@@ -66,23 +66,32 @@ export function CallsList({ initialCalls, error: initialError }: CallsListProps)
     setError(initialError || null)
   }, [initialCalls, initialError])
 
-  // Auto-refresh when page becomes visible or window regains focus (user switches back to the tab)
-  // Also process calls on initial load and when tab becomes visible to extract patient data
+  // Process calls in the background after initial render (non-blocking)
+  // This extracts patient data without blocking the UI
   useEffect(() => {
     let mounted = true
     
-    // Process calls on initial mount to extract patient data
-    refreshCalls(true)
+    // Process calls in the background after a short delay to allow UI to render first
+    const timeoutId = setTimeout(() => {
+      if (mounted) {
+        // Process calls asynchronously without blocking
+        refreshCalls(true).catch(err => {
+          console.error('[CallsList] Error processing calls in background:', err)
+        })
+      }
+    }, 500) // Small delay to ensure UI is interactive first
     
     const handleVisibilityChange = () => {
       if (mounted && document.visibilityState === 'visible') {
-        refreshCalls(true) // Process calls when tab becomes visible
+        // Only refresh (don't process) when tab becomes visible to avoid blocking
+        refreshCalls(false)
       }
     }
 
     const handleFocus = () => {
       if (mounted) {
-        refreshCalls(true) // Process calls when window gains focus
+        // Only refresh (don't process) when window gains focus to avoid blocking
+        refreshCalls(false)
       }
     }
 
@@ -91,6 +100,7 @@ export function CallsList({ initialCalls, error: initialError }: CallsListProps)
     
     return () => {
       mounted = false
+      clearTimeout(timeoutId)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('focus', handleFocus)
     }
