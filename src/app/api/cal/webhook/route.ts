@@ -249,6 +249,7 @@ export async function POST(req: NextRequest) {
                 name: attendeeName,
                 email: attendeeEmail || undefined,
                 phone: phoneForCreation,
+                dateOfBirth: new Date('1900-01-01'), // Placeholder date when DOB is unknown
                 preferredContactMethod: attendeeEmail ? 'email' : 'phone',
                 notes: `Patient created from Cal.com booking (${calBookingId || 'unknown'})`,
               },
