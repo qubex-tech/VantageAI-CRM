@@ -1,23 +1,12 @@
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, Prisma } from '@prisma/client'
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
-// Configure Prisma with connection limits to prevent exhausting the pool
-// Supabase Session Pooler has limits, so we need to be conservative
-const prismaClientOptions = {
-  log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-  datasources: {
-    db: {
-      url: process.env.DATABASE_URL,
-    },
-  },
-}
-
 // Add connection limit via DATABASE_URL if not already present
 // This helps prevent hitting Supabase's max clients limit
-const databaseUrl = process.env.DATABASE_URL || ''
+let databaseUrl = process.env.DATABASE_URL || ''
 if (databaseUrl && !databaseUrl.includes('connection_limit')) {
   // Parse and add connection_limit parameter
   // Handle both postgresql:// and postgres:// URLs
@@ -36,10 +25,23 @@ if (databaseUrl && !databaseUrl.includes('connection_limit')) {
     }
     
     const paramString = params.toString()
-    prismaClientOptions.datasources.db.url = paramString 
+    databaseUrl = paramString 
       ? `${baseUrl}?${paramString}`
       : baseUrl
   }
+}
+
+// Configure Prisma with connection limits to prevent exhausting the pool
+// Supabase Session Pooler has limits, so we need to be conservative
+const prismaClientOptions: Prisma.PrismaClientOptions = {
+  log: process.env.NODE_ENV === 'development' 
+    ? ['query', 'error', 'warn'] as Prisma.LogLevel[]
+    : ['error'] as Prisma.LogLevel[],
+  datasources: {
+    db: {
+      url: databaseUrl || process.env.DATABASE_URL,
+    },
+  },
 }
 
 export const prisma =
