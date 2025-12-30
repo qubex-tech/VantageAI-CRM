@@ -109,29 +109,89 @@ export async function POST(req: NextRequest) {
         } else if (attendeeEmail) {
           // If appointment doesn't exist, try to find or create patient and appointment
           console.log('Appointment not found, attempting to create from webhook')
-          // Try to find patient by email
-          const patient = await prisma.patient.findFirst({
-            where: {
-              email: attendeeEmail,
-              deletedAt: null,
+          
+          // Try to find patient by email - need to search across all practices that have Cal integration
+          // First, find all practices with Cal integrations
+          const calIntegrations = await prisma.calIntegration.findMany({
+            include: {
+              practice: true,
             },
           })
+          
+          // Search for patient in those practices
+          let patient = null
+          let practiceId = null
+          
+          for (const integration of calIntegrations) {
+            const foundPatient = await prisma.patient.findFirst({
+              where: {
+                practiceId: integration.practiceId,
+                email: attendeeEmail,
+                deletedAt: null,
+              },
+            })
+            
+            if (foundPatient) {
+              patient = foundPatient
+              practiceId = integration.practiceId
+              break
+            }
+          }
+          
+          // If patient not found, try to find by phone number if available
+          if (!patient && payload?.attendees?.[0]?.phoneNumber) {
+            const phoneNumber = payload.attendees[0].phoneNumber.replace(/\D/g, '')
+            for (const integration of calIntegrations) {
+              const foundPatient = await prisma.patient.findFirst({
+                where: {
+                  practiceId: integration.practiceId,
+                  phone: phoneNumber,
+                  deletedAt: null,
+                },
+              })
+              
+              if (foundPatient) {
+                patient = foundPatient
+                practiceId = integration.practiceId
+                break
+              }
+            }
+          }
+          
+          // If still no patient found but we have attendee name, create a basic patient record
+          if (!patient && attendeeName && calIntegrations.length > 0) {
+            // Use the first practice with Cal integration (or determine based on organizer email if available)
+            const targetIntegration = calIntegrations[0]
+            practiceId = targetIntegration.practiceId
+            
+            console.log(`Creating new patient from Cal.com webhook: ${attendeeName} (${attendeeEmail})`)
+            
+            // Create patient with minimal information
+            patient = await prisma.patient.create({
+              data: {
+                practiceId: targetIntegration.practiceId,
+                name: attendeeName,
+                email: attendeeEmail,
+                phone: payload?.attendees?.[0]?.phoneNumber?.replace(/\D/g, '') || '000-000-0000',
+                preferredContactMethod: 'email',
+                notes: `Patient created from Cal.com booking (${calBookingId})`,
+              },
+            })
+          }
 
-          // If patient found, create appointment record
-          if (patient && startTime && endTime) {
-            // Find which practice this belongs to (we need organizer email or event type mapping)
-            // For now, we'll try to find a practice with a Cal integration
+          // If patient found or created, create appointment record
+          if (patient && startTime && endTime && practiceId) {
+            // Find Cal integration for this practice
             const calIntegration = await prisma.calIntegration.findFirst({
               where: {
-                // We can't directly match organizer email, so we'll need to handle this differently
-                // For now, create appointment if we can find the practice via patient
+                practiceId: practiceId,
               },
               include: {
                 practice: true,
               },
             })
 
-            if (calIntegration && patient.practiceId === calIntegration.practiceId) {
+            if (calIntegration) {
               // Get event type mapping to determine visit type
               const eventMapping = eventTypeId
                 ? await prisma.calEventTypeMapping.findFirst({
