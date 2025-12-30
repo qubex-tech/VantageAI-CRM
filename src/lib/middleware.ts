@@ -143,6 +143,8 @@ export function verifyRetellSignature(
 /**
  * Verify Cal.com webhook signature
  * Cal.com uses HMAC-SHA256 for webhook signature verification
+ * According to: https://cal.com/docs/developing/guides/automation/webhooks
+ * The signature is in the x-cal-signature-256 header as a hex-encoded HMAC-SHA256 hash
  */
 export function verifyCalSignature(
   payload: string,
@@ -154,7 +156,8 @@ export function verifyCalSignature(
   }
 
   try {
-    // Cal.com sends signature as base64-encoded HMAC-SHA256
+    // Cal.com sends signature as hex-encoded HMAC-SHA256 in x-cal-signature-256 header
+    // Create HMAC using the secret key and the payload body
     const expectedSignature = crypto
       .createHmac('sha256', secret)
       .update(payload)
