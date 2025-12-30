@@ -38,6 +38,13 @@ function LoginForm() {
     setLoading(true)
 
     try {
+      // Check if Supabase is configured
+      if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+        setError('Supabase is not configured. Please contact support.')
+        setLoading(false)
+        return
+      }
+
       // Sign in with Supabase Auth
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email,
@@ -45,7 +52,26 @@ function LoginForm() {
       })
 
       if (signInError) {
-        throw signInError
+        // Handle specific Supabase error messages
+        let errorMessage = 'Invalid email or password'
+        
+        if (signInError.message) {
+          // Supabase error messages
+          if (signInError.message.includes('Invalid API key') || signInError.message.includes('API key')) {
+            errorMessage = 'Authentication service configuration error. Please contact support.'
+          } else if (signInError.message.includes('Invalid login credentials')) {
+            errorMessage = 'Invalid email or password'
+          } else if (signInError.message.includes('Email not confirmed')) {
+            errorMessage = 'Please verify your email address before signing in'
+          } else {
+            // Use the error message but make it user-friendly
+            errorMessage = signInError.message
+          }
+        }
+        
+        setError(errorMessage)
+        setLoading(false)
+        return
       }
 
       if (data.user) {
@@ -53,8 +79,20 @@ function LoginForm() {
         window.location.href = callbackUrl
       }
     } catch (err: any) {
-      setError(err.message || 'Invalid email or password')
-    } finally {
+      console.error('Login error:', err)
+      let errorMessage = 'An unexpected error occurred. Please try again.'
+      
+      if (err.message) {
+        if (err.message.includes('Missing Supabase environment variables')) {
+          errorMessage = 'Authentication service is not configured. Please contact support.'
+        } else if (err.message.includes('Invalid API key') || err.message.includes('API key')) {
+          errorMessage = 'Authentication service configuration error. Please contact support.'
+        } else {
+          errorMessage = err.message
+        }
+      }
+      
+      setError(errorMessage)
       setLoading(false)
     }
   }
