@@ -38,7 +38,8 @@ if (databaseUrl && !databaseUrl.includes('connection_limit')) {
 }
 
 // Configure Prisma with connection limits to prevent exhausting the pool
-// Supabase Session Pooler has limits, so we need to be conservative
+// For Transaction Mode (6543): Prisma automatically handles the lack of prepared statements
+// For Session Mode (5432): Prepared statements work normally
 const prismaClientOptions: Prisma.PrismaClientOptions = {
   log: process.env.NODE_ENV === 'development' 
     ? ['query', 'error', 'warn'] as Prisma.LogLevel[]
@@ -48,6 +49,8 @@ const prismaClientOptions: Prisma.PrismaClientOptions = {
       url: databaseUrl || process.env.DATABASE_URL,
     },
   },
+  // Transaction Mode (port 6543) doesn't support prepared statements
+  // Prisma detects this automatically, but we can explicitly set connection parameters
 }
 
 export const prisma =
