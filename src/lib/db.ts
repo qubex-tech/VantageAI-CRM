@@ -5,26 +5,27 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 // Configure database URL
-// For Transaction Mode (port 6543), we don't need connection_limit - the pooler handles it
-// For Session Mode (port 5432), connection_limit helps but has low limits
+// For Transaction Mode (port 6543): Use connection_limit=1 (recommended for serverless)
+// For Session Mode (port 5432): Use connection_limit=5 (has low total limits anyway)
 let databaseUrl = process.env.DATABASE_URL || ''
 const portMatch = databaseUrl.match(/:(\d+)\//)
 const port = portMatch ? portMatch[1] : ''
 
-// Only add connection_limit for Session Mode (5432), not Transaction Mode (6543)
-// Transaction Mode pooler manages connections differently and doesn't need this limit
-if (databaseUrl && port === '5432' && !databaseUrl.includes('connection_limit')) {
-  // Parse and add connection_limit parameter for Session Mode only
+// Add connection_limit if not already present
+// For Transaction Mode, use 1 connection per instance (pooler handles the rest)
+// For Session Mode, use 5 connections per instance (but total pool is small)
+if (databaseUrl && !databaseUrl.includes('connection_limit')) {
   const urlMatch = databaseUrl.match(/^(postgresql?:\/\/[^?]+)(\?.*)?$/)
   if (urlMatch) {
     const baseUrl = urlMatch[1]
     const existingParams = urlMatch[2] || ''
     const params = new URLSearchParams(existingParams.replace(/^\?/, ''))
     
-    // Only add if not already present (Session Mode only)
-    if (!params.has('connection_limit')) {
-      params.set('connection_limit', '5') // Limit to 5 connections per Prisma instance
-    }
+    // Transaction Mode (6543): Use 1 connection per instance (recommended)
+    // Session Mode (5432): Use 5 connections per instance
+    const connectionLimit = port === '6543' ? '1' : '5'
+    params.set('connection_limit', connectionLimit)
+    
     if (!params.has('pool_timeout')) {
       params.set('pool_timeout', '10') // Timeout after 10 seconds
     }
