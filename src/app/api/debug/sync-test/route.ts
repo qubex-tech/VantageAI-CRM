@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
           email: prismaUser.email,
           name: prismaUser.name,
           practiceId: prismaUser.practiceId,
-          hasPractice: !!prismaUser.practice,
+          hasPractice: !!(prismaUser as any).practice,
         } : null,
       })
     } catch (syncError) {
