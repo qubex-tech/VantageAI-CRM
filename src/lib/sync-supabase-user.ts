@@ -17,7 +17,8 @@ export async function syncSupabaseUserToPrisma(
 
   try {
     // Check if user already exists
-    let user = await prisma.user.findUnique({
+    // Use findFirst instead of findUnique to avoid potential connection issues
+    let user = await prisma.user.findFirst({
       where: { email: userEmail },
       include: {
         practice: true,
