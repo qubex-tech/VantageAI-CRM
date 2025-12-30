@@ -38,8 +38,17 @@ export function EditPatientForm({ patient, onCancel, onSuccess }: EditPatientFor
   const [error, setError] = useState('')
   
   // Format date for input (YYYY-MM-DD)
+  // Handle invalid or placeholder dates (like 1900-01-01)
   const formatDateForInput = (date: Date | string) => {
     const d = typeof date === 'string' ? new Date(date) : date
+    // Check if date is a placeholder (like 1900) or invalid
+    const year = d.getFullYear()
+    if (isNaN(d.getTime()) || year < 1901) {
+      // Return empty string or a reasonable default (today minus 30 years)
+      const defaultDate = new Date()
+      defaultDate.setFullYear(defaultDate.getFullYear() - 30)
+      return defaultDate.toISOString().split('T')[0]
+    }
     return d.toISOString().split('T')[0]
   }
 
@@ -123,7 +132,9 @@ export function EditPatientForm({ patient, onCancel, onSuccess }: EditPatientFor
               type="date"
               value={formData.dateOfBirth}
               onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+              max={new Date().toISOString().split('T')[0]} // Prevent future dates
               required
+              className="w-full"
             />
           </div>
 
