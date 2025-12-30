@@ -37,12 +37,14 @@ export async function middleware(req: NextRequest) {
       },
     })
 
+    // Use getUser() instead of getSession() - it refreshes the session automatically
+    // This ensures the session stays valid and cookies are properly updated
     const {
-      data: { session },
-    } = await supabase.auth.getSession()
+      data: { user },
+    } = await supabase.auth.getUser()
 
     // Protect all other routes
-    if (!session && !pathname.startsWith('/api/auth')) {
+    if (!user && !pathname.startsWith('/api/auth')) {
       const loginUrl = new URL('/login', req.url)
       // Validate callbackUrl to prevent open redirect vulnerabilities
       // Only allow relative paths starting with /
