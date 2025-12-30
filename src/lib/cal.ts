@@ -355,6 +355,134 @@ export class CalApiClient {
   }
 
   /**
+   * Get all bookings
+   * Documentation: https://cal.com/docs/api-reference/v2/bookings/get-all-bookings
+   */
+  async getBookings(params?: {
+    status?: string[] // upcoming, recurring, past, cancelled, unconfirmed
+    attendeeEmail?: string
+    attendeeName?: string
+    bookingUid?: string
+    eventTypeIds?: string // comma-separated
+    eventTypeId?: string
+    teamsIds?: string // comma-separated
+    teamId?: string
+    afterStart?: string // ISO date string
+    beforeEnd?: string // ISO date string
+    afterCreatedAt?: string
+    beforeCreatedAt?: string
+    afterUpdatedAt?: string
+    beforeUpdatedAt?: string
+    sortStart?: 'asc' | 'desc'
+    sortEnd?: 'asc' | 'desc'
+    sortCreated?: 'asc' | 'desc'
+    sortUpdatedAt?: 'asc' | 'desc'
+    take?: number // default 100
+    skip?: number // default 0
+  }): Promise<{
+    status: string
+    data: CalBooking[]
+    pagination: {
+      totalItems: number
+      remainingItems: number
+      returnedItems: number
+      itemsPerPage: number
+      currentPage: number
+      totalPages: number
+      hasNextPage: boolean
+      hasPreviousPage: boolean
+    }
+  }> {
+    try {
+      const queryParams = new URLSearchParams()
+      
+      if (params?.status) {
+        queryParams.append('status', params.status.join(','))
+      }
+      if (params?.attendeeEmail) {
+        queryParams.append('attendeeEmail', params.attendeeEmail)
+      }
+      if (params?.attendeeName) {
+        queryParams.append('attendeeName', params.attendeeName)
+      }
+      if (params?.bookingUid) {
+        queryParams.append('bookingUid', params.bookingUid)
+      }
+      if (params?.eventTypeIds) {
+        queryParams.append('eventTypeIds', params.eventTypeIds)
+      }
+      if (params?.eventTypeId) {
+        queryParams.append('eventTypeId', params.eventTypeId)
+      }
+      if (params?.teamsIds) {
+        queryParams.append('teamsIds', params.teamsIds)
+      }
+      if (params?.teamId) {
+        queryParams.append('teamId', params.teamId)
+      }
+      if (params?.afterStart) {
+        queryParams.append('afterStart', params.afterStart)
+      }
+      if (params?.beforeEnd) {
+        queryParams.append('beforeEnd', params.beforeEnd)
+      }
+      if (params?.afterCreatedAt) {
+        queryParams.append('afterCreatedAt', params.afterCreatedAt)
+      }
+      if (params?.beforeCreatedAt) {
+        queryParams.append('beforeCreatedAt', params.beforeCreatedAt)
+      }
+      if (params?.afterUpdatedAt) {
+        queryParams.append('afterUpdatedAt', params.afterUpdatedAt)
+      }
+      if (params?.beforeUpdatedAt) {
+        queryParams.append('beforeUpdatedAt', params.beforeUpdatedAt)
+      }
+      if (params?.sortStart) {
+        queryParams.append('sortStart', params.sortStart)
+      }
+      if (params?.sortEnd) {
+        queryParams.append('sortEnd', params.sortEnd)
+      }
+      if (params?.sortCreated) {
+        queryParams.append('sortCreated', params.sortCreated)
+      }
+      if (params?.sortUpdatedAt) {
+        queryParams.append('sortUpdatedAt', params.sortUpdatedAt)
+      }
+      if (params?.take !== undefined) {
+        queryParams.append('take', String(params.take))
+      }
+      if (params?.skip !== undefined) {
+        queryParams.append('skip', String(params.skip))
+      }
+      
+      const url = `${this.baseUrl}/bookings${queryParams.toString() ? `?${queryParams.toString()}` : ''}`
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+          'cal-api-version': '2024-08-13', // Required header per documentation
+        },
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error')
+        console.error('Cal.com API v2 getBookings error:', response.status, errorText)
+        throw new Error(`Cal.com API error: ${response.status} ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      return data
+    } catch (error) {
+      console.error('Error fetching Cal.com bookings:', error)
+      throw error
+    }
+  }
+
+  /**
    * Cancel a booking
    * Documentation: https://cal.com/docs/api-reference/v2/bookings/cancel-a-booking
    */
