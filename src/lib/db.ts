@@ -20,12 +20,26 @@ const prismaClientOptions = {
 const databaseUrl = process.env.DATABASE_URL || ''
 if (databaseUrl && !databaseUrl.includes('connection_limit')) {
   // Parse and add connection_limit parameter
-  const url = new URL(databaseUrl.replace(/^postgresql:\/\//, 'http://'))
-  url.searchParams.set('connection_limit', '5') // Limit to 5 connections per Prisma instance
-  url.searchParams.set('pool_timeout', '10') // Timeout after 10 seconds
-  // Reconstruct the URL
-  const modifiedUrl = databaseUrl.replace(/\?.*$/, '') + '?' + url.searchParams.toString()
-  prismaClientOptions.datasources.db.url = modifiedUrl.replace(/^http:\/\//, 'postgresql://')
+  // Handle both postgresql:// and postgres:// URLs
+  const urlMatch = databaseUrl.match(/^(postgresql?:\/\/[^?]+)(\?.*)?$/)
+  if (urlMatch) {
+    const baseUrl = urlMatch[1]
+    const existingParams = urlMatch[2] || ''
+    const params = new URLSearchParams(existingParams.replace(/^\?/, ''))
+    
+    // Only add if not already present
+    if (!params.has('connection_limit')) {
+      params.set('connection_limit', '5') // Limit to 5 connections per Prisma instance
+    }
+    if (!params.has('pool_timeout')) {
+      params.set('pool_timeout', '10') // Timeout after 10 seconds
+    }
+    
+    const paramString = params.toString()
+    prismaClientOptions.datasources.db.url = paramString 
+      ? `${baseUrl}?${paramString}`
+      : baseUrl
+  }
 }
 
 export const prisma =
