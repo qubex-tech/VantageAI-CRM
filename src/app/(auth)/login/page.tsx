@@ -60,7 +60,6 @@ function LoginForm() {
         
         // Handle specific Supabase error messages
         let errorMessage = 'Invalid email or password'
-        let shouldTryMigration = false
         
         if (signInError.message) {
           // Supabase error messages
@@ -68,10 +67,7 @@ function LoginForm() {
             errorMessage = 'Authentication service configuration error. Please contact support.'
           } else if (signInError.message.includes('Invalid login credentials') || 
                      signInError.message.includes('Invalid credentials')) {
-            // User might exist in Prisma but not in Supabase (migration issue)
-            // Try to automatically migrate them
-            shouldTryMigration = true
-            errorMessage = 'Checking if account needs migration...'
+            errorMessage = 'Invalid email or password. Please check your credentials and try again.'
           } else if (signInError.message.includes('Email not confirmed')) {
             errorMessage = 'Please verify your email address before signing in'
           } else {
@@ -80,32 +76,7 @@ function LoginForm() {
           }
         }
         
-        // If credentials are invalid, try to migrate user from Prisma to Supabase
-        if (shouldTryMigration) {
-          try {
-            const migrateResponse = await fetch('/api/auth/migrate-user', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email }),
-            })
-            
-            const migrateData = await migrateResponse.json()
-            
-            if (migrateData.success) {
-              setError('Your account has been migrated. Please use "Forgot Password" to set your password and then log in.')
-            } else if (migrateData.exists) {
-              setError('Account exists but password is incorrect. Please use "Forgot Password" to reset your password.')
-            } else {
-              setError('Invalid email or password. If you are an existing user, please use "Forgot Password" to reset your password.')
-            }
-          } catch (migrateError) {
-            console.error('Migration error:', migrateError)
-            setError('Invalid email or password. If you are an existing user, please use "Forgot Password" to reset your password and create a Supabase account.')
-          }
-        } else {
-          setError(errorMessage)
-        }
-        
+        setError(errorMessage)
         setLoading(false)
         return
       }
