@@ -46,17 +46,8 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // Check if user already exists in Supabase
-    const { data: existingUser, error: getUserError } = await supabaseAdmin.auth.admin.getUserByEmail(email)
-
-    if (existingUser?.user) {
-      return NextResponse.json({
-        message: 'User already exists in Supabase Auth. Please try logging in or use "Forgot Password".',
-        exists: true,
-      })
-    }
-
-    // Create user in Supabase (without password - they'll need to reset it)
+    // Try to create user in Supabase (without password - they'll need to reset it)
+    // If user already exists, createUser will return an error which we'll handle
     const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
       email_confirm: true, // Auto-confirm email so they can reset password immediately
@@ -65,8 +56,25 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    if (createError || !newUser.user) {
+    // Check if error is because user already exists
+    if (createError) {
+      if (createError.message?.includes('already registered') || 
+          createError.message?.includes('already exists') ||
+          createError.message?.includes('User already registered')) {
+        return NextResponse.json({
+          message: 'User already exists in Supabase Auth. Please try logging in or use "Forgot Password".',
+          exists: true,
+        })
+      }
+      
       console.error('Error creating Supabase user:', createError)
+      return NextResponse.json(
+        { error: 'Failed to create Supabase account. Please contact support.' },
+        { status: 500 }
+      )
+    }
+
+    if (!newUser.user) {
       return NextResponse.json(
         { error: 'Failed to create Supabase account. Please contact support.' },
         { status: 500 }
