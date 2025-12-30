@@ -48,7 +48,7 @@ export async function GET() {
   const maskedUrl = databaseUrl.replace(/:([^:@]+)@/, ':***@')
   
   // Try to test the connection
-  let connectionTest = { status: 'not_tested', error: null }
+  let connectionTest: { status: string; error: string | null } = { status: 'not_tested', error: null }
   try {
     await prisma.$queryRaw`SELECT 1 as test`
     connectionTest = { status: 'success', error: null }
