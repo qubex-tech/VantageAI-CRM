@@ -325,7 +325,7 @@ export class CalApiClient {
       if (data.status === 'success' && data.data) {
         const booking = data.data
         return {
-          id: booking.id ?? parseInt(booking.uid, 10) || 0,
+          id: booking.id ?? (parseInt(booking.uid, 10) || 0),
           uid: booking.uid ?? String(booking.id),
           title: booking.title || 'Appointment',
           description: booking.description,
