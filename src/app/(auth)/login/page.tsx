@@ -55,6 +55,9 @@ function LoginForm() {
       })
 
       if (signInError) {
+        // Log the error for debugging
+        console.error('Supabase sign in error:', signInError)
+        
         // Handle specific Supabase error messages
         let errorMessage = 'Invalid email or password'
         
@@ -62,8 +65,10 @@ function LoginForm() {
           // Supabase error messages
           if (signInError.message.includes('Invalid API key') || signInError.message.includes('API key')) {
             errorMessage = 'Authentication service configuration error. Please contact support.'
-          } else if (signInError.message.includes('Invalid login credentials')) {
-            errorMessage = 'Invalid email or password'
+          } else if (signInError.message.includes('Invalid login credentials') || 
+                     signInError.message.includes('Invalid credentials')) {
+            // User might exist in Prisma but not in Supabase (migration issue)
+            errorMessage = 'Invalid email or password. If you are an existing user, please use "Forgot Password" to reset your password and create a Supabase account.'
           } else if (signInError.message.includes('Email not confirmed')) {
             errorMessage = 'Please verify your email address before signing in'
           } else {
@@ -163,6 +168,9 @@ function LoginForm() {
                 <Link href="/forgot-password" className="text-gray-900 hover:underline font-medium">
                   Forgot password?
                 </Link>
+              </div>
+              <div className="text-xs text-gray-500 pt-2">
+                Having trouble signing in? Use "Forgot Password" to reset your password and create a new account.
               </div>
             </div>
           </form>
