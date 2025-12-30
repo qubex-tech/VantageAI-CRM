@@ -24,7 +24,12 @@ export default async function NewAppointmentPage({
     user = await syncSupabaseUserToPrisma(supabaseUser)
   } catch (error) {
     console.error('Error syncing user to Prisma:', error)
-    redirect('/login?error=Failed to sync user account. Please try again.')
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    console.error('Error details:', errorMessage)
+    const safeErrorMessage = errorMessage.length > 100 
+      ? errorMessage.substring(0, 100) + '...'
+      : errorMessage
+    redirect(`/login?error=${encodeURIComponent(`Failed to sync user account: ${safeErrorMessage}`)}`)
   }
   
   if (!user) {
