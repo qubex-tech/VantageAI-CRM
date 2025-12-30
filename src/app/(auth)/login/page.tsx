@@ -110,17 +110,21 @@ function LoginForm() {
         return
       }
 
-      if (data.user) {
+      if (data.user && data.session) {
+        // Session is available immediately after signInWithPassword
+        // Use window.location for full page reload to ensure middleware picks up the session
+        window.location.href = callbackUrl
+      } else if (data.user) {
+        // User exists but session might not be immediately available
         // Wait a moment for session cookies to be set
-        // Then use window.location for full page reload to ensure middleware picks up the session
-        await new Promise(resolve => setTimeout(resolve, 100))
+        await new Promise(resolve => setTimeout(resolve, 500))
         
         // Verify session is available before redirecting
         const { data: { session } } = await supabase.auth.getSession()
         if (session) {
           window.location.href = callbackUrl
         } else {
-          // If session not available, try redirecting anyway (cookies might still propagate)
+          // If session still not available, redirect anyway (cookies might propagate)
           console.warn('Session not immediately available after login, redirecting anyway')
           window.location.href = callbackUrl
         }
