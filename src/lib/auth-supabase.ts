@@ -71,17 +71,35 @@ export function createSupabaseServerClientForAPI(req: NextRequest) {
 
 /**
  * Get current session from Supabase (Server Components, Server Actions)
+ * Uses getUser() to automatically refresh expired sessions, matching middleware behavior
  */
 export async function getSupabaseSession() {
   try {
     const supabase = await createSupabaseServerClient()
+    // Use getUser() instead of getSession() to automatically refresh expired sessions
+    // This matches the middleware behavior and ensures consistent session handling
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser()
+    
+    if (error || !user) {
+      if (error) {
+        console.error('Error getting Supabase user:', error)
+      }
+      return null
+    }
+    
+    // Get session after user is validated (getUser refreshes the session)
     const {
       data: { session },
-      error,
+      error: sessionError,
     } = await supabase.auth.getSession()
     
-    if (error) {
-      console.error('Error getting Supabase session:', error)
+    if (sessionError || !session) {
+      if (sessionError) {
+        console.error('Error getting Supabase session:', sessionError)
+      }
       return null
     }
     
