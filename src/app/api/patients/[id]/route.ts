@@ -7,14 +7,15 @@ import { tenantScope } from '@/lib/db'
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params
   try {
     const user = await requireAuth(req)
 
     const patient = await prisma.patient.findFirst({
       where: {
-        id: params.id,
+        id,
         practiceId: user.practiceId,
         deletedAt: null,
       },
@@ -47,16 +48,17 @@ export async function GET(
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAuth(req)
+    const { id } = await params
     const body = await req.json()
 
     // Get existing patient
     const existing = await prisma.patient.findFirst({
       where: {
-        id: params.id,
+        id,
         practiceId: user.practiceId,
         deletedAt: null,
       },
@@ -72,7 +74,7 @@ export async function PATCH(
     delete updateData.tags
 
     const patient = await prisma.patient.update({
-      where: { id: params.id },
+      where: { id },
       data: updateData,
       include: {
         tags: true,
@@ -83,14 +85,14 @@ export async function PATCH(
     if (validated.tags !== undefined) {
       // Delete existing tags
       await prisma.patientTag.deleteMany({
-        where: { patientId: params.id },
+        where: { patientId: id },
       })
 
       // Create new tags
       if (validated.tags.length > 0) {
         await prisma.patientTag.createMany({
           data: validated.tags.map((tag) => ({
-            patientId: params.id,
+            patientId: id,
             tag,
           })),
           skipDuplicates: true,
@@ -99,7 +101,7 @@ export async function PATCH(
 
       // Reload patient with tags
       const updated = await prisma.patient.findUnique({
-        where: { id: params.id },
+        where: { id },
         include: { tags: true },
       })
       
@@ -137,14 +139,15 @@ export async function PATCH(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAuth(req)
+    const { id } = await params
 
     const existing = await prisma.patient.findFirst({
       where: {
-        id: params.id,
+        id,
         practiceId: user.practiceId,
         deletedAt: null,
       },
@@ -156,7 +159,7 @@ export async function DELETE(
 
     // Soft delete
     const patient = await prisma.patient.update({
-      where: { id: params.id },
+      where: { id },
       data: { deletedAt: new Date() },
     })
 

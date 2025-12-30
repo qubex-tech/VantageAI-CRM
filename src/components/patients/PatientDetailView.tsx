@@ -1,75 +1,97 @@
-import { redirect } from 'next/navigation'
-import { getSupabaseSession } from '@/lib/auth-supabase'
-import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
-import { prisma } from '@/lib/db'
+'use client'
+
+import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { Calendar, Phone, Mail, MapPin, Edit } from 'lucide-react'
-import { PatientDetailView } from '@/components/patients/PatientDetailView'
+import { EditPatientForm } from './EditPatientForm'
 
-export const dynamic = 'force-dynamic'
+interface Patient {
+  id: string
+  name: string
+  dateOfBirth: Date | string
+  phone: string
+  email: string | null
+  address: string | null
+  preferredContactMethod: string
+  notes: string | null
+  tags?: Array<{ tag: string }>
+  insurancePolicies?: Array<{
+    id: string
+    providerName: string
+    memberId: string
+    eligibilityStatus: string
+  }>
+  appointments?: Array<{
+    id: string
+    visitType: string
+    startTime: Date | string
+    status: string
+  }>
+  timelineEntries?: Array<{
+    id: string
+    title: string
+    description: string | null
+    createdAt: Date | string
+  }>
+}
 
-export default async function PatientDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>
-}) {
-  const { id } = await params
-  const supabaseSession = await getSupabaseSession()
-  
-  if (!supabaseSession) {
-    redirect('/login')
+interface PatientDetailViewProps {
+  patient: Patient
+}
+
+export function PatientDetailView({ patient: initialPatient }: PatientDetailViewProps) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [patient, setPatient] = useState(initialPatient)
+
+  const age = new Date().getFullYear() - new Date(patient.dateOfBirth).getFullYear()
+
+  const handleEditSuccess = () => {
+    setIsEditing(false)
+    // Refresh the page to get updated data
+    window.location.reload()
   }
 
-  const supabaseUser = supabaseSession.user
-  let user
-  try {
-    user = await syncSupabaseUserToPrisma(supabaseUser)
-  } catch (error) {
-    console.error('Error syncing user to Prisma:', error)
-    redirect('/login?error=Failed to sync user account. Please try again.')
-  }
-  
-  if (!user) {
-    redirect('/login?error=User account not found.')
-  }
-
-  const patient = await prisma.patient.findFirst({
-    where: {
-      id,
-      practiceId: user.practiceId,
-      deletedAt: null,
-    },
-    include: {
-      tags: true,
-      insurancePolicies: true,
-      appointments: {
-        orderBy: { startTime: 'desc' },
-        take: 10,
-      },
-      timelineEntries: {
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-      },
-    },
-  })
-
-  if (!patient) {
+  if (isEditing) {
     return (
-      <div className="container mx-auto p-4">
-        <p>Patient not found</p>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold text-gray-900">Edit Patient</h1>
+          <Button variant="outline" onClick={() => setIsEditing(false)}>
+            Cancel
+          </Button>
+        </div>
+        <EditPatientForm
+          patient={patient}
+          onCancel={() => setIsEditing(false)}
+          onSuccess={handleEditSuccess}
+        />
       </div>
     )
   }
 
   return (
-    <div className="container mx-auto p-4 space-y-6 pb-20 md:pb-4">
-      <PatientDetailView patient={patient} />
-    </div>
-  )
-}
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">{patient.name}</h1>
+          <p className="text-gray-500">Age: {age} years</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setIsEditing(true)}>
+            <Edit className="mr-2 h-4 w-4" />
+            Edit
+          </Button>
+          <Link href={`/appointments/new?patientId=${patient.id}`}>
+            <Button>
+              <Calendar className="mr-2 h-4 w-4" />
+              Schedule Appointment
+            </Button>
+          </Link>
+        </div>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
@@ -98,10 +120,16 @@ export default async function PatientDetailPage({
                 Preferred: {patient.preferredContactMethod}
               </p>
             </div>
+            {patient.notes && (
+              <div className="pt-2 border-t">
+                <p className="text-sm font-medium text-gray-500 mb-1">Notes:</p>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap">{patient.notes}</p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {patient.insurancePolicies.length > 0 && (
+        {patient.insurancePolicies && patient.insurancePolicies.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle>Insurance</CardTitle>
@@ -122,7 +150,7 @@ export default async function PatientDetailPage({
           </Card>
         )}
 
-        {patient.appointments.length > 0 && (
+        {patient.appointments && patient.appointments.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle>Recent Appointments</CardTitle>
@@ -136,7 +164,7 @@ export default async function PatientDetailPage({
                 >
                   <p className="font-medium">{apt.visitType}</p>
                   <p className="text-sm text-gray-500">
-                    {format(apt.startTime, 'MMM d, yyyy h:mm a')}
+                    {format(new Date(apt.startTime), 'MMM d, yyyy h:mm a')}
                   </p>
                   <p className="text-xs text-gray-500">Status: {apt.status}</p>
                 </Link>
@@ -150,17 +178,17 @@ export default async function PatientDetailPage({
             <CardTitle>Timeline</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {patient.timelineEntries.length === 0 ? (
+            {patient.timelineEntries && patient.timelineEntries.length === 0 ? (
               <p className="text-sm text-gray-500">No timeline entries</p>
             ) : (
-              patient.timelineEntries.map((entry: any) => (
+              patient.timelineEntries?.map((entry: any) => (
                 <div key={entry.id} className="border-b pb-2">
                   <p className="font-medium">{entry.title}</p>
                   {entry.description && (
                     <p className="text-sm text-gray-500">{entry.description}</p>
                   )}
                   <p className="text-xs text-gray-500">
-                    {format(entry.createdAt, 'MMM d, yyyy h:mm a')}
+                    {format(new Date(entry.createdAt), 'MMM d, yyyy h:mm a')}
                   </p>
                 </div>
               ))
