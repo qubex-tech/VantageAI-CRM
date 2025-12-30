@@ -30,19 +30,25 @@ export function CallsList({ initialCalls, error: initialError }: CallsListProps)
   const [error, setError] = useState<string | null>(initialError || null)
 
   // Refresh function
-  const refreshCalls = async () => {
+  const refreshCalls = async (processCalls: boolean = false) => {
     setIsRefreshing(true)
     setError(null)
     
     try {
       // Fetch directly via API for immediate update
-      const response = await fetch('/api/calls?limit=50')
+      // Add ?process=true to trigger patient extraction
+      const url = processCalls ? '/api/calls?limit=50&process=true' : '/api/calls?limit=50'
+      const response = await fetch(url)
       const data = await response.json()
       
       if (response.ok && data.calls) {
         setCalls(data.calls)
         // Also refresh the server component data to keep it in sync
         router.refresh()
+        
+        if (processCalls) {
+          console.log('[CallsList] Processed calls for patient extraction')
+        }
       } else {
         setError(data.error || 'Failed to refresh calls')
       }
@@ -61,18 +67,22 @@ export function CallsList({ initialCalls, error: initialError }: CallsListProps)
   }, [initialCalls, initialError])
 
   // Auto-refresh when page becomes visible or window regains focus (user switches back to the tab)
+  // Also process calls on initial load and when tab becomes visible to extract patient data
   useEffect(() => {
     let mounted = true
     
+    // Process calls on initial mount to extract patient data
+    refreshCalls(true)
+    
     const handleVisibilityChange = () => {
       if (mounted && document.visibilityState === 'visible') {
-        refreshCalls()
+        refreshCalls(true) // Process calls when tab becomes visible
       }
     }
 
     const handleFocus = () => {
       if (mounted) {
-        refreshCalls()
+        refreshCalls(true) // Process calls when window gains focus
       }
     }
 
@@ -124,7 +134,7 @@ export function CallsList({ initialCalls, error: initialError }: CallsListProps)
           </p>
         </div>
         <Button
-          onClick={refreshCalls}
+          onClick={() => refreshCalls(true)}
           disabled={isRefreshing}
           variant="outline"
           size="sm"
