@@ -5,6 +5,7 @@ import { prisma } from '@/lib/db'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { format } from 'date-fns'
 import Link from 'next/link'
+import { getCalClient } from '@/lib/cal'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,6 +42,7 @@ export default async function AppointmentsPage({
   const date = params.date ? new Date(params.date) : null
   const status = params.status
 
+  // Fetch local appointments from database
   const where: any = {
     practiceId: user.practiceId,
   }
@@ -69,7 +71,7 @@ export default async function AppointmentsPage({
     where.status = status
   }
 
-  const appointments = await prisma.appointment.findMany({
+  const localAppointments = await prisma.appointment.findMany({
     where,
     include: {
       patient: {
@@ -84,6 +86,113 @@ export default async function AppointmentsPage({
       startTime: 'asc',
     },
   })
+
+  // Fetch Cal.com bookings and merge with local appointments
+  let calBookings: any[] = []
+  try {
+    const calClient = await getCalClient(user.practiceId)
+    
+    // Build query params for Cal.com API
+    const calParams: any = {
+      sortStart: 'asc',
+      take: 100, // Get up to 100 bookings
+    }
+    
+    // Map status filter if provided
+    if (status) {
+      const statusMap: Record<string, string[]> = {
+        'scheduled': ['upcoming'],
+        'confirmed': ['upcoming'],
+        'cancelled': ['cancelled'],
+        'completed': ['past'],
+      }
+      if (statusMap[status]) {
+        calParams.status = statusMap[status]
+      }
+    } else {
+      // Default to upcoming if no date filter
+      if (!date) {
+        calParams.status = ['upcoming']
+      }
+    }
+    
+    // Add date filters if provided
+    if (date) {
+      const startOfDay = new Date(date)
+      startOfDay.setHours(0, 0, 0, 0)
+      const endOfDay = new Date(date)
+      endOfDay.setHours(23, 59, 59, 999)
+      calParams.afterStart = startOfDay.toISOString()
+      calParams.beforeEnd = endOfDay.toISOString()
+    } else {
+      // Only show upcoming bookings if no date filter
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      calParams.afterStart = today.toISOString()
+    }
+    
+    const bookingsResponse = await calClient.getBookings(calParams)
+    calBookings = bookingsResponse.data || []
+  } catch (error) {
+    // If Cal.com is not configured or fails, just use local appointments
+    console.error('Error fetching Cal.com bookings:', error)
+  }
+
+  // Combine local appointments and Cal.com bookings
+  // Create a map to avoid duplicates (bookings that already exist in local DB)
+  const localBookingIds = new Set(localAppointments.map(apt => apt.calBookingId).filter(Boolean))
+  
+  // Filter out Cal.com bookings that are already in local DB
+  const newCalBookings = calBookings.filter(booking => {
+    const bookingId = booking.uid || String(booking.id)
+    return !localBookingIds.has(bookingId)
+  })
+
+  // Transform Cal.com bookings to match appointment structure for display
+  const transformedCalBookings = await Promise.all(
+    newCalBookings.map(async (booking) => {
+      // Try to find existing patient by email
+      const attendeeEmail = booking.attendees?.[0]?.email
+      let patient = null
+      if (attendeeEmail) {
+        patient = await prisma.patient.findFirst({
+          where: {
+            practiceId: user.practiceId,
+            email: attendeeEmail,
+            deletedAt: null,
+          },
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+          },
+        })
+      }
+      
+      return {
+        id: `cal-${booking.uid || booking.id}`,
+        calBookingId: booking.uid || String(booking.id),
+        patient: patient || {
+          id: null,
+          name: booking.attendees?.[0]?.name || 'Unknown',
+          phone: booking.attendees?.[0]?.phoneNumber || null,
+        },
+        startTime: new Date(booking.start),
+        endTime: new Date(booking.end),
+        visitType: booking.title || booking.eventType?.slug || 'Appointment',
+        status: booking.status === 'accepted' ? 'confirmed' : booking.status === 'cancelled' ? 'cancelled' : 'scheduled',
+        reason: booking.description || null,
+        isCalBooking: true, // Flag to identify Cal.com bookings
+      }
+    })
+  )
+
+  // Combine and sort all appointments
+  const allAppointments = [...localAppointments, ...transformedCalBookings].sort((a, b) => {
+    return new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+  })
+  
+  const appointments = allAppointments
 
   return (
     <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">

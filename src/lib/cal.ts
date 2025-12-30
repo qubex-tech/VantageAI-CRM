@@ -6,20 +6,38 @@
  */
 
 export interface CalBooking {
-  id: string
+  id: number
   uid: string
-  startTime: string
-  endTime: string
   title: string
+  description?: string
   status: string
+  start: string // ISO datetime
+  end: string // ISO datetime
+  duration: number
+  eventTypeId: number
   eventType: {
-    id: string
-    title: string
+    id: number
+    slug: string
   }
-  attendees: Array<{
-    email: string
+  hosts?: Array<{
+    id: number
     name: string
+    email: string
+    username: string
+    timeZone: string
   }>
+  attendees: Array<{
+    name: string
+    email: string
+    timeZone?: string
+    absent?: boolean
+    language?: string
+    phoneNumber?: string
+  }>
+  location?: string
+  createdAt: string
+  updatedAt: string
+  metadata?: Record<string, any>
 }
 
 export interface CalEventType {
