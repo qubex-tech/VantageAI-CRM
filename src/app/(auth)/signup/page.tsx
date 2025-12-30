@@ -76,13 +76,22 @@ export default function SignUpPage() {
         let errorMessage = 'Failed to create account. Please try again.'
         
         if (signUpError.message) {
+          console.error('Supabase signup error:', signUpError)
+          
           // Supabase error messages
-          if (signUpError.message.includes('Invalid API key') || signUpError.message.includes('API key')) {
-            errorMessage = 'Authentication service configuration error. Please contact support.'
-          } else if (signUpError.message.includes('User already registered')) {
+          if (signUpError.message.includes('Invalid API key') || 
+              signUpError.message.includes('API key') ||
+              signUpError.message.includes('JWT') ||
+              signUpError.message.includes('401') ||
+              signUpError.message.includes('Unauthorized')) {
+            errorMessage = 'Authentication service configuration error. Please verify that the Supabase API key is correct in the environment variables.'
+          } else if (signUpError.message.includes('User already registered') || 
+                     signUpError.message.includes('already registered')) {
             errorMessage = 'An account with this email already exists. Please sign in instead.'
           } else if (signUpError.message.includes('Password')) {
             errorMessage = signUpError.message
+          } else if (signUpError.message.includes('Email rate limit')) {
+            errorMessage = 'Too many signup attempts. Please wait a few minutes and try again.'
           } else {
             // Use the error message but make it user-friendly
             errorMessage = signUpError.message
