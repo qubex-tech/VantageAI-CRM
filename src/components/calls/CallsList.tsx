@@ -66,20 +66,32 @@ export function CallsList({ initialCalls, error: initialError }: CallsListProps)
     setError(initialError || null)
   }, [initialCalls, initialError])
 
-  // Process calls in the background after initial render (non-blocking)
-  // This extracts patient data without blocking the UI
+  // Process calls in the background completely asynchronously without blocking
+  // Use a separate function that doesn't affect UI state
   useEffect(() => {
     let mounted = true
     
-    // Process calls in the background after a short delay to allow UI to render first
-    const timeoutId = setTimeout(() => {
-      if (mounted) {
-        // Process calls asynchronously without blocking
-        refreshCalls(true).catch(err => {
-          console.error('[CallsList] Error processing calls in background:', err)
-        })
+    // Process calls in background without blocking UI or showing loading state
+    const processCallsInBackground = async () => {
+      try {
+        // Fetch and process calls silently in the background
+        const response = await fetch('/api/calls?limit=50&process=true')
+        if (mounted && response.ok) {
+          const data = await response.json()
+          if (data.calls) {
+            // Update calls silently in the background (user already sees initial data)
+            setCalls(data.calls)
+            console.log('[CallsList] Background processing completed')
+          }
+        }
+      } catch (err) {
+        // Silently fail - don't show errors for background processing
+        console.error('[CallsList] Error processing calls in background:', err)
       }
-    }, 500) // Small delay to ensure UI is interactive first
+    }
+    
+    // Start background processing immediately but don't wait for it
+    processCallsInBackground()
     
     const handleVisibilityChange = () => {
       if (mounted && document.visibilityState === 'visible') {
@@ -100,7 +112,6 @@ export function CallsList({ initialCalls, error: initialError }: CallsListProps)
     
     return () => {
       mounted = false
-      clearTimeout(timeoutId)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('focus', handleFocus)
     }
