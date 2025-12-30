@@ -53,8 +53,8 @@ export async function GET(req: NextRequest) {
       },
       // Show metadata
       metadata: call.metadata,
-      // Show phone number from call
-      phoneNumber: call.from_number || call.phone_number || 'not found',
+      // Show phone number from call (check metadata as it may be stored there)
+      phoneNumber: (call.metadata as any)?.phone_number || (call.metadata as any)?.from_number || 'not found',
     })
   } catch (error) {
     console.error('Error fetching call data:', error)
