@@ -43,10 +43,14 @@ export default async function CallDetailPage({
     if (call) {
       try {
         const { processRetellCallData } = await import('@/lib/process-call-data')
-        await processRetellCallData(user.practiceId, call, user.id)
+        const result = await processRetellCallData(user.practiceId, call, user.id)
+        console.log('[Call Detail Page] Patient processing completed:', result)
       } catch (processError) {
         // Log but don't fail the page load if processing fails
-        console.error('Error processing call data:', processError)
+        console.error('[Call Detail Page] Error processing call data:', processError)
+        if (processError instanceof Error) {
+          console.error('[Call Detail Page] Error stack:', processError.stack)
+        }
       }
     }
   } catch (err) {

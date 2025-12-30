@@ -40,7 +40,9 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
     if (call.call_analysis.custom_analysis_data) {
       const customData = call.call_analysis.custom_analysis_data as Record<string, any>
       
-      // Map common field names
+      console.log('[extractCallData] Found custom_analysis_data:', customData)
+      
+      // Map common field names - check both exact match and common variations
       if (customData.user_age !== undefined) extracted.user_age = customData.user_age
       if (customData.user_phone_number) extracted.user_phone_number = customData.user_phone_number
       if (customData.detailed_call_summary) extracted.detailed_call_summary = customData.detailed_call_summary
@@ -49,12 +51,19 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
       if (customData.selected_date) extracted.selected_date = customData.selected_date
       if (customData.preferred_dentist) extracted.preferred_dentist = customData.preferred_dentist
       if (customData.call_reason) extracted.call_reason = customData.call_reason
+      
+      // Also check for common variations
+      if (!extracted.patient_name && customData.name) extracted.patient_name = customData.name
+      if (!extracted.user_phone_number && customData.phone) extracted.user_phone_number = customData.phone
+      if (!extracted.user_phone_number && customData.phone_number) extracted.user_phone_number = customData.phone_number
     }
   }
 
   // Check metadata field as fallback
   if (call.metadata) {
     const metadata = call.metadata as Record<string, any>
+    
+    console.log('[extractCallData] Found metadata:', metadata)
     
     if (!extracted.user_age && metadata.user_age !== undefined) extracted.user_age = metadata.user_age
     if (!extracted.user_phone_number && metadata.user_phone_number) extracted.user_phone_number = metadata.user_phone_number
@@ -64,7 +73,14 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
     if (!extracted.selected_date && metadata.selected_date) extracted.selected_date = metadata.selected_date
     if (!extracted.preferred_dentist && metadata.preferred_dentist) extracted.preferred_dentist = metadata.preferred_dentist
     if (!extracted.call_reason && metadata.call_reason) extracted.call_reason = metadata.call_reason
+    
+    // Also check for common variations in metadata
+    if (!extracted.patient_name && metadata.name) extracted.patient_name = metadata.name
+    if (!extracted.user_phone_number && metadata.phone) extracted.user_phone_number = metadata.phone
+    if (!extracted.user_phone_number && metadata.phone_number) extracted.user_phone_number = metadata.phone_number
   }
+
+  console.log('[extractCallData] Final extracted data:', extracted)
 
   return extracted
 }
@@ -82,8 +98,16 @@ export async function processCallDataForPatient(
   const phoneNumber = callData.user_phone_number
   const patientName = callData.patient_name
 
+  // Log extracted data for debugging
+  console.log('[processCallDataForPatient] Extracted call data:', {
+    patient_name: patientName,
+    user_phone_number: phoneNumber,
+    user_age: callData.user_age,
+    callId,
+  })
+
   if (!phoneNumber && !patientName) {
-    console.warn('No phone number or patient name in extracted call data, skipping patient creation')
+    console.warn('[processCallDataForPatient] No phone number or patient name in extracted call data, skipping patient creation. Full callData:', callData)
     return { patientId: null, isNew: false }
   }
 
@@ -247,6 +271,14 @@ export async function processRetellCallData(
 ): Promise<{ patientId: string | null; extractedData: ExtractedCallData }> {
   // Extract data from call
   const extractedData = extractCallData(call)
+  
+  // Log extracted data for debugging
+  console.log('[processRetellCallData] Extracted data from call:', {
+    callId: call.call_id,
+    extractedData,
+    callAnalysis: call.call_analysis,
+    metadata: call.metadata,
+  })
 
   // Create or update patient
   const { patientId, isNew } = await processCallDataForPatient(
@@ -255,6 +287,8 @@ export async function processRetellCallData(
     userId,
     call.call_id
   )
+  
+  console.log('[processRetellCallData] Patient processing result:', { patientId, isNew })
 
   // Update or create voice conversation record
   if (call.call_id) {
