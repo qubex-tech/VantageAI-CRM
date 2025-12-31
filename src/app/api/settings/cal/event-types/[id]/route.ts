@@ -4,14 +4,15 @@ import { requireAuth } from '@/lib/middleware'
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const user = await requireAuth(req)
 
     const mapping = await prisma.calEventTypeMapping.findFirst({
       where: {
-        id: params.id,
+        id,
         practiceId: user.practiceId,
       },
     })
@@ -21,7 +22,7 @@ export async function DELETE(
     }
 
     await prisma.calEventTypeMapping.delete({
-      where: { id: params.id },
+      where: { id },
     })
 
     return NextResponse.json({ success: true })

@@ -6,14 +6,15 @@ import { createAuditLog } from '@/lib/audit'
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const user = await requireAuth(req)
 
     const appointment = await prisma.appointment.findFirst({
       where: {
-        id: params.id,
+        id,
         practiceId: user.practiceId,
       },
       include: {
@@ -36,15 +37,16 @@ export async function GET(
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const user = await requireAuth(req)
     const body = await req.json()
 
     const existing = await prisma.appointment.findFirst({
       where: {
-        id: params.id,
+        id,
         practiceId: user.practiceId,
       },
     })
@@ -56,7 +58,7 @@ export async function PATCH(
     const validated = appointmentSchema.partial().parse(body)
 
     const appointment = await prisma.appointment.update({
-      where: { id: params.id },
+      where: { id },
       data: validated,
       include: {
         patient: {
@@ -96,14 +98,15 @@ export async function PATCH(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const user = await requireAuth(req)
 
     const existing = await prisma.appointment.findFirst({
       where: {
-        id: params.id,
+        id,
         practiceId: user.practiceId,
       },
     })
@@ -114,7 +117,7 @@ export async function DELETE(
 
     // Update status to cancelled instead of deleting
     const appointment = await prisma.appointment.update({
-      where: { id: params.id },
+      where: { id },
       data: { status: 'cancelled' },
     })
 

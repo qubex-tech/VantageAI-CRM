@@ -6,15 +6,16 @@ import { createAuditLog } from '@/lib/audit'
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const user = await requireAuth(req)
     const body = await req.json()
 
     const existing = await prisma.insurancePolicy.findFirst({
       where: {
-        id: params.id,
+        id,
         practiceId: user.practiceId,
       },
     })
@@ -26,7 +27,7 @@ export async function PATCH(
     const validated = insurancePolicySchema.partial().parse(body)
 
     const policy = await prisma.insurancePolicy.update({
-      where: { id: params.id },
+      where: { id },
       data: validated,
     })
 
@@ -56,14 +57,15 @@ export async function PATCH(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const user = await requireAuth(req)
 
     const existing = await prisma.insurancePolicy.findFirst({
       where: {
-        id: params.id,
+        id,
         practiceId: user.practiceId,
       },
     })
@@ -73,7 +75,7 @@ export async function DELETE(
     }
 
     await prisma.insurancePolicy.delete({
-      where: { id: params.id },
+      where: { id },
     })
 
     await createAuditLog({
@@ -81,7 +83,7 @@ export async function DELETE(
       userId: user.id,
       action: 'delete',
       resourceType: 'insurance',
-      resourceId: params.id,
+      resourceId: id,
     })
 
     return NextResponse.json({ success: true })
