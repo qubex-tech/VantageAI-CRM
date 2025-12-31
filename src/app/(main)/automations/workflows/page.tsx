@@ -9,6 +9,8 @@ import { WorkflowsList } from '@/components/workflows/WorkflowsList'
 
 export const dynamic = 'force-dynamic'
 
+export const dynamic = 'force-dynamic'
+
 export default async function WorkflowsPage() {
   const supabaseSession = await getSupabaseSession()
   
@@ -33,8 +35,25 @@ export default async function WorkflowsPage() {
     redirect('/login?error=User account not found.')
   }
 
-  // TODO: Fetch workflows from database when schema is created
-  const workflows: any[] = []
+  // Fetch workflows from database
+  const workflows = await prisma.workflow.findMany({
+    where: {
+      practiceId: user.practiceId,
+    },
+    include: {
+      steps: {
+        orderBy: { order: 'asc' },
+      },
+      _count: {
+        select: {
+          runs: true,
+        },
+      },
+    },
+    orderBy: {
+      updatedAt: 'desc',
+    },
+  })
 
   return (
     <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
