@@ -208,12 +208,12 @@ export function PatientFilters({
               <TabsTrigger
                 key={savedFilter.id}
                 value={savedFilter.id}
-                className="data-[state=active]:bg-white relative group pr-8"
+                className="data-[state=active]:bg-white relative group pr-6"
               >
                 {savedFilter.name}
                 <button
                   onClick={(e) => handleDeleteFilter(savedFilter.id, e)}
-                  className="ml-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-200 rounded"
+                  className="ml-1.5 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-gray-200 rounded"
                 >
                   <X className="h-3 w-3" />
                 </button>
