@@ -1,10 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Input } from '@/components/ui/input'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Search } from 'lucide-react'
 import Link from 'next/link'
+import { PatientFilters, FilterRule } from './PatientFilters'
 
 interface PatientsListProps {
   initialPatients: any[]
@@ -28,44 +27,117 @@ export function PatientsList({ initialPatients }: PatientsListProps) {
   const searchParams = useSearchParams()
   const [search, setSearch] = useState(searchParams?.get('search') || '')
   const [patients, setPatients] = useState(initialPatients)
+  
+  // Parse filters from URL or initialize empty
+  const [filters, setFilters] = useState<FilterRule[]>(() => {
+    const filtersParam = searchParams?.get('filters')
+    if (filtersParam) {
+      try {
+        return JSON.parse(decodeURIComponent(filtersParam))
+      } catch {
+        return []
+      }
+    }
+    return []
+  })
 
   useEffect(() => {
     setPatients(initialPatients)
   }, [initialPatients])
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSearchChange = (query: string) => {
+    setSearch(query)
+    updateURL(query, filters)
+  }
+
+  const handleFiltersChange = (newFilters: FilterRule[]) => {
+    setFilters(newFilters)
+    updateURL(search, newFilters)
+  }
+
+  const updateURL = (searchQuery: string, filterRules: FilterRule[]) => {
     const params = new URLSearchParams()
-    if (search) {
-      params.set('search', search)
+    if (searchQuery) {
+      params.set('search', searchQuery)
+    }
+    if (filterRules.length > 0) {
+      params.set('filters', encodeURIComponent(JSON.stringify(filterRules)))
     }
     router.push(`/patients?${params.toString()}`)
   }
 
-  // Filter clientside for now (can be improved with server actions)
   const filteredPatients = patients.filter((patient) => {
-    if (!search) return true
-    const searchLower = search.toLowerCase()
-    return (
-      patient.name.toLowerCase().includes(searchLower) ||
-      patient.phone.includes(search) ||
-      (patient.email && patient.email.toLowerCase().includes(searchLower))
-    )
+    // Basic search filter
+    if (search) {
+      const searchLower = search.toLowerCase()
+      const matchesSearch =
+        patient.name.toLowerCase().includes(searchLower) ||
+        patient.phone.includes(search) ||
+        (patient.email && patient.email.toLowerCase().includes(searchLower))
+      if (!matchesSearch) return false
+    }
+
+    // Advanced filters
+    return filters.every((filter) => {
+      const field = filter.field
+      const operator = filter.operator
+      const value = filter.value
+      const appointmentCount = patient._count?.appointments ?? 0
+
+      let fieldValue: string | number | null = null
+
+      switch (field) {
+        case 'name':
+          fieldValue = patient.name
+          break
+        case 'email':
+          fieldValue = patient.email || ''
+          break
+        case 'phone':
+          fieldValue = patient.phone
+          break
+        case 'age':
+          fieldValue = calculateAge(new Date(patient.dateOfBirth))
+          break
+        case 'appointments':
+          fieldValue = appointmentCount
+          break
+        default:
+          return true
+      }
+
+      // Handle different operators
+      switch (operator) {
+        case 'equals':
+          return String(fieldValue).toLowerCase() === value.toLowerCase()
+        case 'not_equals':
+          return String(fieldValue).toLowerCase() !== value.toLowerCase()
+        case 'contains':
+          return String(fieldValue).toLowerCase().includes(value.toLowerCase())
+        case 'not_contains':
+          return !String(fieldValue).toLowerCase().includes(value.toLowerCase())
+        case 'greater_than':
+          return Number(fieldValue) > Number(value)
+        case 'less_than':
+          return Number(fieldValue) < Number(value)
+        case 'is_empty':
+          return !fieldValue || String(fieldValue).trim() === ''
+        case 'is_not_empty':
+          return !!fieldValue && String(fieldValue).trim() !== ''
+        default:
+          return true
+      }
+    })
   })
 
   return (
     <div className="space-y-4">
-      <form onSubmit={handleSearch} className="flex gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
-          <Input
-            placeholder="Search patients by name, phone, or email..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-      </form>
+      <PatientFilters
+        searchQuery={search}
+        onSearchChange={handleSearchChange}
+        filters={filters}
+        onFiltersChange={handleFiltersChange}
+      />
 
       {filteredPatients.length === 0 ? (
         <div className="text-center py-12">
@@ -155,4 +227,3 @@ export function PatientsList({ initialPatients }: PatientsListProps) {
     </div>
   )
 }
-
