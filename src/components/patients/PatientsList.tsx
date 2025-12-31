@@ -102,29 +102,47 @@ export function PatientsList({ initialPatients }: PatientsListProps) {
                   return (
                     <tr
                       key={patient.id}
-                      className="hover:bg-gray-50 transition-colors cursor-pointer"
+                      className="hover:bg-gray-50 transition-colors"
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Link
                           href={`/patients/${patient.id}`}
-                          className="text-sm font-medium text-gray-900 hover:text-gray-700"
+                          className="block text-sm font-medium text-gray-900 hover:text-gray-700"
                         >
                           {patient.name}
                         </Link>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{age} years</div>
+                        <Link
+                          href={`/patients/${patient.id}`}
+                          className="block text-sm text-gray-900"
+                        >
+                          {age} years
+                        </Link>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{patient.phone}</div>
+                        <Link
+                          href={`/patients/${patient.id}`}
+                          className="block text-sm text-gray-900"
+                        >
+                          {patient.phone}
+                        </Link>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
+                        <Link
+                          href={`/patients/${patient.id}`}
+                          className="block text-sm text-gray-900"
+                        >
                           {patient.email || <span className="text-gray-400">—</span>}
-                        </div>
+                        </Link>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{appointmentsCount}</div>
+                        <Link
+                          href={`/patients/${patient.id}`}
+                          className="block text-sm text-gray-900"
+                        >
+                          {appointmentsCount}
+                        </Link>
                       </td>
                     </tr>
                   )
