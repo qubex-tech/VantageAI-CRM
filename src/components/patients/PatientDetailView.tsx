@@ -188,137 +188,320 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
         {/* Content Area */}
         <div className="flex-1 overflow-y-auto px-6 py-6">
           <div className="max-w-4xl">
-            {/* Highlights Section */}
-            <div className="mb-8">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Grid className="h-4 w-4 text-gray-500" />
-                  <h2 className="text-sm font-medium text-gray-900">Highlights</h2>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {/* Age */}
-                <div className="border border-gray-200 rounded-lg p-4 bg-white">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-xs text-gray-500 mb-1">Age</div>
-                      <div className="text-sm font-medium text-gray-900">{age} years</div>
+            {activeTab === 'overview' && (
+              <>
+                {/* Highlights Section */}
+                <div className="mb-8">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <Grid className="h-4 w-4 text-gray-500" />
+                      <h2 className="text-sm font-medium text-gray-900">Highlights</h2>
                     </div>
-                    <User className="h-5 w-5 text-gray-400" />
                   </div>
-                </div>
-
-                {/* Next Appointment */}
-                <div className="border border-gray-200 rounded-lg p-4 bg-white">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-xs text-gray-500 mb-1">Next appointment</div>
-                      <div className="text-sm font-medium text-gray-900">
-                        {nextAppointment 
-                          ? format(new Date(nextAppointment.startTime), 'MMM d, yyyy h:mm a')
-                          : 'No upcoming appointments'
-                        }
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {/* Age */}
+                    <div className="border border-gray-200 rounded-lg p-4 bg-white">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-xs text-gray-500 mb-1">Age</div>
+                          <div className="text-sm font-medium text-gray-900">{age} years</div>
+                        </div>
+                        <User className="h-5 w-5 text-gray-400" />
                       </div>
                     </div>
-                    <Calendar className="h-5 w-5 text-gray-400" />
-                  </div>
-                </div>
 
-                {/* Email */}
-                <div className="border border-gray-200 rounded-lg p-4 bg-white">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs text-gray-500 mb-1">Email addresses</div>
-                      <div className="text-sm font-medium text-gray-900 truncate">
-                        {patient.email || 'No email address'}
+                    {/* Next Appointment */}
+                    <div className="border border-gray-200 rounded-lg p-4 bg-white">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-xs text-gray-500 mb-1">Next appointment</div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {nextAppointment 
+                              ? format(new Date(nextAppointment.startTime), 'MMM d, yyyy h:mm a')
+                              : 'No upcoming appointments'
+                            }
+                          </div>
+                        </div>
+                        <Calendar className="h-5 w-5 text-gray-400" />
                       </div>
                     </div>
-                    <AtSign className="h-5 w-5 text-gray-400 flex-shrink-0 ml-2" />
-                  </div>
-                </div>
 
-                {/* Phone */}
-                <div className="border border-gray-200 rounded-lg p-4 bg-white">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-xs text-gray-500 mb-1">Phone numbers</div>
-                      <div className="text-sm font-medium text-gray-900">{patient.phone}</div>
-                    </div>
-                    <PhoneIcon className="h-5 w-5 text-gray-400" />
-                  </div>
-                </div>
-
-                {/* Address */}
-                <div className="border border-gray-200 rounded-lg p-4 bg-white">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs text-gray-500 mb-1">Primary location</div>
-                      <div className="text-sm font-medium text-gray-900 truncate">
-                        {patient.address || 'No address'}
+                    {/* Email */}
+                    <div className="border border-gray-200 rounded-lg p-4 bg-white">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs text-gray-500 mb-1">Email addresses</div>
+                          <div className="text-sm font-medium text-gray-900 truncate">
+                            {patient.email || 'No email address'}
+                          </div>
+                        </div>
+                        <AtSign className="h-5 w-5 text-gray-400 flex-shrink-0 ml-2" />
                       </div>
                     </div>
-                    <MapPin className="h-5 w-5 text-gray-400 flex-shrink-0 ml-2" />
-                  </div>
-                </div>
 
-                {/* Insurance */}
-                <div className="border border-gray-200 rounded-lg p-4 bg-white">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-xs text-gray-500 mb-1">Insurance policies</div>
-                      <div className="text-sm font-medium text-gray-900">
-                        {patient.insurancePolicies.length > 0 
-                          ? `${patient.insurancePolicies.length} policy${patient.insurancePolicies.length > 1 ? 'ies' : ''}`
-                          : 'No insurance policies'
-                        }
+                    {/* Phone */}
+                    <div className="border border-gray-200 rounded-lg p-4 bg-white">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-xs text-gray-500 mb-1">Phone numbers</div>
+                          <div className="text-sm font-medium text-gray-900">{patient.phone}</div>
+                        </div>
+                        <PhoneIcon className="h-5 w-5 text-gray-400" />
                       </div>
                     </div>
-                    <Building2 className="h-5 w-5 text-gray-400" />
+
+                    {/* Address */}
+                    <div className="border border-gray-200 rounded-lg p-4 bg-white">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs text-gray-500 mb-1">Primary location</div>
+                          <div className="text-sm font-medium text-gray-900 truncate">
+                            {patient.address || 'No address'}
+                          </div>
+                        </div>
+                        <MapPin className="h-5 w-5 text-gray-400 flex-shrink-0 ml-2" />
+                      </div>
+                    </div>
+
+                    {/* Insurance */}
+                    <div className="border border-gray-200 rounded-lg p-4 bg-white">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-xs text-gray-500 mb-1">Insurance policies</div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {patient.insurancePolicies.length > 0 
+                              ? `${patient.insurancePolicies.length} policy${patient.insurancePolicies.length > 1 ? 'ies' : ''}`
+                              : 'No insurance policies'
+                            }
+                          </div>
+                        </div>
+                        <Building2 className="h-5 w-5 text-gray-400" />
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Activity Section */}
-            <div className="mb-8">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-gray-500" />
-                  <h2 className="text-sm font-medium text-gray-900">Activity</h2>
-                </div>
-                <button className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1">
-                  View all
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-              
-              <div className="space-y-4">
-                {patient.timelineEntries.slice(0, 5).map((entry) => (
-                  <div key={entry.id} className="border border-gray-200 rounded-lg p-4 bg-white">
-                    <div className="flex items-start gap-3">
-                      <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
-                        <Activity className="h-4 w-4 text-gray-500" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-gray-900">{entry.title}</div>
-                        {entry.description && (
-                          <div className="text-sm text-gray-500 mt-1">{entry.description}</div>
-                        )}
-                        <div className="text-xs text-gray-400 mt-2">
-                          {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true })}
+                {/* Activity Section Preview */}
+                <div className="mb-8">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <Activity className="h-4 w-4 text-gray-500" />
+                      <h2 className="text-sm font-medium text-gray-900">Activity</h2>
+                    </div>
+                    <button 
+                      onClick={() => setActiveTab('activity')}
+                      className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
+                    >
+                      View all
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    {patient.timelineEntries.slice(0, 5).map((entry) => (
+                      <div key={entry.id} className="border border-gray-200 rounded-lg p-4 bg-white">
+                        <div className="flex items-start gap-3">
+                          <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                            <Activity className="h-4 w-4 text-gray-500" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-gray-900">{entry.title}</div>
+                            {entry.description && (
+                              <div className="text-sm text-gray-500 mt-1">{entry.description}</div>
+                            )}
+                            <div className="text-xs text-gray-400 mt-2">
+                              {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true })}
+                            </div>
+                          </div>
                         </div>
                       </div>
+                    ))}
+                    {patient.timelineEntries.length === 0 && (
+                      <div className="text-center py-8 text-gray-500 text-sm">
+                        No activity recorded
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {activeTab === 'activity' && (
+              <div>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900">Activity</h2>
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    Add meeting
+                  </Button>
+                </div>
+                
+                <div className="space-y-4">
+                  {patient.timelineEntries.length > 0 ? (
+                    // Group activities by date
+                    (() => {
+                      const grouped: { [key: string]: typeof patient.timelineEntries } = {}
+                      const now = new Date()
+                      const today = new Date(now.setHours(0, 0, 0, 0))
+                      const thisWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+                      
+                      patient.timelineEntries.forEach((entry) => {
+                        const entryDate = new Date(entry.createdAt)
+                        let groupKey = ''
+                        
+                        if (entryDate >= today) {
+                          groupKey = 'Today'
+                        } else if (entryDate >= thisWeek) {
+                          groupKey = 'This week'
+                        } else {
+                          const monthYear = format(entryDate, 'MMMM yyyy')
+                          groupKey = monthYear
+                        }
+                        
+                        if (!grouped[groupKey]) {
+                          grouped[groupKey] = []
+                        }
+                        grouped[groupKey].push(entry)
+                      })
+                      
+                      return Object.entries(grouped).map(([groupKey, entries]) => (
+                        <div key={groupKey}>
+                          <div className="flex items-center gap-2 mb-4">
+                            <h3 className="text-sm font-medium text-gray-900">{groupKey}</h3>
+                            <ChevronDown className="h-4 w-4 text-gray-400" />
+                          </div>
+                          <div className="space-y-4">
+                            {entries.map((entry) => (
+                              <div key={entry.id} className="border border-gray-200 rounded-lg p-4 bg-white">
+                                <div className="flex items-start gap-3">
+                                  <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                                    <Activity className="h-4 w-4 text-gray-500" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-medium text-gray-900">{entry.title}</div>
+                                    {entry.description && (
+                                      <div className="text-sm text-gray-500 mt-1">{entry.description}</div>
+                                    )}
+                                    <div className="text-xs text-gray-400 mt-2">
+                                      {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true })}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))
+                    })()
+                  ) : (
+                    <div className="text-center py-12 text-gray-500 text-sm">
+                      No activity recorded
                     </div>
-                  </div>
-                ))}
-                {patient.timelineEntries.length === 0 && (
-                  <div className="text-center py-8 text-gray-500 text-sm">
-                    No activity recorded
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
+            )}
+
+            {activeTab === 'appointments' && (
+              <div>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900">Appointments</h2>
+                  <Link href={`/appointments/new?patientId=${patient.id}`}>
+                    <Button variant="outline" size="sm" className="gap-2">
+                      <Plus className="h-4 w-4" />
+                      Schedule Appointment
+                    </Button>
+                  </Link>
+                </div>
+                
+                <div className="space-y-4">
+                  {patient.appointments.length > 0 ? (
+                    (() => {
+                      const grouped: { [key: string]: typeof patient.appointments } = {}
+                      const now = new Date()
+                      const today = new Date(now.setHours(0, 0, 0, 0))
+                      const thisWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+                      
+                      patient.appointments.forEach((appointment) => {
+                        const aptDate = new Date(appointment.startTime)
+                        let groupKey = ''
+                        
+                        if (aptDate >= today) {
+                          groupKey = 'Upcoming'
+                        } else if (aptDate >= thisWeek) {
+                          groupKey = 'This week'
+                        } else {
+                          const monthYear = format(aptDate, 'MMMM yyyy')
+                          groupKey = monthYear
+                        }
+                        
+                        if (!grouped[groupKey]) {
+                          grouped[groupKey] = []
+                        }
+                        grouped[groupKey].push(appointment)
+                      })
+                      
+                      return Object.entries(grouped).map(([groupKey, appointments]) => (
+                        <div key={groupKey}>
+                          <div className="flex items-center gap-2 mb-4">
+                            <h3 className="text-sm font-medium text-gray-900">{groupKey}</h3>
+                            <ChevronDown className="h-4 w-4 text-gray-400" />
+                          </div>
+                          <div className="space-y-4">
+                            {appointments.map((appointment) => (
+                              <Link
+                                key={appointment.id}
+                                href={`/appointments/${appointment.id}`}
+                                className="block border border-gray-200 rounded-lg p-4 bg-white hover:border-gray-300 hover:shadow-sm transition-all"
+                              >
+                                <div className="flex items-start gap-3">
+                                  <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                                    <Calendar className="h-4 w-4 text-blue-600" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-medium text-gray-900">{appointment.visitType}</div>
+                                    <div className="text-sm text-gray-500 mt-1">
+                                      {format(new Date(appointment.startTime), 'MMM d, yyyy h:mm a')} - {format(new Date(appointment.endTime), 'h:mm a')}
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-2">
+                                      <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium ${
+                                        appointment.status === 'confirmed' || appointment.status === 'scheduled'
+                                          ? 'bg-green-100 text-green-700'
+                                          : appointment.status === 'cancelled'
+                                          ? 'bg-red-100 text-red-700'
+                                          : 'bg-gray-100 text-gray-700'
+                                      }`}>
+                                        {appointment.status}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </Link>
+                            ))}
+                          </div>
+                        </div>
+                      ))
+                    })()
+                  ) : (
+                    <div className="text-center py-12 text-gray-500 text-sm">
+                      No appointments scheduled
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'calls' && (
+              <div>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900">Calls</h2>
+                </div>
+                <div className="text-center py-12 text-gray-500 text-sm">
+                  No calls recorded
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
