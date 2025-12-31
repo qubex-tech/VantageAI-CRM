@@ -1,4 +1,4 @@
-import { redirect } from 'next/navigation'
+import { redirect, notFound } from 'next/navigation'
 import { getSupabaseSession } from '@/lib/auth-supabase'
 import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
 import { prisma } from '@/lib/db'
@@ -64,10 +64,5 @@ export default async function PatientDetailPage({
     )
   }
 
-  return (
-    <div className="container mx-auto p-4 space-y-6 pb-20 md:pb-4">
-      <PatientDetailView patient={patient} />
-    </div>
-  )
+  return <PatientDetailView patient={patient} />
 }
-
