@@ -10,6 +10,7 @@
 import { prisma } from './db'
 import { createTimelineEntry } from './audit'
 import { CalBooking } from './cal'
+import { getCalClient } from './cal'
 
 export interface SyncBookingResult {
   patientId: string
@@ -177,20 +178,88 @@ export async function syncBookingToPatient(
       data: updateData,
     })
 
-    // Create timeline entry
-    await createTimelineEntry({
-      patientId: updatedPatient.id,
-      type: 'appointment',
-      title: 'Appointment booking synced from Cal.com',
-      description: `Booking ${booking.title || 'appointment'} synced from Cal.com (matched by ${matchReason})`,
-      metadata: {
-        bookingId: booking.uid || String(booking.id),
-        bookingTitle: booking.title,
-        bookingStart: booking.start,
-        bookingEnd: booking.end,
-        matchReason,
+    // Check if timeline entry already exists for this booking to avoid duplicates
+    const bookingId = booking.uid || String(booking.id)
+    const existingTimelineEntry = await prisma.patientTimelineEntry.findFirst({
+      where: {
+        patientId: updatedPatient.id,
+        type: 'appointment',
+        metadata: {
+          path: ['bookingId'],
+          equals: bookingId,
+        },
       },
     })
+
+    // Only create timeline entry if it doesn't already exist
+    if (!existingTimelineEntry) {
+      await createTimelineEntry({
+        patientId: updatedPatient.id,
+        type: 'appointment',
+        title: 'Appointment booking synced from Cal.com',
+        description: `Booking ${booking.title || 'appointment'} synced from Cal.com (matched by ${matchReason})`,
+        metadata: {
+          bookingId: booking.uid || String(booking.id),
+          bookingTitle: booking.title,
+          bookingStart: booking.start,
+          bookingEnd: booking.end,
+          matchReason,
+        },
+      })
+    }
+
+    // Check if appointment already exists for this booking
+    const existingAppointment = await prisma.appointment.findFirst({
+      where: {
+        patientId: updatedPatient.id,
+        calBookingId: bookingId,
+      },
+    })
+
+    // Create appointment if it doesn't exist
+    if (!existingAppointment && booking.start && booking.end) {
+      try {
+        // Try to get event type mapping to determine visit type
+        const calIntegration = await prisma.calIntegration.findFirst({
+          where: { practiceId },
+          include: {
+            practice: true,
+          },
+        })
+
+        let visitType = booking.title || 'Appointment'
+        if (calIntegration && booking.eventTypeId) {
+          const eventMapping = await prisma.calEventTypeMapping.findFirst({
+            where: {
+              practiceId: calIntegration.practiceId,
+              calEventTypeId: String(booking.eventTypeId),
+            },
+          })
+          if (eventMapping) {
+            visitType = eventMapping.visitTypeName
+          }
+        }
+
+        await prisma.appointment.create({
+          data: {
+            practiceId,
+            patientId: updatedPatient.id,
+            startTime: new Date(booking.start),
+            endTime: new Date(booking.end),
+            timezone: booking.attendees?.[0]?.timeZone || 'America/New_York',
+            visitType: visitType,
+            status: booking.status === 'ACCEPTED' || booking.status === 'accepted' ? 'confirmed' : 'scheduled',
+            calBookingId: bookingId,
+            calEventId: booking.eventTypeId ? String(booking.eventTypeId) : undefined,
+            reason: booking.description || undefined,
+          },
+        })
+        console.log(`[syncBookingToPatient] Created appointment for booking ${bookingId}`)
+      } catch (error) {
+        console.error(`[syncBookingToPatient] Error creating appointment for booking ${bookingId}:`, error)
+        // Don't throw - appointment creation is optional
+      }
+    }
 
     return {
       patientId: updatedPatient.id,
@@ -226,20 +295,80 @@ export async function syncBookingToPatient(
 
     console.log('[syncBookingToPatient] Created new patient:', newPatient.id, 'practiceId:', newPatient.practiceId)
 
-    // Create timeline entry
-    await createTimelineEntry({
-      patientId: newPatient.id,
-      type: 'appointment',
-      title: 'Patient created from Cal.com booking',
-      description: `Patient created from Cal.com booking: ${booking.title || 'appointment'}`,
-      metadata: {
-        bookingId: booking.uid || String(booking.id),
-        bookingTitle: booking.title,
-        bookingStart: booking.start,
-        bookingEnd: booking.end,
-        source: 'cal.com_booking',
+    // Check if timeline entry already exists for this booking to avoid duplicates
+    const bookingId = booking.uid || String(booking.id)
+    const existingTimelineEntry = await prisma.patientTimelineEntry.findFirst({
+      where: {
+        patientId: newPatient.id,
+        type: 'appointment',
+        metadata: {
+          path: ['bookingId'],
+          equals: bookingId,
+        },
       },
     })
+
+    // Only create timeline entry if it doesn't already exist
+    if (!existingTimelineEntry) {
+      await createTimelineEntry({
+        patientId: newPatient.id,
+        type: 'appointment',
+        title: 'Patient created from Cal.com booking',
+        description: `Patient created from Cal.com booking: ${booking.title || 'appointment'}`,
+        metadata: {
+          bookingId: booking.uid || String(booking.id),
+          bookingTitle: booking.title,
+          bookingStart: booking.start,
+          bookingEnd: booking.end,
+          source: 'cal.com_booking',
+        },
+      })
+    }
+
+    // Create appointment if it doesn't exist
+    if (booking.start && booking.end) {
+      try {
+        // Try to get event type mapping to determine visit type
+        const calIntegration = await prisma.calIntegration.findFirst({
+          where: { practiceId },
+          include: {
+            practice: true,
+          },
+        })
+
+        let visitType = booking.title || 'Appointment'
+        if (calIntegration && booking.eventTypeId) {
+          const eventMapping = await prisma.calEventTypeMapping.findFirst({
+            where: {
+              practiceId: calIntegration.practiceId,
+              calEventTypeId: String(booking.eventTypeId),
+            },
+          })
+          if (eventMapping) {
+            visitType = eventMapping.visitTypeName
+          }
+        }
+
+        await prisma.appointment.create({
+          data: {
+            practiceId,
+            patientId: newPatient.id,
+            startTime: new Date(booking.start),
+            endTime: new Date(booking.end),
+            timezone: booking.attendees?.[0]?.timeZone || 'America/New_York',
+            visitType: visitType,
+            status: booking.status === 'ACCEPTED' || booking.status === 'accepted' ? 'confirmed' : 'scheduled',
+            calBookingId: bookingId,
+            calEventId: booking.eventTypeId ? String(booking.eventTypeId) : undefined,
+            reason: booking.description || undefined,
+          },
+        })
+        console.log(`[syncBookingToPatient] Created appointment for new patient booking ${bookingId}`)
+      } catch (error) {
+        console.error(`[syncBookingToPatient] Error creating appointment for new patient booking ${bookingId}:`, error)
+        // Don't throw - appointment creation is optional
+      }
+    }
 
     console.log('[syncBookingToPatient] Created timeline entry for new patient:', newPatient.id)
 
