@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { ComposeEmail } from './ComposeEmail'
 import Link from 'next/link'
 import { 
   Star, 
@@ -82,6 +83,7 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'activity' | 'appointments' | 'calls'>('overview')
   const [sidebarTab, setSidebarTab] = useState<'details' | 'comments'>('details')
   const [isEditing, setIsEditing] = useState(false)
+  const [composeEmailOpen, setComposeEmailOpen] = useState(false)
   
   const age = calculateAge(patient.dateOfBirth)
   
@@ -122,7 +124,12 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="gap-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="gap-2"
+              onClick={() => setComposeEmailOpen(true)}
+            >
               <Mail className="h-4 w-4" />
               Compose email
             </Button>
@@ -702,6 +709,14 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
           </Button>
         </div>
       </div>
+
+      {/* Compose Email Dialog */}
+      <ComposeEmail
+        open={composeEmailOpen}
+        onOpenChange={setComposeEmailOpen}
+        patientEmail={patient.email || undefined}
+        patientName={patient.name}
+      />
     </div>
   )
 }
