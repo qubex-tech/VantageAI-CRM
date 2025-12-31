@@ -176,83 +176,85 @@ export function PatientFilters({
   return (
     <div className="space-y-3">
       {/* Saved Filters Tabs */}
-      <Tabs value={activeTab} onValueChange={(value) => {
-        if (value === 'default') {
-          handleDefaultTab()
-        } else {
-          const savedFilter = savedFilters.find((f) => f.id === value)
-          if (savedFilter) {
-            handleLoadFilter(savedFilter)
+      <div className="flex items-center gap-2">
+        <Tabs value={activeTab} onValueChange={(value) => {
+          if (value === 'default') {
+            handleDefaultTab()
+          } else {
+            const savedFilter = savedFilters.find((f) => f.id === value)
+            if (savedFilter) {
+              handleLoadFilter(savedFilter)
+            }
           }
-        }
-      }}>
-        <TabsList className="w-full justify-start h-auto p-1 bg-gray-100">
-          <TabsTrigger value="default" className="data-[state=active]:bg-white">
-            All Patients
-          </TabsTrigger>
-          {savedFilters.map((savedFilter) => (
-            <TabsTrigger
-              key={savedFilter.id}
-              value={savedFilter.id}
-              className="data-[state=active]:bg-white relative group pr-8"
-            >
-              {savedFilter.name}
-              <button
-                onClick={(e) => handleDeleteFilter(savedFilter.id, e)}
-                className="ml-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-200 rounded"
-              >
-                <X className="h-3 w-3" />
-              </button>
+        }} className="flex-1">
+          <TabsList className="w-full justify-start h-auto p-1 bg-gray-100">
+            <TabsTrigger value="default" className="data-[state=active]:bg-white">
+              All Patients
             </TabsTrigger>
-          ))}
-          {hasActiveFilters && (
-            <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
-              <DialogTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="ml-auto h-8 px-3 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+            {savedFilters.map((savedFilter) => (
+              <TabsTrigger
+                key={savedFilter.id}
+                value={savedFilter.id}
+                className="data-[state=active]:bg-white relative group pr-8"
+              >
+                {savedFilter.name}
+                <button
+                  onClick={(e) => handleDeleteFilter(savedFilter.id, e)}
+                  className="ml-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-200 rounded"
                 >
-                  <Save className="mr-2 h-4 w-4" />
-                  Save filter
+                  <X className="h-3 w-3" />
+                </button>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+        {hasActiveFilters && (
+          <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+            <DialogTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-3 text-blue-600 hover:text-blue-700 hover:bg-blue-50 whitespace-nowrap"
+              >
+                <Save className="mr-2 h-4 w-4" />
+                Save filter
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Save Filter</DialogTitle>
+                <DialogDescription>
+                  Give this filter a name so you can use it again later.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="py-4">
+                <Input
+                  placeholder="Filter name (e.g., 'VIP Patients', 'Recent Appointments')"
+                  value={filterName}
+                  onChange={(e) => setFilterName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSaveFilter()
+                    }
+                  }}
+                />
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setSaveDialogOpen(false)}
+                >
+                  Cancel
                 </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Save Filter</DialogTitle>
-                  <DialogDescription>
-                    Give this filter a name so you can use it again later.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="py-4">
-                  <Input
-                    placeholder="Filter name (e.g., 'VIP Patients', 'Recent Appointments')"
-                    value={filterName}
-                    onChange={(e) => setFilterName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleSaveFilter()
-                      }
-                    }}
-                  />
-                </div>
-                <DialogFooter>
-                  <Button
-                    variant="outline"
-                    onClick={() => setSaveDialogOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button onClick={handleSaveFilter}>
-                    <Save className="mr-2 h-4 w-4" />
-                    Save
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          )}
-        </TabsList>
-      </Tabs>
+                <Button onClick={handleSaveFilter}>
+                  <Save className="mr-2 h-4 w-4" />
+                  Save
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+      </div>
 
       {/* Search Bar */}
       <div className="relative">
