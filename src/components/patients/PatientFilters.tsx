@@ -208,7 +208,7 @@ export function PatientFilters({
               <TabsTrigger
                 key={savedFilter.id}
                 value={savedFilter.id}
-                className="data-[state=active]:bg-white relative group pr-6"
+                className="data-[state=active]:bg-white relative group pr-1"
               >
                 {savedFilter.name}
                 <button
