@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { format } from 'date-fns'
 import Link from 'next/link'
 import { getCalClient } from '@/lib/cal'
+import { syncBookingToPatient } from '@/lib/sync-booking-to-patient'
 
 export const dynamic = 'force-dynamic'
 
@@ -149,24 +150,48 @@ export default async function AppointmentsPage({
   })
 
   // Transform Cal.com bookings to match appointment structure for display
+  // Also sync each booking to patient records
   const transformedCalBookings = await Promise.all(
     newCalBookings.map(async (booking) => {
-      // Try to find existing patient by email
-      const attendeeEmail = booking.attendees?.[0]?.email
+      // Sync booking to patient record (find or create, merge info, add timeline)
+      let syncResult = null
+      try {
+        syncResult = await syncBookingToPatient(user.practiceId, booking, user.id)
+      } catch (error) {
+        // Log error but don't fail the entire page load
+        console.error(`Error syncing booking ${booking.uid || booking.id} to patient:`, error)
+      }
+      
+      // Get patient info (either from sync result or fallback to booking attendee data)
       let patient = null
-      if (attendeeEmail) {
-        patient = await prisma.patient.findFirst({
-          where: {
-            practiceId: user.practiceId,
-            email: attendeeEmail,
-            deletedAt: null,
-          },
+      if (syncResult?.patientId) {
+        patient = await prisma.patient.findUnique({
+          where: { id: syncResult.patientId },
           select: {
             id: true,
             name: true,
             phone: true,
           },
         })
+      }
+      
+      // Fallback to attendee data if sync didn't work
+      if (!patient) {
+        const attendeeEmail = booking.attendees?.[0]?.email
+        if (attendeeEmail) {
+          patient = await prisma.patient.findFirst({
+            where: {
+              practiceId: user.practiceId,
+              email: attendeeEmail,
+              deletedAt: null,
+            },
+            select: {
+              id: true,
+              name: true,
+              phone: true,
+            },
+          })
+        }
       }
       
       return {
