@@ -200,7 +200,7 @@ export function PatientFilters({
             }
           }
         }} className="flex-1">
-          <TabsList className="w-full justify-start h-auto p-1 bg-gray-100">
+          <TabsList className="w-full justify-start h-auto p-0.5 bg-gray-100 gap-0.5">
             <TabsTrigger value="default" className="data-[state=active]:bg-white">
               All Patients
             </TabsTrigger>
