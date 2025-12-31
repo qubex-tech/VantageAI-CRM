@@ -92,8 +92,12 @@ export function WorkflowEditor({ practiceId, workflowId }: WorkflowEditorProps) 
       )}
 
       {/* Workflow Builder */}
-      <div className="bg-gray-50 rounded-lg p-6 min-h-[600px]">
-        <div className="space-y-4 max-w-3xl mx-auto">
+      <div className="relative rounded-lg p-6 min-h-[600px] overflow-hidden" style={{
+        backgroundImage: 'radial-gradient(circle, #d1d5db 1px, transparent 1px)',
+        backgroundSize: '20px 20px',
+        backgroundColor: '#f9fafb',
+      }}>
+        <div className="space-y-4 max-w-3xl mx-auto relative z-10">
           {/* Trigger Block */}
           <TriggerBlock 
             trigger={trigger}
@@ -105,10 +109,10 @@ export function WorkflowEditor({ practiceId, workflowId }: WorkflowEditorProps) 
             <div key={step.id} className="relative">
               {/* Connection Line */}
               {index === 0 && trigger && (
-                <div className="absolute left-6 top-0 w-0.5 h-6 bg-gray-300 transform -translate-y-6" />
+                <div className="absolute left-6 top-0 w-0.5 h-6 bg-gray-400 transform -translate-y-6" />
               )}
               {index > 0 && (
-                <div className="absolute left-6 top-0 w-0.5 h-6 bg-gray-300 transform -translate-y-6" />
+                <div className="absolute left-6 top-0 w-0.5 h-6 bg-gray-400 transform -translate-y-6" />
               )}
 
               {/* Step Block */}
@@ -129,13 +133,13 @@ export function WorkflowEditor({ practiceId, workflowId }: WorkflowEditorProps) 
               {/* Add Step Button */}
               {index === steps.length - 1 && (
                 <div className="relative mt-4">
-                  <div className="absolute left-6 top-0 w-0.5 h-6 bg-gray-300" />
+                  <div className="absolute left-6 top-0 w-0.5 h-6 bg-gray-400" />
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
                         variant="outline"
                         size="sm"
-                        className="ml-6"
+                        className="ml-6 bg-white hover:bg-gray-50 border-gray-300 shadow-sm"
                       >
                         <Plus className="mr-2 h-4 w-4" />
                         Add step
@@ -158,13 +162,13 @@ export function WorkflowEditor({ practiceId, workflowId }: WorkflowEditorProps) 
           {/* Initial Add Step Button */}
           {steps.length === 0 && trigger && (
             <div className="relative mt-4">
-              <div className="absolute left-6 top-0 w-0.5 h-6 bg-gray-300" />
+              <div className="absolute left-6 top-0 w-0.5 h-6 bg-gray-400" />
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="ml-6"
+                    className="ml-6 bg-white hover:bg-gray-50 border-gray-300 shadow-sm"
                   >
                     <Plus className="mr-2 h-4 w-4" />
                     Add step
