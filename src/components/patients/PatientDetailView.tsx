@@ -420,19 +420,29 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
                     (() => {
                       const grouped: { [key: string]: typeof patient.appointments } = {}
                       const now = new Date()
-                      const today = new Date(now.setHours(0, 0, 0, 0))
-                      const thisWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+                      const today = new Date(now)
+                      today.setHours(0, 0, 0, 0)
+                      const thisWeekStart = new Date(today)
+                      thisWeekStart.setDate(today.getDate() - 7)
                       
-                      patient.appointments.forEach((appointment) => {
+                      // Sort appointments by startTime (ascending for upcoming, descending for past)
+                      const sortedAppointments = [...patient.appointments].sort((a, b) => {
+                        const aTime = new Date(a.startTime).getTime()
+                        const bTime = new Date(b.startTime).getTime()
+                        return aTime - bTime // Sort ascending
+                      })
+                      
+                      sortedAppointments.forEach((appointment) => {
                         const aptDate = new Date(appointment.startTime)
+                        aptDate.setHours(0, 0, 0, 0)
                         let groupKey = ''
                         
                         if (aptDate >= today) {
                           groupKey = 'Upcoming'
-                        } else if (aptDate >= thisWeek) {
+                        } else if (aptDate >= thisWeekStart) {
                           groupKey = 'This week'
                         } else {
-                          const monthYear = format(aptDate, 'MMMM yyyy')
+                          const monthYear = format(new Date(appointment.startTime), 'MMMM yyyy')
                           groupKey = monthYear
                         }
                         
@@ -442,14 +452,30 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
                         grouped[groupKey].push(appointment)
                       })
                       
-                      return Object.entries(grouped).map(([groupKey, appointments]) => (
+                      // Sort groups: Upcoming first, then This week, then months (newest first)
+                      const groupOrder = ['Upcoming', 'This week']
+                      const sortedGroups = Object.entries(grouped).sort(([keyA], [keyB]) => {
+                        if (groupOrder.includes(keyA) && groupOrder.includes(keyB)) {
+                          return groupOrder.indexOf(keyA) - groupOrder.indexOf(keyB)
+                        }
+                        if (groupOrder.includes(keyA)) return -1
+                        if (groupOrder.includes(keyB)) return 1
+                        // For months, sort newest first (we'll need to parse the month names)
+                        return keyB.localeCompare(keyA)
+                      })
+                      
+                      return sortedGroups.map(([groupKey, appointments]) => (
                         <div key={groupKey}>
                           <div className="flex items-center gap-2 mb-4">
                             <h3 className="text-sm font-medium text-gray-900">{groupKey}</h3>
                             <ChevronDown className="h-4 w-4 text-gray-400" />
                           </div>
                           <div className="space-y-4">
-                            {appointments.map((appointment) => (
+                            {appointments.sort((a, b) => {
+                              const aTime = new Date(a.startTime).getTime()
+                              const bTime = new Date(b.startTime).getTime()
+                              return groupKey === 'Upcoming' ? aTime - bTime : bTime - aTime
+                            }).map((appointment) => (
                               <Link
                                 key={appointment.id}
                                 href={`/appointments/${appointment.id}`}

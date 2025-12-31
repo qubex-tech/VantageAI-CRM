@@ -47,7 +47,6 @@ export default async function PatientDetailPage({
       insurancePolicies: true,
       appointments: {
         orderBy: { startTime: 'desc' },
-        take: 10,
       },
       timelineEntries: {
         orderBy: { createdAt: 'desc' },
