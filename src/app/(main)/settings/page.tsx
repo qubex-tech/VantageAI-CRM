@@ -44,9 +44,16 @@ export default async function SettingsPage() {
     where: { practiceId: user.practiceId },
   })
 
-  const sendgridIntegration = await prisma.sendgridIntegration.findUnique({
-    where: { practiceId: user.practiceId },
-  })
+  // Fetch SendGrid integration, handle gracefully if table doesn't exist yet
+  let sendgridIntegration = null
+  try {
+    sendgridIntegration = await prisma.sendgridIntegration.findUnique({
+      where: { practiceId: user.practiceId },
+    })
+  } catch (error) {
+    // Table might not exist if migration hasn't been run yet
+    console.error('Error fetching SendGrid integration (table may not exist):', error)
+  }
 
   return (
     <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8 max-w-4xl">
