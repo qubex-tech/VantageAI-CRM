@@ -50,7 +50,7 @@ export default async function PatientDetailPage({
       },
       timelineEntries: {
         orderBy: { createdAt: 'desc' },
-        take: 20,
+        take: 50,
       },
     },
   })
@@ -62,6 +62,20 @@ export default async function PatientDetailPage({
       </div>
     )
   }
+
+  // Debug: Log appointments count
+  console.log('[PatientDetailPage] Patient appointments count:', patient.appointments?.length || 0)
+  console.log('[PatientDetailPage] Patient ID:', patient.id)
+  console.log('[PatientDetailPage] Practice ID:', user.practiceId)
+  
+  // Also verify appointments exist for this patient directly
+  const directAppointmentCount = await prisma.appointment.count({
+    where: {
+      patientId: patient.id,
+      practiceId: user.practiceId,
+    },
+  })
+  console.log('[PatientDetailPage] Direct appointment count query:', directAppointmentCount)
 
   return <PatientDetailView patient={patient} />
 }
