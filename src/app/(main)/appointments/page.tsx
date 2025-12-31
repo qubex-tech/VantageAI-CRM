@@ -172,6 +172,7 @@ export default async function AppointmentsPage({
       return {
         id: `cal-${booking.uid || booking.id}`,
         calBookingId: booking.uid || String(booking.id),
+        calBookingUid: booking.uid, // Store UID separately for fetching details
         patient: patient || {
           id: null,
           name: booking.attendees?.[0]?.name || 'Unknown',
@@ -183,6 +184,8 @@ export default async function AppointmentsPage({
         status: booking.status === 'accepted' ? 'confirmed' : booking.status === 'cancelled' ? 'cancelled' : 'scheduled',
         reason: booking.description || null,
         isCalBooking: true, // Flag to identify Cal.com bookings
+        // Store full booking data for detail page
+        rawBookingData: booking,
       }
     })
   )
