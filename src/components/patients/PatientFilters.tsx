@@ -54,6 +54,7 @@ const fieldOptions = [
   { value: 'phone', label: 'Phone Number' },
   { value: 'age', label: 'Age' },
   { value: 'appointments', label: 'Appointments' },
+  { value: 'appointment_date', label: 'Appointment Date' },
 ]
 
 const operatorOptions = [
@@ -65,6 +66,18 @@ const operatorOptions = [
   { value: 'less_than', label: 'less than' },
   { value: 'is_empty', label: 'is empty' },
   { value: 'is_not_empty', label: 'is not empty' },
+]
+
+const dateOperatorOptions = [
+  { value: 'is_tomorrow', label: 'is tomorrow' },
+  { value: 'is_today', label: 'is today' },
+  { value: 'is_in_next_7_days', label: 'is in next 7 days' },
+  { value: 'is_in_next_30_days', label: 'is in next 30 days' },
+  { value: 'equals', label: 'equals' },
+  { value: 'before', label: 'before' },
+  { value: 'after', label: 'after' },
+  { value: 'is_not_empty', label: 'has appointment' },
+  { value: 'is_empty', label: 'has no appointments' },
 ]
 
 export function PatientFilters({
@@ -349,11 +362,11 @@ export function PatientFilters({
                         handleUpdateFilter(filter.id, { operator: value })
                       }
                     >
-                      <SelectTrigger className="w-32">
+                      <SelectTrigger className="w-40">
                         <SelectValue placeholder="Operator" />
                       </SelectTrigger>
                       <SelectContent>
-                        {operatorOptions.map((option) => (
+                        {(filter.field === 'appointment_date' ? dateOperatorOptions : operatorOptions).map((option) => (
                           <SelectItem key={option.value} value={option.value}>
                             {option.label}
                           </SelectItem>
@@ -361,7 +374,21 @@ export function PatientFilters({
                       </SelectContent>
                     </Select>
 
-                    {filter.operator !== 'is_empty' &&
+                    {filter.field === 'appointment_date' ? (
+                      // Date-specific input handling
+                      (filter.operator === 'equals' || filter.operator === 'before' || filter.operator === 'after') ? (
+                        <Input
+                          type="date"
+                          value={filter.value}
+                          onChange={(e) =>
+                            handleUpdateFilter(filter.id, { value: e.target.value })
+                          }
+                          className="flex-1"
+                        />
+                      ) : null
+                    ) : (
+                      // Regular input for other fields
+                      filter.operator !== 'is_empty' &&
                       filter.operator !== 'is_not_empty' && (
                         <Input
                           placeholder="Enter value..."
@@ -371,7 +398,8 @@ export function PatientFilters({
                           }
                           className="flex-1"
                         />
-                      )}
+                      )
+                    )}
 
                     <Button
                       variant="ghost"

@@ -60,6 +60,16 @@ export default async function PatientsPage({
           insurancePolicies: true,
         },
       },
+      appointments: {
+        select: {
+          id: true,
+          startTime: true,
+          status: true,
+        },
+        orderBy: {
+          startTime: 'asc',
+        },
+      },
     },
     orderBy: {
       createdAt: 'desc',

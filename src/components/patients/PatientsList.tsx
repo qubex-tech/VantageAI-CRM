@@ -83,7 +83,75 @@ export function PatientsList({ initialPatients }: PatientsListProps) {
       const operator = filter.operator
       const value = filter.value
       const appointmentCount = patient._count?.appointments ?? 0
+      const appointments = patient.appointments || []
 
+      // Handle appointment_date field separately
+      if (field === 'appointment_date') {
+        const now = new Date()
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+        const tomorrow = new Date(today)
+        tomorrow.setDate(tomorrow.getDate() + 1)
+        const next7Days = new Date(today)
+        next7Days.setDate(next7Days.getDate() + 7)
+        const next30Days = new Date(today)
+        next30Days.setDate(next30Days.getDate() + 30)
+
+        // Get the earliest upcoming appointment, or null if none
+        const upcomingAppointments = appointments.filter((apt: any) => new Date(apt.startTime) >= today)
+        const earliestAppointment = upcomingAppointments.length > 0 
+          ? new Date(upcomingAppointments[0].startTime)
+          : null
+
+        // Get appointment dates only (without time) for comparison
+        const appointmentDates = appointments.map((apt: any) => {
+          const aptDate = new Date(apt.startTime)
+          return new Date(aptDate.getFullYear(), aptDate.getMonth(), aptDate.getDate())
+        })
+
+        switch (operator) {
+          case 'is_today':
+            return appointmentDates.some((date: Date) => 
+              date.getTime() === today.getTime()
+            )
+          case 'is_tomorrow':
+            return appointmentDates.some((date: Date) => 
+              date.getTime() === tomorrow.getTime()
+            )
+          case 'is_in_next_7_days':
+            if (!earliestAppointment) return false
+            const earliestDate = new Date(earliestAppointment.getFullYear(), earliestAppointment.getMonth(), earliestAppointment.getDate())
+            return earliestDate >= today && earliestDate <= next7Days
+          case 'is_in_next_30_days':
+            if (!earliestAppointment) return false
+            const earliestDate30 = new Date(earliestAppointment.getFullYear(), earliestAppointment.getMonth(), earliestAppointment.getDate())
+            return earliestDate30 >= today && earliestDate30 <= next30Days
+          case 'equals':
+            if (!value) return true
+            const targetDate = new Date(value)
+            const targetDateOnly = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate())
+            return appointmentDates.some((date: Date) => 
+              date.getTime() === targetDateOnly.getTime()
+            )
+          case 'before':
+            if (!value) return true
+            const beforeDate = new Date(value)
+            const beforeDateOnly = new Date(beforeDate.getFullYear(), beforeDate.getMonth(), beforeDate.getDate())
+            return appointmentDates.some((date: Date) => date < beforeDateOnly)
+          case 'after':
+            if (!value) return true
+            const afterDate = new Date(value)
+            const afterDateOnly = new Date(afterDate.getFullYear(), afterDate.getMonth(), afterDate.getDate())
+            return appointmentDates.some((date: Date) => date > afterDateOnly)
+          case 'is_not_empty':
+            return appointments.length > 0
+          case 'is_empty':
+            return appointments.length === 0
+          default:
+            return true
+        }
+      }
+
+      // Handle other fields
       let fieldValue: string | number | null = null
 
       switch (field) {
