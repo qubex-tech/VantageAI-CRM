@@ -4,8 +4,13 @@ import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Plus, ChevronDown, Save, Eye } from 'lucide-react'
+import { Plus, ChevronDown, Save } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { TriggerBlock } from './TriggerBlock'
 import { ActionBlock } from './ActionBlock'
 import { ConditionBlock } from './ConditionBlock'
@@ -125,19 +130,26 @@ export function WorkflowEditor({ practiceId, workflowId }: WorkflowEditorProps) 
               {index === steps.length - 1 && (
                 <div className="relative mt-4">
                   <div className="absolute left-6 top-0 w-0.5 h-6 bg-gray-300" />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      // Show menu to select condition or action
-                      const type = window.confirm('Add condition? (Cancel for action)') ? 'condition' : 'action'
-                      handleAddStep(type)
-                    }}
-                    className="ml-6"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add step
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="ml-6"
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add step
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      <DropdownMenuItem onClick={() => handleAddStep('condition')}>
+                        <span>Condition</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleAddStep('action')}>
+                        <span>Action</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               )}
             </div>
@@ -147,18 +159,26 @@ export function WorkflowEditor({ practiceId, workflowId }: WorkflowEditorProps) 
           {steps.length === 0 && trigger && (
             <div className="relative mt-4">
               <div className="absolute left-6 top-0 w-0.5 h-6 bg-gray-300" />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const type = window.confirm('Add condition? (Cancel for action)') ? 'condition' : 'action'
-                  handleAddStep(type)
-                }}
-                className="ml-6"
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Add step
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="ml-6"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add step
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem onClick={() => handleAddStep('condition')}>
+                    <span>Condition</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleAddStep('action')}>
+                    <span>Action</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           )}
         </div>
