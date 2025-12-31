@@ -35,6 +35,12 @@ export const appointmentSchema = z.object({
   notes: z.string().optional(),
 })
 
+export const sendgridIntegrationSchema = z.object({
+  apiKey: z.string().min(1, 'API key is required'),
+  fromEmail: z.string().email('Valid email address is required'),
+  fromName: z.string().optional(),
+})
+
 export const bookAppointmentSchema = z.object({
   patientId: z.string().uuid(),
   eventTypeId: z.string().min(1, 'Event type ID is required'),

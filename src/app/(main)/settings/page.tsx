@@ -4,6 +4,7 @@ import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
 import { prisma } from '@/lib/db'
 import { CalSettings } from '@/components/settings/CalSettings'
 import { RetellSettings } from '@/components/settings/RetellSettings'
+import { SendgridSettings } from '@/components/settings/SendgridSettings'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,6 +44,10 @@ export default async function SettingsPage() {
     where: { practiceId: user.practiceId },
   })
 
+  const sendgridIntegration = await prisma.sendgridIntegration.findUnique({
+    where: { practiceId: user.practiceId },
+  })
+
   return (
     <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8 max-w-4xl">
       <div className="mb-8">
@@ -57,6 +62,8 @@ export default async function SettingsPage() {
         />
 
         <RetellSettings initialIntegration={retellIntegration} />
+
+        <SendgridSettings initialIntegration={sendgridIntegration} />
       </div>
     </div>
   )

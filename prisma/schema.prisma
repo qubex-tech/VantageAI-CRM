@@ -26,6 +26,7 @@ model Practice {
   calIntegrations      CalIntegration[]
   calEventTypeMappings CalEventTypeMapping[]
   retellIntegrations   RetellIntegration[]
+  sendgridIntegrations SendgridIntegration[]
   voiceConversations   VoiceConversation[]
   workflows            Workflow[]
   auditLogs            AuditLog[]
@@ -208,6 +209,22 @@ model RetellIntegration {
 
   @@index([practiceId])
   @@map("retell_integrations")
+}
+
+model SendgridIntegration {
+  id         String   @id @default(uuid())
+  practiceId String   @unique
+  apiKey     String // Encrypted in production
+  fromEmail  String // Default "from" email address
+  fromName   String? // Optional: Default "from" name
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId])
+  @@map("sendgrid_integrations")
 }
 
 model VoiceConversation {
