@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { X, Filter, Plus } from 'lucide-react'
+import { X, Filter, Plus, Save, Trash2 } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -14,6 +14,16 @@ import {
   SelectLabel,
 } from '@/components/ui/select'
 import { Card, CardContent } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 export interface FilterRule {
   id: string
@@ -22,12 +32,21 @@ export interface FilterRule {
   value: string
 }
 
+export interface SavedFilter {
+  id: string
+  name: string
+  searchQuery: string
+  filters: FilterRule[]
+}
+
 interface PatientFiltersProps {
   searchQuery: string
   onSearchChange: (query: string) => void
   filters: FilterRule[]
   onFiltersChange: (filters: FilterRule[]) => void
 }
+
+const STORAGE_KEY = 'patient_saved_filters'
 
 const fieldOptions = [
   { value: 'name', label: 'Name' },
@@ -55,6 +74,78 @@ export function PatientFilters({
   onFiltersChange,
 }: PatientFiltersProps) {
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
+  const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([])
+  const [activeTab, setActiveTab] = useState<string>('default')
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false)
+  const [filterName, setFilterName] = useState('')
+
+  // Load saved filters from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        setSavedFilters(parsed)
+      }
+    } catch (error) {
+      console.error('Error loading saved filters:', error)
+    }
+  }, [])
+
+  // Save filters to localStorage whenever savedFilters changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(savedFilters))
+    } catch (error) {
+      console.error('Error saving filters to localStorage:', error)
+    }
+  }, [savedFilters])
+
+  const handleSaveFilter = () => {
+    if (!filterName.trim()) {
+      alert('Please enter a name for this filter')
+      return
+    }
+
+    const newSavedFilter: SavedFilter = {
+      id: `filter-${Date.now()}`,
+      name: filterName.trim(),
+      searchQuery,
+      filters: [...filters],
+    }
+
+    setSavedFilters([...savedFilters, newSavedFilter])
+    setFilterName('')
+    setSaveDialogOpen(false)
+    setActiveTab(newSavedFilter.id)
+  }
+
+  const handleLoadFilter = (savedFilter: SavedFilter) => {
+    onSearchChange(savedFilter.searchQuery)
+    onFiltersChange(savedFilter.filters)
+    setActiveTab(savedFilter.id)
+  }
+
+  const handleDeleteFilter = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (confirm('Are you sure you want to delete this saved filter?')) {
+      const updated = savedFilters.filter((f) => f.id !== id)
+      setSavedFilters(updated)
+      if (activeTab === id) {
+        setActiveTab('default')
+        onSearchChange('')
+        onFiltersChange([])
+      }
+    }
+  }
+
+  const handleDefaultTab = () => {
+    setActiveTab('default')
+    onSearchChange('')
+    onFiltersChange([])
+  }
+
+  const hasActiveFilters = searchQuery || filters.length > 0
 
   const handleAddFilter = () => {
     const newFilter: FilterRule = {
@@ -84,6 +175,85 @@ export function PatientFilters({
 
   return (
     <div className="space-y-3">
+      {/* Saved Filters Tabs */}
+      <Tabs value={activeTab} onValueChange={(value) => {
+        if (value === 'default') {
+          handleDefaultTab()
+        } else {
+          const savedFilter = savedFilters.find((f) => f.id === value)
+          if (savedFilter) {
+            handleLoadFilter(savedFilter)
+          }
+        }
+      }}>
+        <TabsList className="w-full justify-start h-auto p-1 bg-gray-100">
+          <TabsTrigger value="default" className="data-[state=active]:bg-white">
+            All Patients
+          </TabsTrigger>
+          {savedFilters.map((savedFilter) => (
+            <TabsTrigger
+              key={savedFilter.id}
+              value={savedFilter.id}
+              className="data-[state=active]:bg-white relative group pr-8"
+            >
+              {savedFilter.name}
+              <button
+                onClick={(e) => handleDeleteFilter(savedFilter.id, e)}
+                className="ml-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-200 rounded"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </TabsTrigger>
+          ))}
+          {hasActiveFilters && (
+            <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+              <DialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="ml-auto h-8 px-3 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                >
+                  <Save className="mr-2 h-4 w-4" />
+                  Save filter
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Save Filter</DialogTitle>
+                  <DialogDescription>
+                    Give this filter a name so you can use it again later.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="py-4">
+                  <Input
+                    placeholder="Filter name (e.g., 'VIP Patients', 'Recent Appointments')"
+                    value={filterName}
+                    onChange={(e) => setFilterName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleSaveFilter()
+                      }
+                    }}
+                  />
+                </div>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => setSaveDialogOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button onClick={handleSaveFilter}>
+                    <Save className="mr-2 h-4 w-4" />
+                    Save
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
+        </TabsList>
+      </Tabs>
+
       {/* Search Bar */}
       <div className="relative">
         <Input
