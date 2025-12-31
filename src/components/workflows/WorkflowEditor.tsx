@@ -18,13 +18,33 @@ import { ConditionBlock } from './ConditionBlock'
 interface WorkflowEditorProps {
   practiceId: string
   workflowId?: string
+  initialWorkflow?: {
+    id: string
+    name: string
+    description?: string | null
+    isActive: boolean
+    triggerType?: string | null
+    triggerConfig?: any
+    steps?: Array<{
+      id: string
+      type: string
+      order: number
+      config: any
+    }>
+  }
 }
 
-export function WorkflowEditor({ practiceId, workflowId }: WorkflowEditorProps) {
-  const [workflowName, setWorkflowName] = useState('Untitled Workflow')
-  const [trigger, setTrigger] = useState<any>(null)
-  const [steps, setSteps] = useState<any[]>([])
-  const [isPublished, setIsPublished] = useState(false)
+export function WorkflowEditor({ practiceId, workflowId, initialWorkflow }: WorkflowEditorProps) {
+  const [workflowName, setWorkflowName] = useState(initialWorkflow?.name || 'Untitled Workflow')
+  const [trigger, setTrigger] = useState<any>(initialWorkflow?.triggerConfig || null)
+  const [steps, setSteps] = useState<any[]>(
+    initialWorkflow?.steps?.map(step => ({
+      id: step.id,
+      type: step.type,
+      config: step.config,
+    })) || []
+  )
+  const [isPublished, setIsPublished] = useState(initialWorkflow?.isActive || false)
 
   const handleAddStep = (type: 'condition' | 'action') => {
     const newStep = {
@@ -45,15 +65,102 @@ export function WorkflowEditor({ practiceId, workflowId }: WorkflowEditorProps) 
     setSteps(steps.filter(step => step.id !== stepId))
   }
 
+  const [isSaving, setIsSaving] = useState(false)
+
   const handleSave = async () => {
-    // TODO: Implement save logic
-    console.log('Saving workflow:', { workflowName, trigger, steps })
+    if (!workflowName.trim()) {
+      alert('Please enter a workflow name')
+      return
+    }
+
+    if (!trigger) {
+      alert('Please select a trigger for the workflow')
+      return
+    }
+
+    setIsSaving(true)
+    try {
+      const response = await fetch('/api/workflows', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          workflowId: workflowId,
+          name: workflowName,
+          description: null,
+          trigger,
+          steps: steps.map(step => ({
+            type: step.type,
+            config: step.config,
+          })),
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to save workflow')
+      }
+
+      const savedWorkflow = await response.json()
+      
+      // Update the URL if this is a new workflow
+      if (!workflowId && savedWorkflow.id) {
+        window.history.replaceState({}, '', `/automations/workflows/${savedWorkflow.id}`)
+        // Reload to load the workflow with proper ID
+        window.location.href = `/automations/workflows/${savedWorkflow.id}`
+        return
+      }
+
+      alert('Workflow saved successfully!')
+    } catch (error) {
+      console.error('Error saving workflow:', error)
+      alert(error instanceof Error ? error.message : 'Failed to save workflow')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handlePublish = async () => {
-    // TODO: Implement publish logic
-    setIsPublished(true)
-    console.log('Publishing workflow')
+    if (!workflowName.trim()) {
+      alert('Please enter a workflow name')
+      return
+    }
+
+    if (!trigger) {
+      alert('Please select a trigger for the workflow')
+      return
+    }
+
+    // First save the workflow if it doesn't have an ID
+    if (!workflowId) {
+      await handleSave()
+      // handleSave will redirect if it's a new workflow, so return here
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/workflows/${workflowId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          isActive: true,
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to publish workflow')
+      }
+
+      setIsPublished(true)
+      alert('Workflow published successfully!')
+    } catch (error) {
+      console.error('Error publishing workflow:', error)
+      alert(error instanceof Error ? error.message : 'Failed to publish workflow')
+    }
   }
 
   return (
@@ -69,12 +176,20 @@ export function WorkflowEditor({ practiceId, workflowId }: WorkflowEditorProps) 
           />
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={handleSave}>
+          <Button 
+            variant="outline" 
+            onClick={handleSave}
+            disabled={isSaving}
+          >
             <Save className="mr-2 h-4 w-4" />
-            Save
+            {isSaving ? 'Saving...' : 'Save'}
           </Button>
           {!isPublished && (
-            <Button onClick={handlePublish} className="bg-blue-600 hover:bg-blue-700 text-white">
+            <Button 
+              onClick={handlePublish} 
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+              disabled={isSaving}
+            >
               Publish workflow
             </Button>
           )}

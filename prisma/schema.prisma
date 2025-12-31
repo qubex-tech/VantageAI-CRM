@@ -20,15 +20,16 @@ model Practice {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users            User[]
-  patients         Patient[]
-  insurancePolicies InsurancePolicy[]
-  appointments     Appointment[]
-  calIntegrations  CalIntegration[]
+  users                User[]
+  patients             Patient[]
+  insurancePolicies    InsurancePolicy[]
+  appointments         Appointment[]
+  calIntegrations      CalIntegration[]
   calEventTypeMappings CalEventTypeMapping[]
-  retellIntegrations RetellIntegration[]
-  voiceConversations VoiceConversation[]
-  auditLogs        AuditLog[]
+  retellIntegrations   RetellIntegration[]
+  voiceConversations   VoiceConversation[]
+  workflows            Workflow[]
+  auditLogs            AuditLog[]
 
   @@map("practices")
 }
@@ -38,12 +39,12 @@ model User {
   email        String   @unique
   passwordHash String
   name         String
-  role         String   // 'admin', 'staff', 'provider'
+  role         String // 'admin', 'staff', 'provider'
   practiceId   String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  practice  Practice    @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  practice  Practice   @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   auditLogs AuditLog[]
 
   @@index([practiceId])
@@ -52,25 +53,25 @@ model User {
 }
 
 model Patient {
-  id                     String   @id @default(uuid())
+  id                     String    @id @default(uuid())
   practiceId             String
   name                   String
   dateOfBirth            DateTime
   phone                  String
   email                  String?
   address                String?
-  preferredContactMethod String   // 'phone', 'email', 'sms'
+  preferredContactMethod String // 'phone', 'email', 'sms'
   notes                  String?
   deletedAt              DateTime?
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
-  practice            Practice            @relation(fields: [practiceId], references: [id], onDelete: Cascade)
-  insurancePolicies   InsurancePolicy[]
-  appointments        Appointment[]
-  voiceConversations  VoiceConversation[]
-  tags                PatientTag[]
-  timelineEntries     PatientTimelineEntry[]
+  practice           Practice               @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  insurancePolicies  InsurancePolicy[]
+  appointments       Appointment[]
+  voiceConversations VoiceConversation[]
+  tags               PatientTag[]
+  timelineEntries    PatientTimelineEntry[]
 
   @@index([practiceId])
   @@index([phone])
@@ -93,13 +94,13 @@ model PatientTag {
 }
 
 model PatientTimelineEntry {
-  id        String   @id @default(uuid())
-  patientId String
-  type      String   // 'appointment', 'insurance', 'call', 'note'
-  title     String
+  id          String   @id @default(uuid())
+  patientId   String
+  type        String // 'appointment', 'insurance', 'call', 'note'
+  title       String
   description String?
-  metadata  Json?
-  createdAt DateTime @default(now())
+  metadata    Json?
+  createdAt   DateTime @default(now())
 
   patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
@@ -117,9 +118,9 @@ model InsurancePolicy {
   groupId           String?
   policyHolderName  String
   policyHolderPhone String?
-  eligibilityStatus String    // 'active', 'inactive', 'pending', 'unknown'
+  eligibilityStatus String // 'active', 'inactive', 'pending', 'unknown'
   lastVerifiedAt    DateTime?
-  fileMetadata      Json?     // Store file info (path, size, type) - actual storage TODO
+  fileMetadata      Json? // Store file info (path, size, type) - actual storage TODO
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -133,21 +134,21 @@ model InsurancePolicy {
 }
 
 model Appointment {
-  id           String    @id @default(uuid())
+  id           String   @id @default(uuid())
   practiceId   String
   patientId    String
-  providerId   String?   // For future provider assignment
-  status       String    // 'scheduled', 'confirmed', 'completed', 'cancelled', 'no_show'
+  providerId   String? // For future provider assignment
+  status       String // 'scheduled', 'confirmed', 'completed', 'cancelled', 'no_show'
   startTime    DateTime
   endTime      DateTime
   timezone     String
-  visitType    String    // Maps to Cal event type name
+  visitType    String // Maps to Cal event type name
   reason       String?
   notes        String?
-  calEventId   String?   // Cal.com event type ID
-  calBookingId String?   @unique // Cal.com booking ID
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  calEventId   String? // Cal.com event type ID
+  calBookingId String?  @unique // Cal.com booking ID
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
@@ -161,16 +162,16 @@ model Appointment {
 }
 
 model CalIntegration {
-  id                String    @id @default(uuid())
-  practiceId        String    @unique
-  apiKey            String    // Encrypted in production
+  id                String   @id @default(uuid())
+  practiceId        String   @unique
+  apiKey            String // Encrypted in production
   calOrganizationId String?
   calTeamId         String?
-  isActive          Boolean   @default(true)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  practice         Practice            @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  practice          Practice              @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   eventTypeMappings CalEventTypeMapping[]
 
   @@index([practiceId])
@@ -178,15 +179,15 @@ model CalIntegration {
 }
 
 model CalEventTypeMapping {
-  id              String   @id @default(uuid())
-  practiceId      String
+  id               String   @id @default(uuid())
+  practiceId       String
   calIntegrationId String
-  visitTypeName   String   // e.g., "Consultation", "Follow-up"
-  calEventTypeId  String   // Cal.com event type ID
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  visitTypeName    String // e.g., "Consultation", "Follow-up"
+  calEventTypeId   String // Cal.com event type ID
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  practice      Practice      @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  practice       Practice       @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   calIntegration CalIntegration @relation(fields: [calIntegrationId], references: [id], onDelete: Cascade)
 
   @@unique([practiceId, visitTypeName])
@@ -196,34 +197,34 @@ model CalEventTypeMapping {
 }
 
 model RetellIntegration {
-  id                String    @id @default(uuid())
-  practiceId        String    @unique
-  apiKey            String    // Encrypted in production
-  agentId           String?   // Optional: default agent ID for this practice
-  isActive          Boolean   @default(true)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id         String   @id @default(uuid())
+  practiceId String   @unique
+  apiKey     String // Encrypted in production
+  agentId    String? // Optional: default agent ID for this practice
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  practice         Practice  @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
 
   @@index([practiceId])
   @@map("retell_integrations")
 }
 
 model VoiceConversation {
-  id            String    @id @default(uuid())
-  practiceId    String
-  patientId     String?
-  callerPhone   String
-  retellCallId  String?
-  startedAt     DateTime
-  endedAt       DateTime?
-  transcript    String?   // Redacted PHI
+  id              String    @id @default(uuid())
+  practiceId      String
+  patientId       String?
+  callerPhone     String
+  retellCallId    String?
+  startedAt       DateTime
+  endedAt         DateTime?
+  transcript      String? // Redacted PHI
   extractedIntent String?
-  outcome       String?   // 'appointment_booked', 'information_only', 'failed', etc.
-  metadata      Json?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  outcome         String? // 'appointment_booked', 'information_only', 'failed', etc.
+  metadata        Json?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   patient  Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
@@ -235,14 +236,67 @@ model VoiceConversation {
   @@map("voice_conversations")
 }
 
+model Workflow {
+  id            String   @id @default(uuid())
+  practiceId    String
+  name          String
+  description   String?
+  isActive      Boolean  @default(false)
+  triggerType   String? // e.g., 'record_command', 'appointment_created'
+  triggerConfig Json? // JSON configuration for trigger
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  practice Practice       @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  steps    WorkflowStep[]
+  runs     WorkflowRun[]
+
+  @@index([practiceId])
+  @@index([isActive])
+  @@map("workflows")
+}
+
+model WorkflowStep {
+  id         String   @id @default(uuid())
+  workflowId String
+  type       String // 'condition', 'action'
+  order      Int // Position in workflow sequence
+  config     Json // JSON configuration for the step
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId])
+  @@index([workflowId, order])
+  @@map("workflow_steps")
+}
+
+model WorkflowRun {
+  id          String    @id @default(uuid())
+  workflowId  String
+  status      String // 'success', 'failed', 'running'
+  triggerData Json? // Data that triggered the workflow
+  result      Json? // Result/output of the workflow execution
+  error       String?
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId])
+  @@index([startedAt])
+  @@map("workflow_runs")
+}
+
 model AuditLog {
   id           String   @id @default(uuid())
   practiceId   String
   userId       String
-  action       String   // 'create', 'update', 'delete', 'view'
-  resourceType String   // 'patient', 'appointment', 'insurance', etc.
+  action       String // 'create', 'update', 'delete', 'view'
+  resourceType String // 'patient', 'appointment', 'insurance', etc.
   resourceId   String
-  changes      Json?    // Before/after state (redacted)
+  changes      Json? // Before/after state (redacted)
   ipAddress    String?
   userAgent    String?
   createdAt    DateTime @default(now())
@@ -255,4 +309,3 @@ model AuditLog {
   @@index([createdAt])
   @@map("audit_logs")
 }
-
