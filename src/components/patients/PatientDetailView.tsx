@@ -84,7 +84,22 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
   const [isEditing, setIsEditing] = useState(false)
   
   const age = calculateAge(patient.dateOfBirth)
-  const upcomingAppointments = patient.appointments.filter(apt => new Date(apt.startTime) > new Date())
+  
+  // Debug: Log appointments to see what we're getting
+  console.log('[PatientDetailView] Patient appointments:', patient.appointments)
+  console.log('[PatientDetailView] Appointments count:', patient.appointments?.length || 0)
+  
+  // Ensure appointments is always an array
+  const appointments = Array.isArray(patient.appointments) ? patient.appointments : []
+  const upcomingAppointments = appointments.filter(apt => {
+    try {
+      const aptDate = new Date(apt.startTime)
+      return aptDate > new Date()
+    } catch (e) {
+      console.error('[PatientDetailView] Error parsing appointment date:', e, apt)
+      return false
+    }
+  })
   const nextAppointment = upcomingAppointments.length > 0 ? upcomingAppointments[0] : null
 
   if (isEditing) {
@@ -169,7 +184,7 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
               }`}
             >
               <Calendar className="h-4 w-4" />
-              Appointments {patient.appointments.length > 0 && `(${patient.appointments.length})`}
+              Appointments {appointments.length > 0 && `(${appointments.length})`}
             </button>
             <button
               onClick={() => setActiveTab('calls')}
@@ -416,9 +431,9 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
                 </div>
                 
                 <div className="space-y-4">
-                  {patient.appointments.length > 0 ? (
+                  {appointments.length > 0 ? (
                     (() => {
-                      const grouped: { [key: string]: typeof patient.appointments } = {}
+                      const grouped: { [key: string]: typeof appointments } = {}
                       const now = new Date()
                       const today = new Date(now)
                       today.setHours(0, 0, 0, 0)
@@ -426,7 +441,7 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
                       thisWeekStart.setDate(today.getDate() - 7)
                       
                       // Sort appointments by startTime (ascending for upcoming, descending for past)
-                      const sortedAppointments = [...patient.appointments].sort((a, b) => {
+                      const sortedAppointments = [...appointments].sort((a, b) => {
                         const aTime = new Date(a.startTime).getTime()
                         const bTime = new Date(b.startTime).getTime()
                         return aTime - bTime // Sort ascending
