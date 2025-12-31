@@ -11,7 +11,8 @@ import {
   X,
   ChevronLeft,
   LogOut,
-  Phone
+  Phone,
+  Workflow
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useEffect } from 'react'
@@ -23,6 +24,7 @@ const navItems = [
   { href: '/patients', label: 'Patients', icon: Users },
   { href: '/appointments', label: 'Appointments', icon: Calendar },
   { href: '/calls', label: 'Calls', icon: Phone },
+  { href: '/automations/workflows', label: 'Workflows', icon: Workflow },
   { href: '/settings', label: 'Settings', icon: Settings },
 ]
 
