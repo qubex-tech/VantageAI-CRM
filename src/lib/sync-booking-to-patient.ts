@@ -30,8 +30,11 @@ export async function syncBookingToPatient(
   booking: CalBooking,
   userId?: string
 ): Promise<SyncBookingResult> {
+  console.log('[syncBookingToPatient] Starting sync for booking:', booking.uid || booking.id, 'practiceId:', practiceId)
+  
   const attendee = booking.attendees?.[0]
   if (!attendee) {
+    console.error('[syncBookingToPatient] No attendee information in booking')
     throw new Error('No attendee information in booking')
   }
 
@@ -39,7 +42,10 @@ export async function syncBookingToPatient(
   const attendeeEmail = attendee.email
   const attendeePhone = attendee.phoneNumber
 
+  console.log('[syncBookingToPatient] Attendee info:', { name: attendeeName, email: attendeeEmail, phone: attendeePhone })
+
   if (!attendeeName && !attendeeEmail && !attendeePhone) {
+    console.error('[syncBookingToPatient] No identifiable information in booking')
     throw new Error('No identifiable information in booking (name, email, or phone required)')
   }
 
@@ -204,6 +210,8 @@ export async function syncBookingToPatient(
 
     const phoneForCreation = normalizedPhone || '000-000-0000'
 
+    console.log('[syncBookingToPatient] Creating new patient:', { name: attendeeName, email: attendeeEmail, phone: phoneForCreation, practiceId })
+    
     const newPatient = await prisma.patient.create({
       data: {
         practiceId,
@@ -215,6 +223,8 @@ export async function syncBookingToPatient(
         notes: bookingNote,
       },
     })
+
+    console.log('[syncBookingToPatient] Created new patient:', newPatient.id, 'practiceId:', newPatient.practiceId)
 
     // Create timeline entry
     await createTimelineEntry({
@@ -230,6 +240,8 @@ export async function syncBookingToPatient(
         source: 'cal.com_booking',
       },
     })
+
+    console.log('[syncBookingToPatient] Created timeline entry for new patient:', newPatient.id)
 
     return {
       patientId: newPatient.id,

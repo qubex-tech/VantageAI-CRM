@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { verifyCalSignature, rateLimit } from '@/lib/middleware'
 import { createAuditLog, createTimelineEntry } from '@/lib/audit'
+import { syncBookingToPatient } from '@/lib/sync-booking-to-patient'
 
 /**
  * Cal.com webhook endpoint

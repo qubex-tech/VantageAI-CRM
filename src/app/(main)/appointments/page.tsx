@@ -156,10 +156,13 @@ export default async function AppointmentsPage({
       // Sync booking to patient record (find or create, merge info, add timeline)
       let syncResult = null
       try {
+        console.log(`[AppointmentsPage] Syncing booking ${booking.uid || booking.id} to patient for practice ${user.practiceId}`)
         syncResult = await syncBookingToPatient(user.practiceId, booking, user.id)
+        console.log(`[AppointmentsPage] Sync result:`, { patientId: syncResult.patientId, isNew: syncResult.isNew })
       } catch (error) {
         // Log error but don't fail the entire page load
-        console.error(`Error syncing booking ${booking.uid || booking.id} to patient:`, error)
+        console.error(`[AppointmentsPage] Error syncing booking ${booking.uid || booking.id} to patient:`, error)
+        console.error(`[AppointmentsPage] Error details:`, error instanceof Error ? error.stack : error)
       }
       
       // Get patient info (either from sync result or fallback to booking attendee data)
