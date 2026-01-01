@@ -152,17 +152,43 @@ export class SendgridApiClient {
 
       if (!response.ok) {
         const errorBody = await response.text()
-        let errorMessage = `SendGrid API error: ${response.status} ${response.statusText}`
+        let errorMessage = 'Failed to send email via SendGrid'
         
         try {
           const errorJson = JSON.parse(errorBody)
           if (errorJson.errors && Array.isArray(errorJson.errors) && errorJson.errors.length > 0) {
-            errorMessage = errorJson.errors.map((e: any) => e.message || e.field || '').join(', ')
+            const errors = errorJson.errors.map((e: any) => {
+              // Provide user-friendly error messages
+              if (e.message) {
+                // Handle common SendGrid errors
+                if (e.message.includes('Invalid API key') || e.message.includes('401')) {
+                  return 'Invalid SendGrid API key. Please check your API key in Settings.'
+                }
+                if (e.message.includes('Forbidden') || e.message.includes('403')) {
+                  return 'SendGrid API key does not have permission to send emails.'
+                }
+                if (e.message.includes('rate limit') || e.message.includes('429')) {
+                  return 'SendGrid rate limit exceeded. Please try again later.'
+                }
+                if (e.message.includes('from email') || e.message.includes('sender')) {
+                  return 'Invalid sender email address. Please check your "From Email" in Settings.'
+                }
+                return e.message
+              }
+              return e.field ? `${e.field}: Invalid value` : 'Unknown error'
+            })
+            errorMessage = errors.join(', ')
           }
         } catch {
-          // If parsing fails, use the raw error body
-          if (errorBody) {
-            errorMessage = errorBody
+          // If parsing fails, provide a generic message based on status code
+          if (response.status === 401 || response.status === 403) {
+            errorMessage = 'Invalid SendGrid API key or insufficient permissions. Please check your API key in Settings.'
+          } else if (response.status === 429) {
+            errorMessage = 'SendGrid rate limit exceeded. Please try again later.'
+          } else if (response.status >= 500) {
+            errorMessage = 'SendGrid service is temporarily unavailable. Please try again later.'
+          } else if (errorBody) {
+            errorMessage = errorBody.length > 200 ? 'Failed to send email via SendGrid' : errorBody
           }
         }
 
@@ -181,9 +207,20 @@ export class SendgridApiClient {
       }
     } catch (error) {
       console.error('Failed to send email via SendGrid:', error)
+      let errorMessage = 'Unknown error sending email'
+      
+      if (error instanceof Error) {
+        // Handle network errors
+        if (error.message.includes('fetch') || error.message.includes('network') || error.message.includes('ECONNREFUSED')) {
+          errorMessage = 'Unable to connect to SendGrid. Please check your internet connection and try again.'
+        } else {
+          errorMessage = error.message
+        }
+      }
+      
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error sending email',
+        error: errorMessage,
       }
     }
   }

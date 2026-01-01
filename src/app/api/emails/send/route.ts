@@ -28,8 +28,11 @@ export async function POST(req: NextRequest) {
       sendgridClient = await getSendgridClient(user.practiceId)
     } catch (error) {
       console.error('Error getting SendGrid client:', error)
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : 'SendGrid integration is not configured. Please configure it in Settings → SendGrid Integration.'
       return NextResponse.json(
-        { error: error instanceof Error ? error.message : 'SendGrid integration not configured. Please configure it in Settings.' },
+        { error: errorMessage },
         { status: 400 }
       )
     }

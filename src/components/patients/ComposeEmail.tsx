@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Mail, Send, X, CheckCircle2 } from 'lucide-react'
+import { Mail, Send, X, CheckCircle2, AlertCircle } from 'lucide-react'
 
 interface ComposeEmailProps {
   open: boolean
@@ -93,10 +93,30 @@ export function ComposeEmail({
         }),
       })
 
-      const data = await response.json()
+      let data
+      try {
+        data = await response.json()
+      } catch (jsonError) {
+        // If response is not JSON, it's likely a server error
+        throw new Error('Server error: Unable to process the request. Please try again later.')
+      }
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to send email')
+        // Provide user-friendly error messages
+        let errorMessage = data.error || 'Failed to send email'
+        
+        // Make error messages more user-friendly
+        if (errorMessage.includes('SendGrid integration not configured') || 
+            errorMessage.includes('SendGrid integration not found')) {
+          errorMessage = 'Email service is not configured. Please configure SendGrid in Settings → SendGrid Integration.'
+        } else if (errorMessage.includes('Invalid API key') || 
+                   errorMessage.includes('Unauthorized')) {
+          errorMessage = 'Invalid email service configuration. Please check your SendGrid API key in Settings.'
+        } else if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
+          errorMessage = 'Network error. Please check your internet connection and try again.'
+        }
+        
+        throw new Error(errorMessage)
       }
 
       // Show success message
@@ -115,7 +135,21 @@ export function ComposeEmail({
       }, 2000)
     } catch (err) {
       console.error('Error sending email:', err)
-      setError(err instanceof Error ? err.message : 'Failed to send email')
+      
+      // Provide user-friendly error message
+      let errorMessage = 'Failed to send email'
+      if (err instanceof Error) {
+        errorMessage = err.message
+      } else if (typeof err === 'string') {
+        errorMessage = err
+      }
+      
+      // Handle network errors
+      if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+        errorMessage = 'Unable to connect to the server. Please check your internet connection and try again.'
+      }
+      
+      setError(errorMessage)
       setSending(false)
     }
   }
@@ -183,8 +217,12 @@ export function ComposeEmail({
           </div>
 
           {error && (
-            <div className="rounded-md bg-red-50 p-3 text-sm text-red-800 border border-red-200 animate-in fade-in slide-in-from-top-2">
-              {error}
+            <div className="rounded-md bg-red-50 p-4 text-sm text-red-800 border-2 border-red-200 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300 flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-medium mb-1">Unable to send email</p>
+                <p className="text-red-700">{error}</p>
+              </div>
             </div>
           )}
 
