@@ -57,6 +57,24 @@ export async function PATCH(
 
     const { name, description, trigger, steps, isActive } = body
 
+    // Get existing workflow to check if isActive is changing from false to true
+    const existingWorkflow = await prisma.workflow.findFirst({
+      where: {
+        id,
+        practiceId: user.practiceId,
+      },
+      select: {
+        isActive: true,
+      },
+    })
+
+    if (!existingWorkflow) {
+      return NextResponse.json(
+        { error: 'Workflow not found' },
+        { status: 404 }
+      )
+    }
+
     // Update workflow
     const updateData: any = {}
     if (name !== undefined) updateData.name = name
@@ -65,7 +83,13 @@ export async function PATCH(
       updateData.triggerType = trigger?.type || null
       updateData.triggerConfig = trigger || null
     }
-    if (isActive !== undefined) updateData.isActive = isActive
+    if (isActive !== undefined) {
+      updateData.isActive = isActive
+      // If publishing (changing from inactive to active), set publishedAt
+      if (isActive && !existingWorkflow.isActive) {
+        updateData.publishedAt = new Date()
+      }
+    }
 
     const workflow = await prisma.workflow.update({
       where: {

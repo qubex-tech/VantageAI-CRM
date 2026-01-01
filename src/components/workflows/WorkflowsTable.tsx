@@ -19,6 +19,7 @@ interface WorkflowWithStats {
   isActive: boolean
   createdAt: Date
   updatedAt: Date
+  publishedAt?: Date | null
   runCount: number
   lastFailedRun?: Date | null
   createdByName?: string | null
@@ -183,10 +184,10 @@ function WorkflowsTableSection({ workflows }: { workflows: WorkflowWithStats[] }
                   </div>
                 </td>
                 <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {workflow.isActive && workflow.updatedAt ? (
+                  {workflow.publishedAt ? (
                     <div>
-                      <div className="text-gray-900">{format(workflow.updatedAt, 'MMM d, yyyy')}</div>
-                      <div className="text-xs text-gray-500">{formatDistanceToNow(workflow.updatedAt, { addSuffix: true })}</div>
+                      <div className="text-gray-900">{format(workflow.publishedAt, 'MMM d, yyyy')}</div>
+                      <div className="text-xs text-gray-500">{formatDistanceToNow(workflow.publishedAt, { addSuffix: true })}</div>
                     </div>
                   ) : (
                     <span className="text-gray-500">—</span>

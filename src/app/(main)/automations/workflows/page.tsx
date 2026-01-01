@@ -107,6 +107,7 @@ export default async function WorkflowsPage() {
       isActive: workflow.isActive,
       createdAt: workflow.createdAt,
       updatedAt: workflow.updatedAt,
+      publishedAt: workflow.publishedAt,
       runCount: workflow._count.runs,
       lastFailedRun,
       createdByName,

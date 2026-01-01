@@ -253,15 +253,16 @@ model VoiceConversation {
 }
 
 model Workflow {
-  id            String   @id @default(uuid())
+  id            String    @id @default(uuid())
   practiceId    String
   name          String
   description   String?
-  isActive      Boolean  @default(false)
-  triggerType   String? // e.g., 'record_command', 'appointment_created'
-  triggerConfig Json? // JSON configuration for trigger
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  isActive      Boolean   @default(false)
+  triggerType   String?   // e.g., 'record_command', 'appointment_created'
+  triggerConfig Json?     // JSON configuration for trigger
+  publishedAt   DateTime? // When the workflow was last published
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   practice Practice       @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   steps    WorkflowStep[]
