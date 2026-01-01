@@ -98,6 +98,31 @@ export class SendgridApiClient {
       const fromEmail = params.fromEmail || this.defaultFromEmail
       const fromName = params.fromName || this.defaultFromName
 
+      // SendGrid requires: text/plain must be first, then text/html
+      const content: Array<{ type: string; value: string }> = []
+      
+      // Add text/plain first (required to be first if present)
+      if (params.textContent) {
+        content.push({
+          type: 'text/plain',
+          value: params.textContent,
+        })
+      } else if (params.htmlContent) {
+        // If no textContent but we have htmlContent, create plain text from HTML
+        content.push({
+          type: 'text/plain',
+          value: params.htmlContent.replace(/<[^>]*>/g, '') || '',
+        })
+      }
+      
+      // Add text/html second (if present)
+      if (params.htmlContent) {
+        content.push({
+          type: 'text/html',
+          value: params.htmlContent,
+        })
+      }
+
       // Build the email payload according to SendGrid API v3
       const payload = {
         personalizations: [
@@ -115,30 +140,7 @@ export class SendgridApiClient {
           email: fromEmail,
           name: fromName || undefined,
         },
-        // SendGrid requires: text/plain must be first, then text/html
-        const content: Array<{ type: string; value: string }> = []
-        
-        // Add text/plain first (required to be first if present)
-        if (params.textContent) {
-          content.push({
-            type: 'text/plain',
-            value: params.textContent,
-          })
-        } else if (params.htmlContent) {
-          // If no textContent but we have htmlContent, create plain text from HTML
-          content.push({
-            type: 'text/plain',
-            value: params.htmlContent.replace(/<[^>]*>/g, '') || '',
-          })
-        }
-        
-        // Add text/html second (if present)
-        if (params.htmlContent) {
-          content.push({
-            type: 'text/html',
-            value: params.htmlContent,
-          })
-        }
+        content: content,
       }
 
       const response = await fetch(`${this.baseUrl}/mail/send`, {
