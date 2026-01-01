@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import { SpeedInsights } from "@vercel/speed-insights/next"
+import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 import { Sidebar } from "@/components/layout/Sidebar"
 import { SidebarProvider } from "@/components/layout/SidebarProvider"
@@ -24,6 +25,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <body className="font-sans antialiased bg-white text-gray-900">
+        <Analytics />
         <SpeedInsights />
         <SidebarProvider>
           <div className="flex min-h-screen flex-col bg-white">
