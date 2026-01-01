@@ -35,36 +35,101 @@ export default async function WorkflowsPage() {
     }
 
     // Fetch workflows from database with runs data
-    const workflows = await prisma.workflow.findMany({
-      where: {
-        practiceId: user.practiceId,
-      },
-      include: {
-        steps: {
-          orderBy: { order: 'asc' },
+    // Use raw query as workaround for publishedAt column sync issue
+    let workflows
+    try {
+      workflows = await prisma.workflow.findMany({
+        where: {
+          practiceId: user.practiceId,
         },
-        _count: {
-          select: {
-            runs: true,
+        include: {
+          steps: {
+            orderBy: { order: 'asc' },
+          },
+          _count: {
+            select: {
+              runs: true,
+            },
+          },
+          runs: {
+            where: {
+              status: 'failed',
+            },
+            orderBy: {
+              startedAt: 'desc',
+            },
+            take: 1,
+            select: {
+              startedAt: true,
+            },
           },
         },
-        runs: {
+        orderBy: {
+          updatedAt: 'desc',
+        },
+      })
+    } catch (error: any) {
+      // If error is about publishedAt, use raw query workaround
+      if (error?.message?.includes('publishedAt') || error?.message?.includes('published_at')) {
+        console.error('[WorkflowsPage] Prisma Client sync issue - using raw query workaround:', error.message)
+        
+        // Use raw SQL query as fallback
+        const rawWorkflows = await prisma.$queryRaw<Array<{
+          id: string
+          practiceId: string
+          name: string
+          description: string | null
+          isActive: boolean
+          triggerType: string | null
+          triggerConfig: any
+          publishedAt: Date | null
+          createdAt: Date
+          updatedAt: Date
+        }>>`
+          SELECT 
+            id, "practiceId", name, description, "isActive", "triggerType", "triggerConfig",
+            "publishedAt", "createdAt", "updatedAt"
+          FROM workflows
+          WHERE "practiceId" = ${user.practiceId}
+          ORDER BY "updatedAt" DESC
+        `
+        
+        // Fetch related data separately
+        const workflowIds = rawWorkflows.map(w => w.id)
+        const steps = await prisma.workflowStep.findMany({
+          where: { workflowId: { in: workflowIds } },
+          orderBy: { order: 'asc' },
+        })
+        const runCounts = await prisma.workflowRun.groupBy({
+          by: ['workflowId'],
+          where: { workflowId: { in: workflowIds } },
+          _count: true,
+        })
+        const failedRuns = await prisma.workflowRun.findMany({
           where: {
+            workflowId: { in: workflowIds },
             status: 'failed',
           },
-          orderBy: {
-            startedAt: 'desc',
+          orderBy: { startedAt: 'desc' },
+          distinct: ['workflowId'],
+        })
+        
+        // Reconstruct workflow objects with relations
+        workflows = rawWorkflows.map(w => ({
+          ...w,
+          steps: steps.filter(s => s.workflowId === w.id),
+          _count: {
+            runs: runCounts.find(rc => rc.workflowId === w.id)?._count || 0,
           },
-          take: 1,
-          select: {
-            startedAt: true,
-          },
-        },
-      },
-      orderBy: {
-        updatedAt: 'desc',
-      },
-    })
+          runs: failedRuns
+            .filter(r => r.workflowId === w.id)
+            .slice(0, 1)
+            .map(r => ({ startedAt: r.startedAt })),
+        })) as any
+      } else {
+        throw error
+      }
+    }
 
   // Get creator names from audit logs for workflows
   const workflowIds = workflows.map(w => w.id)
