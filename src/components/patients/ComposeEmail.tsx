@@ -152,12 +152,8 @@ export function ComposeEmail({
         throw new Error(errorMessage)
       }
 
-      // Verify success response
-      if (!data || (!data.success && !response.ok)) {
-        errorOccurred = true
-        errorMessage = data?.error || 'Email sending failed. Please try again.'
-        throw new Error(errorMessage)
-      }
+      // If we got here, response is ok, so it's a success
+      // (We don't need to check data.success since response.ok is enough)
 
       // SUCCESS - Show success message and close dialog
       setError('') // Clear any previous errors
