@@ -45,8 +45,8 @@ export async function findOrCreatePatientByPhone(
     email?: string
   }
 ): Promise<FindOrCreatePatientResult> {
-  // Normalize phone number (remove non-digits)
-  const normalizedPhone = phone.replace(/\D/g, '')
+  // Normalize phone number (remove non-digits) - ensure it's a string
+  const normalizedPhone = String(phone).replace(/\D/g, '')
   
   // Try to find existing patient - use exact match on normalized phone
   // First try exact match on normalized phone
@@ -72,7 +72,7 @@ export async function findOrCreatePatientByPhone(
       },
     })
 
-    const matchedPatient = allPatients.find(p => p.phone.replace(/\D/g, '') === normalizedPhone)
+    const matchedPatient = allPatients.find(p => p.phone ? String(p.phone).replace(/\D/g, '') === normalizedPhone : false)
     if (matchedPatient) {
       // Reload full patient record
       patient = await prisma.patient.findUnique({

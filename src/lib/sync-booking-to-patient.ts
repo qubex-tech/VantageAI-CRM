@@ -143,7 +143,7 @@ export async function syncBookingToPatient(
     updateData.email = attendeeEmail
   }
 
-  if (normalizedPhone && (!patient || !patient.phone || normalizedPhone !== patient.phone.replace(/\D/g, ''))) {
+  if (normalizedPhone && (!patient || !patient.phone || normalizedPhone !== (patient.phone ? String(patient.phone).replace(/\D/g, '') : ''))) {
     updateData.phone = normalizedPhone
   }
 

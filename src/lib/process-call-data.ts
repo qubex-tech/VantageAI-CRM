@@ -150,8 +150,8 @@ export async function processCallDataForPatient(
     return { patientId: null, isNew: false }
   }
 
-  // Normalize phone number
-  const normalizedPhone = phoneNumber ? phoneNumber.replace(/\D/g, '') : null
+  // Normalize phone number - ensure it's a string before calling replace
+  const normalizedPhone = phoneNumber ? String(phoneNumber).replace(/\D/g, '') : null
 
   // Try to find existing patient by phone number
   let patient = null
@@ -177,7 +177,7 @@ export async function processCallDataForPatient(
         },
       })
 
-      const matchedPatient = allPatients.find(p => p.phone.replace(/\D/g, '') === normalizedPhone)
+      const matchedPatient = allPatients.find(p => p.phone ? String(p.phone).replace(/\D/g, '') === normalizedPhone : false)
       if (matchedPatient) {
         patient = await prisma.patient.findUnique({
           where: { id: matchedPatient.id },
@@ -358,7 +358,7 @@ export async function processRetellCallData(
         data: {
           practiceId,
           patientId: patientId || undefined,
-          callerPhone: phoneNumber.replace(/\D/g, ''),
+          callerPhone: phoneNumber ? String(phoneNumber).replace(/\D/g, '') : 'unknown',
           retellCallId: call.call_id,
           startedAt: call.start_timestamp ? new Date(call.start_timestamp) : new Date(),
           endedAt: call.end_timestamp ? new Date(call.end_timestamp) : undefined,
