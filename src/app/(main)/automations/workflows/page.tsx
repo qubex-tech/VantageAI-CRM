@@ -36,7 +36,7 @@ export default async function WorkflowsPage() {
 
     // Fetch workflows from database with runs data
     // Use raw query as workaround for publishedAt column sync issue
-    let workflows
+    let workflows: Awaited<ReturnType<typeof prisma.workflow.findMany>>
     try {
       workflows = await prisma.workflow.findMany({
         where: {
