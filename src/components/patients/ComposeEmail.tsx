@@ -92,6 +92,7 @@ export function ComposeEmail({
     let errorMessage = 'Failed to send email. Please try again.'
 
     try {
+      console.log('[ComposeEmail] Starting fetch request to /api/emails/send')
       const response = await fetch('/api/emails/send', {
         method: 'POST',
         headers: {
@@ -106,10 +107,13 @@ export function ComposeEmail({
         }),
       }).catch((fetchError) => {
         // Network error
+        console.error('[ComposeEmail] Fetch error:', fetchError)
         errorOccurred = true
         errorMessage = 'Unable to connect to the server. Please check your internet connection and try again.'
         throw fetchError
       })
+
+      console.log('[ComposeEmail] Fetch response received:', { ok: response?.ok, status: response?.status })
 
       if (!response) {
         errorOccurred = true
@@ -120,13 +124,16 @@ export function ComposeEmail({
       let data
       try {
         const responseText = await response.text()
+        console.log('[ComposeEmail] Response text:', responseText.substring(0, 200))
         if (!responseText) {
           errorOccurred = true
           errorMessage = 'Empty response from server. Please try again.'
           throw new Error(errorMessage)
         }
         data = JSON.parse(responseText)
+        console.log('[ComposeEmail] Parsed response data:', { success: data?.success, error: data?.error })
       } catch (jsonError) {
+        console.error('[ComposeEmail] JSON parse error:', jsonError)
         errorOccurred = true
         errorMessage = 'Server error: Unable to process the request. Please try again later.'
         throw jsonError
@@ -156,12 +163,14 @@ export function ComposeEmail({
       // (We don't need to check data.success since response.ok is enough)
 
       // SUCCESS - Show success message and close dialog
+      console.log('[ComposeEmail] Email sent successfully!')
       setError('') // Clear any previous errors
       setSuccess('Email sent successfully!')
       setSending(false)
       
       // Close dialog after showing success animation (2.5 seconds to let user see the success)
       setTimeout(() => {
+        console.log('[ComposeEmail] Closing dialog after success')
         onOpenChange(false)
       }, 2500)
       
@@ -169,7 +178,7 @@ export function ComposeEmail({
       
     } catch (err) {
       errorOccurred = true
-      console.error('Error sending email:', err)
+      console.error('[ComposeEmail] Error in handleSend:', err)
       
       // Determine error message
       if (err instanceof Error && err.message) {
@@ -187,10 +196,12 @@ export function ComposeEmail({
       }
     } finally {
       // Always reset sending state
+      console.log('[ComposeEmail] Finally block - errorOccurred:', errorOccurred, 'errorMessage:', errorMessage)
       setSending(false)
       
       // Always show error if one occurred
       if (errorOccurred) {
+        console.log('[ComposeEmail] Setting error message:', errorMessage)
         setError(errorMessage)
         setSuccess('') // Clear success if there was an error
       }
