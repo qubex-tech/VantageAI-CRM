@@ -110,6 +110,15 @@ export default async function WorkflowsPage() {
     // Get creator name from audit logs, fallback to current user if not found
     const createdByName = creatorMap.get(workflow.id) || user.name
 
+    // Safely access publishedAt - handle case where Prisma Client might not have it yet
+    let publishedAt: Date | null = null
+    try {
+      publishedAt = (workflow as any).publishedAt || null
+    } catch (error) {
+      // If publishedAt doesn't exist in the type, it will be null
+      publishedAt = null
+    }
+
     return {
       id: workflow.id,
       name: workflow.name,
@@ -117,7 +126,7 @@ export default async function WorkflowsPage() {
       isActive: workflow.isActive,
       createdAt: workflow.createdAt,
       updatedAt: workflow.updatedAt,
-      publishedAt: workflow.publishedAt,
+      publishedAt,
       runCount: workflow._count.runs,
       lastFailedRun,
       createdByName,
