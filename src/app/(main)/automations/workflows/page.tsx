@@ -10,31 +10,32 @@ import { WorkflowsTable } from '@/components/workflows/WorkflowsTable'
 export const dynamic = 'force-dynamic'
 
 export default async function WorkflowsPage() {
-  const supabaseSession = await getSupabaseSession()
-  
-  if (!supabaseSession) {
-    redirect('/login')
-  }
-
-  const supabaseUser = supabaseSession.user
-  let user
   try {
-    user = await syncSupabaseUserToPrisma(supabaseUser)
-  } catch (error) {
-    console.error('Error syncing user to Prisma:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    const safeErrorMessage = errorMessage.length > 100 
-      ? errorMessage.substring(0, 100) + '...'
-      : errorMessage
-    redirect(`/login?error=${encodeURIComponent(`Failed to sync user account: ${safeErrorMessage}`)}`)
-  }
-  
-  if (!user) {
-    redirect('/login?error=User account not found.')
-  }
+    const supabaseSession = await getSupabaseSession()
+    
+    if (!supabaseSession) {
+      redirect('/login')
+    }
 
-  // Fetch workflows from database with runs data
-  const workflows = await prisma.workflow.findMany({
+    const supabaseUser = supabaseSession.user
+    let user
+    try {
+      user = await syncSupabaseUserToPrisma(supabaseUser)
+    } catch (error) {
+      console.error('Error syncing user to Prisma:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const safeErrorMessage = errorMessage.length > 100 
+        ? errorMessage.substring(0, 100) + '...'
+        : errorMessage
+      redirect(`/login?error=${encodeURIComponent(`Failed to sync user account: ${safeErrorMessage}`)}`)
+    }
+    
+    if (!user) {
+      redirect('/login?error=User account not found.')
+    }
+
+    // Fetch workflows from database with runs data
+    const workflows = await prisma.workflow.findMany({
     where: {
       practiceId: user.practiceId,
     },
@@ -67,22 +68,31 @@ export default async function WorkflowsPage() {
 
   // Get creator names from audit logs for workflows
   const workflowIds = workflows.map(w => w.id)
-  const auditLogs = await prisma.auditLog.findMany({
-    where: {
-      practiceId: user.practiceId,
-      resourceType: 'workflow',
-      resourceId: { in: workflowIds },
-      action: 'create',
-    },
-    include: {
-      user: {
-        select: {
-          id: true,
-          name: true,
+  let auditLogs: Array<{ resourceId: string; user: { name: string } | null }> = []
+  
+  if (workflowIds.length > 0) {
+    try {
+      auditLogs = await prisma.auditLog.findMany({
+        where: {
+          practiceId: user.practiceId,
+          resourceType: 'workflow',
+          resourceId: { in: workflowIds },
+          action: 'create',
         },
-      },
-    },
-  })
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      })
+    } catch (error) {
+      console.error('[WorkflowsPage] Error fetching audit logs:', error)
+      // Continue without audit log data - not critical
+    }
+  }
 
   // Create a map of workflow ID to creator name
   const creatorMap = new Map<string, string>()
@@ -131,6 +141,23 @@ export default async function WorkflowsPage() {
 
       <WorkflowsTable workflows={workflowsWithStats} />
     </div>
-  )
+    )
+  } catch (error) {
+    console.error('[WorkflowsPage] Error:', error)
+    // Return a more helpful error message
+    return (
+      <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <h2 className="text-lg font-semibold text-red-900 mb-2">Error loading workflows</h2>
+          <p className="text-sm text-red-700 mb-4">
+            {error instanceof Error ? error.message : 'An unexpected error occurred'}
+          </p>
+          <p className="text-xs text-red-600">
+            Please check the server logs for more details. If the error persists, ensure the database migration has been run.
+          </p>
+        </div>
+      </div>
+    )
+  }
 }
 
