@@ -100,6 +100,9 @@ export default async function WorkflowsPage() {
     // Get creator name from audit logs, fallback to current user if not found
     const createdByName = creatorMap.get(workflow.id) || user.name
 
+    // Handle publishedAt - it may not exist if migration hasn't run yet
+    const publishedAt = 'publishedAt' in workflow ? (workflow as any).publishedAt : null
+
     return {
       id: workflow.id,
       name: workflow.name,
@@ -107,7 +110,7 @@ export default async function WorkflowsPage() {
       isActive: workflow.isActive,
       createdAt: workflow.createdAt,
       updatedAt: workflow.updatedAt,
-      publishedAt: workflow.publishedAt,
+      publishedAt,
       runCount: workflow._count.runs,
       lastFailedRun,
       createdByName,
