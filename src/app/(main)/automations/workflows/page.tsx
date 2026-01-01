@@ -88,6 +88,7 @@ export default async function WorkflowsPage() {
         console.error('[WorkflowsPage] Prisma Client sync issue - using raw query workaround:', error.message)
         
         // Use raw SQL query as fallback
+        // Note: PostgreSQL column names are snake_case (published_at), not camelCase (publishedAt)
         const rawWorkflows = await prisma.$queryRaw<Array<{
           id: string
           practiceId: string
@@ -102,7 +103,7 @@ export default async function WorkflowsPage() {
         }>>`
           SELECT 
             id, "practiceId", name, description, "isActive", "triggerType", "triggerConfig",
-            "publishedAt", "createdAt", "updatedAt"
+            "published_at" as "publishedAt", "createdAt", "updatedAt"
           FROM workflows
           WHERE "practiceId" = ${user.practiceId}
           ORDER BY "updatedAt" DESC
