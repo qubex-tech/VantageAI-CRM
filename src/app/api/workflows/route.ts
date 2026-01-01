@@ -100,16 +100,81 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(updatedWorkflow)
     } else {
       // Create new workflow
-      const workflow = await prisma.workflow.create({
-        data: {
-          practiceId: user.practiceId,
-          name,
-          description: description || null,
-          triggerType: trigger?.type || null,
-          triggerConfig: trigger || null,
-          isActive: false,
-        },
-      })
+      let workflow
+      try {
+        workflow = await prisma.workflow.create({
+          data: {
+            practiceId: user.practiceId,
+            name,
+            description: description || null,
+            triggerType: trigger?.type || null,
+            triggerConfig: trigger || null,
+            isActive: false,
+          },
+        })
+      } catch (error: any) {
+        // If error is about publishedAt, use raw SQL workaround
+        if (error?.message?.includes('publishedAt') || error?.message?.includes('published_at')) {
+          console.error('[Workflows API] Prisma Client sync issue - using raw SQL for create:', error.message)
+          
+          // Use raw SQL to create workflow
+          const result = await prisma.$queryRaw<Array<{ id: string }>>`
+            INSERT INTO workflows (
+              id, "practiceId", name, description, "isActive", "triggerType", "triggerConfig",
+              "createdAt", "updatedAt"
+            )
+            VALUES (
+              gen_random_uuid()::text, ${user.practiceId}, ${name}, ${description || null},
+              false, ${trigger?.type || null}, ${JSON.stringify(trigger || null)}::jsonb,
+              NOW(), NOW()
+            )
+            RETURNING id
+          `
+          
+          if (result.length === 0) {
+            throw new Error('Failed to create workflow')
+          }
+          
+          // Fetch the created workflow using raw SQL
+          const created = await prisma.$queryRaw<Array<{
+            id: string
+            practiceId: string
+            name: string
+            description: string | null
+            isActive: boolean
+            triggerType: string | null
+            triggerConfig: any
+            publishedAt: Date | null
+            createdAt: Date
+            updatedAt: Date
+          }>>`
+            SELECT 
+              id, "practiceId", name, description, "isActive", "triggerType", "triggerConfig",
+              "published_at" as "publishedAt", "createdAt", "updatedAt"
+            FROM workflows
+            WHERE id = ${result[0].id}
+          `
+          
+          if (created.length === 0) {
+            throw new Error('Failed to retrieve created workflow')
+          }
+          
+          workflow = {
+            id: created[0].id,
+            practiceId: created[0].practiceId,
+            name: created[0].name,
+            description: created[0].description,
+            isActive: created[0].isActive,
+            triggerType: created[0].triggerType,
+            triggerConfig: created[0].triggerConfig,
+            publishedAt: created[0].publishedAt,
+            createdAt: created[0].createdAt,
+            updatedAt: created[0].updatedAt,
+          } as any
+        } else {
+          throw error
+        }
+      }
 
       // Create steps
       if (steps && steps.length > 0) {

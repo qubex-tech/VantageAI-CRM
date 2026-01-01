@@ -91,13 +91,116 @@ export async function PATCH(
       }
     }
 
-    const workflow = await prisma.workflow.update({
-      where: {
-        id,
-        practiceId: user.practiceId,
-      },
-      data: updateData,
-    })
+    let workflow
+    try {
+      workflow = await prisma.workflow.update({
+        where: {
+          id,
+          practiceId: user.practiceId,
+        },
+        data: updateData,
+      })
+    } catch (error: any) {
+      // If error is about publishedAt, use raw SQL workaround
+      if (error?.message?.includes('publishedAt') || error?.message?.includes('published_at')) {
+        console.error('[Workflows API] Prisma Client sync issue - using raw SQL for update:', error.message)
+        
+        // Build SET clause for update
+        const setClauses: string[] = []
+        const values: any[] = []
+        let paramIndex = 1
+        
+        if (updateData.name !== undefined) {
+          setClauses.push(`name = $${paramIndex}`)
+          values.push(updateData.name)
+          paramIndex++
+        }
+        if (updateData.description !== undefined) {
+          setClauses.push(`description = $${paramIndex}`)
+          values.push(updateData.description)
+          paramIndex++
+        }
+        if (updateData.triggerType !== undefined) {
+          setClauses.push(`"triggerType" = $${paramIndex}`)
+          values.push(updateData.triggerType)
+          paramIndex++
+        }
+        if (updateData.triggerConfig !== undefined) {
+          setClauses.push(`"triggerConfig" = $${paramIndex}::jsonb`)
+          values.push(JSON.stringify(updateData.triggerConfig))
+          paramIndex++
+        }
+        if (updateData.isActive !== undefined) {
+          setClauses.push(`"isActive" = $${paramIndex}`)
+          values.push(updateData.isActive)
+          paramIndex++
+        }
+        if (updateData.publishedAt !== undefined) {
+          setClauses.push(`"published_at" = $${paramIndex}`)
+          values.push(updateData.publishedAt)
+          paramIndex++
+        }
+        setClauses.push(`"updatedAt" = NOW()`)
+        
+        if (setClauses.length === 1) {
+          // Only updatedAt changed, just return existing
+          const existing = await prisma.$queryRaw<Array<{
+            id: string
+            practiceId: string
+            name: string
+            description: string | null
+            isActive: boolean
+            triggerType: string | null
+            triggerConfig: any
+            publishedAt: Date | null
+            createdAt: Date
+            updatedAt: Date
+          }>>`
+            SELECT 
+              id, "practiceId", name, description, "isActive", "triggerType", "triggerConfig",
+              "published_at" as "publishedAt", "createdAt", "updatedAt"
+            FROM workflows
+            WHERE id = ${id} AND "practiceId" = ${user.practiceId}
+          `
+          if (existing.length === 0) {
+            throw new Error('Workflow not found')
+          }
+          workflow = existing[0] as any
+        } else {
+          // Execute update
+          await prisma.$executeRawUnsafe(
+            `UPDATE workflows SET ${setClauses.join(', ')} WHERE id = $${paramIndex} AND "practiceId" = $${paramIndex + 1}`,
+            ...values, id, user.practiceId
+          )
+          
+          // Fetch updated workflow
+          const updated = await prisma.$queryRaw<Array<{
+            id: string
+            practiceId: string
+            name: string
+            description: string | null
+            isActive: boolean
+            triggerType: string | null
+            triggerConfig: any
+            publishedAt: Date | null
+            createdAt: Date
+            updatedAt: Date
+          }>>`
+            SELECT 
+              id, "practiceId", name, description, "isActive", "triggerType", "triggerConfig",
+              "published_at" as "publishedAt", "createdAt", "updatedAt"
+            FROM workflows
+            WHERE id = ${id} AND "practiceId" = ${user.practiceId}
+          `
+          if (updated.length === 0) {
+            throw new Error('Workflow not found')
+          }
+          workflow = updated[0] as any
+        }
+      } else {
+        throw error
+      }
+    }
 
     // Update steps if provided
     if (steps !== undefined) {
