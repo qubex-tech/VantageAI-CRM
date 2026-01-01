@@ -16,6 +16,8 @@ export async function POST(req: NextRequest) {
 
     const { to, toName, subject, htmlContent, textContent, patientId } = body
 
+    console.log('[EMAIL SEND] Received request body:', { to, subject, hasPatientId: !!patientId, patientId })
+
     // Validate required fields
     if (!to || !subject || (!htmlContent && !textContent)) {
       return NextResponse.json(
@@ -55,18 +57,19 @@ export async function POST(req: NextRequest) {
     }
 
     // Log email activity if patientId is provided, or find patient by email
+    // IMPORTANT: Do this BEFORE returning the response to ensure it completes
     try {
-      if (patientId) {
+      if (patientId && typeof patientId === 'string' && patientId.trim() !== '') {
         // Direct patient ID provided
         console.log('[EMAIL SEND] Logging email activity for patientId:', patientId)
         await logEmailActivity({
-          patientId,
+          patientId: patientId.trim(),
           to,
           subject,
           messageId: result.messageId,
           userId: user.id,
         })
-        console.log('[EMAIL SEND] Successfully logged email activity')
+        console.log('[EMAIL SEND] Successfully logged email activity for patientId:', patientId)
       } else if (to) {
         // Try to find patient by email address
         console.log('[EMAIL SEND] Looking up patient by email:', to)
