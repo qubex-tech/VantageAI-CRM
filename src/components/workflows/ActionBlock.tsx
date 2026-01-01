@@ -29,6 +29,9 @@ const actionOptions = [
 
 export function ActionBlock({ step, onUpdate, onRemove }: ActionBlockProps) {
   const config = step.config || { action: '', params: {} }
+  
+  // For send_email action, determine the "To" field type
+  const toType = config.params?.toType || (config.params?.to ? 'custom' : 'patient_email')
 
   return (
     <Card className="border border-gray-200 bg-white">
@@ -72,15 +75,43 @@ export function ActionBlock({ step, onUpdate, onRemove }: ActionBlockProps) {
           <div className="space-y-2">
             <div>
               <label className="text-xs font-medium text-gray-700 mb-1 block">To</label>
-              <Input
-                placeholder="Email address"
-                value={config.params?.to || ''}
-                onChange={(e) => onUpdate({
-                  ...config,
-                  params: { ...config.params, to: e.target.value },
-                })}
-              />
+              <Select
+                value={toType}
+                onValueChange={(value) => {
+                  const newParams = { ...config.params, toType: value }
+                  // Clear custom email when switching to patient email
+                  if (value === 'patient_email') {
+                    delete newParams.to
+                  }
+                  onUpdate({
+                    ...config,
+                    params: newParams,
+                  })
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select recipient type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="patient_email">Patient's Email Address</SelectItem>
+                  <SelectItem value="custom">Custom Email</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+            {toType === 'custom' && (
+              <div>
+                <label className="text-xs font-medium text-gray-700 mb-1 block">Email Address</label>
+                <Input
+                  type="email"
+                  placeholder="Enter email address"
+                  value={config.params?.to || ''}
+                  onChange={(e) => onUpdate({
+                    ...config,
+                    params: { ...config.params, to: e.target.value },
+                  })}
+                />
+              </div>
+            )}
             <div>
               <label className="text-xs font-medium text-gray-700 mb-1 block">Subject</label>
               <Input
