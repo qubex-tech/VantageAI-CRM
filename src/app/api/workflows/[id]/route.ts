@@ -106,36 +106,48 @@ export async function PATCH(
       if (error?.message?.includes('publishedAt') || error?.message?.includes('published_at')) {
         console.error('[Workflows API] Prisma Client sync issue - using raw SQL for update:', error.message)
         
-        // Build SQL SET clauses using Prisma.Sql for safe SQL building
-        const setParts: Prisma.Sql[] = []
+        // Build SET clauses and collect parameter values
+        const setClauses: string[] = []
+        const params: any[] = []
+        let paramIndex = 1
         
         if (updateData.name !== undefined) {
-          setParts.push(Prisma.sql`name = ${updateData.name}`)
+          setClauses.push(`name = $${paramIndex}`)
+          params.push(updateData.name)
+          paramIndex++
         }
         if (updateData.description !== undefined) {
-          setParts.push(Prisma.sql`description = ${updateData.description}`)
+          setClauses.push(`description = $${paramIndex}`)
+          params.push(updateData.description)
+          paramIndex++
         }
         if (updateData.triggerType !== undefined) {
-          setParts.push(Prisma.sql`"triggerType" = ${updateData.triggerType}`)
+          setClauses.push(`"triggerType" = $${paramIndex}`)
+          params.push(updateData.triggerType)
+          paramIndex++
         }
         if (updateData.triggerConfig !== undefined) {
-          setParts.push(Prisma.sql`"triggerConfig" = ${JSON.stringify(updateData.triggerConfig)}::jsonb`)
+          setClauses.push(`"triggerConfig" = $${paramIndex}::jsonb`)
+          params.push(JSON.stringify(updateData.triggerConfig))
+          paramIndex++
         }
         if (updateData.isActive !== undefined) {
-          setParts.push(Prisma.sql`"isActive" = ${updateData.isActive}`)
+          setClauses.push(`"isActive" = $${paramIndex}`)
+          params.push(updateData.isActive)
+          paramIndex++
         }
         if (updateData.publishedAt !== undefined) {
-          setParts.push(Prisma.sql`"published_at" = ${updateData.publishedAt}`)
+          setClauses.push(`"published_at" = $${paramIndex}`)
+          params.push(updateData.publishedAt)
+          paramIndex++
         }
-        setParts.push(Prisma.sql`"updatedAt" = NOW()`)
+        setClauses.push(`"updatedAt" = NOW()`)
         
-        // Combine all SET clauses
-        const setClause = Prisma.join(setParts, Prisma.sql`, `)
+        // Execute update using parameterized query
+        const sql = `UPDATE workflows SET ${setClauses.join(', ')} WHERE id = $${paramIndex} AND "practiceId" = $${paramIndex + 1}`
+        params.push(id, user.practiceId)
         
-        // Execute update - use Prisma.join for the SET clause
-        await prisma.$executeRaw(
-          Prisma.sql`UPDATE workflows SET ${setClause} WHERE id = ${id} AND "practiceId" = ${user.practiceId}`
-        )
+        await prisma.$executeRawUnsafe(sql, ...params)
         
         // Fetch updated workflow
         const updated = await prisma.$queryRaw<Array<{
