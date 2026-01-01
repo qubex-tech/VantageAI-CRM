@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/middleware'
 import { prisma } from '@/lib/db'
+import { Prisma } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -106,7 +107,6 @@ export async function PATCH(
         console.error('[Workflows API] Prisma Client sync issue - using raw SQL for update:', error.message)
         
         // Build SQL SET clauses using Prisma.Sql for safe SQL building
-        const { Prisma } = await import('@prisma/client')
         const setParts: Prisma.Sql[] = []
         
         if (updateData.name !== undefined) {
