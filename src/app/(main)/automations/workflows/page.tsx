@@ -35,36 +35,48 @@ export default async function WorkflowsPage() {
     }
 
     // Fetch workflows from database with runs data
-    const workflows = await prisma.workflow.findMany({
-    where: {
-      practiceId: user.practiceId,
-    },
-    include: {
-      steps: {
-        orderBy: { order: 'asc' },
-      },
-      _count: {
-        select: {
-          runs: true,
-        },
-      },
-      runs: {
+    // Note: We don't explicitly select publishedAt - Prisma will include it if it exists in the schema
+    // If the column doesn't exist in DB, we'll handle it gracefully below
+    let workflows
+    try {
+      workflows = await prisma.workflow.findMany({
         where: {
-          status: 'failed',
+          practiceId: user.practiceId,
+        },
+        include: {
+          steps: {
+            orderBy: { order: 'asc' },
+          },
+          _count: {
+            select: {
+              runs: true,
+            },
+          },
+          runs: {
+            where: {
+              status: 'failed',
+            },
+            orderBy: {
+              startedAt: 'desc',
+            },
+            take: 1,
+            select: {
+              startedAt: true,
+            },
+          },
         },
         orderBy: {
-          startedAt: 'desc',
+          updatedAt: 'desc',
         },
-        take: 1,
-        select: {
-          startedAt: true,
-        },
-      },
-    },
-    orderBy: {
-      updatedAt: 'desc',
-    },
-  })
+      })
+    } catch (error: any) {
+      // If the error is about publishedAt column not existing, try a workaround
+      if (error?.message?.includes('publishedAt') || error?.message?.includes('published_at')) {
+        console.error('[WorkflowsPage] publishedAt column missing - migration may not have run:', error.message)
+        throw new Error('The workflows table is missing the published_at column. Please run the migration: ALTER TABLE "workflows" ADD COLUMN "published_at" TIMESTAMP(3);')
+      }
+      throw error
+    }
 
   // Get creator names from audit logs for workflows
   const workflowIds = workflows.map(w => w.id)
