@@ -79,23 +79,38 @@ export function ComposeEmail({
     setSending(true)
 
     try {
-      const response = await fetch('/api/emails/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          to: to.trim(),
-          toName: patientName,
-          subject: subject.trim(),
-          htmlContent: body.trim().replace(/\n/g, '<br>'),
-          textContent: body.trim(),
-        }),
-      })
+      let response
+      try {
+        response = await fetch('/api/emails/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            to: to.trim(),
+            toName: patientName,
+            subject: subject.trim(),
+            htmlContent: body.trim().replace(/\n/g, '<br>'),
+            textContent: body.trim(),
+          }),
+        })
+      } catch (fetchError) {
+        // Handle network errors during fetch
+        throw new Error('Network error: Unable to connect to the server. Please check your internet connection and try again.')
+      }
+
+      // Check if response exists
+      if (!response) {
+        throw new Error('No response from server. Please try again.')
+      }
 
       let data
       try {
-        data = await response.json()
+        const responseText = await response.text()
+        if (!responseText) {
+          throw new Error('Empty response from server')
+        }
+        data = JSON.parse(responseText)
       } catch (jsonError) {
         // If response is not JSON, it's likely a server error
         throw new Error('Server error: Unable to process the request. Please try again later.')
@@ -103,7 +118,7 @@ export function ComposeEmail({
 
       if (!response.ok) {
         // Provide user-friendly error messages
-        let errorMessage = data.error || 'Failed to send email'
+        let errorMessage = data?.error || 'Failed to send email'
         
         // Make error messages more user-friendly
         if (errorMessage.includes('SendGrid integration not configured') || 
@@ -117,6 +132,11 @@ export function ComposeEmail({
         }
         
         throw new Error(errorMessage)
+      }
+
+      // Verify success response
+      if (!data || !data.success) {
+        throw new Error(data?.error || 'Email sending failed. Please try again.')
       }
 
       // Show success message
@@ -136,21 +156,26 @@ export function ComposeEmail({
     } catch (err) {
       console.error('Error sending email:', err)
       
+      // Always reset sending state
+      setSending(false)
+      
       // Provide user-friendly error message
-      let errorMessage = 'Failed to send email'
+      let errorMessage = 'Failed to send email. Please try again.'
       if (err instanceof Error) {
         errorMessage = err.message
       } else if (typeof err === 'string') {
         errorMessage = err
       }
       
-      // Handle network errors
-      if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+      // Handle specific error cases
+      if (errorMessage.includes('Failed to fetch') || 
+          errorMessage.includes('NetworkError') || 
+          errorMessage.includes('ECONNREFUSED')) {
         errorMessage = 'Unable to connect to the server. Please check your internet connection and try again.'
       }
       
+      // Always show error to user
       setError(errorMessage)
-      setSending(false)
     }
   }
 
