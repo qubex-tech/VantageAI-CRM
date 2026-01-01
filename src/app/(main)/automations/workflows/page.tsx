@@ -111,13 +111,9 @@ export default async function WorkflowsPage() {
     const createdByName = creatorMap.get(workflow.id) || user.name
 
     // Safely access publishedAt - handle case where Prisma Client might not have it yet
-    let publishedAt: Date | null = null
-    try {
-      publishedAt = (workflow as any).publishedAt || null
-    } catch (error) {
-      // If publishedAt doesn't exist in the type, it will be null
-      publishedAt = null
-    }
+    // Use type assertion to access the field safely
+    const workflowAny = workflow as any
+    const publishedAt: Date | null = workflowAny.publishedAt || null
 
     return {
       id: workflow.id,
