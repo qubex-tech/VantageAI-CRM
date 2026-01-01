@@ -92,7 +92,6 @@ export function ComposeEmail({
     let errorMessage = 'Failed to send email. Please try again.'
 
     try {
-      console.log('[ComposeEmail] Starting fetch request to /api/emails/send')
       const response = await fetch('/api/emails/send', {
         method: 'POST',
         headers: {
@@ -113,7 +112,6 @@ export function ComposeEmail({
         throw fetchError
       })
 
-      console.log('[ComposeEmail] Fetch response received:', { ok: response?.ok, status: response?.status })
 
       if (!response) {
         errorOccurred = true
@@ -124,16 +122,13 @@ export function ComposeEmail({
       let data
       try {
         const responseText = await response.text()
-        console.log('[ComposeEmail] Response text:', responseText.substring(0, 200))
         if (!responseText) {
           errorOccurred = true
           errorMessage = 'Empty response from server. Please try again.'
           throw new Error(errorMessage)
         }
         data = JSON.parse(responseText)
-        console.log('[ComposeEmail] Parsed response data:', { success: data?.success, error: data?.error })
       } catch (jsonError) {
-        console.error('[ComposeEmail] JSON parse error:', jsonError)
         errorOccurred = true
         errorMessage = 'Server error: Unable to process the request. Please try again later.'
         throw jsonError
@@ -163,22 +158,19 @@ export function ComposeEmail({
       // (We don't need to check data.success since response.ok is enough)
 
       // SUCCESS - Show success message and close dialog
-      console.log('[ComposeEmail] Email sent successfully!')
       setError('') // Clear any previous errors
       setSuccess('Email sent successfully!')
       setSending(false)
       
-      // Close dialog after showing success animation (2.5 seconds to let user see the success)
+      // Close dialog after showing success animation (3 seconds to let user see the success message)
       setTimeout(() => {
-        console.log('[ComposeEmail] Closing dialog after success')
         onOpenChange(false)
-      }, 2500)
+      }, 3000)
       
       return // Exit early on success
       
     } catch (err) {
       errorOccurred = true
-      console.error('[ComposeEmail] Error in handleSend:', err)
       
       // Determine error message
       if (err instanceof Error && err.message) {
@@ -196,12 +188,10 @@ export function ComposeEmail({
       }
     } finally {
       // Always reset sending state
-      console.log('[ComposeEmail] Finally block - errorOccurred:', errorOccurred, 'errorMessage:', errorMessage)
       setSending(false)
       
       // Always show error if one occurred
       if (errorOccurred) {
-        console.log('[ComposeEmail] Setting error message:', errorMessage)
         setError(errorMessage)
         setSuccess('') // Clear success if there was an error
       }
@@ -283,12 +273,15 @@ export function ComposeEmail({
           )}
 
           {success && (
-            <div className="rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 p-4 text-sm text-green-800 border-2 border-green-400 shadow-lg animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-500 flex items-center gap-3">
+            <div className="rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 p-5 text-base text-green-800 border-2 border-green-400 shadow-xl animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-500 flex items-center gap-3">
               <div className="relative flex-shrink-0">
-                <CheckCircle2 className="h-6 w-6 text-green-600 animate-in zoom-in-95 duration-300" />
-                <div className="absolute inset-0 h-6 w-6 bg-green-400 rounded-full animate-ping opacity-75"></div>
+                <CheckCircle2 className="h-7 w-7 text-green-600 animate-in zoom-in-95 duration-300" />
+                <div className="absolute inset-0 h-7 w-7 bg-green-400 rounded-full animate-ping opacity-75"></div>
               </div>
-              <span className="font-semibold text-green-900">{success}</span>
+              <div className="flex-1">
+                <p className="font-bold text-green-900 text-lg">{success}</p>
+                <p className="text-sm text-green-700 mt-1">The email has been sent to {to}</p>
+              </div>
             </div>
           )}
         </div>
