@@ -34,5 +34,5 @@ yarn-error.log*
 next-env.d.ts
 
 # prisma
-/prisma/migrations/*.sql
+# Migration SQL files should be tracked in git
 
