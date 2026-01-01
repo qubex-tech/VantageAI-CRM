@@ -115,7 +115,7 @@ export default async function WorkflowsPage() {
         })
         
         // Reconstruct workflow objects with relations
-        workflows = rawWorkflows.map(w => ({
+        workflows = rawWorkflows.map((w: typeof rawWorkflows[0]) => ({
           ...w,
           steps: steps.filter(s => s.workflowId === w.id),
           _count: {
@@ -125,7 +125,7 @@ export default async function WorkflowsPage() {
             .filter(r => r.workflowId === w.id)
             .slice(0, 1)
             .map(r => ({ startedAt: r.startedAt })),
-        })) as any
+        })) as typeof workflows
       } else {
         throw error
       }
