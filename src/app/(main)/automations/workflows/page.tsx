@@ -114,9 +114,18 @@ export default async function WorkflowsPage() {
           distinct: ['workflowId'],
         })
         
-        // Reconstruct workflow objects with relations
+        // Reconstruct workflow objects with relations to match Prisma query structure
         workflows = rawWorkflows.map((w: typeof rawWorkflows[0]) => ({
-          ...w,
+          id: w.id,
+          practiceId: w.practiceId,
+          name: w.name,
+          description: w.description,
+          isActive: w.isActive,
+          triggerType: w.triggerType,
+          triggerConfig: w.triggerConfig,
+          publishedAt: w.publishedAt,
+          createdAt: w.createdAt,
+          updatedAt: w.updatedAt,
           steps: steps.filter(s => s.workflowId === w.id),
           _count: {
             runs: runCounts.find(rc => rc.workflowId === w.id)?._count || 0,
