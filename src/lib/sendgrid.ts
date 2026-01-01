@@ -195,15 +195,15 @@ export class SendgridApiClient {
 export async function getSendgridClient(practiceId: string) {
   const { prisma } = await import('@/lib/db')
 
-  const integration = await prisma.sendgridIntegration.findUnique({
+  const integration = await prisma.sendgridIntegration.findFirst({
     where: {
       practiceId,
       isActive: true,
     },
   })
 
-  if (!integration) {
-    throw new Error('SendGrid integration not found or not active')
+  if (!integration || !integration.apiKey || !integration.fromEmail) {
+    throw new Error('SendGrid integration not configured or not active. Please configure it in Settings → SendGrid Integration.')
   }
 
   return new SendgridApiClient(

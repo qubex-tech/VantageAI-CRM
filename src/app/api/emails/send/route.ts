@@ -23,7 +23,16 @@ export async function POST(req: NextRequest) {
     }
 
     // Get SendGrid client for this practice
-    const sendgridClient = await getSendgridClient(user.practiceId)
+    let sendgridClient
+    try {
+      sendgridClient = await getSendgridClient(user.practiceId)
+    } catch (error) {
+      console.error('Error getting SendGrid client:', error)
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : 'SendGrid integration not configured. Please configure it in Settings.' },
+        { status: 400 }
+      )
+    }
 
     // Send the email
     const result = await sendgridClient.sendEmail({
@@ -35,8 +44,9 @@ export async function POST(req: NextRequest) {
     })
 
     if (!result.success) {
+      console.error('SendGrid sendEmail failed:', result.error)
       return NextResponse.json(
-        { error: result.error || 'Failed to send email' },
+        { error: result.error || 'Failed to send email via SendGrid' },
         { status: 500 }
       )
     }

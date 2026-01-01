@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Mail, Send, X } from 'lucide-react'
+import { Mail, Send, X, CheckCircle2 } from 'lucide-react'
 
 interface ComposeEmailProps {
   open: boolean
@@ -93,23 +93,29 @@ export function ComposeEmail({
         }),
       })
 
+      const data = await response.json()
+
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to send email')
+        throw new Error(data.error || 'Failed to send email')
       }
 
+      // Show success message
       setSuccess('Email sent successfully!')
+      setSending(false)
       
-      // Close dialog after a short delay
+      // Close dialog after showing success animation
       setTimeout(() => {
         onOpenChange(false)
+        // Reset form after dialog closes
         setSubject('')
         setBody('')
+        setError('')
+        setSuccess('')
         setTo(patientEmail || '')
-      }, 1500)
+      }, 2000)
     } catch (err) {
+      console.error('Error sending email:', err)
       setError(err instanceof Error ? err.message : 'Failed to send email')
-    } finally {
       setSending(false)
     }
   }
@@ -177,14 +183,18 @@ export function ComposeEmail({
           </div>
 
           {error && (
-            <div className="rounded-md bg-red-50 p-3 text-sm text-red-800 border border-red-200">
+            <div className="rounded-md bg-red-50 p-3 text-sm text-red-800 border border-red-200 animate-in fade-in slide-in-from-top-2">
               {error}
             </div>
           )}
 
           {success && (
-            <div className="rounded-md bg-green-50 p-3 text-sm text-green-800 border border-green-200">
-              {success}
+            <div className="rounded-md bg-gradient-to-r from-green-50 to-emerald-50 p-4 text-sm text-green-800 border-2 border-green-300 shadow-lg animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-500 flex items-center gap-3">
+              <div className="relative">
+                <CheckCircle2 className="h-6 w-6 text-green-600 flex-shrink-0 animate-in zoom-in-95 duration-300" />
+                <div className="absolute inset-0 h-6 w-6 bg-green-400 rounded-full animate-ping opacity-75"></div>
+              </div>
+              <span className="font-semibold">{success}</span>
             </div>
           )}
         </div>
