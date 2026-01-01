@@ -5,7 +5,7 @@
 SELECT * FROM "_prisma_migrations" 
 WHERE migration_name = '20250104000000_add_published_at_to_workflow';
 
--- If the above returns no rows, run this INSERT:
+-- If the above returns no rows, run this INSERT (using WHERE NOT EXISTS):
 INSERT INTO "_prisma_migrations" (
     id,
     checksum,
@@ -16,17 +16,23 @@ INSERT INTO "_prisma_migrations" (
     started_at,
     applied_steps_count
 )
-VALUES (
+SELECT 
     gen_random_uuid()::text,
-    'placeholder',  -- Will be updated by Prisma migrate resolve
-    NOW(),
-    '20250104000000_add_published_at_to_workflow',
-    NULL,
-    NULL,
-    NOW(),
-    1
-)
-ON CONFLICT (migration_name) DO NOTHING;
+    'placeholder' as checksum,  -- Will be updated by Prisma migrate resolve
+    NOW() as finished_at,
+    '20250104000000_add_published_at_to_workflow' as migration_name,
+    NULL as logs,
+    NULL as rolled_back_at,
+    NOW() as started_at,
+    1 as applied_steps_count
+WHERE NOT EXISTS (
+    SELECT 1 FROM "_prisma_migrations" 
+    WHERE migration_name = '20250104000000_add_published_at_to_workflow'
+);
+
+-- Verify it was inserted
+SELECT * FROM "_prisma_migrations" 
+WHERE migration_name = '20250104000000_add_published_at_to_workflow';
 
 -- Then run this locally to fix the checksum:
 -- npx prisma migrate resolve --applied 20250104000000_add_published_at_to_workflow
