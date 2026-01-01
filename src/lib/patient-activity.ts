@@ -39,7 +39,12 @@ export interface CreateActivityParams {
  */
 export async function logPatientActivity(params: CreateActivityParams): Promise<void> {
   try {
-    await prisma.patientTimelineEntry.create({
+    console.log('[logPatientActivity] Creating activity entry:', {
+      patientId: params.patientId,
+      type: params.type,
+      title: params.title,
+    })
+    const entry = await prisma.patientTimelineEntry.create({
       data: {
         patientId: params.patientId,
         type: params.type,
@@ -48,9 +53,13 @@ export async function logPatientActivity(params: CreateActivityParams): Promise<
         metadata: params.metadata || undefined,
       },
     })
+    console.log('[logPatientActivity] Successfully created activity entry:', entry.id)
   } catch (error) {
     // Log error but don't throw - activity logging should not break main operations
     console.error('[logPatientActivity] Error logging activity:', error)
+    if (error instanceof Error) {
+      console.error('[logPatientActivity] Error details:', error.message, error.stack)
+    }
   }
 }
 

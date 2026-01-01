@@ -55,18 +55,21 @@ export async function POST(req: NextRequest) {
     }
 
     // Log email activity if patientId is provided, or find patient by email
-    if (patientId) {
-      // Direct patient ID provided
-      await logEmailActivity({
-        patientId,
-        to,
-        subject,
-        messageId: result.messageId,
-        userId: user.id,
-      })
-    } else if (to) {
-      // Try to find patient by email address
-      try {
+    try {
+      if (patientId) {
+        // Direct patient ID provided
+        console.log('[EMAIL SEND] Logging email activity for patientId:', patientId)
+        await logEmailActivity({
+          patientId,
+          to,
+          subject,
+          messageId: result.messageId,
+          userId: user.id,
+        })
+        console.log('[EMAIL SEND] Successfully logged email activity')
+      } else if (to) {
+        // Try to find patient by email address
+        console.log('[EMAIL SEND] Looking up patient by email:', to)
         const patient = await prisma.patient.findFirst({
           where: {
             practiceId: user.practiceId,
@@ -77,6 +80,7 @@ export async function POST(req: NextRequest) {
         })
 
         if (patient) {
+          console.log('[EMAIL SEND] Found patient by email, logging activity for patientId:', patient.id)
           await logEmailActivity({
             patientId: patient.id,
             to,
@@ -84,11 +88,14 @@ export async function POST(req: NextRequest) {
             messageId: result.messageId,
             userId: user.id,
           })
+          console.log('[EMAIL SEND] Successfully logged email activity')
+        } else {
+          console.log('[EMAIL SEND] No patient found with email:', to)
         }
-      } catch (error) {
-        // Don't fail the request if activity logging fails
-        console.error('[EMAIL SEND] Error logging email activity:', error)
       }
+    } catch (error) {
+      // Don't fail the request if activity logging fails, but log the error
+      console.error('[EMAIL SEND] Error logging email activity:', error)
     }
 
     return NextResponse.json({
