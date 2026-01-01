@@ -36,7 +36,21 @@ export default async function WorkflowsPage() {
 
     // Fetch workflows from database with runs data
     // Use raw query as workaround for publishedAt column sync issue
-    let workflows: Awaited<ReturnType<typeof prisma.workflow.findMany>>
+    let workflows: Array<{
+      id: string
+      practiceId: string
+      name: string
+      description: string | null
+      isActive: boolean
+      triggerType: string | null
+      triggerConfig: any
+      publishedAt: Date | null
+      createdAt: Date
+      updatedAt: Date
+      steps: Array<any>
+      _count: { runs: number }
+      runs: Array<{ startedAt: Date }>
+    }>
     try {
       workflows = await prisma.workflow.findMany({
         where: {
