@@ -18,6 +18,7 @@ interface ComposeEmailProps {
   onOpenChange: (open: boolean) => void
   patientEmail?: string
   patientName: string
+  patientId?: string
 }
 
 export function ComposeEmail({
@@ -25,6 +26,7 @@ export function ComposeEmail({
   onOpenChange,
   patientEmail,
   patientName,
+  patientId,
 }: ComposeEmailProps) {
   const [to, setTo] = useState(patientEmail || '')
   const [subject, setSubject] = useState('')
@@ -103,6 +105,7 @@ export function ComposeEmail({
           subject: subject.trim(),
           htmlContent: body.trim().replace(/\n/g, '<br>'),
           textContent: body.trim(),
+          patientId: patientId,
         }),
       }).catch((fetchError) => {
         // Network error

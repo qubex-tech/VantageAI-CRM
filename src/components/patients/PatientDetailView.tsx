@@ -717,6 +717,7 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
         onOpenChange={setComposeEmailOpen}
         patientEmail={patient.email || undefined}
         patientName={patient.name}
+        patientId={patient.id}
       />
     </div>
   )

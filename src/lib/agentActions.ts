@@ -102,8 +102,9 @@ export async function findOrCreatePatientByPhone(
 
     isNew = true
 
-    // Create timeline entry
-    await createTimelineEntry({
+    // Create timeline entry using new activity logging system
+    const { logCustomActivity } = await import('@/lib/patient-activity')
+    await logCustomActivity({
       patientId: patient.id,
       type: 'note',
       title: 'Patient created via voice call',
@@ -235,14 +236,15 @@ export async function bookAppointment(
     },
   })
 
-  // Create timeline entry
-  await createTimelineEntry({
+  // Create timeline entry using new activity logging system
+  const { logAppointmentActivity } = await import('@/lib/patient-activity')
+  await logAppointmentActivity({
     patientId,
-    type: 'appointment',
+    appointmentId: appointment.id,
+    action: 'created',
     title: `Appointment scheduled: ${eventMapping.visitTypeName}`,
     description: `Scheduled for ${start.toLocaleString()}`,
     metadata: {
-      appointmentId: appointment.id,
       calBookingId: calBooking.uid || String(calBooking.id),
     },
   })
@@ -291,15 +293,14 @@ export async function cancelAppointment(
     data: { status: 'cancelled' },
   })
 
-  // Create timeline entry
-  await createTimelineEntry({
+  // Create timeline entry using new activity logging system
+  const { logAppointmentActivity } = await import('@/lib/patient-activity')
+  await logAppointmentActivity({
     patientId: appointment.patientId,
-    type: 'appointment',
+    appointmentId: appointment.id,
+    action: 'cancelled',
     title: 'Appointment cancelled',
     description: `Appointment scheduled for ${appointment.startTime.toLocaleString()} was cancelled`,
-    metadata: {
-      appointmentId: appointment.id,
-    },
   })
 }
 

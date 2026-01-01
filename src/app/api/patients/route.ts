@@ -77,11 +77,14 @@ export async function POST(req: NextRequest) {
       changes: { after: patient },
     })
 
-    await createTimelineEntry({
+    // Log patient creation activity
+    const { logCustomActivity } = await import('@/lib/patient-activity')
+    await logCustomActivity({
       patientId: patient.id,
       type: 'note',
       title: 'Patient created',
       description: 'Patient record was created',
+      userId: user.id,
     })
 
     return NextResponse.json({ patient }, { status: 201 })

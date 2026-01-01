@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/middleware'
 import { patientSchema } from '@/lib/validations'
 import { createAuditLog, createTimelineEntry } from '@/lib/audit'
 import { tenantScope } from '@/lib/db'
+import { logPatientChanges } from '@/lib/patient-activity'
 
 export const dynamic = 'force-dynamic'
 
@@ -125,6 +126,15 @@ export async function PATCH(
         before: existing,
         after: patient,
       },
+    })
+
+    // Log patient changes to timeline (automatically detects what changed)
+    await logPatientChanges({
+      patientId: patient.id,
+      oldPatient: existing,
+      newPatient: patient,
+      userId: user.id,
+      excludedFields: ['tags'], // Tags are handled separately
     })
 
     return NextResponse.json({ patient })

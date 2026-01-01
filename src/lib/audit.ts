@@ -49,6 +49,7 @@ export async function createAuditLog(params: AuditLogParams) {
 
 /**
  * Log a patient timeline entry
+ * @deprecated Use functions from @/lib/patient-activity instead for better type safety and automatic change detection
  */
 export async function createTimelineEntry(params: {
   patientId: string

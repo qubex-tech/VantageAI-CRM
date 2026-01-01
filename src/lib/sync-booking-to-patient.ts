@@ -8,9 +8,9 @@
  */
 
 import { prisma } from './db'
-import { createTimelineEntry } from './audit'
 import { CalBooking } from './cal'
 import { getCalClient } from './cal'
+import { logAppointmentActivity, logCustomActivity } from './patient-activity'
 
 export interface SyncBookingResult {
   patientId: string
@@ -191,23 +191,6 @@ export async function syncBookingToPatient(
       },
     })
 
-    // Only create timeline entry if it doesn't already exist
-    if (!existingTimelineEntry) {
-      await createTimelineEntry({
-        patientId: updatedPatient.id,
-        type: 'appointment',
-        title: 'Appointment booking synced from Cal.com',
-        description: `Booking ${booking.title || 'appointment'} synced from Cal.com (matched by ${matchReason})`,
-        metadata: {
-          bookingId: booking.uid || String(booking.id),
-          bookingTitle: booking.title,
-          bookingStart: booking.start,
-          bookingEnd: booking.end,
-          matchReason,
-        },
-      })
-    }
-
     // Check if appointment already exists for this booking
     const existingAppointment = await prisma.appointment.findFirst({
       where: {
@@ -215,6 +198,9 @@ export async function syncBookingToPatient(
         calBookingId: bookingId,
       },
     })
+
+    // Create or get appointment for timeline entry
+    let appointmentForTimeline = existingAppointment
 
     // Create appointment if it doesn't exist
     if (!existingAppointment && booking.start && booking.end) {
@@ -259,6 +245,24 @@ export async function syncBookingToPatient(
         console.error(`[syncBookingToPatient] Error creating appointment for booking ${bookingId}:`, error)
         // Don't throw - appointment creation is optional
       }
+    }
+
+    // Only create timeline entry if it doesn't already exist and we have an appointment
+    if (!existingTimelineEntry && appointmentForTimeline) {
+      await logAppointmentActivity({
+        patientId: updatedPatient.id,
+        appointmentId: appointmentForTimeline.id,
+        action: 'created',
+        title: 'Appointment booking synced from Cal.com',
+        description: `Booking ${booking.title || 'appointment'} synced from Cal.com (matched by ${matchReason})`,
+        metadata: {
+          bookingId: booking.uid || String(booking.id),
+          bookingTitle: booking.title,
+          bookingStart: booking.start,
+          bookingEnd: booking.end,
+          matchReason,
+        },
+      })
     }
 
     return {
@@ -310,9 +314,9 @@ export async function syncBookingToPatient(
 
     // Only create timeline entry if it doesn't already exist
     if (!existingTimelineEntry) {
-      await createTimelineEntry({
+      await logCustomActivity({
         patientId: newPatient.id,
-        type: 'appointment',
+        type: 'note',
         title: 'Patient created from Cal.com booking',
         description: `Patient created from Cal.com booking: ${booking.title || 'appointment'}`,
         metadata: {

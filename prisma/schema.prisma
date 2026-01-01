@@ -96,7 +96,7 @@ model PatientTag {
 model PatientTimelineEntry {
   id          String   @id @default(uuid())
   patientId   String
-  type        String // 'appointment', 'insurance', 'call', 'note'
+  type        String // 'appointment', 'insurance', 'call', 'note', 'email', 'field_update', 'document', 'payment', 'reminder', 'task', 'other'
   title       String
   description String?
   metadata    Json?
