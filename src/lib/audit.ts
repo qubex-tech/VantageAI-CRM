@@ -9,6 +9,7 @@ export type AuditResourceType =
   | 'cal_integration'
   | 'voice_conversation'
   | 'user'
+  | 'workflow'
 
 interface AuditLogParams {
   practiceId: string

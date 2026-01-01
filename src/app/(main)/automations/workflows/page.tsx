@@ -5,7 +5,7 @@ import { prisma } from '@/lib/db'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { Plus } from 'lucide-react'
-import { WorkflowsList } from '@/components/workflows/WorkflowsList'
+import { WorkflowsTable } from '@/components/workflows/WorkflowsTable'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,7 +33,7 @@ export default async function WorkflowsPage() {
     redirect('/login?error=User account not found.')
   }
 
-  // Fetch workflows from database
+  // Fetch workflows from database with runs data
   const workflows = await prisma.workflow.findMany({
     where: {
       practiceId: user.practiceId,
@@ -47,10 +47,70 @@ export default async function WorkflowsPage() {
           runs: true,
         },
       },
+      runs: {
+        where: {
+          status: 'failed',
+        },
+        orderBy: {
+          startedAt: 'desc',
+        },
+        take: 1,
+        select: {
+          startedAt: true,
+        },
+      },
     },
     orderBy: {
       updatedAt: 'desc',
     },
+  })
+
+  // Get creator names from audit logs for workflows
+  const workflowIds = workflows.map(w => w.id)
+  const auditLogs = await prisma.auditLog.findMany({
+    where: {
+      practiceId: user.practiceId,
+      resourceType: 'workflow',
+      resourceId: { in: workflowIds },
+      action: 'create',
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+  })
+
+  // Create a map of workflow ID to creator name
+  const creatorMap = new Map<string, string>()
+  auditLogs.forEach(log => {
+    if (log.user) {
+      creatorMap.set(log.resourceId, log.user.name)
+    }
+  })
+
+  // Transform workflows to include the stats we need
+  const workflowsWithStats = workflows.map((workflow) => {
+    // Get last failed run date
+    const lastFailedRun = workflow.runs.length > 0 ? workflow.runs[0].startedAt : null
+
+    // Get creator name from audit logs, fallback to current user if not found
+    const createdByName = creatorMap.get(workflow.id) || user.name
+
+    return {
+      id: workflow.id,
+      name: workflow.name,
+      description: workflow.description,
+      isActive: workflow.isActive,
+      createdAt: workflow.createdAt,
+      updatedAt: workflow.updatedAt,
+      runCount: workflow._count.runs,
+      lastFailedRun,
+      createdByName,
+    }
   })
 
   return (
@@ -63,12 +123,12 @@ export default async function WorkflowsPage() {
         <Link href="/automations/workflows/new">
           <Button className="bg-gray-900 hover:bg-gray-800 text-white font-medium">
             <Plus className="mr-2 h-4 w-4" />
-            Create Workflow
+            New workflow
           </Button>
         </Link>
       </div>
 
-      <WorkflowsList initialWorkflows={workflows} />
+      <WorkflowsTable workflows={workflowsWithStats} />
     </div>
   )
 }

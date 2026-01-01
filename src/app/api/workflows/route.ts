@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/middleware'
 import { prisma } from '@/lib/db'
+import { createAuditLog } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -129,6 +130,23 @@ export async function POST(req: NextRequest) {
             orderBy: { order: 'asc' },
           },
         },
+      })
+
+      if (!createdWorkflow) {
+        return NextResponse.json(
+          { error: 'Workflow created but could not be retrieved' },
+          { status: 500 }
+        )
+      }
+
+      // Log workflow creation in audit log
+      await createAuditLog({
+        practiceId: user.practiceId,
+        userId: user.id,
+        action: 'create',
+        resourceType: 'workflow',
+        resourceId: createdWorkflow.id,
+        changes: { after: { name: createdWorkflow.name } },
       })
 
       return NextResponse.json(createdWorkflow, { status: 201 })
