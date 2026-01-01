@@ -43,15 +43,24 @@ export function ComposeEmail({
   // Reset form when dialog closes
   useEffect(() => {
     if (!open) {
-      setSubject('')
-      setBody('')
-      setError('')
-      setSuccess('')
-      // Keep the email address even when dialog closes
+      // Reset after a short delay to allow animations to complete
+      setTimeout(() => {
+        setSubject('')
+        setBody('')
+        setError('')
+        setSuccess('')
+        setSending(false)
+        // Keep the email address even when dialog closes
+      }, 300)
     }
   }, [open])
 
   const handleSend = async () => {
+    // Clear previous messages
+    setError('')
+    setSuccess('')
+    
+    // Validation
     if (!to.trim()) {
       setError('Email address is required')
       return
@@ -74,58 +83,67 @@ export function ComposeEmail({
       return
     }
 
+    // Start sending
+    setSending(true)
     setError('')
     setSuccess('')
-    setSending(true)
+
+    let errorOccurred = false
+    let errorMessage = 'Failed to send email. Please try again.'
 
     try {
-      let response
-      try {
-        response = await fetch('/api/emails/send', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            to: to.trim(),
-            toName: patientName,
-            subject: subject.trim(),
-            htmlContent: body.trim().replace(/\n/g, '<br>'),
-            textContent: body.trim(),
-          }),
-        })
-      } catch (fetchError) {
-        // Handle network errors during fetch
-        throw new Error('Network error: Unable to connect to the server. Please check your internet connection and try again.')
-      }
+      const response = await fetch('/api/emails/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: to.trim(),
+          toName: patientName,
+          subject: subject.trim(),
+          htmlContent: body.trim().replace(/\n/g, '<br>'),
+          textContent: body.trim(),
+        }),
+      }).catch((fetchError) => {
+        // Network error
+        errorOccurred = true
+        errorMessage = 'Unable to connect to the server. Please check your internet connection and try again.'
+        throw fetchError
+      })
 
-      // Check if response exists
       if (!response) {
-        throw new Error('No response from server. Please try again.')
+        errorOccurred = true
+        errorMessage = 'No response from server. Please try again.'
+        throw new Error(errorMessage)
       }
 
       let data
       try {
         const responseText = await response.text()
         if (!responseText) {
-          throw new Error('Empty response from server')
+          errorOccurred = true
+          errorMessage = 'Empty response from server. Please try again.'
+          throw new Error(errorMessage)
         }
         data = JSON.parse(responseText)
       } catch (jsonError) {
-        // If response is not JSON, it's likely a server error
-        throw new Error('Server error: Unable to process the request. Please try again later.')
+        errorOccurred = true
+        errorMessage = 'Server error: Unable to process the request. Please try again later.'
+        throw jsonError
       }
 
       if (!response.ok) {
-        // Provide user-friendly error messages
-        let errorMessage = data?.error || 'Failed to send email'
+        errorOccurred = true
+        errorMessage = data?.error || 'Failed to send email'
         
         // Make error messages more user-friendly
         if (errorMessage.includes('SendGrid integration not configured') || 
             errorMessage.includes('SendGrid integration not found')) {
           errorMessage = 'Email service is not configured. Please configure SendGrid in Settings → SendGrid Integration.'
         } else if (errorMessage.includes('Invalid API key') || 
-                   errorMessage.includes('Unauthorized')) {
+                   errorMessage.includes('Unauthorized') ||
+                   errorMessage.includes('401') ||
+                   errorMessage.includes('403')) {
           errorMessage = 'Invalid email service configuration. Please check your SendGrid API key in Settings.'
         } else if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
           errorMessage = 'Network error. Please check your internet connection and try again.'
@@ -135,33 +153,30 @@ export function ComposeEmail({
       }
 
       // Verify success response
-      if (!data || !data.success) {
-        throw new Error(data?.error || 'Email sending failed. Please try again.')
+      if (!data || (!data.success && !response.ok)) {
+        errorOccurred = true
+        errorMessage = data?.error || 'Email sending failed. Please try again.'
+        throw new Error(errorMessage)
       }
 
-      // Show success message
+      // SUCCESS - Show success message and close dialog
+      setError('') // Clear any previous errors
       setSuccess('Email sent successfully!')
       setSending(false)
       
-      // Close dialog after showing success animation
+      // Close dialog after showing success animation (2.5 seconds to let user see the success)
       setTimeout(() => {
         onOpenChange(false)
-        // Reset form after dialog closes
-        setSubject('')
-        setBody('')
-        setError('')
-        setSuccess('')
-        setTo(patientEmail || '')
-      }, 2000)
+      }, 2500)
+      
+      return // Exit early on success
+      
     } catch (err) {
+      errorOccurred = true
       console.error('Error sending email:', err)
       
-      // Always reset sending state
-      setSending(false)
-      
-      // Provide user-friendly error message
-      let errorMessage = 'Failed to send email. Please try again.'
-      if (err instanceof Error) {
+      // Determine error message
+      if (err instanceof Error && err.message) {
         errorMessage = err.message
       } else if (typeof err === 'string') {
         errorMessage = err
@@ -170,12 +185,19 @@ export function ComposeEmail({
       // Handle specific error cases
       if (errorMessage.includes('Failed to fetch') || 
           errorMessage.includes('NetworkError') || 
-          errorMessage.includes('ECONNREFUSED')) {
+          errorMessage.includes('ECONNREFUSED') ||
+          errorMessage.includes('network')) {
         errorMessage = 'Unable to connect to the server. Please check your internet connection and try again.'
       }
+    } finally {
+      // Always reset sending state
+      setSending(false)
       
-      // Always show error to user
-      setError(errorMessage)
+      // Always show error if one occurred
+      if (errorOccurred) {
+        setError(errorMessage)
+        setSuccess('') // Clear success if there was an error
+      }
     }
   }
 
@@ -242,22 +264,24 @@ export function ComposeEmail({
           </div>
 
           {error && (
-            <div className="rounded-md bg-red-50 p-4 text-sm text-red-800 border-2 border-red-200 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300 flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="font-medium mb-1">Unable to send email</p>
-                <p className="text-red-700">{error}</p>
+            <div className="rounded-lg bg-red-50 p-4 text-sm text-red-800 border-2 border-red-300 shadow-md animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-300 flex items-start gap-3">
+              <div className="relative flex-shrink-0 mt-0.5">
+                <AlertCircle className="h-5 w-5 text-red-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold mb-1 text-red-900">Unable to send email</p>
+                <p className="text-red-700 break-words">{error}</p>
               </div>
             </div>
           )}
 
           {success && (
-            <div className="rounded-md bg-gradient-to-r from-green-50 to-emerald-50 p-4 text-sm text-green-800 border-2 border-green-300 shadow-lg animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-500 flex items-center gap-3">
-              <div className="relative">
-                <CheckCircle2 className="h-6 w-6 text-green-600 flex-shrink-0 animate-in zoom-in-95 duration-300" />
+            <div className="rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 p-4 text-sm text-green-800 border-2 border-green-400 shadow-lg animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-500 flex items-center gap-3">
+              <div className="relative flex-shrink-0">
+                <CheckCircle2 className="h-6 w-6 text-green-600 animate-in zoom-in-95 duration-300" />
                 <div className="absolute inset-0 h-6 w-6 bg-green-400 rounded-full animate-ping opacity-75"></div>
               </div>
-              <span className="font-semibold">{success}</span>
+              <span className="font-semibold text-green-900">{success}</span>
             </div>
           )}
         </div>
