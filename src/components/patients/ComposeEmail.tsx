@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -248,9 +248,13 @@ export function ComposeEmail({
           </Button>
           <Button
             type="button"
-            onClick={handleSend}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              handleSend()
+            }}
             disabled={sending || !to.trim() || !subject.trim() || !body.trim()}
-            className="bg-blue-600 hover:bg-blue-700 text-white"
+            className="bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {sending ? (
               'Sending...'
