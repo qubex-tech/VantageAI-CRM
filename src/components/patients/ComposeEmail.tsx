@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Dialog,
   DialogContent,
@@ -28,6 +29,7 @@ export function ComposeEmail({
   patientName,
   patientId,
 }: ComposeEmailProps) {
+  const router = useRouter()
   const [to, setTo] = useState(patientEmail || '')
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
@@ -165,10 +167,13 @@ export function ComposeEmail({
       setSuccess('Email sent successfully!')
       setSending(false)
       
-      // Close dialog after showing success animation (3 seconds to let user see the success message)
+      // Refresh the page to show the new activity in the Activity section
+      // Use a small delay to let the success message be visible
       setTimeout(() => {
         onOpenChange(false)
-      }, 3000)
+        // Refresh the router to reload the page data and show the new activity
+        router.refresh()
+      }, 2000) // Reduced from 3000ms to show activity faster
       
       return // Exit early on success
       
