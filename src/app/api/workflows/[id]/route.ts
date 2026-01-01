@@ -132,12 +132,10 @@ export async function PATCH(
         // Combine all SET clauses
         const setClause = Prisma.join(setParts, Prisma.sql`, `)
         
-        // Execute update
-        await prisma.$executeRaw`
-          UPDATE workflows 
-          SET ${setClause}
-          WHERE id = ${id} AND "practiceId" = ${user.practiceId}
-        `
+        // Execute update - use Prisma.join for the SET clause
+        await prisma.$executeRaw(
+          Prisma.sql`UPDATE workflows SET ${setClause} WHERE id = ${id} AND "practiceId" = ${user.practiceId}`
+        )
         
         // Fetch updated workflow
         const updated = await prisma.$queryRaw<Array<{
