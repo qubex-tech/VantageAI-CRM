@@ -149,7 +149,7 @@ export async function PATCH(
         
         await prisma.$executeRawUnsafe(sql, ...params)
         
-        // Fetch updated workflow
+        // Fetch updated workflow using raw SQL (since Prisma Client is out of sync)
         const updated = await prisma.$queryRaw<Array<{
           id: string
           practiceId: string
@@ -199,14 +199,61 @@ export async function PATCH(
       }
     }
 
-    const updatedWorkflow = await prisma.workflow.findUnique({
-      where: { id },
-      include: {
-        steps: {
-          orderBy: { order: 'asc' },
+    // Fetch updated workflow with steps - use raw SQL if Prisma Client is out of sync
+    let updatedWorkflow
+    try {
+      updatedWorkflow = await prisma.workflow.findUnique({
+        where: { id },
+        include: {
+          steps: {
+            orderBy: { order: 'asc' },
+          },
         },
-      },
-    })
+      })
+    } catch (error: any) {
+      // If error is about publishedAt, use raw SQL workaround
+      if (error?.message?.includes('publishedAt') || error?.message?.includes('published_at')) {
+        console.error('[Workflows API] Prisma Client sync issue - using raw SQL for findUnique:', error.message)
+        
+        // Fetch workflow using raw SQL
+        const workflowData = await prisma.$queryRaw<Array<{
+          id: string
+          practiceId: string
+          name: string
+          description: string | null
+          isActive: boolean
+          triggerType: string | null
+          triggerConfig: any
+          publishedAt: Date | null
+          createdAt: Date
+          updatedAt: Date
+        }>>`
+          SELECT 
+            id, "practiceId", name, description, "isActive", "triggerType", "triggerConfig",
+            "published_at" as "publishedAt", "createdAt", "updatedAt"
+          FROM workflows
+          WHERE id = ${id} AND "practiceId" = ${user.practiceId}
+        `
+        
+        if (workflowData.length === 0) {
+          throw new Error('Workflow not found')
+        }
+        
+        // Fetch steps separately
+        const stepsData = await prisma.workflowStep.findMany({
+          where: { workflowId: id },
+          orderBy: { order: 'asc' },
+        })
+        
+        // Reconstruct workflow object
+        updatedWorkflow = {
+          ...workflowData[0],
+          steps: stepsData,
+        } as any
+      } else {
+        throw error
+      }
+    }
 
     return NextResponse.json(updatedWorkflow)
   } catch (error) {
