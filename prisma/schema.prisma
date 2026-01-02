@@ -258,9 +258,9 @@ model Workflow {
   name          String
   description   String?
   isActive      Boolean   @default(false)
-  triggerType   String?   // e.g., 'record_command', 'appointment_created'
-  triggerConfig Json?     // JSON configuration for trigger
-  publishedAt   DateTime? // When the workflow was last published
+  triggerType   String? // e.g., 'record_command', 'appointment_created'
+  triggerConfig Json? // JSON configuration for trigger
+  publishedAt   DateTime? @map("published_at") // When the workflow was last published
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

@@ -61,20 +61,90 @@ export async function POST(req: NextRequest) {
         },
       })
 
-      // Update workflow
-      const workflow = await prisma.workflow.update({
-        where: {
-          id: workflowId,
-          practiceId: user.practiceId,
-        },
-        data: {
-          name,
-          description: description || null,
-          triggerType: trigger?.type || null,
-          triggerConfig: trigger || null,
-          isActive: false, // Reset to inactive when saving draft
-        },
-      })
+      // Update workflow - use raw SQL if Prisma Client is out of sync
+      let workflow
+      try {
+        workflow = await prisma.workflow.update({
+          where: {
+            id: workflowId,
+            practiceId: user.practiceId,
+          },
+          data: {
+            name,
+            description: description || null,
+            triggerType: trigger?.type || null,
+            triggerConfig: trigger || null,
+            isActive: false, // Reset to inactive when saving draft
+          },
+        })
+      } catch (error: any) {
+        // If error is about publishedAt, use raw SQL workaround
+        if (error?.message?.includes('publishedAt') || error?.message?.includes('published_at')) {
+          console.error('[Workflows API] Prisma Client sync issue - using raw SQL for update:', error.message)
+          
+          // Build SET clauses and collect parameter values
+          const setClauses: string[] = []
+          const params: any[] = []
+          let paramIndex = 1
+          
+          if (name !== undefined) {
+            setClauses.push(`name = $${paramIndex}`)
+            params.push(name)
+            paramIndex++
+          }
+          if (description !== undefined) {
+            setClauses.push(`description = $${paramIndex}`)
+            params.push(description !== null ? description : null)
+            paramIndex++
+          }
+          if (trigger?.type !== undefined) {
+            setClauses.push(`"triggerType" = $${paramIndex}`)
+            params.push(trigger?.type || null)
+            paramIndex++
+          }
+          if (trigger !== undefined) {
+            setClauses.push(`"triggerConfig" = $${paramIndex}::jsonb`)
+            params.push(JSON.stringify(trigger || null))
+            paramIndex++
+          }
+          setClauses.push(`"isActive" = $${paramIndex}`)
+          params.push(false)
+          paramIndex++
+          setClauses.push(`"updatedAt" = NOW()`)
+          
+          // Execute update using parameterized query
+          const sql = `UPDATE workflows SET ${setClauses.join(', ')} WHERE id = $${paramIndex} AND "practiceId" = $${paramIndex + 1}`
+          params.push(workflowId, user.practiceId)
+          
+          await prisma.$executeRawUnsafe(sql, ...params)
+          
+          // Fetch updated workflow using raw SQL (since Prisma Client is out of sync)
+          const updated = await prisma.$queryRaw<Array<{
+            id: string
+            practiceId: string
+            name: string
+            description: string | null
+            isActive: boolean
+            triggerType: string | null
+            triggerConfig: any
+            publishedAt: Date | null
+            createdAt: Date
+            updatedAt: Date
+          }>>`
+            SELECT 
+              id, "practiceId", name, description, "isActive", "triggerType", "triggerConfig",
+              "published_at" as "publishedAt", "createdAt", "updatedAt"
+            FROM workflows
+            WHERE id = ${workflowId} AND "practiceId" = ${user.practiceId}
+          `
+          if (updated.length === 0) {
+            throw new Error('Workflow not found')
+          }
+          workflow = updated[0] as any
+        } else {
+          throw error
+        }
+      }
 
       // Create new steps
       if (steps && steps.length > 0) {
