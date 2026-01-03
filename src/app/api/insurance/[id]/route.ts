@@ -13,10 +13,18 @@ export async function PATCH(
     const user = await requireAuth(req)
     const body = await req.json()
 
+    if (!user.practiceId) {
+      return NextResponse.json(
+        { error: 'Practice ID is required for this operation' },
+        { status: 400 }
+      )
+    }
+    const practiceId = user.practiceId
+
     const existing = await prisma.insurancePolicy.findFirst({
       where: {
         id,
-        practiceId: user.practiceId,
+        practiceId: practiceId,
       },
     })
 
@@ -32,7 +40,7 @@ export async function PATCH(
     })
 
     await createAuditLog({
-      practiceId: user.practiceId,
+      practiceId: practiceId,
       userId: user.id,
       action: 'update',
       resourceType: 'insurance',
@@ -63,10 +71,18 @@ export async function DELETE(
     const { id } = await params
     const user = await requireAuth(req)
 
+    if (!user.practiceId) {
+      return NextResponse.json(
+        { error: 'Practice ID is required for this operation' },
+        { status: 400 }
+      )
+    }
+    const practiceId = user.practiceId
+
     const existing = await prisma.insurancePolicy.findFirst({
       where: {
         id,
-        practiceId: user.practiceId,
+        practiceId: practiceId,
       },
     })
 
@@ -79,7 +95,7 @@ export async function DELETE(
     })
 
     await createAuditLog({
-      practiceId: user.practiceId,
+      practiceId: practiceId,
       userId: user.id,
       action: 'delete',
       resourceType: 'insurance',

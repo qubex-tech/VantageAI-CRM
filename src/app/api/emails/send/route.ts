@@ -27,9 +27,17 @@ export async function POST(req: NextRequest) {
     }
 
     // Get SendGrid client for this practice
+    if (!user.practiceId) {
+      return NextResponse.json(
+        { error: 'Practice ID is required for this operation' },
+        { status: 400 }
+      )
+    }
+    const practiceId = user.practiceId
+    
     let sendgridClient
     try {
-      sendgridClient = await getSendgridClient(user.practiceId)
+      sendgridClient = await getSendgridClient(practiceId)
     } catch (error) {
       const errorMessage = error instanceof Error 
         ? error.message 
@@ -75,7 +83,7 @@ export async function POST(req: NextRequest) {
         console.log('[EMAIL SEND] Looking up patient by email:', to)
         const patient = await prisma.patient.findFirst({
           where: {
-            practiceId: user.practiceId,
+            practiceId: practiceId,
             email: to,
             deletedAt: null,
           },

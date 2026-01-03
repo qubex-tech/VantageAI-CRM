@@ -45,6 +45,27 @@ export default async function DashboardPage() {
     redirect('/login?error=User account not found.')
   }
 
+  // Practice-specific feature - require practiceId
+  if (!user.practiceId) {
+    // For Vantage Admins without practiceId, show empty dashboard
+    return (
+      <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
+        <div className="mb-8">
+          <h1 className="text-2xl font-semibold text-gray-900 mb-1">Dashboard</h1>
+          <p className="text-sm text-gray-500">Welcome back, {user.name || 'User'}</p>
+        </div>
+        <div className="space-y-6">
+          <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+            <p className="text-sm text-gray-600">
+              As a Vantage Admin, you can manage practices from the Settings page.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+  const practiceId = user.practiceId
+
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const tomorrow = new Date(today)
@@ -53,7 +74,7 @@ export default async function DashboardPage() {
   // Get today's appointments
   const appointments = await prisma.appointment.findMany({
     where: {
-      practiceId: user.practiceId,
+      practiceId: practiceId,
       startTime: {
         gte: today,
         lt: tomorrow,
@@ -80,7 +101,7 @@ export default async function DashboardPage() {
   // Get recent patients
   const recentPatients = await prisma.patient.findMany({
     where: {
-      practiceId: user.practiceId,
+      practiceId: practiceId,
       deletedAt: null,
     },
     orderBy: {

@@ -9,13 +9,22 @@ import { bookAppointment as bookAppointmentAction } from '@/lib/agentActions'
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req)
+    
+    if (!user.practiceId) {
+      return NextResponse.json(
+        { error: 'Practice ID is required for this operation' },
+        { status: 400 }
+      )
+    }
+    const practiceId = user.practiceId
+    
     const searchParams = req.nextUrl.searchParams
     const date = searchParams.get('date')
     const status = searchParams.get('status')
     const patientId = searchParams.get('patientId')
 
     const where: any = {
-      practiceId: user.practiceId,
+      practiceId: practiceId,
     }
 
     if (date) {
@@ -65,6 +74,15 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req)
+    
+    if (!user.practiceId) {
+      return NextResponse.json(
+        { error: 'Practice ID is required for this operation' },
+        { status: 400 }
+      )
+    }
+    const practiceId = user.practiceId
+    
     const body = await req.json()
 
     // Check if this is a booking request (with Cal.com integration)
@@ -72,7 +90,7 @@ export async function POST(req: NextRequest) {
       const bookingParams = bookAppointmentSchema.parse(body)
       
       const result = await bookAppointmentAction(
-        user.practiceId,
+        practiceId,
         bookingParams.patientId,
         bookingParams.eventTypeId,
         bookingParams.startTime,
@@ -103,7 +121,7 @@ export async function POST(req: NextRequest) {
       }
 
       await createAuditLog({
-        practiceId: user.practiceId,
+        practiceId: practiceId,
         userId: user.id,
         action: 'create',
         resourceType: 'appointment',
@@ -120,7 +138,7 @@ export async function POST(req: NextRequest) {
     const appointment = await prisma.appointment.create({
       data: {
         ...validated,
-        practiceId: user.practiceId,
+        practiceId: practiceId,
       },
       include: {
         patient: {
@@ -135,7 +153,7 @@ export async function POST(req: NextRequest) {
     })
 
     await createAuditLog({
-      practiceId: user.practiceId,
+      practiceId: practiceId,
       userId: user.id,
       action: 'create',
       resourceType: 'appointment',

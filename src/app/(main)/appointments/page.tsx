@@ -43,9 +43,30 @@ export default async function AppointmentsPage({
   const date = params.date ? new Date(params.date) : null
   const status = params.status
 
+  // Practice-specific feature - require practiceId
+  if (!user.practiceId) {
+    // If no practiceId, return empty appointments list
+    return (
+      <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
+        <div className="mb-8">
+          <h1 className="text-2xl font-semibold text-gray-900 mb-1">Appointments</h1>
+          <p className="text-sm text-gray-500">
+            {date ? format(date, 'MMMM d, yyyy') : 'Upcoming appointments'}
+          </p>
+        </div>
+        <Card className="border border-gray-200">
+          <CardContent className="py-12 text-center">
+            <p className="text-sm text-gray-500">No appointments scheduled</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+  const practiceId = user.practiceId
+
   // Fetch local appointments from database
   const where: any = {
-    practiceId: user.practiceId,
+    practiceId: practiceId,
   }
 
   // If a specific date is provided, filter to that day
@@ -91,49 +112,49 @@ export default async function AppointmentsPage({
   // Fetch Cal.com bookings and merge with local appointments
   let calBookings: any[] = []
   try {
-    const calClient = await getCalClient(user.practiceId)
-    
-    // Build query params for Cal.com API
-    const calParams: any = {
-      sortStart: 'asc',
-      take: 100, // Get up to 100 bookings
-    }
-    
-    // Map status filter if provided
-    if (status) {
-      const statusMap: Record<string, string[]> = {
-        'scheduled': ['upcoming'],
-        'confirmed': ['upcoming'],
-        'cancelled': ['cancelled'],
-        'completed': ['past'],
+    const calClient = await getCalClient(practiceId)
+      
+      // Build query params for Cal.com API
+      const calParams: any = {
+        sortStart: 'asc',
+        take: 100, // Get up to 100 bookings
       }
-      if (statusMap[status]) {
-        calParams.status = statusMap[status]
+      
+      // Map status filter if provided
+      if (status) {
+        const statusMap: Record<string, string[]> = {
+          'scheduled': ['upcoming'],
+          'confirmed': ['upcoming'],
+          'cancelled': ['cancelled'],
+          'completed': ['past'],
+        }
+        if (statusMap[status]) {
+          calParams.status = statusMap[status]
+        }
+      } else {
+        // Default to upcoming if no date filter
+        if (!date) {
+          calParams.status = ['upcoming']
+        }
       }
-    } else {
-      // Default to upcoming if no date filter
-      if (!date) {
-        calParams.status = ['upcoming']
+      
+      // Add date filters if provided
+      if (date) {
+        const startOfDay = new Date(date)
+        startOfDay.setHours(0, 0, 0, 0)
+        const endOfDay = new Date(date)
+        endOfDay.setHours(23, 59, 59, 999)
+        calParams.afterStart = startOfDay.toISOString()
+        calParams.beforeEnd = endOfDay.toISOString()
+      } else {
+        // Only show upcoming bookings if no date filter
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        calParams.afterStart = today.toISOString()
       }
-    }
-    
-    // Add date filters if provided
-    if (date) {
-      const startOfDay = new Date(date)
-      startOfDay.setHours(0, 0, 0, 0)
-      const endOfDay = new Date(date)
-      endOfDay.setHours(23, 59, 59, 999)
-      calParams.afterStart = startOfDay.toISOString()
-      calParams.beforeEnd = endOfDay.toISOString()
-    } else {
-      // Only show upcoming bookings if no date filter
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      calParams.afterStart = today.toISOString()
-    }
-    
-    const bookingsResponse = await calClient.getBookings(calParams)
-    calBookings = bookingsResponse.data || []
+      
+      const bookingsResponse = await calClient.getBookings(calParams)
+      calBookings = bookingsResponse.data || []
   } catch (error) {
     // If Cal.com is not configured or fails, just use local appointments
     console.error('Error fetching Cal.com bookings:', error)
@@ -156,8 +177,8 @@ export default async function AppointmentsPage({
       // Sync booking to patient record (find or create, merge info, add timeline)
       let syncResult = null
       try {
-        console.log(`[AppointmentsPage] Syncing booking ${booking.uid || booking.id} to patient for practice ${user.practiceId}`)
-        syncResult = await syncBookingToPatient(user.practiceId, booking, user.id)
+        console.log(`[AppointmentsPage] Syncing booking ${booking.uid || booking.id} to patient for practice ${practiceId}`)
+        syncResult = await syncBookingToPatient(practiceId, booking, user.id)
         console.log(`[AppointmentsPage] Sync result:`, { patientId: syncResult.patientId, isNew: syncResult.isNew })
       } catch (error) {
         // Log error but don't fail the entire page load
@@ -184,7 +205,7 @@ export default async function AppointmentsPage({
         if (attendeeEmail) {
           patient = await prisma.patient.findFirst({
             where: {
-              practiceId: user.practiceId,
+              practiceId: practiceId,
               email: attendeeEmail,
               deletedAt: null,
             },

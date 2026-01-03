@@ -34,6 +34,29 @@ export default async function WorkflowsPage() {
       redirect('/login?error=User account not found.')
     }
 
+    // Practice-specific feature - require practiceId
+    if (!user.practiceId) {
+      // Return empty workflows list for users without practiceId
+      return (
+        <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h1 className="text-2xl font-semibold text-gray-900 mb-1">Workflows</h1>
+              <p className="text-sm text-gray-500">Create automations to streamline your practice</p>
+            </div>
+            <Link href="/automations/workflows/new">
+              <Button className="bg-gray-900 hover:bg-gray-800 text-white font-medium">
+                <Plus className="mr-2 h-4 w-4" />
+                New workflow
+              </Button>
+            </Link>
+          </div>
+          <WorkflowsTable workflows={[]} />
+        </div>
+      )
+    }
+    const practiceId = user.practiceId
+
     // Fetch workflows from database with runs data
     // Use raw query as workaround for publishedAt column sync issue
     let workflows: Array<{
@@ -54,7 +77,7 @@ export default async function WorkflowsPage() {
     try {
       workflows = await prisma.workflow.findMany({
         where: {
-          practiceId: user.practiceId,
+          practiceId: practiceId,
         },
         include: {
           steps: {
@@ -105,7 +128,7 @@ export default async function WorkflowsPage() {
             id, "practiceId", name, description, "isActive", "triggerType", "triggerConfig",
             "published_at" as "publishedAt", "createdAt", "updatedAt"
           FROM workflows
-          WHERE "practiceId" = ${user.practiceId}
+          WHERE "practiceId" = ${practiceId}
           ORDER BY "updatedAt" DESC
         `
         
@@ -163,7 +186,7 @@ export default async function WorkflowsPage() {
     try {
       auditLogs = await prisma.auditLog.findMany({
         where: {
-          practiceId: user.practiceId,
+          practiceId: practiceId,
           resourceType: 'workflow',
           resourceId: { in: workflowIds },
           action: 'create',

@@ -40,6 +40,12 @@ export default async function AppointmentDetailPage({
     redirect('/login?error=User account not found.')
   }
 
+  // Practice-specific feature - require practiceId
+  if (!user.practiceId) {
+    notFound()
+  }
+  const practiceId = user.practiceId
+
   // Check if this is a Cal.com booking (ID starts with "cal-")
   const isCalBooking = id.startsWith('cal-')
   let appointment: any = null
@@ -51,7 +57,7 @@ export default async function AppointmentDetailPage({
     
     try {
       // Fetch the booking from Cal.com API
-      const calClient = await getCalClient(user.practiceId)
+      const calClient = await getCalClient(practiceId)
       // Try to find by UID first, then by ID if UID doesn't work
       let bookingsResponse = await calClient.getBookings({
         bookingUid: bookingIdentifier,
@@ -80,7 +86,7 @@ export default async function AppointmentDetailPage({
       
       // Sync booking to patient record (find or create, merge info, add timeline)
       try {
-        await syncBookingToPatient(user.practiceId, calBooking, user.id)
+        await syncBookingToPatient(practiceId, calBooking, user.id)
       } catch (error) {
         // Log error but don't fail the page load
         console.error(`Error syncing booking ${calBooking.uid || calBooking.id} to patient:`, error)
@@ -94,7 +100,7 @@ export default async function AppointmentDetailPage({
     appointment = await prisma.appointment.findFirst({
       where: {
         id,
-        practiceId: user.practiceId,
+        practiceId: practiceId,
       },
       include: {
         patient: true,
@@ -116,7 +122,7 @@ export default async function AppointmentDetailPage({
     if (attendeeEmail) {
       const patient = await prisma.patient.findFirst({
         where: {
-          practiceId: user.practiceId,
+          practiceId: practiceId,
           email: attendeeEmail,
           deletedAt: null,
         },
@@ -131,7 +137,7 @@ export default async function AppointmentDetailPage({
     if (!calBooking.patient && attendeePhone) {
       const patient = await prisma.patient.findFirst({
         where: {
-          practiceId: user.practiceId,
+          practiceId: practiceId,
           phone: attendeePhone,
           deletedAt: null,
         },
@@ -146,7 +152,7 @@ export default async function AppointmentDetailPage({
     if (!calBooking.patient && attendeeName) {
       const patient = await prisma.patient.findFirst({
         where: {
-          practiceId: user.practiceId,
+          practiceId: practiceId,
           name: {
             contains: attendeeName,
             mode: 'insensitive',

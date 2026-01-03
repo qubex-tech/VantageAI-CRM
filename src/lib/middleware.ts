@@ -46,11 +46,19 @@ export async function requireAuth(req?: NextRequest) {
   // Fallback to NextAuth
   const session = await getSession()
   
-  if (!session?.user?.practiceId) {
+  if (!session?.user) {
     throw new Error('Unauthorized')
   }
   
-  return session.user
+  // Vantage admin users may have null practiceId, others must have a practiceId
+  if (session.user.role !== 'vantage_admin' && !session.user.practiceId) {
+    throw new Error('Unauthorized')
+  }
+  
+  return {
+    ...session.user,
+    practiceId: session.user.practiceId || null, // Ensure it's explicitly null if undefined
+  }
 }
 
 /**

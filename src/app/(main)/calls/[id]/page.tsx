@@ -37,20 +37,26 @@ export default async function CallDetailPage({
     redirect('/login?error=User account not found.')
   }
 
+  // Practice-specific feature - require practiceId
+  if (!user.practiceId) {
+    notFound()
+  }
+  const practiceId = user.practiceId
+
   // Fetch call details from RetellAI API
   let call: RetellCall | null = null
   let error: string | null = null
 
   try {
     const { getRetellClient } = await import('@/lib/retell-api')
-    const retellClient = await getRetellClient(user.practiceId)
+    const retellClient = await getRetellClient(practiceId)
     call = await retellClient.getCall(callId)
 
     // Process call data to extract patient information and create/update patient
     if (call) {
       try {
         const { processRetellCallData } = await import('@/lib/process-call-data')
-        const result = await processRetellCallData(user.practiceId, call, user.id)
+        const result = await processRetellCallData(practiceId, call, user.id)
         console.log('[Call Detail Page] Patient processing completed:', result)
       } catch (processError) {
         // Log but don't fail the page load if processing fails

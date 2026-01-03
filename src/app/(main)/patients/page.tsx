@@ -39,11 +39,28 @@ export default async function PatientsPage({
     redirect('/login?error=User account not found.')
   }
 
+  // Practice-specific feature - require practiceId
+  if (!user.practiceId) {
+    // Return empty patients list for users without practiceId
+    return (
+      <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
+        <div className="mb-8">
+          <h1 className="text-2xl font-semibold text-gray-900 mb-1">Patients</h1>
+          <p className="text-sm text-gray-500">Patient directory</p>
+        </div>
+        <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+          <p className="text-sm text-gray-600">No patients available.</p>
+        </div>
+      </div>
+    )
+  }
+  const practiceId = user.practiceId
+
   const search = params.search || ''
 
   const patients = await prisma.patient.findMany({
     where: {
-      practiceId: user.practiceId,
+      practiceId: practiceId,
       deletedAt: null,
       OR: search
         ? [

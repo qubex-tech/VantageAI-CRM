@@ -36,10 +36,16 @@ export default async function PatientDetailPage({
     redirect('/login?error=User account not found.')
   }
 
+  // Practice-specific feature - require practiceId
+  if (!user.practiceId) {
+    notFound()
+  }
+  const practiceId = user.practiceId
+
   const patient = await prisma.patient.findFirst({
     where: {
       id,
-      practiceId: user.practiceId,
+      practiceId: practiceId,
       deletedAt: null,
     },
     include: {
@@ -66,13 +72,13 @@ export default async function PatientDetailPage({
   // Debug: Log appointments count
   console.log('[PatientDetailPage] Patient appointments count:', patient.appointments?.length || 0)
   console.log('[PatientDetailPage] Patient ID:', patient.id)
-  console.log('[PatientDetailPage] Practice ID:', user.practiceId)
+  console.log('[PatientDetailPage] Practice ID:', practiceId)
   
   // Also verify appointments exist for this patient directly
   const directAppointmentCount = await prisma.appointment.count({
     where: {
       patientId: patient.id,
-      practiceId: user.practiceId,
+      practiceId: practiceId,
     },
   })
   console.log('[PatientDetailPage] Direct appointment count query:', directAppointmentCount)

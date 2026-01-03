@@ -16,10 +16,18 @@ export async function GET(
   try {
     const user = await requireAuth(req)
 
+    if (!user.practiceId) {
+      return NextResponse.json(
+        { error: 'Practice ID is required for this operation' },
+        { status: 400 }
+      )
+    }
+    const practiceId = user.practiceId
+
     const patient = await prisma.patient.findFirst({
       where: {
         id,
-        practiceId: user.practiceId,
+        practiceId: practiceId,
         deletedAt: null,
       },
       include: {
@@ -58,11 +66,19 @@ export async function PATCH(
     const { id } = await params
     const body = await req.json()
 
+    if (!user.practiceId) {
+      return NextResponse.json(
+        { error: 'Practice ID is required for this operation' },
+        { status: 400 }
+      )
+    }
+    const practiceId = user.practiceId
+
     // Get existing patient
     const existing = await prisma.patient.findFirst({
       where: {
         id,
-        practiceId: user.practiceId,
+        practiceId: practiceId,
         deletedAt: null,
       },
     })
@@ -117,7 +133,7 @@ export async function PATCH(
     }
 
     await createAuditLog({
-      practiceId: user.practiceId,
+      practiceId: practiceId,
       userId: user.id,
       action: 'update',
       resourceType: 'patient',
@@ -157,10 +173,18 @@ export async function DELETE(
     const user = await requireAuth(req)
     const { id } = await params
 
+    if (!user.practiceId) {
+      return NextResponse.json(
+        { error: 'Practice ID is required for this operation' },
+        { status: 400 }
+      )
+    }
+    const practiceId = user.practiceId
+
     const existing = await prisma.patient.findFirst({
       where: {
         id,
-        practiceId: user.practiceId,
+        practiceId: practiceId,
         deletedAt: null,
       },
     })
@@ -176,7 +200,7 @@ export async function DELETE(
     })
 
     await createAuditLog({
-      practiceId: user.practiceId,
+      practiceId: practiceId,
       userId: user.id,
       action: 'delete',
       resourceType: 'patient',

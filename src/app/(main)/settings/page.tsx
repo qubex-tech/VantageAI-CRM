@@ -2,9 +2,12 @@ import { redirect } from 'next/navigation'
 import { getSupabaseSession } from '@/lib/auth-supabase'
 import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
 import { prisma } from '@/lib/db'
+import { isVantageAdmin, canConfigureAPIs } from '@/lib/permissions'
 import { CalSettings } from '@/components/settings/CalSettings'
 import { RetellSettings } from '@/components/settings/RetellSettings'
 import { SendgridSettings } from '@/components/settings/SendgridSettings'
+import { PracticeManagement } from '@/components/settings/PracticeManagement'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,27 +36,50 @@ export default async function SettingsPage() {
     redirect('/login?error=User account not found.')
   }
 
-  const calIntegration = await prisma.calIntegration.findUnique({
-    where: { practiceId: user.practiceId },
-    include: {
-      eventTypeMappings: true,
-    },
-  })
-
-  const retellIntegration = await prisma.retellIntegration.findUnique({
-    where: { practiceId: user.practiceId },
-  })
-
-  // Fetch SendGrid integration, handle gracefully if table doesn't exist yet
-  let sendgridIntegration = null
-  try {
-    sendgridIntegration = await prisma.sendgridIntegration.findUnique({
-      where: { practiceId: user.practiceId },
-    })
-  } catch (error) {
-    // Table might not exist if migration hasn't been run yet
-    console.error('Error fetching SendGrid integration (table may not exist):', error)
+  const userForPermissions = {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    practiceId: user.practiceId,
+    role: user.role,
   }
+
+  const isVantageAdminUser = isVantageAdmin(userForPermissions)
+  const canConfigureAPI = canConfigureAPIs(userForPermissions)
+
+  // Only fetch integrations if user can configure APIs or has a practice
+  let calIntegration = null
+  let retellIntegration = null
+  let sendgridIntegration = null
+
+  if (user.practiceId) {
+    const practiceId = user.practiceId
+    calIntegration = await prisma.calIntegration.findUnique({
+      where: { practiceId: practiceId },
+      include: {
+        eventTypeMappings: true,
+      },
+    })
+
+    retellIntegration = await prisma.retellIntegration.findUnique({
+      where: { practiceId: practiceId },
+    })
+
+    // Fetch SendGrid integration, handle gracefully if table doesn't exist yet
+    try {
+      sendgridIntegration = await prisma.sendgridIntegration.findUnique({
+        where: { practiceId: practiceId },
+      })
+    } catch (error) {
+      // Table might not exist if migration hasn't been run yet
+      console.error('Error fetching SendGrid integration (table may not exist):', error)
+    }
+  }
+
+  // Determine default tab
+  const hasVantageAdminTab = isVantageAdminUser
+  const hasApiTab = canConfigureAPI && user.practiceId
+  const defaultTab = hasVantageAdminTab ? "vantage-admin" : hasApiTab ? "api" : undefined
 
   return (
     <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8 max-w-4xl">
@@ -62,16 +88,48 @@ export default async function SettingsPage() {
         <p className="text-sm text-gray-500">Manage your practice settings</p>
       </div>
 
-      <div className="space-y-6">
-        <CalSettings 
-          initialIntegration={calIntegration} 
-          initialMappings={calIntegration?.eventTypeMappings || []}
-        />
+      {(hasVantageAdminTab || hasApiTab) ? (
+        <Tabs defaultValue={defaultTab} className="w-full">
+          <TabsList>
+            {hasVantageAdminTab && (
+              <TabsTrigger value="vantage-admin">Vantage Admin</TabsTrigger>
+            )}
+            {hasApiTab && (
+              <TabsTrigger value="api">API Configuration</TabsTrigger>
+            )}
+          </TabsList>
 
-        <RetellSettings initialIntegration={retellIntegration} />
+          {/* Vantage Admin Tab - Only visible to Vantage Admins */}
+          {hasVantageAdminTab && (
+            <TabsContent value="vantage-admin" className="mt-6">
+              <PracticeManagement />
+            </TabsContent>
+          )}
 
-        <SendgridSettings initialIntegration={sendgridIntegration} />
-      </div>
+          {/* API Configuration Tab */}
+          {hasApiTab && (
+            <TabsContent value="api" className="mt-6">
+              <div className="space-y-6">
+                <CalSettings 
+                  initialIntegration={calIntegration} 
+                  initialMappings={calIntegration?.eventTypeMappings || []}
+                />
+
+                <RetellSettings initialIntegration={retellIntegration} />
+
+                <SendgridSettings initialIntegration={sendgridIntegration} />
+              </div>
+            </TabsContent>
+          )}
+        </Tabs>
+      ) : (
+        /* For non-Vantage Admins without practice, show a message */
+        <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+          <p className="text-sm text-gray-600">
+            API configuration is only available to Vantage Administrators. Contact your administrator for API setup.
+          </p>
+        </div>
+      )}
     </div>
   )
 }

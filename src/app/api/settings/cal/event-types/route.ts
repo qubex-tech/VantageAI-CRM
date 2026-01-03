@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     const shouldFetch = searchParams.get('fetch') === 'true'
 
     const mappings = await prisma.calEventTypeMapping.findMany({
-      where: { practiceId: user.practiceId },
+      where: { practiceId: practiceId },
       include: {
         calIntegration: {
           select: {
@@ -28,6 +28,9 @@ export async function GET(req: NextRequest) {
 
     // If fetch=true, also get event types from Cal.com
     if (shouldFetch) {
+      if (!user.practiceId) {
+        return NextResponse.json({ mappings })
+      }
       try {
         const calClient = await getCalClient(user.practiceId)
         const eventTypes = await calClient.getEventTypes()
@@ -64,7 +67,7 @@ export async function POST(req: NextRequest) {
 
     // Verify integration exists
     const integration = await prisma.calIntegration.findUnique({
-      where: { practiceId: user.practiceId },
+      where: { practiceId: practiceId },
     })
 
     if (!integration) {
@@ -73,7 +76,7 @@ export async function POST(req: NextRequest) {
 
     const mapping = await prisma.calEventTypeMapping.create({
       data: {
-        practiceId: user.practiceId,
+        practiceId: practiceId,
         calIntegrationId: integration.id,
         visitTypeName: validated.visitTypeName,
         calEventTypeId: validated.calEventTypeId,

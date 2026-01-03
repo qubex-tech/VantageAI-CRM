@@ -9,6 +9,14 @@ export async function POST(req: NextRequest) {
     const user = await requireAuth(req)
     const body = await req.json()
 
+    if (!user.practiceId) {
+      return NextResponse.json(
+        { error: 'Practice ID is required for this operation' },
+        { status: 400 }
+      )
+    }
+    const practiceId = user.practiceId
+
     const validated = insurancePolicySchema.parse(body)
     const { patientId } = body
 
@@ -20,7 +28,7 @@ export async function POST(req: NextRequest) {
     const patient = await prisma.patient.findFirst({
       where: {
         id: patientId,
-        practiceId: user.practiceId,
+        practiceId: practiceId,
         deletedAt: null,
       },
     })
@@ -32,13 +40,13 @@ export async function POST(req: NextRequest) {
     const policy = await prisma.insurancePolicy.create({
       data: {
         ...validated,
-        practiceId: user.practiceId,
+        practiceId: practiceId,
         patientId,
       },
     })
 
     await createAuditLog({
-      practiceId: user.practiceId,
+      practiceId: practiceId,
       userId: user.id,
       action: 'create',
       resourceType: 'insurance',

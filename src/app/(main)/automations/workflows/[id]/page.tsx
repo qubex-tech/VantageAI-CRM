@@ -35,13 +35,19 @@ export default async function EditWorkflowPage({
     redirect('/login?error=User account not found.')
   }
 
+  // Practice-specific feature - require practiceId
+  if (!user.practiceId) {
+    notFound()
+  }
+  const practiceId = user.practiceId
+
   // Fetch workflow - use raw query workaround if Prisma Client is out of sync
   let workflow
   try {
     workflow = await prisma.workflow.findFirst({
       where: {
         id,
-        practiceId: user.practiceId,
+        practiceId: practiceId,
       },
       include: {
         steps: {
@@ -71,7 +77,7 @@ export default async function EditWorkflowPage({
           id, "practiceId", name, description, "isActive", "triggerType", "triggerConfig",
           "published_at" as "publishedAt", "createdAt", "updatedAt"
         FROM workflows
-        WHERE id = ${id} AND "practiceId" = ${user.practiceId}
+        WHERE id = ${id} AND "practiceId" = ${practiceId}
         LIMIT 1
       `
       
@@ -117,7 +123,7 @@ export default async function EditWorkflowPage({
         <p className="text-sm text-gray-500">Build automations to streamline your practice</p>
       </div>
       <WorkflowEditor 
-        practiceId={user.practiceId} 
+        practiceId={practiceId} 
         workflowId={workflow.id}
         initialWorkflow={workflow}
       />

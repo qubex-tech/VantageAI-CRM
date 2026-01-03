@@ -51,6 +51,15 @@ async function processCallsInBackground(
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req)
+    
+    if (!user.practiceId) {
+      return NextResponse.json(
+        { error: 'Practice ID is required for this operation' },
+        { status: 400 }
+      )
+    }
+    const practiceId = user.practiceId
+    
     const searchParams = req.nextUrl.searchParams
     
     const agentId = searchParams.get('agentId') || undefined
@@ -66,7 +75,7 @@ export async function GET(req: NextRequest) {
       ? parseInt(searchParams.get('endTimestamp')!)
       : undefined
 
-    const retellClient = await getRetellClient(user.practiceId)
+    const retellClient = await getRetellClient(practiceId)
     const result = await retellClient.listCalls({
       agentId,
       limit,
@@ -85,7 +94,7 @@ export async function GET(req: NextRequest) {
     if (shouldProcess && calls.length > 0) {
       // Process calls asynchronously without blocking the response
       // Fire and forget - the user gets the data immediately
-      processCallsInBackground(user.practiceId, calls, retellClient, user.id).catch(err => {
+      processCallsInBackground(practiceId, calls, retellClient, user.id).catch(err => {
         console.error('[Calls API] Background processing error:', err)
       })
     }

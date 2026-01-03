@@ -21,7 +21,15 @@ export async function GET(
       )
     }
 
-    const retellClient = await getRetellClient(user.practiceId)
+    if (!user.practiceId) {
+      return NextResponse.json(
+        { error: 'Practice ID is required for this operation' },
+        { status: 400 }
+      )
+    }
+    const practiceId = user.practiceId
+
+    const retellClient = await getRetellClient(practiceId)
     const call = await retellClient.getCall(callId)
 
     return NextResponse.json({ call })

@@ -45,6 +45,13 @@ export default async function CallsPage({
     redirect('/login?error=User account not found.')
   }
 
+  // Practice-specific feature - require practiceId
+  if (!user.practiceId) {
+    // Return empty calls list for users without practiceId - redirect to dashboard instead
+    redirect('/dashboard')
+  }
+  const practiceId = user.practiceId
+
   // Fetch calls from RetellAI API via our API route
   let calls: RetellCallListItem[] = []
   let error: string | null = null
@@ -57,7 +64,7 @@ export default async function CallsPage({
     // Get API key from database (per-practice configuration)
     try {
       const { getRetellClient } = await import('@/lib/retell-api')
-      const retellClient = await getRetellClient(user.practiceId)
+      const retellClient = await getRetellClient(practiceId)
       const result = await retellClient.listCalls({
         agentId,
         limit,

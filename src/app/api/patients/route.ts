@@ -8,13 +8,22 @@ import { tenantScope } from '@/lib/db'
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req)
+    
+    if (!user.practiceId) {
+      return NextResponse.json(
+        { error: 'Practice ID is required for this operation' },
+        { status: 400 }
+      )
+    }
+    const practiceId = user.practiceId
+    
     const searchParams = req.nextUrl.searchParams
     const search = searchParams.get('search') || ''
     const limit = parseInt(searchParams.get('limit') || '50')
 
     const patients = await prisma.patient.findMany({
       where: {
-        practiceId: user.practiceId,
+        practiceId: practiceId,
         deletedAt: null,
         OR: search
           ? [
@@ -49,6 +58,15 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req)
+    
+    if (!user.practiceId) {
+      return NextResponse.json(
+        { error: 'Practice ID is required for this operation' },
+        { status: 400 }
+      )
+    }
+    const practiceId = user.practiceId
+    
     const body = await req.json()
 
     const validated = patientSchema.parse(body)
@@ -56,7 +74,7 @@ export async function POST(req: NextRequest) {
     const patient = await prisma.patient.create({
       data: {
         ...validated,
-        practiceId: user.practiceId,
+        practiceId: practiceId,
         tags: validated.tags
           ? {
               create: validated.tags.map((tag) => ({ tag })),
@@ -69,7 +87,7 @@ export async function POST(req: NextRequest) {
     })
 
     await createAuditLog({
-      practiceId: user.practiceId,
+      practiceId: practiceId,
       userId: user.id,
       action: 'create',
       resourceType: 'patient',

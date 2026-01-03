@@ -8,6 +8,14 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req)
+    
+    if (!user.practiceId) {
+      return NextResponse.json(
+        { error: 'Practice ID is required for this operation' },
+        { status: 400 }
+      )
+    }
+    
     const searchParams = req.nextUrl.searchParams
 
     const params = {

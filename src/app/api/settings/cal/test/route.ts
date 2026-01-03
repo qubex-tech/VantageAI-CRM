@@ -11,6 +11,13 @@ export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req)
 
+    if (!user.practiceId) {
+      return NextResponse.json(
+        { success: false, message: 'Practice ID is required for this operation' },
+        { status: 400 }
+      )
+    }
+
     const calClient = await getCalClient(user.practiceId)
     const isValid = await calClient.testConnection()
 
