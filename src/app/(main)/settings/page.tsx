@@ -7,6 +7,7 @@ import { CalSettings } from '@/components/settings/CalSettings'
 import { RetellSettings } from '@/components/settings/RetellSettings'
 import { SendgridSettings } from '@/components/settings/SendgridSettings'
 import { PracticeManagement } from '@/components/settings/PracticeManagement'
+import { PracticeAPIConfiguration } from '@/components/settings/PracticeAPIConfiguration'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 
 export const dynamic = 'force-dynamic'
@@ -78,8 +79,9 @@ export default async function SettingsPage() {
 
   // Determine default tab
   const hasVantageAdminTab = isVantageAdminUser
+  const hasPracticeApiTab = isVantageAdminUser
   const hasApiTab = canConfigureAPI && user.practiceId
-  const defaultTab = hasVantageAdminTab ? "vantage-admin" : hasApiTab ? "api" : undefined
+  const defaultTab = hasVantageAdminTab ? "vantage-admin" : hasPracticeApiTab ? "practice-api" : hasApiTab ? "api" : undefined
 
   return (
     <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8 max-w-4xl">
@@ -88,11 +90,14 @@ export default async function SettingsPage() {
         <p className="text-sm text-gray-500">Manage your practice settings</p>
       </div>
 
-      {(hasVantageAdminTab || hasApiTab) ? (
+      {(hasVantageAdminTab || hasPracticeApiTab || hasApiTab) ? (
         <Tabs defaultValue={defaultTab} className="w-full">
           <TabsList>
             {hasVantageAdminTab && (
               <TabsTrigger value="vantage-admin">Vantage Admin</TabsTrigger>
+            )}
+            {hasPracticeApiTab && (
+              <TabsTrigger value="practice-api">Practice API Configuration</TabsTrigger>
             )}
             {hasApiTab && (
               <TabsTrigger value="api">API Configuration</TabsTrigger>
@@ -106,7 +111,14 @@ export default async function SettingsPage() {
             </TabsContent>
           )}
 
-          {/* API Configuration Tab */}
+          {/* Practice API Configuration Tab - Only visible to Vantage Admins */}
+          {hasPracticeApiTab && (
+            <TabsContent value="practice-api" className="mt-6">
+              <PracticeAPIConfiguration />
+            </TabsContent>
+          )}
+
+          {/* API Configuration Tab - For users with their own practice */}
           {hasApiTab && (
             <TabsContent value="api" className="mt-6">
               <div className="space-y-6">
