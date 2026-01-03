@@ -27,7 +27,8 @@ export async function syncSupabaseUserToPrisma(
 
     if (user) {
       // Verify practice still exists (in case it was deleted)
-      if (!user.practice) {
+      // Only check practice if user has a practiceId (not for Vantage Admins)
+      if (!user.practice && user.practiceId) {
         console.error(`User ${userEmail} exists but practice ${user.practiceId} is missing`)
         // Try to find or create a practice for this user
         let practice = await prisma.practice.findUnique({
