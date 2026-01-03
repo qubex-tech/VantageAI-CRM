@@ -15,8 +15,13 @@ export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req)
 
+    if (!user.practiceId) {
+      return NextResponse.json({ integration: null })
+    }
+    const practiceId = user.practiceId
+
     const integration = await prisma.retellIntegration.findUnique({
-      where: { practiceId: user.practiceId },
+      where: { practiceId: practiceId },
     })
 
     return NextResponse.json({ integration })
@@ -35,6 +40,14 @@ export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req)
     const body = await req.json()
+
+    if (!user.practiceId) {
+      return NextResponse.json(
+        { error: 'Practice ID is required for this operation' },
+        { status: 400 }
+      )
+    }
+    const practiceId = user.practiceId
 
     const validated = retellIntegrationSchema.parse(body)
 
@@ -55,9 +68,9 @@ export async function POST(req: NextRequest) {
 
     // Create or update integration
     const integration = await prisma.retellIntegration.upsert({
-      where: { practiceId: user.practiceId },
+      where: { practiceId: practiceId },
       create: {
-        practiceId: user.practiceId,
+        practiceId: practiceId,
         apiKey: validated.apiKey,
         agentId: validated.agentId,
         isActive: true,
