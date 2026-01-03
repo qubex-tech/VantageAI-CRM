@@ -10,6 +10,7 @@ export type AuditResourceType =
   | 'voice_conversation'
   | 'user'
   | 'workflow'
+  | 'practice'
 
 interface AuditLogParams {
   practiceId: string
