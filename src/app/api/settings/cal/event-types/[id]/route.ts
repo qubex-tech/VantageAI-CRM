@@ -10,10 +10,18 @@ export async function DELETE(
     const { id } = await params
     const user = await requireAuth(req)
 
+    if (!user.practiceId) {
+      return NextResponse.json(
+        { error: 'Practice ID is required for this operation' },
+        { status: 400 }
+      )
+    }
+    const practiceId = user.practiceId
+
     const mapping = await prisma.calEventTypeMapping.findFirst({
       where: {
         id,
-        practiceId: user.practiceId,
+        practiceId: practiceId,
       },
     })
 
