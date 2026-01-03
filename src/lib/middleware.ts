@@ -72,6 +72,13 @@ export async function withTenant<T>(
     try {
       const user = await requireAuth(req)
       
+      if (!user.practiceId) {
+        return NextResponse.json(
+          { error: 'Practice ID is required for this operation' },
+          { status: 400 }
+        ) as NextResponse<{ error: string }>
+      }
+      
       return NextResponse.json(
         await handler(req, { practiceId: user.practiceId, userId: user.id })
       )
