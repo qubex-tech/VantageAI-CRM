@@ -14,6 +14,11 @@ export async function GET(req: NextRequest) {
     const searchParams = req.nextUrl.searchParams
     const shouldFetch = searchParams.get('fetch') === 'true'
 
+    if (!user.practiceId) {
+      return NextResponse.json({ mappings: [] })
+    }
+    const practiceId = user.practiceId
+
     const mappings = await prisma.calEventTypeMapping.findMany({
       where: { practiceId: practiceId },
       include: {
@@ -62,6 +67,14 @@ export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req)
     const body = await req.json()
+
+    if (!user.practiceId) {
+      return NextResponse.json(
+        { error: 'Practice ID is required for this operation' },
+        { status: 400 }
+      )
+    }
+    const practiceId = user.practiceId
 
     const validated = calEventTypeMappingSchema.parse(body)
 
