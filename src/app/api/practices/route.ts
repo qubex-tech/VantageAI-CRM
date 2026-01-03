@@ -16,7 +16,14 @@ export async function GET(req: NextRequest) {
     const user = await requireAuth(req)
 
     // Only Vantage Admins can list all practices
-    if (!isVantageAdmin(user)) {
+    const userForPermissions = {
+      id: user.id,
+      email: user.email,
+      name: user.name ?? null,
+      practiceId: user.practiceId,
+      role: user.role,
+    }
+    if (!isVantageAdmin(userForPermissions)) {
       return NextResponse.json(
         { error: 'Unauthorized. Only Vantage Admins can view all practices.' },
         { status: 403 }
@@ -68,7 +75,14 @@ export async function POST(req: NextRequest) {
     const user = await requireAuth(req)
 
     // Only Vantage Admins can create practices
-    if (!isVantageAdmin(user)) {
+    const userForPermissions = {
+      id: user.id,
+      email: user.email,
+      name: user.name ?? null,
+      practiceId: user.practiceId,
+      role: user.role,
+    }
+    if (!isVantageAdmin(userForPermissions)) {
       return NextResponse.json(
         { error: 'Unauthorized. Only Vantage Admins can create practices.' },
         { status: 403 }
