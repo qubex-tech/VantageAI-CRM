@@ -13,10 +13,18 @@ export async function GET(
     const user = await requireAuth(req)
     const { id } = await params
 
+    if (!user.practiceId) {
+      return NextResponse.json(
+        { error: 'Practice ID is required for this operation' },
+        { status: 400 }
+      )
+    }
+    const practiceId = user.practiceId
+
     const workflow = await prisma.workflow.findFirst({
       where: {
         id,
-        practiceId: user.practiceId,
+        practiceId: practiceId,
       },
       include: {
         steps: {
@@ -56,13 +64,21 @@ export async function PATCH(
     const { id } = await params
     const body = await req.json()
 
+    if (!user.practiceId) {
+      return NextResponse.json(
+        { error: 'Practice ID is required for this operation' },
+        { status: 400 }
+      )
+    }
+    const practiceId = user.practiceId
+
     const { name, description, trigger, steps, isActive } = body
 
     // Get existing workflow to check if isActive is changing from false to true
     const existingWorkflow = await prisma.workflow.findFirst({
       where: {
         id,
-        practiceId: user.practiceId,
+        practiceId: practiceId,
       },
       select: {
         isActive: true,
@@ -97,7 +113,7 @@ export async function PATCH(
       workflow = await prisma.workflow.update({
         where: {
           id,
-          practiceId: user.practiceId,
+          practiceId: practiceId,
         },
         data: updateData,
       })
@@ -145,7 +161,7 @@ export async function PATCH(
         
         // Execute update using parameterized query
         const sql = `UPDATE workflows SET ${setClauses.join(', ')} WHERE id = $${paramIndex} AND "practiceId" = $${paramIndex + 1}`
-        params.push(id, user.practiceId)
+        params.push(id, practiceId)
         
         await prisma.$executeRawUnsafe(sql, ...params)
         
@@ -166,7 +182,7 @@ export async function PATCH(
             id, "practiceId", name, description, "isActive", "triggerType", "triggerConfig",
             "published_at" as "publishedAt", "createdAt", "updatedAt"
           FROM workflows
-          WHERE id = ${id} AND "practiceId" = ${user.practiceId}
+          WHERE id = ${id} AND "practiceId" = ${practiceId}
         `
         if (updated.length === 0) {
           throw new Error('Workflow not found')
@@ -232,7 +248,7 @@ export async function PATCH(
             id, "practiceId", name, description, "isActive", "triggerType", "triggerConfig",
             "published_at" as "publishedAt", "createdAt", "updatedAt"
           FROM workflows
-          WHERE id = ${id} AND "practiceId" = ${user.practiceId}
+          WHERE id = ${id} AND "practiceId" = ${practiceId}
         `
         
         if (workflowData.length === 0) {
@@ -273,10 +289,18 @@ export async function DELETE(
     const user = await requireAuth(req)
     const { id } = await params
 
+    if (!user.practiceId) {
+      return NextResponse.json(
+        { error: 'Practice ID is required for this operation' },
+        { status: 400 }
+      )
+    }
+    const practiceId = user.practiceId
+
     await prisma.workflow.delete({
       where: {
         id,
-        practiceId: user.practiceId,
+        practiceId: practiceId,
       },
     })
 

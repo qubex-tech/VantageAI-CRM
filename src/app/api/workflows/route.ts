@@ -9,9 +9,17 @@ export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req)
     
+    if (!user.practiceId) {
+      return NextResponse.json(
+        { error: 'Practice ID is required for this operation' },
+        { status: 400 }
+      )
+    }
+    const practiceId = user.practiceId
+    
     const workflows = await prisma.workflow.findMany({
       where: {
-        practiceId: user.practiceId,
+        practiceId: practiceId,
       },
       include: {
         steps: {
@@ -43,6 +51,14 @@ export async function POST(req: NextRequest) {
     const user = await requireAuth(req)
     const body = await req.json()
 
+    if (!user.practiceId) {
+      return NextResponse.json(
+        { error: 'Practice ID is required for this operation' },
+        { status: 400 }
+      )
+    }
+    const practiceId = user.practiceId
+
     const { name, description, trigger, steps, workflowId } = body
 
     if (!name) {
@@ -67,7 +83,7 @@ export async function POST(req: NextRequest) {
         workflow = await prisma.workflow.update({
           where: {
             id: workflowId,
-            practiceId: user.practiceId,
+            practiceId: practiceId,
           },
           data: {
             name,
@@ -114,7 +130,7 @@ export async function POST(req: NextRequest) {
           
           // Execute update using parameterized query
           const sql = `UPDATE workflows SET ${setClauses.join(', ')} WHERE id = $${paramIndex} AND "practiceId" = $${paramIndex + 1}`
-          params.push(workflowId, user.practiceId)
+          params.push(workflowId, practiceId)
           
           await prisma.$executeRawUnsafe(sql, ...params)
           
@@ -135,7 +151,7 @@ export async function POST(req: NextRequest) {
               id, "practiceId", name, description, "isActive", "triggerType", "triggerConfig",
               "published_at" as "publishedAt", "createdAt", "updatedAt"
             FROM workflows
-            WHERE id = ${workflowId} AND "practiceId" = ${user.practiceId}
+            WHERE id = ${workflowId} AND "practiceId" = ${practiceId}
           `
           if (updated.length === 0) {
             throw new Error('Workflow not found')
@@ -191,7 +207,7 @@ export async function POST(req: NextRequest) {
               id, "practiceId", name, description, "isActive", "triggerType", "triggerConfig",
               "published_at" as "publishedAt", "createdAt", "updatedAt"
             FROM workflows
-            WHERE id = ${workflow.id} AND "practiceId" = ${user.practiceId}
+            WHERE id = ${workflow.id} AND "practiceId" = ${practiceId}
           `
           
           if (workflowData.length === 0) {
@@ -221,7 +237,7 @@ export async function POST(req: NextRequest) {
       try {
         workflow = await prisma.workflow.create({
           data: {
-            practiceId: user.practiceId,
+            practiceId: practiceId,
             name,
             description: description || null,
             triggerType: trigger?.type || null,
@@ -241,7 +257,7 @@ export async function POST(req: NextRequest) {
               "createdAt", "updatedAt"
             )
             VALUES (
-              gen_random_uuid()::text, ${user.practiceId}, ${name}, ${description || null},
+              gen_random_uuid()::text, ${practiceId}, ${name}, ${description || null},
               false, ${trigger?.type || null}, ${JSON.stringify(trigger || null)}::jsonb,
               NOW(), NOW()
             )
@@ -338,7 +354,7 @@ export async function POST(req: NextRequest) {
               id, "practiceId", name, description, "isActive", "triggerType", "triggerConfig",
               "published_at" as "publishedAt", "createdAt", "updatedAt"
             FROM workflows
-            WHERE id = ${workflow.id} AND "practiceId" = ${user.practiceId}
+            WHERE id = ${workflow.id} AND "practiceId" = ${practiceId}
           `
           
           if (workflowData.length === 0) {
@@ -373,7 +389,7 @@ export async function POST(req: NextRequest) {
 
       // Log workflow creation in audit log
       await createAuditLog({
-        practiceId: user.practiceId,
+        practiceId: practiceId,
         userId: user.id,
         action: 'create',
         resourceType: 'workflow',
