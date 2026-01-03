@@ -11,7 +11,15 @@ export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req)
 
-    const retellClient = await getRetellClient(user.practiceId)
+    if (!user.practiceId) {
+      return NextResponse.json(
+        { success: false, message: 'Practice ID is required for this operation' },
+        { status: 400 }
+      )
+    }
+    const practiceId = user.practiceId
+
+    const retellClient = await getRetellClient(practiceId)
     
     // Try to list calls to test the connection
     await retellClient.listCalls({ limit: 1 })

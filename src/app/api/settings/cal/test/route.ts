@@ -17,8 +17,9 @@ export async function GET(req: NextRequest) {
         { status: 400 }
       )
     }
+    const practiceId = user.practiceId
 
-    const calClient = await getCalClient(user.practiceId)
+    const calClient = await getCalClient(practiceId)
     const isValid = await calClient.testConnection()
 
     if (!isValid) {
