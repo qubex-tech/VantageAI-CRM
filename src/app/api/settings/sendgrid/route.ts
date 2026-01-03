@@ -13,8 +13,13 @@ export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req)
 
+    if (!user.practiceId) {
+      return NextResponse.json({ integration: null })
+    }
+    const practiceId = user.practiceId
+
     const integration = await prisma.sendgridIntegration.findUnique({
-      where: { practiceId: user.practiceId },
+      where: { practiceId: practiceId },
     })
 
     return NextResponse.json({ integration })
@@ -34,6 +39,14 @@ export async function POST(req: NextRequest) {
     const user = await requireAuth(req)
     const body = await req.json()
 
+    if (!user.practiceId) {
+      return NextResponse.json(
+        { error: 'Practice ID is required for this operation' },
+        { status: 400 }
+      )
+    }
+    const practiceId = user.practiceId
+
     const validated = sendgridIntegrationSchema.parse(body)
 
     // Test connection
@@ -50,9 +63,9 @@ export async function POST(req: NextRequest) {
 
     // Create or update integration
     const integration = await prisma.sendgridIntegration.upsert({
-      where: { practiceId: user.practiceId },
+      where: { practiceId: practiceId },
       create: {
-        practiceId: user.practiceId,
+        practiceId: practiceId,
         apiKey: validated.apiKey,
         fromEmail: validated.fromEmail,
         fromName: validated.fromName || null,
