@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
                     tool: toolToExecute,
                     result: result,
                     actionId: actionId,
-                  },
+                  } as any, // Cast to any for Prisma Json type compatibility
                 },
               })
 
