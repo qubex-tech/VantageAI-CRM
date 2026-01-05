@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
+import { isVantageAdmin } from '@/lib/permissions'
 import { calEventTypeMappingSchema } from '@/lib/validations'
 import { getCalClient } from '@/lib/cal'
 
@@ -13,11 +14,17 @@ export async function GET(req: NextRequest) {
     const user = await requireAuth(req)
     const searchParams = req.nextUrl.searchParams
     const shouldFetch = searchParams.get('fetch') === 'true'
+    const queryPracticeId = searchParams.get('practiceId')
 
-    if (!user.practiceId) {
+    // If practiceId is provided in query and user is Vantage Admin, use it
+    let practiceId: string | null = user.practiceId
+    if (queryPracticeId && isVantageAdmin(user)) {
+      practiceId = queryPracticeId
+    }
+
+    if (!practiceId) {
       return NextResponse.json({ mappings: [] })
     }
-    const practiceId = user.practiceId
 
     const mappings = await prisma.calEventTypeMapping.findMany({
       where: { practiceId: practiceId },
@@ -33,11 +40,11 @@ export async function GET(req: NextRequest) {
 
     // If fetch=true, also get event types from Cal.com
     if (shouldFetch) {
-      if (!user.practiceId) {
+      if (!practiceId) {
         return NextResponse.json({ mappings })
       }
       try {
-        const calClient = await getCalClient(user.practiceId)
+        const calClient = await getCalClient(practiceId)
         const eventTypes = await calClient.getEventTypes()
         return NextResponse.json({ mappings, eventTypes })
       } catch (error) {
@@ -67,14 +74,21 @@ export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req)
     const body = await req.json()
+    const searchParams = req.nextUrl.searchParams
+    const queryPracticeId = searchParams.get('practiceId')
 
-    if (!user.practiceId) {
+    // If practiceId is provided in query and user is Vantage Admin, use it
+    let practiceId: string | null = user.practiceId
+    if (queryPracticeId && isVantageAdmin(user)) {
+      practiceId = queryPracticeId
+    }
+
+    if (!practiceId) {
       return NextResponse.json(
         { error: 'Practice ID is required for this operation' },
         { status: 400 }
       )
     }
-    const practiceId = user.practiceId
 
     const validated = calEventTypeMappingSchema.parse(body)
 

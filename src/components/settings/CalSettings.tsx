@@ -16,6 +16,7 @@ import {
 interface CalSettingsProps {
   initialIntegration: any
   initialMappings?: any[]
+  practiceId?: string // Optional practiceId for Vantage Admins
 }
 
 interface CalEventType {
@@ -31,7 +32,15 @@ interface AvailabilitySlot {
   attendeeCount: number
 }
 
-export function CalSettings({ initialIntegration, initialMappings = [] }: CalSettingsProps) {
+export function CalSettings({ initialIntegration, initialMappings = [], practiceId }: CalSettingsProps) {
+  // Helper function to append practiceId to URLs if provided
+  const apiUrl = (path: string) => {
+    if (practiceId) {
+      const separator = path.includes('?') ? '&' : '?'
+      return `${path}${separator}practiceId=${practiceId}`
+    }
+    return path
+  }
   const [apiKey, setApiKey] = useState(initialIntegration?.apiKey || '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -74,7 +83,7 @@ export function CalSettings({ initialIntegration, initialMappings = [] }: CalSet
     setLoading(true)
 
     try {
-      const response = await fetch('/api/settings/cal', {
+      const response = await fetch(apiUrl('/api/settings/cal'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -105,7 +114,7 @@ export function CalSettings({ initialIntegration, initialMappings = [] }: CalSet
     setLoading(true)
 
     try {
-      const response = await fetch('/api/settings/cal/test')
+      const response = await fetch(apiUrl('/api/settings/cal/test'))
       const data = await response.json()
 
       if (data.success) {
@@ -125,7 +134,7 @@ export function CalSettings({ initialIntegration, initialMappings = [] }: CalSet
     setError('')
     
     try {
-      const response = await fetch('/api/settings/cal/event-types?fetch=true')
+      const response = await fetch(apiUrl('/api/settings/cal/event-types?fetch=true'))
       const data = await response.json()
       
       if (!response.ok) {
@@ -228,7 +237,7 @@ export function CalSettings({ initialIntegration, initialMappings = [] }: CalSet
     setLoadingMapping(true)
 
     try {
-      const response = await fetch('/api/settings/cal/event-types', {
+      const response = await fetch(apiUrl('/api/settings/cal/event-types'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newMapping),
@@ -261,7 +270,7 @@ export function CalSettings({ initialIntegration, initialMappings = [] }: CalSet
     }
 
     try {
-      const response = await fetch(`/api/settings/cal/event-types/${mappingId}`, {
+      const response = await fetch(apiUrl(`/api/settings/cal/event-types/${mappingId}`), {
         method: 'DELETE',
       })
 

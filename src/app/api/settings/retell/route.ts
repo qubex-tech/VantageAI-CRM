@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
+import { isVantageAdmin } from '@/lib/permissions'
 import { z } from 'zod'
 
 const retellIntegrationSchema = z.object({
@@ -14,11 +15,18 @@ const retellIntegrationSchema = z.object({
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req)
+    const searchParams = req.nextUrl.searchParams
+    const queryPracticeId = searchParams.get('practiceId')
 
-    if (!user.practiceId) {
+    // If practiceId is provided in query and user is Vantage Admin, use it
+    let practiceId: string | null = user.practiceId
+    if (queryPracticeId && isVantageAdmin(user)) {
+      practiceId = queryPracticeId
+    }
+
+    if (!practiceId) {
       return NextResponse.json({ integration: null })
     }
-    const practiceId = user.practiceId
 
     const integration = await prisma.retellIntegration.findUnique({
       where: { practiceId: practiceId },
@@ -40,14 +48,21 @@ export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req)
     const body = await req.json()
+    const searchParams = req.nextUrl.searchParams
+    const queryPracticeId = searchParams.get('practiceId')
 
-    if (!user.practiceId) {
+    // If practiceId is provided in query and user is Vantage Admin, use it
+    let practiceId: string | null = user.practiceId
+    if (queryPracticeId && isVantageAdmin(user)) {
+      practiceId = queryPracticeId
+    }
+
+    if (!practiceId) {
       return NextResponse.json(
         { error: 'Practice ID is required for this operation' },
         { status: 400 }
       )
     }
-    const practiceId = user.practiceId
 
     const validated = retellIntegrationSchema.parse(body)
 

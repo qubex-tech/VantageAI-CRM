@@ -10,9 +10,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Loader2 } from 'lucide-react'
-import { CalSettingsWithPracticeId } from './CalSettingsWithPracticeId'
-import { RetellSettingsWithPracticeId } from './RetellSettingsWithPracticeId'
-import { SendgridSettingsWithPracticeId } from './SendgridSettingsWithPracticeId'
+import { CalSettings } from './CalSettings'
+import { RetellSettings } from './RetellSettings'
+import { SendgridSettings } from './SendgridSettings'
 
 interface Practice {
   id: string
@@ -23,6 +23,11 @@ export function PracticeAPIConfiguration() {
   const [practices, setPractices] = useState<Practice[]>([])
   const [selectedPracticeId, setSelectedPracticeId] = useState<string>('')
   const [loadingPractices, setLoadingPractices] = useState(true)
+  const [loadingIntegrations, setLoadingIntegrations] = useState(false)
+  const [calIntegration, setCalIntegration] = useState<any>(null)
+  const [retellIntegration, setRetellIntegration] = useState<any>(null)
+  const [sendgridIntegration, setSendgridIntegration] = useState<any>(null)
+  const [eventTypeMappings, setEventTypeMappings] = useState<any[]>([])
 
   // Fetch all practices
   useEffect(() => {
@@ -43,6 +48,56 @@ export function PracticeAPIConfiguration() {
 
     fetchPractices()
   }, [])
+
+  // Fetch integrations when practice is selected
+  useEffect(() => {
+    if (!selectedPracticeId) {
+      setCalIntegration(null)
+      setRetellIntegration(null)
+      setSendgridIntegration(null)
+      setEventTypeMappings([])
+      return
+    }
+
+    const fetchIntegrations = async () => {
+      setLoadingIntegrations(true)
+      try {
+        // Fetch Cal.com integration
+        const calResponse = await fetch(`/api/settings/cal?practiceId=${selectedPracticeId}`)
+        if (calResponse.ok) {
+          const calData = await calResponse.json()
+          setCalIntegration(calData.integration)
+          
+          // Fetch event type mappings
+          const mappingsResponse = await fetch(`/api/settings/cal/event-types?practiceId=${selectedPracticeId}`)
+          if (mappingsResponse.ok) {
+            const mappingsData = await mappingsResponse.json()
+            setEventTypeMappings(mappingsData.mappings || [])
+          }
+        }
+
+        // Fetch RetellAI integration
+        const retellResponse = await fetch(`/api/settings/retell?practiceId=${selectedPracticeId}`)
+        if (retellResponse.ok) {
+          const retellData = await retellResponse.json()
+          setRetellIntegration(retellData.integration)
+        }
+
+        // Fetch SendGrid integration
+        const sendgridResponse = await fetch(`/api/settings/sendgrid?practiceId=${selectedPracticeId}`)
+        if (sendgridResponse.ok) {
+          const sendgridData = await sendgridResponse.json()
+          setSendgridIntegration(sendgridData.integration)
+        }
+      } catch (error) {
+        console.error('Error fetching integrations:', error)
+      } finally {
+        setLoadingIntegrations(false)
+      }
+    }
+
+    fetchIntegrations()
+  }, [selectedPracticeId])
 
   const selectedPractice = practices.find(p => p.id === selectedPracticeId)
 
@@ -101,9 +156,27 @@ export function PracticeAPIConfiguration() {
 
       {selectedPracticeId && (
         <div className="space-y-6">
-          <CalSettingsWithPracticeId practiceId={selectedPracticeId} />
-          <RetellSettingsWithPracticeId practiceId={selectedPracticeId} />
-          <SendgridSettingsWithPracticeId practiceId={selectedPracticeId} />
+          {loadingIntegrations ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+            </div>
+          ) : (
+            <>
+              <CalSettingsWithPracticeId 
+                practiceId={selectedPracticeId}
+                initialIntegration={calIntegration}
+                initialMappings={eventTypeMappings}
+              />
+              <RetellSettingsWithPracticeId 
+                practiceId={selectedPracticeId}
+                initialIntegration={retellIntegration}
+              />
+              <SendgridSettingsWithPracticeId 
+                practiceId={selectedPracticeId}
+                initialIntegration={sendgridIntegration}
+              />
+            </>
+          )}
         </div>
       )}
 
@@ -118,5 +191,38 @@ export function PracticeAPIConfiguration() {
       )}
     </div>
   )
+}
+
+// Wrapper components that use the existing settings components but include practiceId in API calls
+function CalSettingsWithPracticeId({ 
+  practiceId, 
+  initialIntegration, 
+  initialMappings 
+}: { 
+  practiceId: string
+  initialIntegration: any
+  initialMappings?: any[]
+}) {
+  return <CalSettings initialIntegration={initialIntegration} initialMappings={initialMappings} practiceId={practiceId} />
+}
+
+function RetellSettingsWithPracticeId({ 
+  practiceId, 
+  initialIntegration 
+}: { 
+  practiceId: string
+  initialIntegration: any
+}) {
+  return <RetellSettings initialIntegration={initialIntegration} practiceId={practiceId} />
+}
+
+function SendgridSettingsWithPracticeId({ 
+  practiceId, 
+  initialIntegration 
+}: { 
+  practiceId: string
+  initialIntegration: any
+}) {
+  return <SendgridSettings initialIntegration={initialIntegration} practiceId={practiceId} />
 }
 

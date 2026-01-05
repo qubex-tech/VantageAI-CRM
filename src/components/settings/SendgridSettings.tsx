@@ -8,9 +8,18 @@ import { Label } from '@/components/ui/label'
 
 interface SendgridSettingsProps {
   initialIntegration: any
+  practiceId?: string // Optional practiceId for Vantage Admins
 }
 
-export function SendgridSettings({ initialIntegration }: SendgridSettingsProps) {
+export function SendgridSettings({ initialIntegration, practiceId }: SendgridSettingsProps) {
+  // Helper function to append practiceId to URLs if provided
+  const apiUrl = (path: string) => {
+    if (practiceId) {
+      const separator = path.includes('?') ? '&' : '?'
+      return `${path}${separator}practiceId=${practiceId}`
+    }
+    return path
+  }
   const [apiKey, setApiKey] = useState(initialIntegration?.apiKey || '')
   const [fromEmail, setFromEmail] = useState(initialIntegration?.fromEmail || '')
   const [fromName, setFromName] = useState(initialIntegration?.fromName || '')
@@ -26,7 +35,7 @@ export function SendgridSettings({ initialIntegration }: SendgridSettingsProps) 
     setLoading(true)
 
     try {
-      const response = await fetch('/api/settings/sendgrid', {
+      const response = await fetch(apiUrl('/api/settings/sendgrid'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

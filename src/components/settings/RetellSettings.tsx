@@ -8,9 +8,18 @@ import { Label } from '@/components/ui/label'
 
 interface RetellSettingsProps {
   initialIntegration: any
+  practiceId?: string // Optional practiceId for Vantage Admins
 }
 
-export function RetellSettings({ initialIntegration }: RetellSettingsProps) {
+export function RetellSettings({ initialIntegration, practiceId }: RetellSettingsProps) {
+  // Helper function to append practiceId to URLs if provided
+  const apiUrl = (path: string) => {
+    if (practiceId) {
+      const separator = path.includes('?') ? '&' : '?'
+      return `${path}${separator}practiceId=${practiceId}`
+    }
+    return path
+  }
   const [apiKey, setApiKey] = useState(initialIntegration?.apiKey || '')
   const [agentId, setAgentId] = useState(initialIntegration?.agentId || '')
   const [loading, setLoading] = useState(false)
@@ -30,7 +39,7 @@ export function RetellSettings({ initialIntegration }: RetellSettingsProps) {
     setLoading(true)
 
     try {
-      const response = await fetch('/api/settings/retell', {
+      const response = await fetch(apiUrl('/api/settings/retell'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -58,7 +67,7 @@ export function RetellSettings({ initialIntegration }: RetellSettingsProps) {
     setTesting(true)
 
     try {
-      const response = await fetch('/api/settings/retell/test')
+      const response = await fetch(apiUrl('/api/settings/retell/test'))
       const data = await response.json()
 
       if (data.success) {
