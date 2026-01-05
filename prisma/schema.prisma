@@ -30,6 +30,8 @@ model Practice {
   voiceConversations   VoiceConversation[]
   workflows            Workflow[]
   auditLogs            AuditLog[]
+  healixConversations  HealixConversation[]
+  healixActionLogs     HealixActionLog[]
 
   @@map("practices")
 }
@@ -44,8 +46,10 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  practice  Practice?  @relation(fields: [practiceId], references: [id], onDelete: Cascade)
-  auditLogs AuditLog[]
+  practice            Practice?            @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  auditLogs           AuditLog[]
+  healixConversations HealixConversation[]
+  healixActionLogs    HealixActionLog[]
 
   @@index([practiceId])
   @@index([email])
@@ -326,4 +330,58 @@ model AuditLog {
   @@index([practiceId, resourceType, resourceId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+model HealixConversation {
+  id         String   @id @default(uuid())
+  practiceId String // Multi-tenant: scoped to practice
+  userId     String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  practice   Practice          @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages   HealixMessage[]
+  actionLogs HealixActionLog[]
+
+  @@index([practiceId])
+  @@index([userId])
+  @@index([updatedAt])
+  @@map("healix_conversations")
+}
+
+model HealixMessage {
+  id             String   @id @default(uuid())
+  conversationId String
+  role           String // 'user', 'assistant', 'tool'
+  content        Json // Store message content as JSON to handle markdown, structured data, etc.
+  createdAt      DateTime @default(now())
+
+  conversation HealixConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([createdAt])
+  @@map("healix_messages")
+}
+
+model HealixActionLog {
+  id             String   @id @default(uuid())
+  conversationId String?
+  userId         String
+  practiceId     String // Multi-tenant: scoped to practice
+  actionType     String // e.g., 'tool_call', 'action_executed'
+  toolName       String? // Name of the tool that was called
+  toolArgs       Json? // Arguments passed to the tool
+  toolResult     Json? // Result returned from the tool
+  createdAt      DateTime @default(now())
+
+  practice     Practice            @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation HealixConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  @@index([practiceId])
+  @@index([userId])
+  @@index([conversationId])
+  @@index([createdAt])
+  @@map("healix_action_logs")
 }

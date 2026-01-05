@@ -111,13 +111,13 @@ export default async function DashboardPage() {
   })
 
   return (
-    <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
+    <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8 min-w-0 max-w-full">
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-gray-900 mb-1">Dashboard</h1>
         <p className="text-sm text-gray-500">Welcome back, {user.name || user.email || 'User'}</p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 min-w-0 max-w-full">
         <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-semibold text-gray-900">Today&apos;s Appointments</CardTitle>

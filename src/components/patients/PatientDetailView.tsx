@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ComposeEmail } from './ComposeEmail'
+import { useHealixOpen } from '@/components/healix/HealixButton'
 import Link from 'next/link'
 import { 
   Star, 
@@ -33,6 +34,7 @@ import {
 import { format, formatDistanceToNow } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { EditPatientForm } from './EditPatientForm'
+import { cn } from '@/lib/utils'
 
 interface PatientDetailViewProps {
   patient: {
@@ -84,6 +86,7 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
   const [sidebarTab, setSidebarTab] = useState<'details' | 'comments'>('details')
   const [isEditing, setIsEditing] = useState(false)
   const [composeEmailOpen, setComposeEmailOpen] = useState(false)
+  const healixOpen = useHealixOpen()
   
   const age = calculateAge(patient.dateOfBirth)
   
@@ -109,21 +112,24 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
   }
 
   return (
-    <div className="flex h-screen bg-white">
+    <div className={cn(
+      "flex h-screen bg-white min-w-0 w-full",
+      // Width is now controlled by CSS custom properties via main-content-healix class
+    )}>
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0 max-w-full">
         {/* Header Bar */}
-        <div className="border-b border-gray-200 px-6 py-3 flex items-center justify-between bg-white">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center">
+        <div className="border-b border-gray-200 px-6 py-3 flex items-center justify-between bg-white min-w-0">
+          <div className="flex items-center gap-3 min-w-0 flex-shrink">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0">
                 <User className="h-4 w-4 text-gray-600" />
               </div>
-              <h1 className="text-lg font-semibold text-gray-900">{patient.name}</h1>
-              <Star className="h-4 w-4 text-gray-400" />
+              <h1 className="text-lg font-semibold text-gray-900 truncate">{patient.name}</h1>
+              <Star className="h-4 w-4 text-gray-400 flex-shrink-0" />
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0 ml-4">
             <Button 
               type="button"
               variant="outline" 
@@ -209,8 +215,8 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto px-6 py-6">
-          <div className="max-w-4xl">
+        <div className="flex-1 overflow-y-auto px-6 py-6 min-w-0">
+          <div className="max-w-4xl w-full min-w-0 mx-auto">
             {activeTab === 'overview' && (
               <>
                 {/* Highlights Section */}
@@ -555,10 +561,17 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
         </div>
       </div>
 
-      {/* Right Sidebar */}
-      <div className="w-80 border-l border-gray-200 bg-white flex flex-col">
+      {/* Right Sidebar - Adjust width when Healix is open to prevent cutoff */}
+      <div className={cn(
+        "border-l border-gray-200 bg-white flex flex-col overflow-hidden flex-shrink-0 transition-all duration-300",
+        // Default width
+        "w-80",
+        // When Healix is open on desktop: reduce width significantly to fit
+        // Healix panel takes 384px (md) or 420px (lg), so reduce sidebar proportionally
+        healixOpen && "md:w-56 lg:w-64"
+      )}>
         {/* Sidebar Header Tabs */}
-        <div className="border-b border-gray-200 px-4">
+        <div className="border-b border-gray-200 px-4 flex-shrink-0">
           <div className="flex gap-4">
             <button
               onClick={() => setSidebarTab('details')}
@@ -585,69 +598,69 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
         </div>
 
         {/* Sidebar Content */}
-        <div className="flex-1 overflow-y-auto px-4 py-6">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 min-w-0">
           {sidebarTab === 'details' && (
             <div className="space-y-6">
               {/* Record Details Section */}
-              <div>
+              <div className="min-w-0">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm font-medium text-gray-900">Record Details</h3>
-                  <ChevronDown className="h-4 w-4 text-gray-400" />
+                  <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" />
                 </div>
                 
-                <div className="space-y-4">
-                  <div>
+                <div className="space-y-4 min-w-0">
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
-                      <User className="h-3 w-3" />
+                      <User className="h-3 w-3 flex-shrink-0" />
                       Name
                     </div>
-                    <div className="text-sm font-medium text-gray-900">{patient.name}</div>
+                    <div className="text-sm font-medium text-gray-900 break-words">{patient.name}</div>
                   </div>
 
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
-                      <MailIcon className="h-3 w-3" />
+                      <MailIcon className="h-3 w-3 flex-shrink-0" />
                       Email addresses
                     </div>
-                    <div className="text-sm font-medium text-blue-600">
+                    <div className="text-sm font-medium text-blue-600 break-all min-w-0">
                       {patient.email || 'No email'}
                     </div>
                   </div>
 
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
-                      <PhoneIcon className="h-3 w-3" />
+                      <PhoneIcon className="h-3 w-3 flex-shrink-0" />
                       Phone
                     </div>
-                    <div className="text-sm font-medium text-gray-900">{patient.phone}</div>
+                    <div className="text-sm font-medium text-gray-900 break-all">{patient.phone}</div>
                   </div>
 
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
-                      <Calendar className="h-3 w-3" />
+                      <Calendar className="h-3 w-3 flex-shrink-0" />
                       Date of Birth
                     </div>
-                    <div className="text-sm font-medium text-gray-900">
+                    <div className="text-sm font-medium text-gray-900 break-words">
                       {format(new Date(patient.dateOfBirth), 'MMM d, yyyy')}
                     </div>
                   </div>
 
                   {patient.address && (
-                    <div>
+                    <div className="min-w-0">
                       <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
-                        <MapPin className="h-3 w-3" />
+                        <MapPin className="h-3 w-3 flex-shrink-0" />
                         Address
                       </div>
-                      <div className="text-sm font-medium text-gray-900">{patient.address}</div>
+                      <div className="text-sm font-medium text-gray-900 break-words">{patient.address}</div>
                     </div>
                   )}
 
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
-                      <PhoneIcon className="h-3 w-3" />
+                      <PhoneIcon className="h-3 w-3 flex-shrink-0" />
                       Preferred Contact
                     </div>
-                    <div className="text-sm font-medium text-gray-900 capitalize">
+                    <div className="text-sm font-medium text-gray-900 capitalize break-words">
                       {patient.preferredContactMethod}
                     </div>
                   </div>
@@ -679,12 +692,12 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
 
               {/* Notes Section */}
               {patient.notes && (
-                <div>
+                <div className="min-w-0">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-sm font-medium text-gray-900">Notes</h3>
-                    <ChevronDown className="h-4 w-4 text-gray-400" />
+                    <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" />
                   </div>
-                  <div className="text-sm text-gray-700 whitespace-pre-wrap">
+                  <div className="text-sm text-gray-700 whitespace-pre-wrap break-words min-w-0">
                     {patient.notes}
                   </div>
                 </div>
@@ -700,7 +713,7 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
         </div>
 
         {/* Edit Button */}
-        <div className="border-t border-gray-200 p-4">
+        <div className="border-t border-gray-200 p-4 flex-shrink-0">
           <Button
             onClick={() => setIsEditing(true)}
             variant="outline"
