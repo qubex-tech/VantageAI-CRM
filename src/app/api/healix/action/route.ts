@@ -163,7 +163,7 @@ export async function POST(req: NextRequest) {
         actionType: 'action_executed',
         toolName: tool,
         toolArgs: argsWithClinicId,
-        toolResult: result,
+        toolResult: result as any, // Cast to any for Prisma Json type compatibility
       },
     })
 
