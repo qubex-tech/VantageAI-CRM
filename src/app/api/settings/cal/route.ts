@@ -56,9 +56,15 @@ export async function POST(req: NextRequest) {
     const searchParams = req.nextUrl.searchParams
     const queryPracticeId = searchParams.get('practiceId')
 
+    // Normalize user object for type compatibility
+    const normalizedUser = {
+      ...user,
+      name: user.name ?? null,
+    }
+
     // If practiceId is provided in query and user is Vantage Admin, use it
     let practiceId: string | null = user.practiceId
-    if (queryPracticeId && isVantageAdmin(user)) {
+    if (queryPracticeId && isVantageAdmin(normalizedUser)) {
       practiceId = queryPracticeId
     }
 
