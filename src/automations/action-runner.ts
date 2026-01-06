@@ -440,8 +440,7 @@ async function draftEmail(
             practiceId,
             userId: automationUserId,
             type: 'contact',
-            content: `[Automation Email] Sent to ${toEmail} (Subject: ${args.subject}): ${args.body.substring(0, 100)}${args.body.length > 100 ? '...' : ''}`,
-            metadata: { messageId: result.messageId },
+            content: `[Automation Email] Sent to ${toEmail} (Subject: ${args.subject}, MessageId: ${result.messageId}): ${args.body.substring(0, 100)}${args.body.length > 100 ? '...' : ''}`,
           },
         })
         console.log(`[AUTOMATION] Email note created for patient ${args.patientId}`)
