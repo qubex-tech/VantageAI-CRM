@@ -144,7 +144,8 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
   const handleUpdate = (updates: any) => {
     const newConfig = { ...config, ...updates }
     setConfig(newConfig)
-    onUpdate(node.id, newConfig)
+    // Pass the full config object so updateNodeConfig can properly merge it
+    onUpdate(node.id, { config: newConfig })
   }
 
   const handleDelete = () => {

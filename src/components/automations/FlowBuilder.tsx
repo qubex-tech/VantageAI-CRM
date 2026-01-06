@@ -115,26 +115,36 @@ export function FlowBuilder({ initialWorkflow, onSave, onTest, onWorkflowChange 
   const updateNodeConfig = useCallback(
     (nodeId: string, updates: any) => {
       setNodes((nds) =>
-        nds.map((node) =>
-          node.id === nodeId
-            ? {
-                ...node,
-                data: {
-                  ...node.data,
-                  ...updates,
-                  config: updates.config !== undefined ? updates.config : node.data.config,
-                },
-              }
-            : node
-        )
+        nds.map((node) => {
+          if (node.id === nodeId) {
+            // If updates contains a config object, merge it properly
+            const updatedConfig = updates.config !== undefined 
+              ? { ...node.data.config, ...updates.config }
+              : node.data.config
+            
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                ...updates,
+                config: updatedConfig,
+              },
+            }
+          }
+          return node
+        })
       )
       if (selectedNode?.id === nodeId) {
+        const updatedConfig = updates.config !== undefined 
+          ? { ...selectedNode.data.config, ...updates.config }
+          : selectedNode.data.config
+        
         setSelectedNode({
           ...selectedNode,
           data: {
             ...selectedNode.data,
             ...updates,
-            config: updates.config !== undefined ? updates.config : selectedNode.data.config,
+            config: updatedConfig,
           },
         })
       }
