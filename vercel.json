@@ -6,6 +6,11 @@
       "path": "/api/internal/outbox/publish",
       "schedule": "*/1 * * * *"
     }
-  ]
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "main": true
+    }
+  }
 }
 
