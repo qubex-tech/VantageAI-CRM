@@ -435,26 +435,29 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                 <Input
                   placeholder="{appointment.patientId} or {patient.id}"
                   value={config.args?.patientId || ''}
-                  onChange={(e) =>
-                    handleUpdate({ args: { ...config.args, patientId: e.target.value } })
-                  }
+                  onChange={(e) => {
+                    const currentArgs = config.args || {}
+                    handleUpdate({ args: { ...currentArgs, patientId: e.target.value } })
+                  }}
                 />
                 <Label>Subject</Label>
                 <Input
                   placeholder="Email subject"
                   value={config.args?.subject || ''}
-                  onChange={(e) =>
-                    handleUpdate({ args: { ...config.args, subject: e.target.value } })
-                  }
+                  onChange={(e) => {
+                    const currentArgs = config.args || {}
+                    handleUpdate({ args: { ...currentArgs, subject: e.target.value } })
+                  }}
                 />
                 <Label>Body</Label>
                 <textarea
                   className="w-full min-h-[100px] px-3 py-2 border border-gray-300 rounded-md text-sm"
                   placeholder="Email body"
                   value={config.args?.body || ''}
-                  onChange={(e) =>
-                    handleUpdate({ args: { ...config.args, body: e.target.value } })
-                  }
+                  onChange={(e) => {
+                    const currentArgs = config.args || {}
+                    handleUpdate({ args: { ...currentArgs, body: e.target.value } })
+                  }}
                 />
               </div>
             )}
@@ -465,18 +468,20 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                 <Input
                   placeholder="{appointment.patientId} or {patient.id}"
                   value={config.args?.patientId || ''}
-                  onChange={(e) =>
-                    handleUpdate({ args: { ...config.args, patientId: e.target.value } })
-                  }
+                  onChange={(e) => {
+                    const currentArgs = config.args || {}
+                    handleUpdate({ args: { ...currentArgs, patientId: e.target.value } })
+                  }}
                 />
                 <Label>Message</Label>
                 <textarea
                   className="w-full min-h-[100px] px-3 py-2 border border-gray-300 rounded-md text-sm"
                   placeholder="SMS message"
                   value={config.args?.message || ''}
-                  onChange={(e) =>
-                    handleUpdate({ args: { ...config.args, message: e.target.value } })
-                  }
+                  onChange={(e) => {
+                    const currentArgs = config.args || {}
+                    handleUpdate({ args: { ...currentArgs, message: e.target.value } })
+                  }}
                 />
               </div>
             )}
@@ -487,16 +492,18 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                 <Input
                   placeholder="{appointment.patientId} or {patient.id}"
                   value={config.args?.patientId || ''}
-                  onChange={(e) =>
-                    handleUpdate({ args: { ...config.args, patientId: e.target.value } })
-                  }
+                  onChange={(e) => {
+                    const currentArgs = config.args || {}
+                    handleUpdate({ args: { ...currentArgs, patientId: e.target.value } })
+                  }}
                 />
                 <Label>Reminder Type</Label>
                 <Select
                   value={config.args?.reminderType || 'appointment'}
-                  onValueChange={(value) =>
-                    handleUpdate({ args: { ...config.args, reminderType: value } })
-                  }
+                  onValueChange={(value) => {
+                    const currentArgs = config.args || {}
+                    handleUpdate({ args: { ...currentArgs, reminderType: value } })
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -512,9 +519,10 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                   className="w-full min-h-[100px] px-3 py-2 border border-gray-300 rounded-md text-sm"
                   placeholder="Reminder message"
                   value={config.args?.message || ''}
-                  onChange={(e) =>
-                    handleUpdate({ args: { ...config.args, message: e.target.value } })
-                  }
+                  onChange={(e) => {
+                    const currentArgs = config.args || {}
+                    handleUpdate({ args: { ...currentArgs, message: e.target.value } })
+                  }}
                 />
               </div>
             )}
@@ -526,14 +534,14 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                   placeholder="{appointment.patientId} or {patient.id}"
                   value={config.args?.patientId || ''}
                   onChange={(e) =>
-                    handleUpdate({ args: { ...config.args, patientId: e.target.value } })
+                    handleUpdate({ args: { ...(config.args || {}), patientId: e.target.value } })
                   }
                 />
                 <Label>Note Type</Label>
                 <Select
                   value={config.args?.type || 'general'}
                   onValueChange={(value) =>
-                    handleUpdate({ args: { ...config.args, type: value } })
+                    handleUpdate({ args: { ...(config.args || {}), type: value } })
                   }
                 >
                   <SelectTrigger>
@@ -557,9 +565,10 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                   className="w-full min-h-[100px] px-3 py-2 border border-gray-300 rounded-md text-sm"
                   placeholder="Note content"
                   value={config.args?.content || ''}
-                  onChange={(e) =>
-                    handleUpdate({ args: { ...config.args, content: e.target.value } })
-                  }
+                  onChange={(e) => {
+                    const currentArgs = config.args || {}
+                    handleUpdate({ args: { ...currentArgs, content: e.target.value } })
+                  }}
                 />
               </div>
             )}
@@ -570,33 +579,37 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                 <Input
                   placeholder="Task title"
                   value={config.args?.title || ''}
-                  onChange={(e) =>
-                    handleUpdate({ args: { ...config.args, title: e.target.value } })
-                  }
+                  onChange={(e) => {
+                    const currentArgs = config.args || {}
+                    handleUpdate({ args: { ...currentArgs, title: e.target.value } })
+                  }}
                 />
                 <Label>Description (optional)</Label>
                 <textarea
                   className="w-full min-h-[80px] px-3 py-2 border border-gray-300 rounded-md text-sm"
                   placeholder="Task description"
                   value={config.args?.description || ''}
-                  onChange={(e) =>
-                    handleUpdate({ args: { ...config.args, description: e.target.value } })
-                  }
+                  onChange={(e) => {
+                    const currentArgs = config.args || {}
+                    handleUpdate({ args: { ...currentArgs, description: e.target.value } })
+                  }}
                 />
                 <Label>Patient ID (optional)</Label>
                 <Input
                   placeholder="{appointment.patientId} or {patient.id}"
                   value={config.args?.patientId || ''}
-                  onChange={(e) =>
-                    handleUpdate({ args: { ...config.args, patientId: e.target.value } })
-                  }
+                  onChange={(e) => {
+                    const currentArgs = config.args || {}
+                    handleUpdate({ args: { ...currentArgs, patientId: e.target.value } })
+                  }}
                 />
                 <Label>Priority</Label>
                 <Select
                   value={config.args?.priority || 'medium'}
-                  onValueChange={(value) =>
-                    handleUpdate({ args: { ...config.args, priority: value } })
-                  }
+                  onValueChange={(value) => {
+                    const currentArgs = config.args || {}
+                    handleUpdate({ args: { ...currentArgs, priority: value } })
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -616,17 +629,19 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                 <Input
                   placeholder="{appointment.patientId} or {patient.id}"
                   value={config.args?.patientId || ''}
-                  onChange={(e) =>
-                    handleUpdate({ args: { ...config.args, patientId: e.target.value } })
-                  }
+                  onChange={(e) => {
+                    const currentArgs = config.args || {}
+                    handleUpdate({ args: { ...currentArgs, patientId: e.target.value } })
+                  }}
                 />
                 <Label>Tag</Label>
                 <Input
                   placeholder="Tag name (e.g., 'VIP', 'Follow-up')"
                   value={config.args?.tag || ''}
-                  onChange={(e) =>
-                    handleUpdate({ args: { ...config.args, tag: e.target.value } })
-                  }
+                  onChange={(e) => {
+                    const currentArgs = config.args || {}
+                    handleUpdate({ args: { ...currentArgs, tag: e.target.value } })
+                  }}
                 />
               </div>
             )}
@@ -637,16 +652,18 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                 <Input
                   placeholder="{appointment.id}"
                   value={config.args?.appointmentId || ''}
-                  onChange={(e) =>
-                    handleUpdate({ args: { ...config.args, appointmentId: e.target.value } })
-                  }
+                  onChange={(e) => {
+                    const currentArgs = config.args || {}
+                    handleUpdate({ args: { ...currentArgs, appointmentId: e.target.value } })
+                  }}
                 />
                 <Label>New Status</Label>
                 <Select
                   value={config.args?.status || ''}
-                  onValueChange={(value) =>
-                    handleUpdate({ args: { ...config.args, status: value } })
-                  }
+                  onValueChange={(value) => {
+                    const currentArgs = config.args || {}
+                    handleUpdate({ args: { ...currentArgs, status: value } })
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select status" />
@@ -668,32 +685,36 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                 <Input
                   placeholder="{appointment.patientId} or {patient.id}"
                   value={config.args?.patientId || ''}
-                  onChange={(e) =>
-                    handleUpdate({ args: { ...config.args, patientId: e.target.value } })
-                  }
+                  onChange={(e) => {
+                    const currentArgs = config.args || {}
+                    handleUpdate({ args: { ...currentArgs, patientId: e.target.value } })
+                  }}
                 />
                 <Label>Provider Name</Label>
                 <Input
                   placeholder="Insurance provider name"
                   value={config.args?.providerName || ''}
-                  onChange={(e) =>
-                    handleUpdate({ args: { ...config.args, providerName: e.target.value } })
-                  }
+                  onChange={(e) => {
+                    const currentArgs = config.args || {}
+                    handleUpdate({ args: { ...currentArgs, providerName: e.target.value } })
+                  }}
                 />
                 <Label>Member ID</Label>
                 <Input
                   placeholder="Member ID"
                   value={config.args?.memberId || ''}
-                  onChange={(e) =>
-                    handleUpdate({ args: { ...config.args, memberId: e.target.value } })
-                  }
+                  onChange={(e) => {
+                    const currentArgs = config.args || {}
+                    handleUpdate({ args: { ...currentArgs, memberId: e.target.value } })
+                  }}
                 />
                 <Label>Eligibility Status</Label>
                 <Select
                   value={config.args?.eligibilityStatus || 'active'}
-                  onValueChange={(value) =>
-                    handleUpdate({ args: { ...config.args, eligibilityStatus: value } })
-                  }
+                  onValueChange={(value) => {
+                    const currentArgs = config.args || {}
+                    handleUpdate({ args: { ...currentArgs, eligibilityStatus: value } })
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -716,24 +737,97 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                   placeholder="{appointment.patientId} or {patient.id}"
                   value={config.args?.patientId || ''}
                   onChange={(e) =>
-                    handleUpdate({ args: { ...config.args, patientId: e.target.value } })
+                    handleUpdate({ args: { ...(config.args || {}), patientId: e.target.value } })
                   }
                 />
-                <Label>Fields to Update (JSON)</Label>
-                <textarea
-                  className="w-full min-h-[100px] px-3 py-2 border border-gray-300 rounded-md text-sm font-mono"
-                  placeholder='{"preferredContactMethod": "email", "notes": "Updated via automation"}'
-                  value={config.args?.fieldsJson || ''}
-                  onChange={(e) => {
-                    try {
-                      const parsed = JSON.parse(e.target.value || '{}')
-                      handleUpdate({ args: { ...config.args, fields: parsed, fieldsJson: e.target.value } })
-                    } catch {
-                      handleUpdate({ args: { ...config.args, fieldsJson: e.target.value } })
-                    }
-                  }}
-                />
-                <p className="text-xs text-gray-500">Allowed fields: preferredContactMethod, notes, address</p>
+                <Label>Fields to Update</Label>
+                <div className="space-y-3">
+                  {/* Preferred Contact Method */}
+                  <div>
+                    <Label className="text-xs">Preferred Contact Method</Label>
+                    <Select
+                      value={config.args?.fields?.preferredContactMethod || ''}
+                      onValueChange={(value) => {
+                        const currentArgs = config.args || {}
+                        const currentFields = currentArgs.fields || {}
+                        handleUpdate({
+                          args: {
+                            ...currentArgs,
+                            fields: { ...currentFields, preferredContactMethod: value },
+                          },
+                        })
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select contact method" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="phone">Phone</SelectItem>
+                        <SelectItem value="email">Email</SelectItem>
+                        <SelectItem value="sms">SMS</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Notes */}
+                  <div>
+                    <Label className="text-xs">Notes</Label>
+                    <textarea
+                      className="w-full min-h-[80px] px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      placeholder="Notes (optional)"
+                      value={config.args?.fields?.notes || ''}
+                      onChange={(e) => {
+                        const currentArgs = config.args || {}
+                        const currentFields = currentArgs.fields || {}
+                        handleUpdate({
+                          args: {
+                            ...currentArgs,
+                            fields: { ...currentFields, notes: e.target.value },
+                          },
+                        })
+                      }}
+                    />
+                  </div>
+
+                  {/* Address */}
+                  <div>
+                    <Label className="text-xs">Address</Label>
+                    <Input
+                      placeholder="Address (optional)"
+                      value={config.args?.fields?.address || ''}
+                      onChange={(e) => {
+                        const currentArgs = config.args || {}
+                        const currentFields = currentArgs.fields || {}
+                        handleUpdate({
+                          args: {
+                            ...currentArgs,
+                            fields: { ...currentFields, address: e.target.value },
+                          },
+                        })
+                      }}
+                    />
+                  </div>
+
+                  {/* Clear all fields button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => {
+                      const currentArgs = config.args || {}
+                      handleUpdate({
+                        args: {
+                          ...currentArgs,
+                          fields: {},
+                        },
+                      })
+                    }}
+                  >
+                    Clear All Fields
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-500">Only allowed fields are shown above</p>
               </div>
             )}
 
@@ -744,9 +838,10 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                   type="number"
                   placeholder="60"
                   value={config.args?.seconds || ''}
-                  onChange={(e) =>
-                    handleUpdate({ args: { ...config.args, seconds: parseInt(e.target.value) || 0 } })
-                  }
+                  onChange={(e) => {
+                    const currentArgs = config.args || {}
+                    handleUpdate({ args: { ...currentArgs, seconds: parseInt(e.target.value) || 0 } })
+                  }}
                 />
                 <p className="text-xs text-gray-500">Maximum: 86400 (24 hours)</p>
               </div>
