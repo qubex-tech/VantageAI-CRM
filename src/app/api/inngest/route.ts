@@ -6,6 +6,8 @@ import { runAutomationsForEvent } from '@/inngest/functions'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+// Serve Inngest functions - this endpoint must be publicly accessible
+// Inngest will call this endpoint to register functions and trigger executions
 export const { GET, POST, PUT } = serve({
   client: inngest,
   functions: [runAutomationsForEvent],
