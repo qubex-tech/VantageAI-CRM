@@ -4,10 +4,12 @@ import { prisma } from '@/lib/db'
 import { executeTool, validateToolName } from '@/lib/healix-tools'
 import OpenAI from 'openai'
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
+// Lazy initialization to avoid build-time errors
+function getOpenAIClient() {
+  return new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  })
+}
 
 /**
  * System prompt for Healix assistant
