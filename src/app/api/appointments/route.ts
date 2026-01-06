@@ -5,6 +5,7 @@ import { appointmentSchema, bookAppointmentSchema } from '@/lib/validations'
 import { createAuditLog } from '@/lib/audit'
 import { getCalClient } from '@/lib/cal'
 import { bookAppointment as bookAppointmentAction } from '@/lib/agentActions'
+import { emitEvent } from '@/lib/outbox'
 
 export async function GET(req: NextRequest) {
   try {
@@ -129,6 +130,25 @@ export async function POST(req: NextRequest) {
         changes: { after: appointment },
       })
 
+      // Emit event for automation
+      await emitEvent({
+        practiceId,
+        eventName: 'crm/appointment.created',
+        entityType: 'appointment',
+        entityId: result.appointmentId,
+        data: {
+          appointment: {
+            id: appointment.id,
+            patientId: appointment.patientId,
+            status: appointment.status,
+            startTime: appointment.startTime.toISOString(),
+            endTime: appointment.endTime.toISOString(),
+            visitType: appointment.visitType,
+          },
+          userId: user.id,
+        },
+      })
+
       return NextResponse.json({ appointment, booking: result }, { status: 201 })
     }
 
@@ -159,6 +179,25 @@ export async function POST(req: NextRequest) {
       resourceType: 'appointment',
       resourceId: appointment.id,
       changes: { after: appointment },
+    })
+
+    // Emit event for automation
+    await emitEvent({
+      practiceId,
+      eventName: 'crm/appointment.created',
+      entityType: 'appointment',
+      entityId: appointment.id,
+      data: {
+        appointment: {
+          id: appointment.id,
+          patientId: appointment.patientId,
+          status: appointment.status,
+          startTime: appointment.startTime.toISOString(),
+          endTime: appointment.endTime.toISOString(),
+          visitType: appointment.visitType,
+        },
+        userId: user.id,
+      },
     })
 
     return NextResponse.json({ appointment }, { status: 201 })

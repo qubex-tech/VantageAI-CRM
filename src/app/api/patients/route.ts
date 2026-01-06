@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/middleware'
 import { patientSchema } from '@/lib/validations'
 import { createAuditLog, createTimelineEntry } from '@/lib/audit'
 import { tenantScope } from '@/lib/db'
+import { emitEvent } from '@/lib/outbox'
 
 export async function GET(req: NextRequest) {
   try {
@@ -103,6 +104,24 @@ export async function POST(req: NextRequest) {
       title: 'Patient created',
       description: 'Patient record was created',
       userId: user.id,
+    })
+
+    // Emit event for automation
+    await emitEvent({
+      practiceId,
+      eventName: 'crm/patient.created',
+      entityType: 'patient',
+      entityId: patient.id,
+      data: {
+        patient: {
+          id: patient.id,
+          name: patient.name,
+          email: patient.email,
+          phone: patient.phone,
+          preferredContactMethod: patient.preferredContactMethod,
+        },
+        userId: user.id,
+      },
     })
 
     return NextResponse.json({ patient }, { status: 201 })

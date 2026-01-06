@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
 import { insurancePolicySchema } from '@/lib/validations'
 import { createAuditLog, createTimelineEntry } from '@/lib/audit'
+import { emitEvent } from '@/lib/outbox'
 
 export async function POST(req: NextRequest) {
   try {
@@ -60,6 +61,25 @@ export async function POST(req: NextRequest) {
       title: 'Insurance policy added',
       description: `${validated.providerName} - ${validated.memberId}`,
       metadata: { policyId: policy.id },
+    })
+
+    // Emit event for automation
+    await emitEvent({
+      practiceId,
+      eventName: 'crm/insurance.created',
+      entityType: 'insurance',
+      entityId: policy.id,
+      data: {
+        insurance: {
+          id: policy.id,
+          patientId: policy.patientId,
+          providerName: policy.providerName,
+          planName: policy.planName,
+          memberId: policy.memberId,
+          eligibilityStatus: policy.eligibilityStatus,
+        },
+        userId: user.id,
+      },
     })
 
     return NextResponse.json({ policy }, { status: 201 })

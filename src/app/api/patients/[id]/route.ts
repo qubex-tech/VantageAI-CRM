@@ -5,6 +5,7 @@ import { patientSchema } from '@/lib/validations'
 import { createAuditLog, createTimelineEntry } from '@/lib/audit'
 import { tenantScope } from '@/lib/db'
 import { logPatientChanges } from '@/lib/patient-activity'
+import { emitEvent } from '@/lib/outbox'
 
 export const dynamic = 'force-dynamic'
 
@@ -151,6 +152,25 @@ export async function PATCH(
       newPatient: patient,
       userId: user.id,
       excludedFields: ['tags'], // Tags are handled separately
+    })
+
+    // Emit event for automation
+    await emitEvent({
+      practiceId,
+      eventName: 'crm/patient.updated',
+      entityType: 'patient',
+      entityId: patient.id,
+      data: {
+        patient: {
+          id: patient.id,
+          name: patient.name,
+          email: patient.email,
+          phone: patient.phone,
+          preferredContactMethod: patient.preferredContactMethod,
+        },
+        changes: validated,
+        userId: user.id,
+      },
     })
 
     return NextResponse.json({ patient })

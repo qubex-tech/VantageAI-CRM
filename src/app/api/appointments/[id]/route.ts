@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
 import { appointmentSchema } from '@/lib/validations'
 import { createAuditLog } from '@/lib/audit'
+import { emitEvent } from '@/lib/outbox'
 
 export async function GET(
   req: NextRequest,
@@ -100,6 +101,81 @@ export async function PATCH(
       },
     })
 
+    // Emit event for automation - check if status changed to a specific status
+    const statusChanged = validated.status && validated.status !== existing.status
+    
+    await emitEvent({
+      practiceId,
+      eventName: 'crm/appointment.updated',
+      entityType: 'appointment',
+      entityId: appointment.id,
+      data: {
+        appointment: {
+          id: appointment.id,
+          patientId: appointment.patientId,
+          status: appointment.status,
+          startTime: appointment.startTime.toISOString(),
+          endTime: appointment.endTime.toISOString(),
+          visitType: appointment.visitType,
+        },
+        changes: validated,
+        userId: user.id,
+      },
+    })
+
+    // Emit specific status events
+    if (statusChanged) {
+      if (validated.status === 'confirmed') {
+        await emitEvent({
+          practiceId,
+          eventName: 'crm/appointment.confirmed',
+          entityType: 'appointment',
+          entityId: appointment.id,
+          data: {
+            appointment: {
+              id: appointment.id,
+              patientId: appointment.patientId,
+              status: appointment.status,
+              visitType: appointment.visitType,
+            },
+            userId: user.id,
+          },
+        })
+      } else if (validated.status === 'completed') {
+        await emitEvent({
+          practiceId,
+          eventName: 'crm/appointment.completed',
+          entityType: 'appointment',
+          entityId: appointment.id,
+          data: {
+            appointment: {
+              id: appointment.id,
+              patientId: appointment.patientId,
+              status: appointment.status,
+              visitType: appointment.visitType,
+            },
+            userId: user.id,
+          },
+        })
+      } else if (validated.status === 'no_show') {
+        await emitEvent({
+          practiceId,
+          eventName: 'crm/appointment.no_show',
+          entityType: 'appointment',
+          entityId: appointment.id,
+          data: {
+            appointment: {
+              id: appointment.id,
+              patientId: appointment.patientId,
+              status: appointment.status,
+              visitType: appointment.visitType,
+            },
+            userId: user.id,
+          },
+        })
+      }
+    }
+
     return NextResponse.json({ appointment })
   } catch (error) {
     if (error instanceof Error && error.name === 'ZodError') {
@@ -143,6 +219,16 @@ export async function DELETE(
     const appointment = await prisma.appointment.update({
       where: { id },
       data: { status: 'cancelled' },
+      include: {
+        patient: {
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+            email: true,
+          },
+        },
+      },
     })
 
     await createAuditLog({
@@ -151,6 +237,25 @@ export async function DELETE(
       action: 'delete',
       resourceType: 'appointment',
       resourceId: appointment.id,
+    })
+
+    // Emit event for automation
+    await emitEvent({
+      practiceId,
+      eventName: 'crm/appointment.cancelled',
+      entityType: 'appointment',
+      entityId: appointment.id,
+      data: {
+        appointment: {
+          id: appointment.id,
+          patientId: appointment.patientId,
+          status: appointment.status,
+          startTime: appointment.startTime.toISOString(),
+          endTime: appointment.endTime.toISOString(),
+          visitType: appointment.visitType,
+        },
+        userId: user.id,
+      },
     })
 
     return NextResponse.json({ success: true })

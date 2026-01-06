@@ -33,6 +33,9 @@ model Practice {
   healixConversations  HealixConversation[]
   healixActionLogs     HealixActionLog[]
   patientNotes         PatientNote[]
+  outboxEvents         OutboxEvent[]
+  automationRules      AutomationRule[]
+  automationRuns       AutomationRun[]
 
   @@map("practices")
 }
@@ -410,4 +413,90 @@ model HealixActionLog {
   @@index([conversationId])
   @@index([createdAt])
   @@map("healix_action_logs")
+}
+
+model OutboxEvent {
+  id           String    @id @default(uuid())
+  practiceId   String
+  name         String // e.g., "crm/appointment.created"
+  payload      Json
+  status       String // 'pending', 'published', 'failed'
+  attempts     Int       @default(0)
+  nextAttemptAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId])
+  @@index([status])
+  @@index([status, nextAttemptAt])
+  @@index([name])
+  @@map("outbox_events")
+}
+
+model AutomationRule {
+  id             String   @id @default(uuid())
+  practiceId     String
+  name           String
+  enabled        Boolean  @default(true)
+  triggerEvent   String // Same namespace as OutboxEvent.name
+  conditionsJson Json // v1: JSONLogic or CEL-like subset; store as JSON
+  actionsJson    Json // List of actions with params
+  createdByUserId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  practice Practice       @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  runs     AutomationRun[]
+
+  @@index([practiceId])
+  @@index([practiceId, enabled])
+  @@index([practiceId, triggerEvent])
+  @@index([enabled])
+  @@map("automation_rules")
+}
+
+model AutomationRun {
+  id            String    @id @default(uuid())
+  practiceId    String
+  ruleId        String
+  sourceEventId String // OutboxEvent.id
+  status        String // 'running', 'succeeded', 'failed', 'skipped'
+  startedAt     DateTime  @default(now())
+  finishedAt    DateTime?
+  error         String?
+  result        Json? // Summary of execution
+
+  practice      Practice      @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  rule          AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  actionLogs    AutomationActionLog[]
+
+  @@index([practiceId])
+  @@index([ruleId])
+  @@index([sourceEventId])
+  @@index([status])
+  @@index([startedAt])
+  @@map("automation_runs")
+}
+
+model AutomationActionLog {
+  id          String   @id @default(uuid())
+  runId       String
+  practiceId  String
+  actionType  String // 'draft_sms' | 'draft_email' | 'create_task' | 'create_note' | 'update_patient_fields'
+  actionArgs  Json
+  actionResult Json?
+  status      String // 'succeeded', 'failed', 'skipped'
+  error       String?
+  createdAt   DateTime @default(now())
+
+  run AutomationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([practiceId])
+  @@index([actionType])
+  @@index([status])
+  @@index([createdAt])
+  @@map("automation_action_logs")
 }

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
 import { insurancePolicySchema } from '@/lib/validations'
 import { createAuditLog } from '@/lib/audit'
+import { emitEvent } from '@/lib/outbox'
 
 export async function PATCH(
   req: NextRequest,
@@ -48,6 +49,26 @@ export async function PATCH(
       changes: {
         before: existing,
         after: policy,
+      },
+    })
+
+    // Emit event for automation
+    await emitEvent({
+      practiceId,
+      eventName: 'crm/insurance.updated',
+      entityType: 'insurance',
+      entityId: policy.id,
+      data: {
+        insurance: {
+          id: policy.id,
+          patientId: policy.patientId,
+          providerName: policy.providerName,
+          planName: policy.planName,
+          memberId: policy.memberId,
+          eligibilityStatus: policy.eligibilityStatus,
+        },
+        changes: validated,
+        userId: user.id,
       },
     })
 
