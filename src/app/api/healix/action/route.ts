@@ -4,9 +4,12 @@ import { prisma } from '@/lib/db'
 import { executeTool, validateToolName } from '@/lib/healix-tools'
 import OpenAI from 'openai'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
+// Lazy initialization to avoid build-time errors
+function getOpenAIClient() {
+  return new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  })
+}
 
 /**
  * POST /api/healix/action
@@ -95,6 +98,7 @@ export async function POST(req: NextRequest) {
               // Generate confirmation message using OpenAI
               let confirmationMessage = ''
               try {
+                const openai = getOpenAIClient()
                 const completion = await openai.chat.completions.create({
                   model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
                   messages: [
