@@ -159,7 +159,7 @@ export function HealixPanel({ open, onOpenChange, context }: HealixPanelProps) {
                   const formattedAnswer = parsed.answer || fullAnswer
                   
                   if (parsed.suggestedActions.length > 0 && suggestedActions.length === 0) {
-                    setSuggestedActions(parsed.suggestedActions)
+                    setSuggestedActions(parsed.suggestedActions as SuggestedAction[])
                   }
 
                   const assistantMessage: HealixMessage = {

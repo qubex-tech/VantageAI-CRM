@@ -166,7 +166,7 @@ export function HealixDrawer({ open, onOpenChange, context }: HealixDrawerProps)
                   
                   // Update suggested actions if they're in the parsed response
                   if (parsed.suggestedActions.length > 0 && suggestedActions.length === 0) {
-                    setSuggestedActions(parsed.suggestedActions)
+                    setSuggestedActions(parsed.suggestedActions as SuggestedAction[])
                   }
 
                   const assistantMessage: HealixMessage = {
