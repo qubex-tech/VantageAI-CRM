@@ -30,6 +30,7 @@ interface FlowBuilderPageProps {
   practiceId: string
   userId: string
   initialRules?: AutomationRule[]
+  initialRule?: AutomationRule // For editing a specific rule
 }
 
 // Convert automation rule to flow format
@@ -139,20 +140,26 @@ function flowToRule(
   }
 }
 
-export function FlowBuilderPage({ practiceId, userId, initialRules = [] }: FlowBuilderPageProps) {
+export function FlowBuilderPage({ practiceId, userId, initialRules = [], initialRule }: FlowBuilderPageProps) {
   const router = useRouter()
-  const [workflowName, setWorkflowName] = useState('')
+  const [workflowName, setWorkflowName] = useState(initialRule?.name || '')
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const isEditing = !!initialRule
 
-  // Convert first rule to flow if available
+  // Convert rule to flow if editing, or use first rule from list
   const initialWorkflow = useMemo(() => {
+    if (initialRule) {
+      return ruleToFlow(initialRule)
+    }
     if (initialRules.length > 0) {
       return ruleToFlow(initialRules[0])
     }
     return undefined
-  }, [initialRules])
+  }, [initialRule, initialRules])
+
+  const [currentWorkflow, setCurrentWorkflow] = useState<{ nodes: Node<FlowNodeData>[]; edges: Edge[] } | null>(null)
 
   const handleSave = useCallback(
     async (workflow: { nodes: Node<FlowNodeData>[]; edges: Edge[] }) => {
@@ -168,33 +175,47 @@ export function FlowBuilderPage({ practiceId, userId, initialRules = [] }: FlowB
       try {
         const ruleData = flowToRule(workflow.nodes, workflow.edges, workflowName)
 
-        const res = await fetch('/api/automations', {
-          method: 'POST',
+        // Use PATCH for editing, POST for creating
+        const url = isEditing ? `/api/automations/${initialRule!.id}` : '/api/automations'
+        const method = isEditing ? 'PATCH' : 'POST'
+
+        const res = await fetch(url, {
+          method,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name: workflowName,
-            enabled: true,
+            enabled: isEditing ? initialRule!.enabled : true,
             ...ruleData,
           }),
         })
 
         if (!res.ok) {
           const errorData = await res.json()
-          throw new Error(errorData.error || 'Failed to save workflow')
+          throw new Error(errorData.error || `Failed to ${isEditing ? 'update' : 'save'} workflow`)
         }
 
-        setSuccess('Workflow saved successfully!')
+        setSuccess(`Workflow ${isEditing ? 'updated' : 'saved'} successfully!`)
         setTimeout(() => {
           router.push('/workflows/automations')
         }, 1500)
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to save workflow')
+        setError(err instanceof Error ? err.message : `Failed to ${isEditing ? 'update' : 'save'} workflow`)
       } finally {
         setIsSaving(false)
       }
     },
-    [workflowName, router]
+    [workflowName, router, isEditing, initialRule]
   )
+
+  const handleSaveClick = useCallback(() => {
+    if (currentWorkflow) {
+      handleSave(currentWorkflow)
+    }
+  }, [currentWorkflow, handleSave])
+
+  const handleWorkflowChange = useCallback((workflow: { nodes: Node<FlowNodeData>[]; edges: Edge[] }) => {
+    setCurrentWorkflow(workflow)
+  }, [])
 
   const handleTest = useCallback(() => {
     // TODO: Implement test functionality
@@ -222,7 +243,20 @@ export function FlowBuilderPage({ practiceId, userId, initialRules = [] }: FlowB
               className="w-64"
             />
           </div>
+          {isEditing && (
+            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+              Editing
+            </span>
+          )}
         </div>
+        <Button
+          onClick={handleSaveClick}
+          disabled={isSaving || !workflowName.trim() || !currentWorkflow}
+          className="ml-auto"
+        >
+          <Save className="h-4 w-4 mr-2" />
+          {isSaving ? (isEditing ? 'Updating...' : 'Saving...') : (isEditing ? 'Update Workflow' : 'Save Workflow')}
+        </Button>
       </div>
 
       {error && (
@@ -239,7 +273,15 @@ export function FlowBuilderPage({ practiceId, userId, initialRules = [] }: FlowB
 
       {/* Flow Builder */}
       <div className="flex-1 overflow-hidden">
-        <FlowBuilder initialWorkflow={initialWorkflow} onSave={handleSave} onTest={handleTest} />
+        <FlowBuilder 
+          initialWorkflow={initialWorkflow} 
+          onSave={(workflow) => {
+            setCurrentWorkflow(workflow)
+            handleSave(workflow)
+          }} 
+          onTest={handleTest}
+          onWorkflowChange={handleWorkflowChange}
+        />
       </div>
     </div>
   )

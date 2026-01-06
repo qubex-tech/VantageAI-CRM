@@ -513,6 +513,13 @@ export function AutomationsPage({ initialRules, practiceId, userId }: Automation
                     <Button
                       variant="outline"
                       size="sm"
+                      onClick={() => window.location.href = `/workflows/automations/flow?id=${rule.id}`}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => handleTestRule(rule)}
                       disabled={loading}
                     >

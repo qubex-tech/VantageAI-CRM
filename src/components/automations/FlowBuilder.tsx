@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState, useMemo } from 'react'
+import { useCallback, useState, useMemo, useEffect } from 'react'
 import ReactFlow, {
   Node,
   Edge,
@@ -48,9 +48,10 @@ interface FlowBuilderProps {
   }
   onSave?: (workflow: { nodes: Node<FlowNodeData>[]; edges: Edge[] }) => void
   onTest?: () => void
+  onWorkflowChange?: (workflow: { nodes: Node<FlowNodeData>[]; edges: Edge[] }) => void
 }
 
-export function FlowBuilder({ initialWorkflow, onSave, onTest }: FlowBuilderProps) {
+export function FlowBuilder({ initialWorkflow, onSave, onTest, onWorkflowChange }: FlowBuilderProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState(
     initialWorkflow?.nodes || initialNodes
   )
@@ -59,6 +60,13 @@ export function FlowBuilder({ initialWorkflow, onSave, onTest }: FlowBuilderProp
   )
   const [selectedNode, setSelectedNode] = useState<Node<FlowNodeData> | null>(null)
   const [showSidebar, setShowSidebar] = useState(true)
+
+  // Notify parent of workflow changes
+  useEffect(() => {
+    if (onWorkflowChange) {
+      onWorkflowChange({ nodes, edges })
+    }
+  }, [nodes, edges, onWorkflowChange])
 
   const onConnect = useCallback(
     (params: Connection) => {

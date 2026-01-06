@@ -6,7 +6,11 @@ import { FlowBuilderPage } from '@/components/automations/FlowBuilderPage'
 
 export const dynamic = 'force-dynamic'
 
-export default async function AutomationFlowPage() {
+interface AutomationFlowPageProps {
+  searchParams: Promise<{ id?: string }>
+}
+
+export default async function AutomationFlowPage({ searchParams }: AutomationFlowPageProps) {
   const supabaseSession = await getSupabaseSession()
   
   if (!supabaseSession) {
@@ -26,7 +30,35 @@ export default async function AutomationFlowPage() {
     redirect('/login?error=Practice access required')
   }
 
-  // Get existing rules to convert to flow format
+  const params = await searchParams
+  const ruleId = params.id
+
+  // If editing, load the specific rule
+  if (ruleId) {
+    const rule = await prisma.automationRule.findFirst({
+      where: {
+        id: ruleId,
+        practiceId: user.practiceId,
+      },
+    })
+
+    if (!rule) {
+      redirect('/workflows/automations?error=Rule not found')
+    }
+
+    const ruleToEdit = {
+      id: rule.id,
+      name: rule.name,
+      enabled: rule.enabled,
+      triggerEvent: rule.triggerEvent,
+      conditionsJson: rule.conditionsJson as any,
+      actionsJson: (Array.isArray(rule.actionsJson) ? rule.actionsJson : []) as any[],
+    }
+
+    return <FlowBuilderPage practiceId={user.practiceId} userId={user.id} initialRule={ruleToEdit} />
+  }
+
+  // Otherwise, get all rules for reference
   const rulesData = await prisma.automationRule.findMany({
     where: {
       practiceId: user.practiceId,
@@ -34,7 +66,6 @@ export default async function AutomationFlowPage() {
     orderBy: { createdAt: 'desc' },
   })
 
-  // Serialize and type-cast the rules to match FlowBuilderPage expectations
   const rules = rulesData.map((rule) => ({
     id: rule.id,
     name: rule.name,
