@@ -131,8 +131,23 @@ function flowToRule(
   const actionsJson = actionNodes.map((node) => {
     // Ensure args is properly extracted and serialized
     const nodeArgs = node.data.config?.args || {}
+    
+    console.log('[FLOW_TO_RULE] Processing action node:', {
+      nodeId: node.id,
+      actionType: node.data.config?.actionType,
+      rawArgs: nodeArgs,
+      argsType: typeof nodeArgs,
+      argsKeys: Object.keys(nodeArgs),
+      fullConfig: node.data.config,
+    })
+    
     // Deep clone to ensure all nested properties are included
     const serializedArgs = JSON.parse(JSON.stringify(nodeArgs))
+    
+    console.log('[FLOW_TO_RULE] Serialized args:', {
+      serializedArgs,
+      serializedKeys: Object.keys(serializedArgs),
+    })
     
     return {
       type: node.data.config?.actionType || 'create_note',
@@ -180,10 +195,25 @@ export function FlowBuilderPage({ practiceId, userId, initialRules = [], initial
       setSuccess('')
 
       try {
+        // Debug: Log the workflow nodes before conversion
+        console.log('[WORKFLOW SAVE] Workflow nodes:', workflow.nodes.map(n => ({
+          id: n.id,
+          type: n.type,
+          actionType: n.data.config?.actionType,
+          args: n.data.config?.args,
+          configKeys: Object.keys(n.data.config || {}),
+        })))
+        
         const ruleData = flowToRule(workflow.nodes, workflow.edges, workflowName)
         
         // Debug: Log the rule data to verify args are included
-        console.log('Saving workflow with actions:', JSON.stringify(ruleData.actionsJson, null, 2))
+        console.log('[WORKFLOW SAVE] Rule data actions:', JSON.stringify(ruleData.actionsJson, null, 2))
+        console.log('[WORKFLOW SAVE] Action args details:', ruleData.actionsJson.map(a => ({
+          type: a.type,
+          args: a.args,
+          argsKeys: Object.keys(a.args || {}),
+          argsValues: Object.entries(a.args || {}).map(([k, v]) => ({ key: k, value: v, type: typeof v })),
+        })))
 
         // Use PATCH for editing, POST for creating
         const url = isEditing ? `/api/automations/${initialRule!.id}` : '/api/automations'
