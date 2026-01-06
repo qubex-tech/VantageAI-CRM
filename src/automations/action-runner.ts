@@ -158,6 +158,14 @@ async function createNote(
   args: z.infer<typeof createNoteSchema>,
   eventData: Record<string, any>
 ): Promise<ActionResult> {
+  console.log(`[AUTOMATION] Creating note:`, {
+    practiceId,
+    patientId: args.patientId,
+    type: args.type,
+    contentLength: args.content?.length,
+    eventDataUserId: eventData.userId,
+  })
+
   // Verify patient belongs to practice
   const patient = await prisma.patient.findFirst({
     where: {
@@ -168,6 +176,7 @@ async function createNote(
   })
 
   if (!patient) {
+    console.error(`[AUTOMATION] Patient not found:`, args.patientId)
     return {
       status: 'failed',
       error: `Patient ${args.patientId} not found or not accessible`,
@@ -248,6 +257,12 @@ async function createNote(
       type: args.type,
       content: args.content,
     },
+  })
+
+  console.log(`[AUTOMATION] Note created successfully:`, {
+    noteId: note.id,
+    patientId: args.patientId,
+    userId: automationUserId,
   })
 
   return {
@@ -372,6 +387,13 @@ async function draftEmail(
 
   // Actually send email via SendGrid
   try {
+    console.log(`[AUTOMATION] Sending email via SendGrid:`, {
+      practiceId,
+      toEmail,
+      subject: args.subject,
+      patientId: args.patientId,
+    })
+
     const { getSendgridClient } = await import('@/lib/sendgrid')
     const sendgridClient = await getSendgridClient(practiceId)
     
@@ -384,10 +406,49 @@ async function draftEmail(
     })
 
     if (!result.success) {
+      console.error(`[AUTOMATION] SendGrid error:`, result.error)
       return {
         status: 'failed',
         error: result.error || 'Failed to send email via SendGrid',
       }
+    }
+
+    console.log(`[AUTOMATION] Email sent successfully:`, {
+      messageId: result.messageId,
+      toEmail,
+    })
+
+    // Create a note to track email sent
+    try {
+      let automationUserId = eventData.userId
+      if (!automationUserId) {
+        const adminUser = await prisma.user.findFirst({
+          where: {
+            practiceId,
+            role: { in: ['practice_admin', 'admin'] },
+          },
+        })
+        automationUserId = adminUser?.id || (await prisma.user.findFirst({
+          where: { practiceId },
+        }))?.id
+      }
+
+      if (automationUserId) {
+        await prisma.patientNote.create({
+          data: {
+            patientId: args.patientId,
+            practiceId,
+            userId: automationUserId,
+            type: 'contact',
+            content: `[Automation Email] Sent to ${toEmail} (Subject: ${args.subject}): ${args.body.substring(0, 100)}${args.body.length > 100 ? '...' : ''}`,
+            metadata: { messageId: result.messageId },
+          },
+        })
+        console.log(`[AUTOMATION] Email note created for patient ${args.patientId}`)
+      }
+    } catch (noteError) {
+      console.error(`[AUTOMATION] Failed to create email note:`, noteError)
+      // Don't fail the action if note creation fails
     }
 
     return {
@@ -401,6 +462,7 @@ async function draftEmail(
       },
     }
   } catch (error) {
+    console.error(`[AUTOMATION] Email sending error:`, error)
     return {
       status: 'failed',
       error: error instanceof Error ? error.message : 'Failed to send email',
@@ -740,6 +802,14 @@ async function sendReminder(
  */
 export async function runAction(params: RunActionParams): Promise<ActionResult> {
   const { practiceId, runId, actionType, actionArgs, eventData } = params
+
+  console.log(`[AUTOMATION] runAction called:`, {
+    practiceId,
+    runId,
+    actionType,
+    actionArgs,
+    eventDataKeys: Object.keys(eventData),
+  })
 
   let result: ActionResult
 

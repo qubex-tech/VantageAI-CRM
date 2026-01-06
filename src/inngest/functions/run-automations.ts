@@ -137,8 +137,17 @@ export const runAutomationsForEvent = inngest.createFunction(
             // Execute actions sequentially
             for (const action of actions) {
               try {
+                console.log(`[AUTOMATION] Executing action: ${action.type}`, {
+                  ruleId: rule.id,
+                  runId: run.id,
+                  originalArgs: action.args,
+                  eventData: payload.data,
+                })
+
                 // Substitute variables in action args (e.g., {appointment.patientId} -> actual value)
                 const processedArgs = substituteVariables(action.args || {}, payload.data)
+                
+                console.log(`[AUTOMATION] Processed args after variable substitution:`, processedArgs)
                 
                 const result = await runAction({
                   practiceId,
@@ -151,6 +160,13 @@ export const runAutomationsForEvent = inngest.createFunction(
                   },
                 })
 
+                console.log(`[AUTOMATION] Action result:`, {
+                  actionType: action.type,
+                  status: result.status,
+                  result: result.result,
+                  error: result.error,
+                })
+
                 actionResults.push({
                   actionType: action.type,
                   status: result.status,
@@ -158,6 +174,11 @@ export const runAutomationsForEvent = inngest.createFunction(
                   error: result.error,
                 })
               } catch (error) {
+                console.error(`[AUTOMATION] Action execution error:`, {
+                  actionType: action.type,
+                  error: error instanceof Error ? error.message : 'Unknown error',
+                  stack: error instanceof Error ? error.stack : undefined,
+                })
                 actionResults.push({
                   actionType: action.type,
                   status: 'failed',
