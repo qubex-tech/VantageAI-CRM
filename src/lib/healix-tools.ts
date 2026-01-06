@@ -174,7 +174,7 @@ export async function createTask(
       practiceId: params.clinicId,
       userId,
       action: 'create',
-      resourceType: 'task',
+      resourceType: params.patientId ? 'patient' : params.appointmentId ? 'appointment' : 'patient',
       resourceId: params.patientId || params.appointmentId || 'unknown',
       changes: { task: params },
     })
@@ -256,7 +256,7 @@ export async function createNote(
       practiceId: params.clinicId,
       userId,
       action: 'create',
-      resourceType: 'note',
+      resourceType: params.patientId ? 'patient' : params.appointmentId ? 'appointment' : 'patient',
       resourceId: params.patientId || params.appointmentId || 'unknown',
       changes: { note: params.content },
     })
