@@ -47,14 +47,25 @@ curl -X POST https://your-domain.com/api/internal/outbox/publish
    - Check "Functions" - you should see "Run Automations for Event"
    - Check "Events" - you should see incoming events
 
-2. **Verify Inngest Endpoint**:
+2. **Configure Inngest App URL** (IMPORTANT):
+   - Go to Inngest Dashboard → Your App → Settings
+   - Set "Serve URL" to: `https://your-domain.com/api/inngest`
+   - Click "Save" and wait for Inngest to validate the endpoint
+   - If you get a 404 error:
+     a. Wait 2-3 minutes after deployment for Vercel to finish building
+     b. Verify the route exists: `curl https://your-domain.com/api/inngest` (should not return 404)
+     c. Check that middleware allows `/api/inngest` (see `src/middleware.ts`)
+     d. Verify `INNGEST_EVENT_KEY` is set in Vercel environment variables
+
+3. **Verify Inngest Endpoint**:
    - Your Inngest endpoint should be: `https://your-domain.com/api/inngest`
    - Inngest should be able to reach this URL
-   - Check Inngest dashboard → Settings → Endpoints
+   - Use "App diagnostics" in Inngest dashboard to test connectivity
 
-3. **Check Function Sync**:
+4. **Check Function Sync**:
    - Inngest automatically syncs functions when you deploy
    - If functions don't appear, check the Inngest dashboard logs
+   - Try clicking "Sync" or "Refresh" in the Inngest dashboard
 
 ### 5. Check Database
 
