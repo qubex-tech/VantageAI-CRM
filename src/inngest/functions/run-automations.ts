@@ -205,6 +205,12 @@ export const runAutomationsForEvent = inngest.createFunction(
                   }
                 }
                 
+                // Auto-fill type for create_note if missing
+                if (action.type === 'create_note' && !processedArgs.type) {
+                  console.log(`[AUTOMATION] Auto-filling type='general' for create_note`)
+                  processedArgs = { ...processedArgs, type: 'general' }
+                }
+                
                 console.log(`[AUTOMATION] Processed args after variable substitution:`, {
                   processedArgs,
                   processedArgsKeys: Object.keys(processedArgs),
