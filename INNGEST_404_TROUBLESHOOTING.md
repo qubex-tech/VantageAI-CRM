@@ -2,11 +2,48 @@
 
 If Inngest shows "We could not reach your URL" when trying to sync your app, follow these steps:
 
+## ⚠️ CRITICAL: Check Domain Configuration
+
+**If you get a GitHub Pages 404 error**, your domain is pointing to GitHub Pages instead of Vercel!
+
+### Quick Fix: Use Vercel URL
+
+1. **Find your Vercel deployment URL**:
+   - Go to Vercel Dashboard → Your Project
+   - Your URL will be: `https://your-project.vercel.app`
+   - Or check the "Deployments" tab for the latest deployment URL
+
+2. **Use Vercel URL in Inngest**:
+   - In Inngest Dashboard → Your App → Settings
+   - Set "Serve URL" to: `https://your-project.vercel.app/api/inngest`
+   - NOT `https://getvantage.tech/api/inngest` (if domain points to GitHub Pages)
+
+3. **Test the Vercel endpoint**:
+   ```bash
+   curl https://your-project.vercel.app/api/inngest/health
+   ```
+
+### Alternative: Point Domain to Vercel
+
+If you want to use `getvantage.tech`:
+
+1. **In Vercel Dashboard**:
+   - Go to Project → Settings → Domains
+   - Add `getvantage.tech`
+   - Follow DNS configuration instructions
+
+2. **Update DNS records**:
+   - Point your domain's A/CNAME records to Vercel
+   - Wait for DNS propagation (can take up to 24 hours)
+
+3. **Then use in Inngest**:
+   - Serve URL: `https://getvantage.tech/api/inngest`
+
 ## Step 1: Verify Endpoint is Accessible
 
-Test the health check endpoint:
+Test the health check endpoint (use your Vercel URL, not custom domain if it's pointing to GitHub Pages):
 ```bash
-curl https://getvantage.tech/api/inngest/health
+curl https://your-project.vercel.app/api/inngest/health
 ```
 
 Expected response:
@@ -18,7 +55,7 @@ Expected response:
 }
 ```
 
-If this returns 404, the route isn't being deployed correctly.
+If this returns 404 or GitHub Pages error, the domain is misconfigured.
 
 ## Step 2: Check Vercel Deployment Protection
 
