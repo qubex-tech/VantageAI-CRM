@@ -55,7 +55,7 @@ export async function createAuditLog(params: AuditLogParams) {
  */
 export async function createTimelineEntry(params: {
   patientId: string
-  type: 'appointment' | 'insurance' | 'call' | 'note'
+  type: 'appointment' | 'insurance' | 'call' | 'note' | 'email' | 'field_update' | 'document' | 'payment' | 'reminder' | 'task' | 'other'
   title: string
   description?: string
   metadata?: any
