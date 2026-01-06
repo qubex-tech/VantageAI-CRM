@@ -816,24 +816,40 @@ export async function runAction(params: RunActionParams): Promise<ActionResult> 
     // Validate and execute based on action type
     switch (actionType) {
       case 'create_task': {
+        console.log(`[AUTOMATION] Validating create_task args:`, actionArgs)
         const validated = createTaskSchema.parse(actionArgs)
         result = await createTask(practiceId, validated, eventData)
         break
       }
 
       case 'create_note': {
+        console.log(`[AUTOMATION] Validating create_note args:`, {
+          actionArgs,
+          patientId: actionArgs?.patientId,
+          type: actionArgs?.type,
+          content: actionArgs?.content,
+          allKeys: Object.keys(actionArgs || {}),
+        })
         const validated = createNoteSchema.parse(actionArgs)
         result = await createNote(practiceId, validated, eventData)
         break
       }
 
       case 'draft_sms': {
+        console.log(`[AUTOMATION] Validating draft_sms args:`, actionArgs)
         const validated = draftSmsSchema.parse(actionArgs)
         result = await draftSms(practiceId, validated, eventData)
         break
       }
 
       case 'draft_email': {
+        console.log(`[AUTOMATION] Validating draft_email args:`, {
+          actionArgs,
+          patientId: actionArgs?.patientId,
+          subject: actionArgs?.subject,
+          body: actionArgs?.body,
+          allKeys: Object.keys(actionArgs || {}),
+        })
         const validated = draftEmailSchema.parse(actionArgs)
         result = await draftEmail(practiceId, validated, eventData)
         break
@@ -883,11 +899,21 @@ export async function runAction(params: RunActionParams): Promise<ActionResult> 
     }
   } catch (error) {
     if (error instanceof z.ZodError) {
+      console.error(`[AUTOMATION] Zod validation error for ${actionType}:`, {
+        errors: error.errors,
+        actionArgs,
+        formattedErrors: error.errors.map((e) => ({
+          path: e.path.join('.'),
+          message: e.message,
+          code: e.code,
+        })),
+      })
       result = {
         status: 'failed',
-        error: `Validation error: ${error.errors.map((e) => e.message).join(', ')}`,
+        error: `Validation error: ${error.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
       }
     } else {
+      console.error(`[AUTOMATION] Unexpected error for ${actionType}:`, error)
       result = {
         status: 'failed',
         error: error instanceof Error ? error.message : 'Unknown error',

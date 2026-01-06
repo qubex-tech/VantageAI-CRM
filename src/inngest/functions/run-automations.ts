@@ -16,10 +16,19 @@ function substituteVariables(args: any, eventData: Record<string, any>): any {
         if (value && typeof value === 'object' && key in value) {
           value = value[key]
         } else {
+          console.warn(`[AUTOMATION] Variable not found: ${path} in eventData`, {
+            path,
+            availableKeys: Object.keys(eventData),
+            eventData,
+          })
           return match // Return original if path not found
         }
       }
-      return value !== undefined && value !== null ? String(value) : match
+      const finalValue = value !== undefined && value !== null ? String(value) : match
+      if (finalValue === match) {
+        console.warn(`[AUTOMATION] Variable substitution failed for ${path}, keeping placeholder`)
+      }
+      return finalValue
     })
   } else if (Array.isArray(args)) {
     return args.map(item => substituteVariables(item, eventData))
@@ -141,13 +150,32 @@ export const runAutomationsForEvent = inngest.createFunction(
                   ruleId: rule.id,
                   runId: run.id,
                   originalArgs: action.args,
+                  originalArgsType: typeof action.args,
+                  originalArgsKeys: action.args ? Object.keys(action.args) : [],
                   eventData: payload.data,
+                  eventDataKeys: Object.keys(payload.data),
                 })
 
+                // Ensure args is an object
+                const rawArgs = action.args || {}
+                if (typeof rawArgs !== 'object' || Array.isArray(rawArgs)) {
+                  console.error(`[AUTOMATION] Invalid args structure:`, rawArgs)
+                  throw new Error(`Action args must be an object, got ${typeof rawArgs}`)
+                }
+
                 // Substitute variables in action args (e.g., {appointment.patientId} -> actual value)
-                const processedArgs = substituteVariables(action.args || {}, payload.data)
+                const processedArgs = substituteVariables(rawArgs, payload.data)
                 
-                console.log(`[AUTOMATION] Processed args after variable substitution:`, processedArgs)
+                console.log(`[AUTOMATION] Processed args after variable substitution:`, {
+                  processedArgs,
+                  processedArgsKeys: Object.keys(processedArgs),
+                  processedArgsValues: Object.entries(processedArgs).map(([k, v]) => ({
+                    key: k,
+                    value: v,
+                    valueType: typeof v,
+                    isEmpty: v === '' || v === null || v === undefined,
+                  })),
+                })
                 
                 const result = await runAction({
                   practiceId,
