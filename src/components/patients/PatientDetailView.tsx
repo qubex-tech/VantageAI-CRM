@@ -30,8 +30,7 @@ import {
   Mail as MailIcon,
   ChevronDown,
   MessageSquare,
-  Plus,
-  FileText
+  Plus
 } from 'lucide-react'
 import { format, formatDistanceToNow } from 'date-fns'
 import { Button } from '@/components/ui/button'
