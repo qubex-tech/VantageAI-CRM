@@ -340,14 +340,14 @@ export async function draftMessage(
       userId,
     })
 
-    await createAuditLog({
-      practiceId: params.clinicId,
-      userId,
-      action: 'create',
-      resourceType: 'message',
-      resourceId: params.patientId,
-      changes: { message: { channel: params.channel, content: params.content } },
-    })
+      await createAuditLog({
+        practiceId: params.clinicId,
+        userId,
+        action: 'create',
+        resourceType: 'patient',
+        resourceId: params.patientId,
+        changes: { after: { channel: params.channel, content: params.content } },
+      })
 
     return {
       success: true,
