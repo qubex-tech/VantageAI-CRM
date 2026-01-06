@@ -103,22 +103,20 @@ export async function publishOutboxEvent(eventId: string) {
  * Use this in your code paths to emit events
  * 
  * @param eventData - Event data
- * @param publishImmediately - If true, immediately publish to Inngest (default: true in dev, false in prod)
+ * @param publishImmediately - If true, immediately publish to Inngest (default: true in dev and prod)
  */
 export async function emitEvent(
   eventData: OutboxEventData,
-  publishImmediately: boolean = process.env.NODE_ENV === 'development'
+  publishImmediately: boolean = true // Always publish immediately for reliability
 ) {
   const outboxEvent = await createOutboxEvent(eventData)
 
-  // In development, automatically publish events for easier testing
-  // In production, rely on the scheduled outbox publisher
-  if (publishImmediately) {
-    // Fire and forget - don't block on publishing
-    publishOutboxEvent(outboxEvent.id).catch((error) => {
-      console.error('Failed to publish event immediately:', error)
-    })
-  }
+  // Always try to publish immediately (fire and forget)
+  // The cron job will catch any that fail to publish
+  publishOutboxEvent(outboxEvent.id).catch((error) => {
+    console.error('Failed to publish event immediately:', error)
+    // Event remains in 'pending' status and will be retried by cron
+  })
 
   return outboxEvent
 }
