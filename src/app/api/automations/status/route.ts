@@ -71,14 +71,6 @@ export async function GET(req: NextRequest) {
         where: { practiceId },
         take: 5,
         orderBy: { startedAt: 'desc' },
-        select: {
-          id: true,
-          ruleId: true,
-          status: true,
-          startedAt: true,
-          finishedAt: true,
-          error: true,
-        },
         include: {
           rule: {
             select: {
@@ -86,7 +78,15 @@ export async function GET(req: NextRequest) {
             },
           },
         },
-      }),
+      }).then(runs => runs.map(run => ({
+        id: run.id,
+        ruleId: run.ruleId,
+        status: run.status,
+        startedAt: run.startedAt,
+        finishedAt: run.finishedAt,
+        error: run.error,
+        rule: run.rule,
+      }))),
     }
 
     // Check Inngest configuration
