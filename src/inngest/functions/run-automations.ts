@@ -95,6 +95,22 @@ export const runAutomationsForEvent = inngest.createFunction(
           },
         })
 
+        // Debug: Log the rules and their actions
+        console.log(`[AUTOMATION] Found ${matchingRules.length} matching rules`)
+        matchingRules.forEach((rule) => {
+          console.log(`[AUTOMATION] Rule ${rule.id} (${rule.name}):`, {
+            triggerEvent: rule.triggerEvent,
+            actionsCount: Array.isArray(rule.actionsJson) ? rule.actionsJson.length : 0,
+            actions: rule.actionsJson,
+            actionsDetails: Array.isArray(rule.actionsJson) ? rule.actionsJson.map((a: any) => ({
+              type: a.type,
+              args: a.args,
+              argsKeys: Object.keys(a.args || {}),
+              argsType: typeof a.args,
+            })) : [],
+          })
+        })
+
         return { outboxEvent, matchingRules }
       }
     )
@@ -141,6 +157,9 @@ export const runAutomationsForEvent = inngest.createFunction(
 
           try {
             const actions = rule.actionsJson as any[]
+            console.log(`[AUTOMATION] Rule ${rule.id} has ${actions.length} actions to execute`)
+            console.log(`[AUTOMATION] Actions from database:`, JSON.stringify(actions, null, 2))
+            
             const actionResults = []
 
             // Execute actions sequentially
@@ -149,9 +168,11 @@ export const runAutomationsForEvent = inngest.createFunction(
                 console.log(`[AUTOMATION] Executing action: ${action.type}`, {
                   ruleId: rule.id,
                   runId: run.id,
+                  actionObject: action,
                   originalArgs: action.args,
                   originalArgsType: typeof action.args,
                   originalArgsKeys: action.args ? Object.keys(action.args) : [],
+                  actionKeys: Object.keys(action),
                   eventData: payload.data,
                   eventDataKeys: Object.keys(payload.data),
                 })
