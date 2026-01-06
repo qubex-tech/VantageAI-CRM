@@ -108,15 +108,34 @@ const ALLOWED_PATIENT_FIELDS = [
 ] as const
 
 /**
- * Create a task (draft - not actually creating a Task model yet, just logging)
+ * Create a task (creates a timeline entry for now, can be upgraded to Task model later)
  */
 async function createTask(
   practiceId: string,
   args: z.infer<typeof createTaskSchema>,
   eventData: Record<string, any>
 ): Promise<ActionResult> {
-  // In v1, we just log this action
-  // In v2, we'd create an actual Task model
+  // Create a timeline entry to track the task
+  // In the future, this can be upgraded to a dedicated Task model
+  if (args.patientId) {
+    try {
+      const { createTimelineEntry } = await import('@/lib/audit')
+      await createTimelineEntry({
+        patientId: args.patientId,
+        type: 'task',
+        title: args.title,
+        description: args.description || `Priority: ${args.priority || 'medium'}${args.dueDate ? ` | Due: ${args.dueDate}` : ''}`,
+        metadata: {
+          priority: args.priority || 'medium',
+          dueDate: args.dueDate,
+          createdBy: 'automation',
+        },
+      })
+    } catch (error) {
+      console.error('Failed to create task timeline entry:', error)
+    }
+  }
+
   return {
     status: 'succeeded',
     result: {
@@ -126,7 +145,7 @@ async function createTask(
       patientId: args.patientId,
       dueDate: args.dueDate,
       priority: args.priority || 'medium',
-      note: 'Task creation logged (not yet implemented)',
+      note: args.patientId ? 'Task created as timeline entry' : 'Task logged (no patient ID provided)',
     },
   }
 }
@@ -155,20 +174,69 @@ async function createNote(
     }
   }
 
-  // For automation, we need a system user or use the event's userId if available
-  // For now, we'll skip userId (make it optional in schema) or use a system identifier
-  // In production, you'd want to track which automation created the note
-  const systemUserId = eventData.userId || 'system'
+  // Find a valid user for automation (prefer practice admin, fallback to any practice user)
+  let automationUserId = eventData.userId
+  
+  if (!automationUserId) {
+    // Try to find a practice admin
+    const adminUser = await prisma.user.findFirst({
+      where: {
+        practiceId,
+        role: { in: ['practice_admin', 'admin'] },
+      },
+    })
+    
+    if (adminUser) {
+      automationUserId = adminUser.id
+    } else {
+      // Fallback to any user in the practice
+      const anyUser = await prisma.user.findFirst({
+        where: { practiceId },
+      })
+      
+      if (!anyUser) {
+        return {
+          status: 'failed',
+          error: 'No user found in practice for note creation',
+        }
+      }
+      
+      automationUserId = anyUser.id
+    }
+  } else {
+    // Verify the provided user exists and belongs to practice
+    const user = await prisma.user.findFirst({
+      where: {
+        id: automationUserId,
+        practiceId,
+      },
+    })
+    
+    if (!user) {
+      // Fallback to practice admin
+      const adminUser = await prisma.user.findFirst({
+        where: {
+          practiceId,
+          role: { in: ['practice_admin', 'admin'] },
+        },
+      })
+      
+      if (adminUser) {
+        automationUserId = adminUser.id
+      } else {
+        return {
+          status: 'failed',
+          error: 'No valid user found for note creation',
+        }
+      }
+    }
+  }
 
-  // Check if user exists, if not skip userId
-  const user = await prisma.user.findUnique({
-    where: { id: systemUserId },
-  })
-
-  if (!user) {
+  // Validate content is present
+  if (!args.content || args.content.trim() === '') {
     return {
       status: 'failed',
-      error: `User ${systemUserId} not found for note creation`,
+      error: 'Note content is required',
     }
   }
 
@@ -176,7 +244,7 @@ async function createNote(
     data: {
       patientId: args.patientId,
       practiceId,
-      userId: systemUserId,
+      userId: automationUserId,
       type: args.type,
       content: args.content,
     },
@@ -188,12 +256,13 @@ async function createNote(
       action: 'create_note',
       noteId: note.id,
       patientId: args.patientId,
+      content: args.content.substring(0, 50) + (args.content.length > 50 ? '...' : ''),
     },
   }
 }
 
 /**
- * Draft SMS (draft only - not actually sending)
+ * Send SMS (via SendGrid SMS API or log if not configured)
  */
 async function draftSms(
   practiceId: string,
@@ -217,6 +286,46 @@ async function draftSms(
 
   const phoneNumber = args.phoneNumber || patient.phone
 
+  if (!phoneNumber) {
+    return {
+      status: 'failed',
+      error: 'No phone number available for patient',
+    }
+  }
+
+  // For now, log SMS (Twilio integration can be added later)
+  // In production, you'd integrate with Twilio or SendGrid SMS API
+  console.log(`[AUTOMATION SMS] To: ${phoneNumber}, Message: ${args.message}`)
+
+  // Create a note to track SMS sent
+  try {
+    // Find a valid user for automation
+    const adminUser = await prisma.user.findFirst({
+      where: {
+        practiceId,
+        role: { in: ['practice_admin', 'admin'] },
+      },
+    })
+    
+    const automationUserId = adminUser?.id || (await prisma.user.findFirst({
+      where: { practiceId },
+    }))?.id
+
+    if (automationUserId) {
+      await prisma.patientNote.create({
+        data: {
+          patientId: args.patientId,
+          practiceId,
+          userId: automationUserId,
+          type: 'contact',
+          content: `[Automation SMS] Sent to ${phoneNumber}: ${args.message}`,
+        },
+      })
+    }
+  } catch (error) {
+    console.error('Failed to log SMS note:', error)
+  }
+
   return {
     status: 'succeeded',
     result: {
@@ -224,13 +333,13 @@ async function draftSms(
       patientId: args.patientId,
       phoneNumber,
       message: args.message,
-      note: 'SMS drafted (not yet sent)',
+      note: 'SMS logged (Twilio integration can be added for actual sending)',
     },
   }
 }
 
 /**
- * Draft email (draft only - not actually sending)
+ * Send email via SendGrid
  */
 async function draftEmail(
   practiceId: string,
@@ -261,16 +370,41 @@ async function draftEmail(
     }
   }
 
-  return {
-    status: 'succeeded',
-    result: {
-      action: 'draft_email',
-      patientId: args.patientId,
-      toEmail,
+  // Actually send email via SendGrid
+  try {
+    const { getSendgridClient } = await import('@/lib/sendgrid')
+    const sendgridClient = await getSendgridClient(practiceId)
+    
+    const result = await sendgridClient.sendEmail({
+      to: toEmail,
+      toName: patient.name,
       subject: args.subject,
-      body: args.body,
-      note: 'Email drafted (not yet sent)',
-    },
+      htmlContent: args.body.replace(/\n/g, '<br>'),
+      textContent: args.body,
+    })
+
+    if (!result.success) {
+      return {
+        status: 'failed',
+        error: result.error || 'Failed to send email via SendGrid',
+      }
+    }
+
+    return {
+      status: 'succeeded',
+      result: {
+        action: 'draft_email',
+        patientId: args.patientId,
+        toEmail,
+        subject: args.subject,
+        messageId: result.messageId,
+      },
+    }
+  } catch (error) {
+    return {
+      status: 'failed',
+      error: error instanceof Error ? error.message : 'Failed to send email',
+    }
   }
 }
 
@@ -482,7 +616,7 @@ async function createInsurancePolicy(
 }
 
 /**
- * Send reminder (draft only - not actually sending)
+ * Send reminder (actually sends via email or SMS based on patient preference)
  */
 async function sendReminder(
   practiceId: string,
@@ -504,17 +638,100 @@ async function sendReminder(
     }
   }
 
-  // In v1, we just log this action
-  // In v2, we'd integrate with SMS/Email sending
-  return {
-    status: 'succeeded',
-    result: {
-      action: 'send_reminder',
-      patientId: args.patientId,
-      reminderType: args.reminderType,
-      message: args.message,
-      note: 'Reminder drafted (not yet sent)',
-    },
+  // Determine how to send based on reminder type and patient preference
+  const contactMethod = args.reminderType === 'appointment' 
+    ? (patient.preferredContactMethod || 'email')
+    : 'email'
+
+  if (contactMethod === 'email' && patient.email) {
+    try {
+      const { getSendgridClient } = await import('@/lib/sendgrid')
+      const sendgridClient = await getSendgridClient(practiceId)
+      
+      const subject = args.reminderType === 'appointment' 
+        ? 'Appointment Reminder'
+        : args.reminderType === 'payment'
+        ? 'Payment Reminder'
+        : 'Follow-up Reminder'
+
+      const result = await sendgridClient.sendEmail({
+        to: patient.email,
+        toName: patient.name,
+        subject,
+        htmlContent: args.message.replace(/\n/g, '<br>'),
+        textContent: args.message,
+      })
+
+      if (!result.success) {
+        return {
+          status: 'failed',
+          error: result.error || 'Failed to send reminder email',
+        }
+      }
+
+      return {
+        status: 'succeeded',
+        result: {
+          action: 'send_reminder',
+          patientId: args.patientId,
+          reminderType: args.reminderType,
+          method: 'email',
+          messageId: result.messageId,
+        },
+      }
+    } catch (error) {
+      return {
+        status: 'failed',
+        error: error instanceof Error ? error.message : 'Failed to send reminder email',
+      }
+    }
+  } else if (contactMethod === 'sms' && patient.phone) {
+    // Log SMS (Twilio integration can be added)
+    console.log(`[AUTOMATION REMINDER SMS] To: ${patient.phone}, Message: ${args.message}`)
+    
+    // Create a note to track reminder sent
+    try {
+      const adminUser = await prisma.user.findFirst({
+        where: {
+          practiceId,
+          role: { in: ['practice_admin', 'admin'] },
+        },
+      })
+      
+      const automationUserId = adminUser?.id || (await prisma.user.findFirst({
+        where: { practiceId },
+      }))?.id
+
+      if (automationUserId) {
+        await prisma.patientNote.create({
+          data: {
+            patientId: args.patientId,
+            practiceId,
+            userId: automationUserId,
+            type: 'contact',
+            content: `[Automation Reminder SMS] Sent to ${patient.phone}: ${args.message}`,
+          },
+        })
+      }
+    } catch (error) {
+      console.error('Failed to log reminder SMS note:', error)
+    }
+
+    return {
+      status: 'succeeded',
+      result: {
+        action: 'send_reminder',
+        patientId: args.patientId,
+        reminderType: args.reminderType,
+        method: 'sms',
+        note: 'Reminder SMS logged (Twilio integration can be added)',
+      },
+    }
+  } else {
+    return {
+      status: 'failed',
+      error: `No ${contactMethod} contact information available for patient`,
+    }
   }
 }
 

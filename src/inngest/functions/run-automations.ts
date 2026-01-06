@@ -4,6 +4,36 @@ import { evaluateConditions } from '@/automations/condition-evaluator'
 import { runAction } from '@/automations/action-runner'
 
 /**
+ * Substitute variables in action args (e.g., {appointment.patientId} -> actual value)
+ */
+function substituteVariables(args: any, eventData: Record<string, any>): any {
+  if (typeof args === 'string') {
+    // Replace {variable.path} with actual values
+    return args.replace(/\{([^}]+)\}/g, (match, path) => {
+      const keys = path.split('.')
+      let value: any = eventData
+      for (const key of keys) {
+        if (value && typeof value === 'object' && key in value) {
+          value = value[key]
+        } else {
+          return match // Return original if path not found
+        }
+      }
+      return value !== undefined && value !== null ? String(value) : match
+    })
+  } else if (Array.isArray(args)) {
+    return args.map(item => substituteVariables(item, eventData))
+  } else if (args && typeof args === 'object') {
+    const result: any = {}
+    for (const [key, value] of Object.entries(args)) {
+      result[key] = substituteVariables(value, eventData)
+    }
+    return result
+  }
+  return args
+}
+
+/**
  * Event payload structure for crm/event.received
  */
 interface EventReceivedPayload {
@@ -107,12 +137,18 @@ export const runAutomationsForEvent = inngest.createFunction(
             // Execute actions sequentially
             for (const action of actions) {
               try {
+                // Substitute variables in action args (e.g., {appointment.patientId} -> actual value)
+                const processedArgs = substituteVariables(action.args || {}, payload.data)
+                
                 const result = await runAction({
                   practiceId,
                   runId: run.id,
                   actionType: action.type,
-                  actionArgs: action.args || {},
-                  eventData: payload.data,
+                  actionArgs: processedArgs,
+                  eventData: {
+                    ...payload.data,
+                    userId: rule.createdByUserId, // Pass rule creator as userId for actions
+                  },
                 })
 
                 actionResults.push({

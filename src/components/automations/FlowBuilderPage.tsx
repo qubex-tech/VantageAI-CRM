@@ -128,10 +128,17 @@ function flowToRule(
   }
 
   // Build actions from action nodes
-  const actionsJson = actionNodes.map((node) => ({
-    type: node.data.config?.actionType || 'create_note',
-    args: node.data.config?.args || {},
-  }))
+  const actionsJson = actionNodes.map((node) => {
+    // Ensure args is properly extracted and serialized
+    const nodeArgs = node.data.config?.args || {}
+    // Deep clone to ensure all nested properties are included
+    const serializedArgs = JSON.parse(JSON.stringify(nodeArgs))
+    
+    return {
+      type: node.data.config?.actionType || 'create_note',
+      args: serializedArgs,
+    }
+  })
 
   return {
     triggerEvent,
@@ -174,6 +181,9 @@ export function FlowBuilderPage({ practiceId, userId, initialRules = [], initial
 
       try {
         const ruleData = flowToRule(workflow.nodes, workflow.edges, workflowName)
+        
+        // Debug: Log the rule data to verify args are included
+        console.log('Saving workflow with actions:', JSON.stringify(ruleData.actionsJson, null, 2))
 
         // Use PATCH for editing, POST for creating
         const url = isEditing ? `/api/automations/${initialRule!.id}` : '/api/automations'
