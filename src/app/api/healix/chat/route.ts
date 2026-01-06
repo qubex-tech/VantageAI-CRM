@@ -166,6 +166,9 @@ export async function POST(req: NextRequest) {
         contextParts.push(`- Phone: ${summary.phone || 'N/A'}`)
         contextParts.push(`- Email: ${summary.email || 'N/A'}`)
         contextParts.push(`- Preferred Contact: ${summary.preferredContactMethod || 'N/A'}`)
+        if (summary.notes) {
+          contextParts.push(`- Notes: ${summary.notes}`)
+        }
         if (summary.appointments && summary.appointments.length > 0) {
           contextParts.push(`- Recent Appointments: ${summary.appointments.length} found`)
           summary.appointments.slice(0, 3).forEach((apt: any) => {
