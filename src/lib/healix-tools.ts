@@ -176,7 +176,7 @@ export async function createTask(
       action: 'create',
       resourceType: params.patientId ? 'patient' : params.appointmentId ? 'appointment' : 'patient',
       resourceId: params.patientId || params.appointmentId || 'unknown',
-      changes: { task: params },
+      changes: { after: params },
     })
 
     return {
@@ -258,7 +258,7 @@ export async function createNote(
       action: 'create',
       resourceType: params.patientId ? 'patient' : params.appointmentId ? 'appointment' : 'patient',
       resourceId: params.patientId || params.appointmentId || 'unknown',
-      changes: { note: params.content },
+      changes: { after: { content: params.content } },
     })
 
     return {
