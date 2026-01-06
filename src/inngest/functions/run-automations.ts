@@ -185,7 +185,25 @@ export const runAutomationsForEvent = inngest.createFunction(
                 }
 
                 // Substitute variables in action args (e.g., {appointment.patientId} -> actual value)
-                const processedArgs = substituteVariables(rawArgs, payload.data)
+                let processedArgs = substituteVariables(rawArgs, payload.data)
+                
+                // Auto-fill patientId from event data if missing and action requires it
+                const actionsRequiringPatientId = ['create_note', 'draft_email', 'draft_sms', 'send_reminder', 'update_patient_fields', 'tag_patient', 'create_insurance_policy']
+                if (actionsRequiringPatientId.includes(action.type) && !processedArgs.patientId) {
+                  // Try to extract patientId from common event data paths
+                  const patientId = 
+                    payload.data.appointment?.patientId ||
+                    payload.data.patient?.id ||
+                    payload.data.patientId ||
+                    payload.data.entityId // Fallback to entityId if it's a patient entity
+                  
+                  if (patientId) {
+                    console.log(`[AUTOMATION] Auto-filled patientId from event data:`, patientId)
+                    processedArgs = { ...processedArgs, patientId }
+                  } else {
+                    console.warn(`[AUTOMATION] Could not auto-fill patientId for action ${action.type}. Event data:`, Object.keys(payload.data))
+                  }
+                }
                 
                 console.log(`[AUTOMATION] Processed args after variable substitution:`, {
                   processedArgs,

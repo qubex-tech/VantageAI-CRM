@@ -434,13 +434,14 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
               <div className="space-y-2">
                 <Label>Patient ID</Label>
                 <Input
-                  placeholder="{appointment.patientId} or {patient.id}"
+                  placeholder="{appointment.patientId} or {patient.id} (auto-filled if empty)"
                   value={config.args?.patientId || ''}
                   onChange={(e) => {
                     const currentArgs = config.args || {}
                     handleUpdate({ args: { ...currentArgs, patientId: e.target.value } })
                   }}
                 />
+                <p className="text-xs text-gray-500">Leave empty to auto-fill from event data</p>
                 <Label>Subject</Label>
                 <Input
                   placeholder="Email subject"
