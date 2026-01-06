@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { ComposeEmail } from './ComposeEmail'
+import { PatientNotes } from './PatientNotes'
 import { useHealixOpen } from '@/components/healix/HealixButton'
 import Link from 'next/link'
 import { 
@@ -29,7 +30,8 @@ import {
   Mail as MailIcon,
   ChevronDown,
   MessageSquare,
-  Plus
+  Plus,
+  FileText
 } from 'lucide-react'
 import { format, formatDistanceToNow } from 'date-fns'
 import { Button } from '@/components/ui/button'
@@ -86,6 +88,7 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
   const [sidebarTab, setSidebarTab] = useState<'details' | 'comments'>('details')
   const [isEditing, setIsEditing] = useState(false)
   const [composeEmailOpen, setComposeEmailOpen] = useState(false)
+  const [notesOpen, setNotesOpen] = useState(false)
   const healixOpen = useHealixOpen()
   
   const age = calculateAge(patient.dateOfBirth)
@@ -691,17 +694,38 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
               </div>
 
               {/* Notes Section */}
-              {patient.notes && (
-                <div className="min-w-0">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-sm font-medium text-gray-900">Notes</h3>
-                    <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                  </div>
-                  <div className="text-sm text-gray-700 whitespace-pre-wrap break-words min-w-0">
+              <div className="min-w-0">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-medium text-gray-900">Notes</h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setNotesOpen(true)}
+                    className="h-8 px-2 text-xs"
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    Manage Notes
+                  </Button>
+                </div>
+                {patient.notes ? (
+                  <div className="text-sm text-gray-700 whitespace-pre-wrap break-words min-w-0 mb-2">
                     {patient.notes}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <div className="text-sm text-gray-500 italic mb-2">
+                    No legacy notes. Use "Manage Notes" to add structured notes.
+                  </div>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setNotesOpen(true)}
+                  className="w-full"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  View All Notes
+                </Button>
+              </div>
             </div>
           )}
 
@@ -731,6 +755,17 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
         patientEmail={patient.email || undefined}
         patientName={patient.name}
         patientId={patient.id}
+      />
+
+      {/* Patient Notes Dialog */}
+      <PatientNotes
+        open={notesOpen}
+        onOpenChange={setNotesOpen}
+        patientId={patient.id}
+        onNoteChange={() => {
+          // Refresh the page to get updated data
+          window.location.reload()
+        }}
       />
     </div>
   )

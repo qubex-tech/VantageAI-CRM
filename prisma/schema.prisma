@@ -32,6 +32,7 @@ model Practice {
   auditLogs            AuditLog[]
   healixConversations  HealixConversation[]
   healixActionLogs     HealixActionLog[]
+  patientNotes         PatientNote[]
 
   @@map("practices")
 }
@@ -50,6 +51,7 @@ model User {
   auditLogs           AuditLog[]
   healixConversations HealixConversation[]
   healixActionLogs    HealixActionLog[]
+  patientNotes        PatientNote[]
 
   @@index([practiceId])
   @@index([email])
@@ -77,12 +79,36 @@ model Patient {
   voiceConversations VoiceConversation[]
   tags               PatientTag[]
   timelineEntries    PatientTimelineEntry[]
+  patientNotes       PatientNote[]
 
   @@index([practiceId])
   @@index([phone])
   @@index([email])
   @@index([deletedAt])
   @@map("patients")
+}
+
+model PatientNote {
+  id         String    @id @default(uuid())
+  patientId  String
+  practiceId String
+  userId     String
+  type       String // 'general', 'medical', 'administrative', 'billing', 'appointment', 'medication', 'allergy', 'contact', 'insurance', 'other'
+  content    String
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+
+  patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
+  @@index([practiceId])
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("patient_notes")
 }
 
 model PatientTag {
