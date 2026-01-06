@@ -15,7 +15,11 @@ export async function middleware(req: NextRequest) {
   const publicPaths = ['/login', '/signup', '/forgot-password', '/reset-password']
   const isPublicPath = publicPaths.some(path => pathname.startsWith(path))
   
-  if (isPublicPath || pathname.startsWith('/api/cal/webhook') || pathname.startsWith('/api/retell/webhook')) {
+  // Allow Inngest endpoint (required for Inngest to call back)
+  if (isPublicPath || 
+      pathname.startsWith('/api/cal/webhook') || 
+      pathname.startsWith('/api/retell/webhook') ||
+      pathname.startsWith('/api/inngest')) {
     return res
   }
 
