@@ -123,7 +123,7 @@ describe('Action Runner', () => {
       await runAction({
         practiceId: 'practice-1',
         runId: 'run-1',
-        actionType: 'draft_sms',
+        actionType: 'send_sms',
         actionArgs: {
           patientId: 'patient-1',
           message: 'Test message',
@@ -135,7 +135,7 @@ describe('Action Runner', () => {
         data: expect.objectContaining({
           runId: 'run-1',
           practiceId: 'practice-1',
-          actionType: 'draft_sms',
+          actionType: 'send_sms',
           status: expect.any(String),
         }),
       })

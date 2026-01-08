@@ -53,8 +53,8 @@ const TRIGGER_EVENTS = [
 const ACTION_TYPES = [
   { value: 'create_task', label: 'Create Task' },
   { value: 'create_note', label: 'Create Note' },
-  { value: 'draft_sms', label: 'Draft SMS' },
-  { value: 'draft_email', label: 'Draft Email' },
+  { value: 'send_sms', label: 'Send SMS' },
+  { value: 'send_email', label: 'Send Email' },
   { value: 'update_patient_fields', label: 'Update Patient Fields' },
   { value: 'delay_seconds', label: 'Delay' },
 ]
@@ -432,7 +432,7 @@ export function AutomationsPage({ initialRules, practiceId, userId }: Automation
                         />
                       </div>
                     )}
-                    {action.type === 'draft_email' && (
+                    {action.type === 'send_email' && (
                       <div className="space-y-2">
                         <Input
                           placeholder="Patient ID"
