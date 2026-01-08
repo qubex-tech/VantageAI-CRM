@@ -52,13 +52,13 @@ const createNoteSchema = z.object({
   content: z.string(),
 })
 
-const draftSmsSchema = z.object({
+const sendSmsSchema = z.object({
   patientId: z.string(),
   message: z.string(),
   phoneNumber: z.string().optional(), // If not provided, use patient's phone
 })
 
-const draftEmailSchema = z.object({
+const sendEmailSchema = z.object({
   patientId: z.string(),
   subject: z.string(),
   body: z.string(),
@@ -296,9 +296,9 @@ async function createNote(
 /**
  * Send SMS (via SendGrid SMS API or log if not configured)
  */
-async function draftSms(
+async function sendSms(
   practiceId: string,
-  args: z.infer<typeof draftSmsSchema>,
+  args: z.infer<typeof sendSmsSchema>,
   eventData: Record<string, any>
 ): Promise<ActionResult> {
   const patient = await prisma.patient.findFirst({
@@ -377,7 +377,7 @@ async function draftSms(
   return {
     status: 'succeeded',
     result: {
-      action: 'draft_sms',
+      action: 'send_sms',
       patientId: args.patientId,
       phoneNumber,
       message: args.message,
@@ -389,9 +389,9 @@ async function draftSms(
 /**
  * Send email via SendGrid
  */
-async function draftEmail(
+async function sendEmail(
   practiceId: string,
-  args: z.infer<typeof draftEmailSchema>,
+  args: z.infer<typeof sendEmailSchema>,
   eventData: Record<string, any>
 ): Promise<ActionResult> {
   const patient = await prisma.patient.findFirst({
@@ -504,7 +504,7 @@ async function draftEmail(
     return {
       status: 'succeeded',
       result: {
-        action: 'draft_email',
+        action: 'send_email',
         patientId: args.patientId,
         toEmail,
         subject: args.subject,
@@ -1001,23 +1001,23 @@ export async function runAction(params: RunActionParams): Promise<ActionResult> 
         break
       }
 
-      case 'draft_sms': {
-        console.log(`[AUTOMATION] Validating draft_sms args:`, actionArgs)
-        const validated = draftSmsSchema.parse(actionArgs)
-        result = await draftSms(practiceId, validated, eventData)
+      case 'send_sms': {
+        console.log(`[AUTOMATION] Validating send_sms args:`, actionArgs)
+        const validated = sendSmsSchema.parse(actionArgs)
+        result = await sendSms(practiceId, validated, eventData)
         break
       }
 
-      case 'draft_email': {
-        console.log(`[AUTOMATION] Validating draft_email args:`, {
+      case 'send_email': {
+        console.log(`[AUTOMATION] Validating send_email args:`, {
           actionArgs,
           patientId: actionArgs?.patientId,
           subject: actionArgs?.subject,
           body: actionArgs?.body,
           allKeys: Object.keys(actionArgs || {}),
         })
-        const validated = draftEmailSchema.parse(actionArgs)
-        result = await draftEmail(practiceId, validated, eventData)
+        const validated = sendEmailSchema.parse(actionArgs)
+        result = await sendEmail(practiceId, validated, eventData)
         break
       }
 

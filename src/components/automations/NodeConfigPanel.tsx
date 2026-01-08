@@ -415,8 +415,8 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                   <SelectValue placeholder="Select action" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="draft_email">Draft Email</SelectItem>
-                  <SelectItem value="draft_sms">Draft SMS</SelectItem>
+                  <SelectItem value="send_email">Send Email</SelectItem>
+                  <SelectItem value="send_sms">Send SMS</SelectItem>
                   <SelectItem value="send_reminder">Send Reminder</SelectItem>
                   <SelectItem value="create_note">Create Note</SelectItem>
                   <SelectItem value="create_task">Create Task</SelectItem>
@@ -430,7 +430,7 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
             </div>
 
             {/* Action-specific fields */}
-            {config.actionType === 'draft_email' && (
+            {config.actionType === 'send_email' && (
               <div className="space-y-2">
                 <Label>Patient ID</Label>
                 <Input
@@ -464,7 +464,7 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
               </div>
             )}
 
-            {config.actionType === 'draft_sms' && (
+            {config.actionType === 'send_sms' && (
               <div className="space-y-2">
                 <Label>Patient ID</Label>
                 <Input

@@ -6,8 +6,8 @@ import { PlayCircle, Mail, MessageSquare, FileText, User, Clock } from 'lucide-r
 import { FlowNodeData } from '../FlowBuilder'
 
 const actionIcons: Record<string, any> = {
-  draft_email: Mail,
-  draft_sms: MessageSquare,
+  send_email: Mail,
+  send_sms: MessageSquare,
   create_note: FileText,
   create_task: PlayCircle,
   update_patient_fields: User,

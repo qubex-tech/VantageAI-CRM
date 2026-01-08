@@ -36,8 +36,8 @@ const TRIGGER_OPTIONS = [
 
 const ACTION_OPTIONS = [
   // Communication
-  { value: 'draft_email', label: 'Draft Email', icon: Mail, category: 'Communication' },
-  { value: 'draft_sms', label: 'Draft SMS', icon: MessageSquare, category: 'Communication' },
+  { value: 'send_email', label: 'Send Email', icon: Mail, category: 'Communication' },
+  { value: 'send_sms', label: 'Send SMS', icon: MessageSquare, category: 'Communication' },
   { value: 'send_reminder', label: 'Send Reminder', icon: AlertCircle, category: 'Communication' },
   
   // Patient Management

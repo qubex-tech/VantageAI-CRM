@@ -188,7 +188,7 @@ export const runAutomationsForEvent = inngest.createFunction(
                 let processedArgs = substituteVariables(rawArgs, payload.data)
                 
                 // Auto-fill patientId from event data if missing and action requires it
-                const actionsRequiringPatientId = ['create_note', 'draft_email', 'draft_sms', 'send_reminder', 'update_patient_fields', 'tag_patient', 'create_insurance_policy']
+                const actionsRequiringPatientId = ['create_note', 'send_email', 'send_sms', 'send_reminder', 'update_patient_fields', 'tag_patient', 'create_insurance_policy']
                 if (actionsRequiringPatientId.includes(action.type) && !processedArgs.patientId) {
                   // Try to extract patientId from common event data paths
                   const patientId = 
