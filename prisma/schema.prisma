@@ -484,7 +484,7 @@ model AutomationActionLog {
   id          String   @id @default(uuid())
   runId       String
   practiceId  String
-  actionType  String // 'draft_sms' | 'draft_email' | 'create_task' | 'create_note' | 'update_patient_fields'
+  actionType  String // 'send_sms' | 'send_email' | 'create_task' | 'create_note' | 'update_patient_fields'
   actionArgs  Json
   actionResult Json?
   status      String // 'succeeded', 'failed', 'skipped'
