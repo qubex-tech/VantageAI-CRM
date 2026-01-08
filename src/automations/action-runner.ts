@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { prisma } from '@/lib/db'
+import { logPatientActivity } from '@/lib/patient-activity'
 
 /**
  * Action runner for automation actions
@@ -119,11 +120,10 @@ async function createTask(
   // In the future, this can be upgraded to a dedicated Task model
   if (args.patientId) {
     try {
-      const { createTimelineEntry } = await import('@/lib/audit')
-      await createTimelineEntry({
+      await logPatientActivity({
         patientId: args.patientId,
         type: 'task',
-        title: args.title,
+        title: `Task created: ${args.title}`,
         description: args.description || `Priority: ${args.priority || 'medium'}${args.dueDate ? ` | Due: ${args.dueDate}` : ''}`,
         metadata: {
           priority: args.priority || 'medium',
@@ -265,6 +265,23 @@ async function createNote(
     userId: automationUserId,
   })
 
+  // Log to patient activity timeline
+  try {
+    await logPatientActivity({
+      patientId: args.patientId,
+      type: 'note',
+      title: `Note created (${args.type})`,
+      description: args.content.length > 200 ? `${args.content.substring(0, 200)}...` : args.content,
+      metadata: {
+        noteId: note.id,
+        noteType: args.type,
+        createdBy: 'automation',
+      },
+    })
+  } catch (error) {
+    console.error('Failed to log note activity:', error)
+  }
+
   return {
     status: 'succeeded',
     result: {
@@ -339,6 +356,22 @@ async function draftSms(
     }
   } catch (error) {
     console.error('Failed to log SMS note:', error)
+  }
+
+  // Log to patient activity timeline
+  try {
+    await logPatientActivity({
+      patientId: args.patientId,
+      type: 'call',
+      title: 'SMS sent via automation',
+      description: `Sent to ${phoneNumber}: ${args.message.substring(0, 100)}${args.message.length > 100 ? '...' : ''}`,
+      metadata: {
+        phoneNumber,
+        createdBy: 'automation',
+      },
+    })
+  } catch (error) {
+    console.error('Failed to log SMS activity:', error)
   }
 
   return {
@@ -450,6 +483,24 @@ async function draftEmail(
       // Don't fail the action if note creation fails
     }
 
+    // Log to patient activity timeline
+    try {
+      await logPatientActivity({
+        patientId: args.patientId,
+        type: 'email',
+        title: `Email sent: ${args.subject}`,
+        description: `Sent to ${toEmail}: ${args.body.substring(0, 100)}${args.body.length > 100 ? '...' : ''}`,
+        metadata: {
+          toEmail,
+          subject: args.subject,
+          messageId: result.messageId,
+          createdBy: 'automation',
+        },
+      })
+    } catch (error) {
+      console.error('Failed to log email activity:', error)
+    }
+
     return {
       status: 'succeeded',
       result: {
@@ -510,10 +561,34 @@ async function updatePatientFields(
     }
   }
 
+  const oldPatient = { ...patient }
   const updated = await prisma.patient.update({
     where: { id: args.patientId },
     data: allowedUpdates,
   })
+
+  // Log field updates to patient activity timeline
+  try {
+    const fieldNames = Object.keys(allowedUpdates)
+    const fieldDisplayNames = fieldNames.map(f => f.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()))
+    await logPatientActivity({
+      patientId: args.patientId,
+      type: 'field_update',
+      title: `Patient fields updated: ${fieldDisplayNames.join(', ')}`,
+      description: fieldNames.map(field => {
+        const oldVal = oldPatient[field as keyof typeof oldPatient]
+        const newVal = allowedUpdates[field]
+        return `${field.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}: "${oldVal || 'None'}" → "${newVal || 'None'}"`
+      }).join('; '),
+      metadata: {
+        updatedFields: fieldNames,
+        changes: allowedUpdates,
+        createdBy: 'automation',
+      },
+    })
+  } catch (error) {
+    console.error('Failed to log field update activity:', error)
+  }
 
   return {
     status: 'succeeded',
@@ -582,6 +657,22 @@ async function tagPatient(
     },
   })
 
+  // Log to patient activity timeline
+  try {
+    await logPatientActivity({
+      patientId: args.patientId,
+      type: 'other',
+      title: `Tag added: ${args.tag}`,
+      description: `Patient tagged with "${args.tag}" via automation`,
+      metadata: {
+        tag: args.tag,
+        createdBy: 'automation',
+      },
+    })
+  } catch (error) {
+    console.error('Failed to log tag activity:', error)
+  }
+
   return {
     status: 'succeeded',
     result: {
@@ -614,10 +705,29 @@ async function updateAppointmentStatus(
     }
   }
 
+  const oldStatus = appointment.status
   const updated = await prisma.appointment.update({
     where: { id: args.appointmentId },
     data: { status: args.status },
   })
+
+  // Log to patient activity timeline
+  try {
+    await logPatientActivity({
+      patientId: appointment.patientId,
+      type: 'appointment',
+      title: `Appointment status updated: ${oldStatus} → ${args.status}`,
+      description: `Appointment status changed from "${oldStatus}" to "${args.status}" via automation`,
+      metadata: {
+        appointmentId: args.appointmentId,
+        oldStatus,
+        newStatus: args.status,
+        createdBy: 'automation',
+      },
+    })
+  } catch (error) {
+    console.error('Failed to log appointment status update activity:', error)
+  }
 
   return {
     status: 'succeeded',
@@ -665,6 +775,26 @@ async function createInsurancePolicy(
       eligibilityStatus: args.eligibilityStatus,
     },
   })
+
+  // Log to patient activity timeline
+  try {
+    await logPatientActivity({
+      patientId: args.patientId,
+      type: 'insurance',
+      title: `Insurance policy created: ${args.providerName}`,
+      description: `Policy: ${args.planName || 'N/A'}, Member ID: ${args.memberId}, Status: ${args.eligibilityStatus}`,
+      metadata: {
+        policyId: policy.id,
+        providerName: args.providerName,
+        planName: args.planName,
+        memberId: args.memberId,
+        eligibilityStatus: args.eligibilityStatus,
+        createdBy: 'automation',
+      },
+    })
+  } catch (error) {
+    console.error('Failed to log insurance policy activity:', error)
+  }
 
   return {
     status: 'succeeded',
@@ -730,6 +860,24 @@ async function sendReminder(
         }
       }
 
+      // Log to patient activity timeline
+      try {
+        await logPatientActivity({
+          patientId: args.patientId,
+          type: 'reminder',
+          title: `${args.reminderType.charAt(0).toUpperCase() + args.reminderType.slice(1)} reminder sent via email`,
+          description: `Subject: ${subject}. ${args.message.substring(0, 100)}${args.message.length > 100 ? '...' : ''}`,
+          metadata: {
+            reminderType: args.reminderType,
+            method: 'email',
+            messageId: result.messageId,
+            createdBy: 'automation',
+          },
+        })
+      } catch (error) {
+        console.error('Failed to log reminder activity:', error)
+      }
+
       return {
         status: 'succeeded',
         result: {
@@ -776,6 +924,24 @@ async function sendReminder(
       }
     } catch (error) {
       console.error('Failed to log reminder SMS note:', error)
+    }
+
+    // Log to patient activity timeline
+    try {
+      await logPatientActivity({
+        patientId: args.patientId,
+        type: 'reminder',
+        title: `${args.reminderType.charAt(0).toUpperCase() + args.reminderType.slice(1)} reminder sent via SMS`,
+        description: `Sent to ${patient.phone}: ${args.message.substring(0, 100)}${args.message.length > 100 ? '...' : ''}`,
+        metadata: {
+          reminderType: args.reminderType,
+          method: 'sms',
+          phoneNumber: patient.phone,
+          createdBy: 'automation',
+        },
+      })
+    } catch (error) {
+      console.error('Failed to log reminder activity:', error)
     }
 
     return {
