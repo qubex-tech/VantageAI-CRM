@@ -59,6 +59,8 @@ export default async function PatientDetailPage({
         take: 50,
       },
     },
+    // Select all fields including new enhanced fields
+    select: undefined, // This ensures all fields are included
   })
 
   if (!patient) {
