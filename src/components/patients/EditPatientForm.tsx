@@ -17,7 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 interface Patient {
   id: string
   name: string
-  dateOfBirth: Date | string
+  dateOfBirth: Date | string | null
   phone: string
   email: string | null
   address: string | null
@@ -38,8 +38,14 @@ export function EditPatientForm({ patient, onCancel, onSuccess }: EditPatientFor
   const [error, setError] = useState('')
   
   // Format date for input (YYYY-MM-DD)
-  // Handle invalid or placeholder dates (like 1900-01-01)
-  const formatDateForInput = (date: Date | string) => {
+  // Handle invalid or placeholder dates (like 1900-01-01) or null
+  const formatDateForInput = (date: Date | string | null) => {
+    if (!date) {
+      // Return empty string or a reasonable default (today minus 30 years)
+      const defaultDate = new Date()
+      defaultDate.setFullYear(defaultDate.getFullYear() - 30)
+      return defaultDate.toISOString().split('T')[0]
+    }
     const d = typeof date === 'string' ? new Date(date) : date
     // Check if date is a placeholder (like 1900) or invalid
     const year = d.getFullYear()
