@@ -29,8 +29,11 @@ import {
   Phone as PhoneIcon,
   Mail as MailIcon,
   ChevronDown,
+  ChevronUp,
   MessageSquare,
-  Plus
+  Plus,
+  Shield,
+  Globe
 } from 'lucide-react'
 import { format, formatDistanceToNow } from 'date-fns'
 import { Button } from '@/components/ui/button'
@@ -41,11 +44,44 @@ interface PatientDetailViewProps {
   patient: {
     id: string
     name: string
-    dateOfBirth: Date
+    // Basic Information
+    externalEhrId?: string | null
+    firstName?: string | null
+    lastName?: string | null
+    preferredName?: string | null
+    dateOfBirth: Date | null
+    // Contact Information
+    primaryPhone?: string | null
+    secondaryPhone?: string | null
     phone: string
     email: string | null
+    addressLine1?: string | null
+    addressLine2?: string | null
     address: string | null
+    city?: string | null
+    state?: string | null
+    postalCode?: string | null
+    gender?: string | null
+    pronouns?: string | null
+    primaryLanguage?: string | null
+    // Communication Preferences & Consent
     preferredContactMethod: string
+    preferredChannel?: string | null
+    smsOptIn?: boolean | null
+    smsOptInAt?: Date | null
+    emailOptIn?: boolean | null
+    voiceOptIn?: boolean | null
+    doNotContact?: boolean | null
+    quietHoursStart?: string | null
+    quietHoursEnd?: string | null
+    consentSource?: string | null
+    // Insurance Summary
+    primaryInsuranceId?: string | null
+    secondaryInsuranceId?: string | null
+    insuranceStatus?: string | null
+    lastInsuranceVerifiedAt?: Date | null
+    selfPay?: boolean | null
+    // Legacy
     notes: string | null
     createdAt: Date
     updatedAt: Date
@@ -90,7 +126,41 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
   const [notesOpen, setNotesOpen] = useState(false)
   const healixOpen = useHealixOpen()
   
-  const age = calculateAge(patient.dateOfBirth)
+  // Collapsible sections state
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    basicInfo: false,
+    contactInfo: false,
+    communication: false,
+    insurance: false,
+  })
+  
+  const toggleSection = (section: string) => {
+    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }))
+  }
+  
+  const age = patient.dateOfBirth ? calculateAge(patient.dateOfBirth) : 0
+  
+  // Helper to get display name
+  const getDisplayName = () => {
+    if (patient.firstName || patient.lastName) {
+      return [patient.firstName, patient.lastName].filter(Boolean).join(' ') || patient.name
+    }
+    return patient.name
+  }
+  
+  // Helper to format time
+  const formatTime = (timeStr: string | null | undefined) => {
+    if (!timeStr) return null
+    try {
+      const [hours, minutes] = timeStr.split(':')
+      const hour = parseInt(hours)
+      const ampm = hour >= 12 ? 'PM' : 'AM'
+      const displayHour = hour % 12 || 12
+      return `${displayHour}:${minutes} ${ampm}`
+    } catch {
+      return timeStr
+    }
+  }
   
   // Debug: Log appointments to see what we're getting
   console.log('[PatientDetailView] Patient appointments:', patient.appointments)
@@ -602,95 +672,286 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
         {/* Sidebar Content */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 min-w-0">
           {sidebarTab === 'details' && (
-            <div className="space-y-6">
-              {/* Record Details Section */}
-              <div className="min-w-0">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-medium text-gray-900">Record Details</h3>
-                  <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                </div>
+            <div className="space-y-4">
+              {/* Basic Information Section */}
+              <div className="min-w-0 border-b border-gray-200 pb-4">
+                <button
+                  onClick={() => toggleSection('basicInfo')}
+                  className="flex items-center justify-between w-full mb-3"
+                >
+                  <h3 className="text-sm font-medium text-gray-900">Basic Information</h3>
+                  {expandedSections.basicInfo ? (
+                    <ChevronUp className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  )}
+                </button>
                 
-                <div className="space-y-4 min-w-0">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
-                      <User className="h-3 w-3 flex-shrink-0" />
-                      Name
-                    </div>
-                    <div className="text-sm font-medium text-gray-900 break-words">{patient.name}</div>
-                  </div>
-
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
-                      <MailIcon className="h-3 w-3 flex-shrink-0" />
-                      Email addresses
-                    </div>
-                    <div className="text-sm font-medium text-blue-600 break-all min-w-0">
-                      {patient.email || 'No email'}
-                    </div>
-                  </div>
-
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
-                      <PhoneIcon className="h-3 w-3 flex-shrink-0" />
-                      Phone
-                    </div>
-                    <div className="text-sm font-medium text-gray-900 break-all">{patient.phone}</div>
-                  </div>
-
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
-                      <Calendar className="h-3 w-3 flex-shrink-0" />
-                      Date of Birth
-                    </div>
-                    <div className="text-sm font-medium text-gray-900 break-words">
-                      {format(new Date(patient.dateOfBirth), 'MMM d, yyyy')}
-                    </div>
-                  </div>
-
-                  {patient.address && (
+                {expandedSections.basicInfo && (
+                  <div className="space-y-3 min-w-0">
+                    {patient.externalEhrId && (
+                      <div className="min-w-0">
+                        <div className="text-xs text-gray-500 mb-1">External EHR ID</div>
+                        <div className="text-sm font-medium text-gray-900 break-words">{patient.externalEhrId}</div>
+                      </div>
+                    )}
+                    {(patient.firstName || patient.lastName) && (
+                      <div className="min-w-0">
+                        <div className="text-xs text-gray-500 mb-1">First Name</div>
+                        <div className="text-sm font-medium text-gray-900 break-words">{patient.firstName || '—'}</div>
+                      </div>
+                    )}
+                    {(patient.firstName || patient.lastName) && (
+                      <div className="min-w-0">
+                        <div className="text-xs text-gray-500 mb-1">Last Name</div>
+                        <div className="text-sm font-medium text-gray-900 break-words">{patient.lastName || '—'}</div>
+                      </div>
+                    )}
+                    {patient.preferredName && (
+                      <div className="min-w-0">
+                        <div className="text-xs text-gray-500 mb-1">Preferred Name</div>
+                        <div className="text-sm font-medium text-gray-900 break-words">{patient.preferredName}</div>
+                      </div>
+                    )}
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
-                        <MapPin className="h-3 w-3 flex-shrink-0" />
-                        Address
+                      <div className="text-xs text-gray-500 mb-1">Display Name</div>
+                      <div className="text-sm font-medium text-gray-900 break-words">{getDisplayName()}</div>
+                    </div>
+                    {patient.dateOfBirth && (
+                      <div className="min-w-0">
+                        <div className="text-xs text-gray-500 mb-1">Date of Birth</div>
+                        <div className="text-sm font-medium text-gray-900 break-words">
+                          {format(new Date(patient.dateOfBirth), 'MMM d, yyyy')}
+                        </div>
                       </div>
-                      <div className="text-sm font-medium text-gray-900 break-words">{patient.address}</div>
-                    </div>
-                  )}
-
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
-                      <PhoneIcon className="h-3 w-3 flex-shrink-0" />
-                      Preferred Contact
-                    </div>
-                    <div className="text-sm font-medium text-gray-900 capitalize break-words">
-                      {patient.preferredContactMethod}
-                    </div>
+                    )}
                   </div>
+                )}
+              </div>
 
-                  {patient.tags.length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
-                        Tags
+              {/* Contact Information Section */}
+              <div className="min-w-0 border-b border-gray-200 pb-4">
+                <button
+                  onClick={() => toggleSection('contactInfo')}
+                  className="flex items-center justify-between w-full mb-3"
+                >
+                  <h3 className="text-sm font-medium text-gray-900">Contact Information</h3>
+                  {expandedSections.contactInfo ? (
+                    <ChevronUp className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  )}
+                </button>
+                
+                {expandedSections.contactInfo && (
+                  <div className="space-y-3 min-w-0">
+                    {(patient.primaryPhone || patient.phone) && (
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
+                          <PhoneIcon className="h-3 w-3 flex-shrink-0" />
+                          Primary Phone
+                        </div>
+                        <div className="text-sm font-medium text-gray-900 break-all">
+                          {patient.primaryPhone || patient.phone}
+                        </div>
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        {patient.tags.map((tag) => (
-                          <span
-                            key={tag.id}
-                            className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700"
-                          >
-                            {tag.tag}
-                          </span>
-                        ))}
+                    )}
+                    {patient.secondaryPhone && (
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
+                          <PhoneIcon className="h-3 w-3 flex-shrink-0" />
+                          Secondary Phone
+                        </div>
+                        <div className="text-sm font-medium text-gray-900 break-all">{patient.secondaryPhone}</div>
+                      </div>
+                    )}
+                    {(patient.email || patient.addressLine1 || patient.address) && (
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
+                          <MailIcon className="h-3 w-3 flex-shrink-0" />
+                          Email
+                        </div>
+                        <div className="text-sm font-medium text-blue-600 break-all min-w-0">
+                          {patient.email || 'No email'}
+                        </div>
+                      </div>
+                    )}
+                    {(patient.addressLine1 || patient.address) && (
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
+                          <MapPin className="h-3 w-3 flex-shrink-0" />
+                          Address
+                        </div>
+                        <div className="text-sm font-medium text-gray-900 break-words">
+                          {patient.addressLine1 || patient.address || '—'}
+                          {patient.addressLine2 && `, ${patient.addressLine2}`}
+                          {patient.city && `, ${patient.city}`}
+                          {patient.state && `, ${patient.state}`}
+                          {patient.postalCode && ` ${patient.postalCode}`}
+                        </div>
+                      </div>
+                    )}
+                    {patient.gender && (
+                      <div className="min-w-0">
+                        <div className="text-xs text-gray-500 mb-1">Gender</div>
+                        <div className="text-sm font-medium text-gray-900 capitalize break-words">{patient.gender}</div>
+                      </div>
+                    )}
+                    {patient.pronouns && (
+                      <div className="min-w-0">
+                        <div className="text-xs text-gray-500 mb-1">Pronouns</div>
+                        <div className="text-sm font-medium text-gray-900 break-words">{patient.pronouns}</div>
+                      </div>
+                    )}
+                    {patient.primaryLanguage && (
+                      <div className="min-w-0">
+                        <div className="text-xs text-gray-500 mb-1">Primary Language</div>
+                        <div className="text-sm font-medium text-gray-900 break-words">{patient.primaryLanguage}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Communication Preferences & Consent Section */}
+              <div className="min-w-0 border-b border-gray-200 pb-4">
+                <button
+                  onClick={() => toggleSection('communication')}
+                  className="flex items-center justify-between w-full mb-3"
+                >
+                  <h3 className="text-sm font-medium text-gray-900">Communication Preferences & Consent</h3>
+                  {expandedSections.communication ? (
+                    <ChevronUp className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  )}
+                </button>
+                
+                {expandedSections.communication && (
+                  <div className="space-y-3 min-w-0">
+                    {(patient.preferredChannel || patient.preferredContactMethod) && (
+                      <div className="min-w-0">
+                        <div className="text-xs text-gray-500 mb-1">Preferred Channel</div>
+                        <div className="text-sm font-medium text-gray-900 capitalize break-words">
+                          {patient.preferredChannel || patient.preferredContactMethod}
+                        </div>
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="text-xs text-gray-500 mb-1">SMS Opt-In</div>
+                      <div className="text-sm font-medium text-gray-900">
+                        {patient.smsOptIn ? 'Yes' : 'No'}
+                        {patient.smsOptInAt && ` (${format(new Date(patient.smsOptInAt), 'MMM d, yyyy')})`}
                       </div>
                     </div>
-                  )}
-
-                  <button className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1 mt-4">
-                    Show all values
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
+                    <div className="min-w-0">
+                      <div className="text-xs text-gray-500 mb-1">Email Opt-In</div>
+                      <div className="text-sm font-medium text-gray-900">{patient.emailOptIn ? 'Yes' : 'No'}</div>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-xs text-gray-500 mb-1">Voice Opt-In</div>
+                      <div className="text-sm font-medium text-gray-900">{patient.voiceOptIn ? 'Yes' : 'No'}</div>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-xs text-gray-500 mb-1">Do Not Contact</div>
+                      <div className="text-sm font-medium text-gray-900">{patient.doNotContact ? 'Yes' : 'No'}</div>
+                    </div>
+                    {(patient.quietHoursStart || patient.quietHoursEnd) && (
+                      <div className="min-w-0">
+                        <div className="text-xs text-gray-500 mb-1">Quiet Hours</div>
+                        <div className="text-sm font-medium text-gray-900 break-words">
+                          {formatTime(patient.quietHoursStart) || '—'} - {formatTime(patient.quietHoursEnd) || '—'}
+                        </div>
+                      </div>
+                    )}
+                    {patient.consentSource && (
+                      <div className="min-w-0">
+                        <div className="text-xs text-gray-500 mb-1">Consent Source</div>
+                        <div className="text-sm font-medium text-gray-900 capitalize break-words">{patient.consentSource}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
+
+              {/* Insurance Summary Section */}
+              <div className="min-w-0 border-b border-gray-200 pb-4">
+                <button
+                  onClick={() => toggleSection('insurance')}
+                  className="flex items-center justify-between w-full mb-3"
+                >
+                  <h3 className="text-sm font-medium text-gray-900">Insurance Summary</h3>
+                  {expandedSections.insurance ? (
+                    <ChevronUp className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  )}
+                </button>
+                
+                {expandedSections.insurance && (
+                  <div className="space-y-3 min-w-0">
+                    <div className="min-w-0">
+                      <div className="text-xs text-gray-500 mb-1">Self Pay</div>
+                      <div className="text-sm font-medium text-gray-900">{patient.selfPay ? 'Yes' : 'No'}</div>
+                    </div>
+                    {patient.primaryInsuranceId && (
+                      <div className="min-w-0">
+                        <div className="text-xs text-gray-500 mb-1">Primary Insurance ID</div>
+                        <div className="text-sm font-medium text-gray-900 break-all">{patient.primaryInsuranceId}</div>
+                      </div>
+                    )}
+                    {patient.secondaryInsuranceId && (
+                      <div className="min-w-0">
+                        <div className="text-xs text-gray-500 mb-1">Secondary Insurance ID</div>
+                        <div className="text-sm font-medium text-gray-900 break-all">{patient.secondaryInsuranceId}</div>
+                      </div>
+                    )}
+                    {patient.insuranceStatus && (
+                      <div className="min-w-0">
+                        <div className="text-xs text-gray-500 mb-1">Insurance Status</div>
+                        <div className="text-sm font-medium text-gray-900 capitalize break-words">
+                          {patient.insuranceStatus.replace(/_/g, ' ')}
+                        </div>
+                      </div>
+                    )}
+                    {patient.lastInsuranceVerifiedAt && (
+                      <div className="min-w-0">
+                        <div className="text-xs text-gray-500 mb-1">Last Verified</div>
+                        <div className="text-sm font-medium text-gray-900 break-words">
+                          {format(new Date(patient.lastInsuranceVerifiedAt), 'MMM d, yyyy')}
+                        </div>
+                      </div>
+                    )}
+                    {patient.insurancePolicies.length > 0 && (
+                      <div className="min-w-0">
+                        <div className="text-xs text-gray-500 mb-1">Policies</div>
+                        <div className="text-sm font-medium text-gray-900">
+                          {patient.insurancePolicies.length} policy{patient.insurancePolicies.length !== 1 ? 'ies' : ''}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Tags Section */}
+              {patient.tags.length > 0 && (
+                <div className="min-w-0 border-b border-gray-200 pb-4">
+                  <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
+                    Tags
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {patient.tags.map((tag) => (
+                      <span
+                        key={tag.id}
+                        className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700"
+                      >
+                        {tag.tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Notes Section */}
               <div className="min-w-0">

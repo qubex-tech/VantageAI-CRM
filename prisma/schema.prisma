@@ -63,18 +63,51 @@ model User {
 }
 
 model Patient {
-  id                     String    @id @default(uuid())
-  practiceId             String
-  name                   String
-  dateOfBirth            DateTime
-  phone                  String
-  email                  String?
-  address                String?
-  preferredContactMethod String // 'phone', 'email', 'sms'
-  notes                  String?
-  deletedAt              DateTime?
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
+  id                      String    @id @default(uuid())
+  practiceId              String
+  name                    String // Legacy field - kept for backward compatibility
+  // Basic Information
+  externalEhrId           String?
+  firstName               String?
+  lastName                String?
+  preferredName           String?
+  dateOfBirth             DateTime?
+  // Contact Information
+  primaryPhone            String?
+  secondaryPhone          String?
+  phone                   String // Legacy field - kept for backward compatibility
+  email                   String?
+  addressLine1            String?
+  addressLine2            String?
+  address                 String? // Legacy field - kept for backward compatibility
+  city                    String?
+  state                   String?
+  postalCode              String?
+  gender                  String? // 'male', 'female', 'other', 'unknown'
+  pronouns                String? // 'he/him', 'she/her', 'they/them', 'custom'
+  primaryLanguage         String?
+  // Communication Preferences & Consent
+  preferredContactMethod  String // 'phone', 'email', 'sms' - legacy, use preferredChannel
+  preferredChannel        String? // 'sms', 'email', 'voice'
+  smsOptIn                Boolean   @default(false)
+  smsOptInAt              DateTime?
+  emailOptIn              Boolean   @default(false)
+  voiceOptIn              Boolean   @default(false)
+  doNotContact            Boolean   @default(false)
+  quietHoursStart         String? // Time format: 'HH:mm'
+  quietHoursEnd           String? // Time format: 'HH:mm'
+  consentSource           String? // 'web', 'voice', 'staff', 'import'
+  // Insurance Summary
+  primaryInsuranceId      String?
+  secondaryInsuranceId    String?
+  insuranceStatus         String? // 'verified', 'missing', 'expired', 'self_pay'
+  lastInsuranceVerifiedAt DateTime?
+  selfPay                 Boolean   @default(false)
+  // Legacy fields
+  notes                   String?
+  deletedAt               DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   practice           Practice               @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   insurancePolicies  InsurancePolicy[]
@@ -88,6 +121,9 @@ model Patient {
   @@index([phone])
   @@index([email])
   @@index([deletedAt])
+  @@index([externalEhrId])
+  @@index([primaryInsuranceId])
+  @@index([secondaryInsuranceId])
   @@map("patients")
 }
 
@@ -416,15 +452,15 @@ model HealixActionLog {
 }
 
 model OutboxEvent {
-  id           String    @id @default(uuid())
-  practiceId   String
-  name         String // e.g., "crm/appointment.created"
-  payload      Json
-  status       String // 'pending', 'published', 'failed'
-  attempts     Int       @default(0)
+  id            String    @id @default(uuid())
+  practiceId    String
+  name          String // e.g., "crm/appointment.created"
+  payload       Json
+  status        String // 'pending', 'published', 'failed'
+  attempts      Int       @default(0)
   nextAttemptAt DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
 
@@ -436,18 +472,18 @@ model OutboxEvent {
 }
 
 model AutomationRule {
-  id             String   @id @default(uuid())
-  practiceId     String
-  name           String
-  enabled        Boolean  @default(true)
-  triggerEvent   String // Same namespace as OutboxEvent.name
-  conditionsJson Json // v1: JSONLogic or CEL-like subset; store as JSON
-  actionsJson    Json // List of actions with params
+  id              String   @id @default(uuid())
+  practiceId      String
+  name            String
+  enabled         Boolean  @default(true)
+  triggerEvent    String // Same namespace as OutboxEvent.name
+  conditionsJson  Json // v1: JSONLogic or CEL-like subset; store as JSON
+  actionsJson     Json // List of actions with params
   createdByUserId String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  practice Practice       @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  practice Practice        @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   runs     AutomationRun[]
 
   @@index([practiceId])
@@ -468,9 +504,9 @@ model AutomationRun {
   error         String?
   result        Json? // Summary of execution
 
-  practice      Practice      @relation(fields: [practiceId], references: [id], onDelete: Cascade)
-  rule          AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
-  actionLogs    AutomationActionLog[]
+  practice   Practice              @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  rule       AutomationRule        @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  actionLogs AutomationActionLog[]
 
   @@index([practiceId])
   @@index([ruleId])
@@ -481,15 +517,15 @@ model AutomationRun {
 }
 
 model AutomationActionLog {
-  id          String   @id @default(uuid())
-  runId       String
-  practiceId  String
-  actionType  String // 'send_sms' | 'send_email' | 'create_task' | 'create_note' | 'update_patient_fields'
-  actionArgs  Json
+  id           String   @id @default(uuid())
+  runId        String
+  practiceId   String
+  actionType   String // 'send_sms' | 'send_email' | 'create_task' | 'create_note' | 'update_patient_fields'
+  actionArgs   Json
   actionResult Json?
-  status      String // 'succeeded', 'failed', 'skipped'
-  error       String?
-  createdAt   DateTime @default(now())
+  status       String // 'succeeded', 'failed', 'skipped'
+  error        String?
+  createdAt    DateTime @default(now())
 
   run AutomationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
 
