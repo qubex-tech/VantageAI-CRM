@@ -20,7 +20,7 @@
  */
 
 type ConditionOperator = 'and' | 'or'
-type FieldOperator = 'equals' | 'contains' | 'exists' | 'not_equals' | 'greater_than' | 'less_than'
+type FieldOperator = 'equals' | 'contains' | 'exists' | 'not_equals' | 'not_contains' | 'greater_than' | 'less_than' | 'not_exists' | 'is_empty'
 
 interface FieldCondition {
   field: string
@@ -73,8 +73,31 @@ function evaluateFieldCondition(
       }
       return false
 
+    case 'not_contains':
+      if (typeof fieldValue === 'string' && typeof condition.value === 'string') {
+        return !fieldValue.toLowerCase().includes(condition.value.toLowerCase())
+      }
+      if (Array.isArray(fieldValue)) {
+        return !fieldValue.includes(condition.value)
+      }
+      return true // If field is not string/array, consider it "not contains"
+
     case 'exists':
       return fieldValue !== undefined && fieldValue !== null
+
+    case 'not_exists':
+      // Field doesn't exist or is null/undefined, or is empty (covers "is_empty" functionality)
+      if (fieldValue === undefined || fieldValue === null) return true
+      if (typeof fieldValue === 'string') return fieldValue.trim() === ''
+      if (Array.isArray(fieldValue)) return fieldValue.length === 0
+      return false
+
+    case 'is_empty':
+      // Field is empty string, null, undefined, or empty array
+      if (fieldValue === undefined || fieldValue === null) return true
+      if (typeof fieldValue === 'string') return fieldValue.trim() === ''
+      if (Array.isArray(fieldValue)) return fieldValue.length === 0
+      return false
 
     case 'greater_than':
       if (typeof fieldValue === 'number' && typeof condition.value === 'number') {

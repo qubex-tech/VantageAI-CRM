@@ -23,6 +23,20 @@ interface NodeConfigPanelProps {
   triggerEventName?: string // The event name from the trigger node
 }
 
+// Patient fields - available for all patient-related events
+const PATIENT_FIELDS: Array<{ value: string; label: string; type: 'string' | 'number' | 'boolean' | 'date' }> = [
+  { value: 'patient.id', label: 'Patient ID', type: 'string' },
+  { value: 'patient.name', label: 'Name', type: 'string' },
+  { value: 'patient.email', label: 'Email', type: 'string' },
+  { value: 'patient.phone', label: 'Phone', type: 'string' },
+  { value: 'patient.address', label: 'Address', type: 'string' },
+  { value: 'patient.dateOfBirth', label: 'Date of Birth', type: 'date' },
+  { value: 'patient.preferredContactMethod', label: 'Preferred Contact Method', type: 'string' },
+  { value: 'patient.notes', label: 'Notes', type: 'string' },
+  { value: 'patient.createdAt', label: 'Created At', type: 'date' },
+  { value: 'patient.updatedAt', label: 'Updated At', type: 'date' },
+]
+
 // Field mappings for each event type
 const EVENT_FIELDS: Record<string, Array<{ value: string; label: string; type: 'string' | 'number' | 'boolean' | 'date' }>> = {
   'crm/appointment.created': [
@@ -32,6 +46,7 @@ const EVENT_FIELDS: Record<string, Array<{ value: string; label: string; type: '
     { value: 'appointment.visitType', label: 'Visit Type', type: 'string' },
     { value: 'appointment.startTime', label: 'Start Time', type: 'date' },
     { value: 'appointment.endTime', label: 'End Time', type: 'date' },
+    ...PATIENT_FIELDS,
   ],
   'crm/appointment.updated': [
     { value: 'appointment.id', label: 'Appointment ID', type: 'string' },
@@ -39,48 +54,50 @@ const EVENT_FIELDS: Record<string, Array<{ value: string; label: string; type: '
     { value: 'appointment.status', label: 'Status', type: 'string' },
     { value: 'appointment.visitType', label: 'Visit Type', type: 'string' },
     { value: 'changes.status', label: 'Status Changed', type: 'string' },
+    ...PATIENT_FIELDS,
   ],
   'crm/appointment.cancelled': [
     { value: 'appointment.id', label: 'Appointment ID', type: 'string' },
     { value: 'appointment.patientId', label: 'Patient ID', type: 'string' },
     { value: 'appointment.visitType', label: 'Visit Type', type: 'string' },
+    ...PATIENT_FIELDS,
   ],
   'crm/appointment.confirmed': [
     { value: 'appointment.id', label: 'Appointment ID', type: 'string' },
     { value: 'appointment.patientId', label: 'Patient ID', type: 'string' },
     { value: 'appointment.visitType', label: 'Visit Type', type: 'string' },
+    ...PATIENT_FIELDS,
   ],
   'crm/appointment.completed': [
     { value: 'appointment.id', label: 'Appointment ID', type: 'string' },
     { value: 'appointment.patientId', label: 'Patient ID', type: 'string' },
     { value: 'appointment.visitType', label: 'Visit Type', type: 'string' },
+    ...PATIENT_FIELDS,
   ],
   'crm/appointment.no_show': [
     { value: 'appointment.id', label: 'Appointment ID', type: 'string' },
     { value: 'appointment.patientId', label: 'Patient ID', type: 'string' },
     { value: 'appointment.visitType', label: 'Visit Type', type: 'string' },
+    ...PATIENT_FIELDS,
   ],
   'crm/patient.created': [
-    { value: 'patient.id', label: 'Patient ID', type: 'string' },
-    { value: 'patient.name', label: 'Name', type: 'string' },
-    { value: 'patient.email', label: 'Email', type: 'string' },
-    { value: 'patient.phone', label: 'Phone', type: 'string' },
-    { value: 'patient.preferredContactMethod', label: 'Preferred Contact', type: 'string' },
+    ...PATIENT_FIELDS,
   ],
   'crm/patient.updated': [
-    { value: 'patient.id', label: 'Patient ID', type: 'string' },
-    { value: 'patient.name', label: 'Name', type: 'string' },
-    { value: 'patient.email', label: 'Email', type: 'string' },
-    { value: 'patient.phone', label: 'Phone', type: 'string' },
+    ...PATIENT_FIELDS,
     { value: 'changes.name', label: 'Name Changed', type: 'string' },
     { value: 'changes.email', label: 'Email Changed', type: 'string' },
+    { value: 'changes.phone', label: 'Phone Changed', type: 'string' },
+    { value: 'changes.address', label: 'Address Changed', type: 'string' },
+    { value: 'changes.preferredContactMethod', label: 'Preferred Contact Method Changed', type: 'string' },
+    { value: 'changes.notes', label: 'Notes Changed', type: 'string' },
   ],
   'crm/patient.tag_added': [
-    { value: 'patient.id', label: 'Patient ID', type: 'string' },
+    ...PATIENT_FIELDS,
     { value: 'tag', label: 'Tag', type: 'string' },
   ],
   'crm/patient.note_created': [
-    { value: 'patient.id', label: 'Patient ID', type: 'string' },
+    ...PATIENT_FIELDS,
     { value: 'note.type', label: 'Note Type', type: 'string' },
     { value: 'note.content', label: 'Note Content', type: 'string' },
   ],
@@ -89,24 +106,29 @@ const EVENT_FIELDS: Record<string, Array<{ value: string; label: string; type: '
     { value: 'insurance.providerName', label: 'Provider Name', type: 'string' },
     { value: 'insurance.eligibilityStatus', label: 'Eligibility Status', type: 'string' },
     { value: 'insurance.memberId', label: 'Member ID', type: 'string' },
+    ...PATIENT_FIELDS,
   ],
   'crm/insurance.updated': [
     { value: 'insurance.patientId', label: 'Patient ID', type: 'string' },
     { value: 'insurance.providerName', label: 'Provider Name', type: 'string' },
     { value: 'insurance.eligibilityStatus', label: 'Eligibility Status', type: 'string' },
     { value: 'changes.eligibilityStatus', label: 'Eligibility Changed', type: 'string' },
+    ...PATIENT_FIELDS,
   ],
   'crm/message.drafted': [
     { value: 'message.patientId', label: 'Patient ID', type: 'string' },
     { value: 'message.type', label: 'Message Type', type: 'string' },
+    ...PATIENT_FIELDS,
   ],
   'crm/voice_conversation.started': [
     { value: 'conversation.patientId', label: 'Patient ID', type: 'string' },
     { value: 'conversation.callerPhone', label: 'Caller Phone', type: 'string' },
+    ...PATIENT_FIELDS,
   ],
   'crm/voice_conversation.ended': [
     { value: 'conversation.patientId', label: 'Patient ID', type: 'string' },
     { value: 'conversation.outcome', label: 'Outcome', type: 'string' },
+    ...PATIENT_FIELDS,
   ],
 }
 
@@ -284,13 +306,14 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                             <SelectItem value="contains">Contains</SelectItem>
                             <SelectItem value="not_contains">Not Contains</SelectItem>
                             <SelectItem value="exists">Exists</SelectItem>
-                            <SelectItem value="not_exists">Not Exists</SelectItem>
+                            <SelectItem value="not_exists">Not Exists / Is Empty</SelectItem>
+                            <SelectItem value="is_empty">Is Empty</SelectItem>
                             <SelectItem value="greater_than">Greater Than</SelectItem>
                             <SelectItem value="less_than">Less Than</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
-                      {condition.operator !== 'exists' && condition.operator !== 'not_exists' && (
+                      {condition.operator !== 'exists' && condition.operator !== 'not_exists' && condition.operator !== 'is_empty' && (
                         <div>
                           <Label className="text-xs">Value</Label>
                           {condition.field === 'appointment.status' ? (
