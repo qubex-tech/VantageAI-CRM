@@ -177,7 +177,15 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
   }
 
   // Get available fields for the trigger event
-  const availableFields = triggerEventName ? (EVENT_FIELDS[triggerEventName] || []) : []
+  // Always include patient fields since they're relevant for most automation scenarios
+  // Also include event-specific fields when a trigger is set
+  const eventSpecificFields = triggerEventName ? (EVENT_FIELDS[triggerEventName] || []) : []
+  const availableFields = [...PATIENT_FIELDS, ...eventSpecificFields]
+  
+  // Remove duplicates (in case patient fields are already in event-specific fields)
+  const uniqueFields = availableFields.filter((field, index, self) => 
+    index === self.findIndex(f => f.value === field.value)
+  )
 
   return (
     <div className="h-full flex flex-col">
@@ -263,15 +271,12 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                             <SelectValue placeholder="Select field" />
                           </SelectTrigger>
                           <SelectContent>
-                            {availableFields.length > 0 ? (
-                              availableFields.map((field) => (
-                                <SelectItem key={field.value} value={field.value}>
-                                  {field.label}
-                                </SelectItem>
-                              ))
-                            ) : (
-                              <SelectItem value="custom">Custom Field</SelectItem>
-                            )}
+                            {uniqueFields.map((field) => (
+                              <SelectItem key={field.value} value={field.value}>
+                                {field.label}
+                              </SelectItem>
+                            ))}
+                            <SelectItem value="custom">Custom Field</SelectItem>
                           </SelectContent>
                         </Select>
                         {condition.field === 'custom' && (
