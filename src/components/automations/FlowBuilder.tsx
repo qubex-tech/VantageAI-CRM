@@ -61,6 +61,19 @@ export function FlowBuilder({ initialWorkflow, onSave, onTest, onWorkflowChange 
   const [selectedNode, setSelectedNode] = useState<Node<FlowNodeData> | null>(null)
   const [showSidebar, setShowSidebar] = useState(true)
 
+  // Reset nodes and edges when initialWorkflow changes (e.g., when switching between edit/create)
+  useEffect(() => {
+    if (initialWorkflow) {
+      setNodes(initialWorkflow.nodes)
+      setEdges(initialWorkflow.edges)
+    } else {
+      // Reset to empty for new workflows
+      setNodes(initialNodes)
+      setEdges(initialEdges)
+    }
+    setSelectedNode(null) // Clear selection when workflow changes
+  }, [initialWorkflow, setNodes, setEdges])
+
   // Notify parent of workflow changes
   useEffect(() => {
     if (onWorkflowChange) {

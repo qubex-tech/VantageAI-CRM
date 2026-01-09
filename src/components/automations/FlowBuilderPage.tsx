@@ -170,16 +170,21 @@ export function FlowBuilderPage({ practiceId, userId, initialRules = [], initial
   const [success, setSuccess] = useState('')
   const isEditing = !!initialRule
 
-  // Convert rule to flow if editing, or use first rule from list
+  // Reset workflow name when initialRule changes (e.g., when switching between edit/create)
+  useEffect(() => {
+    setWorkflowName(initialRule?.name || '')
+    setError('')
+    setSuccess('')
+  }, [initialRule])
+
+  // Convert rule to flow if editing, otherwise start with empty workflow for new rule
   const initialWorkflow = useMemo(() => {
     if (initialRule) {
       return ruleToFlow(initialRule)
     }
-    if (initialRules.length > 0) {
-      return ruleToFlow(initialRules[0])
-    }
+    // For new rules, start with empty workflow (no fallback to first rule)
     return undefined
-  }, [initialRule, initialRules])
+  }, [initialRule])
 
   const [currentWorkflow, setCurrentWorkflow] = useState<{ nodes: Node<FlowNodeData>[]; edges: Edge[] } | null>(null)
 
