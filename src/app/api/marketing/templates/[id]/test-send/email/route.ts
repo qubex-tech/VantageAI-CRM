@@ -3,7 +3,8 @@ import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
 import { testSendEmailSchema } from '@/lib/validations'
 import { renderEmailFromJson } from '@/lib/marketing/render-email'
-import { stubEmailProvider } from '@/lib/marketing/providers'
+import { replaceVariables } from '@/lib/marketing/variables'
+import { getSendgridClient } from '@/lib/sendgrid'
 import { createMarketingAuditLog } from '@/lib/marketing/audit'
 import { quietHoursCheck } from '@/lib/marketing/lint'
 import { VariableContext } from '@/lib/marketing/types'
@@ -126,31 +127,83 @@ export async function POST(
       text = template.bodyText || ''
     }
     
-    // Replace variables in subject
+    // Replace variables in subject using the proper variable replacement function
     const subject = template.subject
-      ? template.subject.replace(/\{\{([^}]+)\}\}/g, (match: string, key: string) => {
-          const value = context.patient?.[key as keyof typeof context.patient] || 
-                       context.practice?.[key as keyof typeof context.practice] || 
-                       context.appointment?.[key as keyof typeof context.appointment] || 
-                       match
-          return String(value)
-        })
+      ? replaceVariables(template.subject, context)
       : 'Test Email'
     
-    // Send email via provider
-    const from = brandProfile?.defaultFromEmail || user.email || 'noreply@practice.com'
-    const fromName = brandProfile?.defaultFromName || user.name || 'Practice'
-    const replyTo = brandProfile?.defaultReplyToEmail || from
+    // Send email via SendGrid using verified sender email
+    // SendGrid requires the fromEmail to be verified, otherwise emails won't send
+    // The SendgridApiClient from getSendgridClient() already has the verified fromEmail set
+    let result: { success: boolean; messageId?: string; error?: string }
     
-    const result = await stubEmailProvider.sendEmail({
-      to,
-      from,
-      fromName,
-      replyTo,
-      subject,
-      html,
-      text,
-    })
+    try {
+      const sendgridClient = await getSendgridClient(user.practiceId)
+      
+      // Get SendGrid integration to access verified sender details
+      const sendgridIntegration = await prisma.sendgridIntegration.findFirst({
+        where: {
+          practiceId: user.practiceId,
+          isActive: true,
+        },
+      })
+      
+      if (!sendgridIntegration) {
+        throw new Error('SendGrid integration not configured or not active')
+      }
+      
+      // Use verified fromName from SendGrid integration, fallback to brand profile
+      const verifiedFromName = sendgridIntegration.fromName || brandProfile?.defaultFromName || user.name || 'Practice'
+      const verifiedFromEmail = sendgridIntegration.fromEmail
+      const replyTo = brandProfile?.defaultReplyToEmail || verifiedFromEmail
+      
+      result = await sendgridClient.sendEmail({
+        to,
+        toName: undefined,
+        subject,
+        htmlContent: html,
+        textContent: text,
+        // Don't pass fromEmail - the SendgridApiClient uses its verified default fromEmail
+        // (set in constructor from SendGrid integration, which is verified and will actually send)
+        fromName: verifiedFromName,
+        replyTo: replyTo !== verifiedFromEmail ? replyTo : undefined,
+      })
+      
+      // Check if SendGrid returned an error
+      if (!result.success) {
+        return NextResponse.json(
+          {
+            error: result.error || 'Failed to send email via SendGrid',
+            rendered: { html, text, subject },
+          },
+          { status: 500 }
+        )
+      }
+    } catch (sendgridError: any) {
+      // If SendGrid is not configured, return clear error message
+      if (sendgridError.message?.includes('not configured') || 
+          sendgridError.message?.includes('not found') ||
+          sendgridError.message?.includes('not active')) {
+        return NextResponse.json(
+          {
+            error: 'SendGrid integration is not configured. Please configure it in Settings → SendGrid Integration.',
+            rendered: { html, text, subject },
+            requiresConfiguration: true,
+          },
+          { status: 400 }
+        )
+      }
+      
+      // For other errors, return the error message
+      console.error('SendGrid error:', sendgridError)
+      return NextResponse.json(
+        {
+          error: sendgridError.message || 'Failed to send email via SendGrid',
+          rendered: { html, text, subject },
+        },
+        { status: 500 }
+      )
+    }
     
     // Audit log
     await createMarketingAuditLog({

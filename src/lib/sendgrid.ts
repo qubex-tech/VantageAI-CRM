@@ -13,6 +13,7 @@ export interface SendEmailParams {
   textContent?: string
   fromEmail?: string
   fromName?: string
+  replyTo?: string
 }
 
 export interface SendEmailResult {
@@ -124,7 +125,7 @@ export class SendgridApiClient {
       }
 
       // Build the email payload according to SendGrid API v3
-      const payload = {
+      const payload: any = {
         personalizations: [
           {
             to: [
@@ -141,6 +142,13 @@ export class SendgridApiClient {
           name: fromName || undefined,
         },
         content: content,
+      }
+      
+      // Add reply_to if provided
+      if (params.replyTo) {
+        payload.reply_to = {
+          email: params.replyTo,
+        }
       }
 
       const response = await fetch(`${this.baseUrl}/mail/send`, {

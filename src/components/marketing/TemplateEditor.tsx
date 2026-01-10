@@ -684,12 +684,16 @@ function TestSendForm({ templateId, channel }: { templateId: string; channel: 'e
         }),
       })
 
+      const data = await response.json()
+
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to send test message')
+        // Check if this is a configuration error
+        if (data.requiresConfiguration) {
+          throw new Error(data.error || 'SendGrid integration is not configured')
+        }
+        throw new Error(data.error || 'Failed to send test message')
       }
 
-      const data = await response.json()
       setSuccess(true)
       setDestination('')
       setTimeout(() => setSuccess(false), 5000)
@@ -717,14 +721,36 @@ function TestSendForm({ templateId, channel }: { templateId: string; channel: 'e
       </div>
 
       {error && (
-        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-          {error}
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 space-y-2">
+          <div className="font-medium">Failed to send test message</div>
+          <div>{error}</div>
+          {error.includes('SendGrid integration') && (
+            <div className="mt-2 text-xs">
+              <p>To send emails, please configure SendGrid:</p>
+              <ol className="list-decimal list-inside mt-1 space-y-1">
+                <li>Go to Settings → SendGrid Integration</li>
+                <li>Enter your SendGrid API key</li>
+                <li>Verify your sender email address in SendGrid</li>
+                <li>Test the connection</li>
+              </ol>
+            </div>
+          )}
+          {error.includes('sender') && (
+            <div className="mt-2 text-xs">
+              The sender email address must be verified in SendGrid. Please verify it in your SendGrid account or update it in Settings.
+            </div>
+          )}
         </div>
       )}
 
       {success && (
         <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
-          Test {channel === 'email' ? 'email' : 'SMS'} sent successfully!
+          <div className="font-medium">Test {channel === 'email' ? 'email' : 'SMS'} sent successfully!</div>
+          {channel === 'email' && (
+            <div className="mt-1 text-xs text-green-600">
+              Check your inbox (and spam folder) for the test email. If you don't receive it, verify your sender email in SendGrid.
+            </div>
+          )}
         </div>
       )}
 
