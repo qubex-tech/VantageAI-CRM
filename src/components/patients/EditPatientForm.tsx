@@ -82,7 +82,7 @@ export function EditPatientForm({ patient, onCancel, onSuccess }: EditPatientFor
   }
 
   // Format date for input (YYYY-MM-DD)
-  const formatDateForInput = (date: Date | string | null) => {
+  const formatDateForInput = (date: Date | string | null | undefined) => {
     if (!date) return ''
     const d = typeof date === 'string' ? new Date(date) : date
     if (isNaN(d.getTime()) || d.getFullYear() < 1901) return ''

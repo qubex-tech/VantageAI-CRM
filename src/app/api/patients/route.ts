@@ -72,15 +72,89 @@ export async function POST(req: NextRequest) {
 
     const validated = patientSchema.parse(body)
 
+    // Ensure required fields are set for patient creation
+    // Construct name from firstName/lastName if name is not provided
+    const patientName = validated.name || 
+      (validated.firstName && validated.lastName 
+        ? `${validated.firstName} ${validated.lastName}`.trim() 
+        : validated.firstName || validated.lastName || '')
+    
+    // Ensure phone is set (use primaryPhone if phone is not provided)
+    const patientPhone = validated.phone || validated.primaryPhone || ''
+    
+    // Ensure preferredContactMethod is set
+    const patientPreferredContactMethod = validated.preferredContactMethod || validated.preferredChannel || 'phone'
+
+    if (!patientName) {
+      return NextResponse.json(
+        { error: 'Name or firstName/lastName is required' },
+        { status: 400 }
+      )
+    }
+
+    if (!patientPhone) {
+      return NextResponse.json(
+        { error: 'Phone or primaryPhone is required' },
+        { status: 400 }
+      )
+    }
+
+    // Prepare patient data for creation - ensure all required fields are set
+    const patientData = {
+      name: patientName,
+      phone: patientPhone,
+      preferredContactMethod: patientPreferredContactMethod as 'phone' | 'email' | 'sms' | 'mail',
+      practiceId: practiceId,
+      // Basic Information
+      externalEhrId: validated.externalEhrId ?? null,
+      firstName: validated.firstName ?? null,
+      lastName: validated.lastName ?? null,
+      preferredName: validated.preferredName ?? null,
+      dateOfBirth: validated.dateOfBirth ? new Date(validated.dateOfBirth) : null,
+      // Contact Information
+      primaryPhone: validated.primaryPhone || patientPhone || null,
+      secondaryPhone: validated.secondaryPhone ?? null,
+      email: validated.email || null,
+      addressLine1: validated.addressLine1 ?? null,
+      addressLine2: validated.addressLine2 ?? null,
+      address: validated.address ?? null,
+      city: validated.city ?? null,
+      state: validated.state ?? null,
+      postalCode: validated.postalCode ?? null,
+      gender: validated.gender ? (validated.gender as 'male' | 'female' | 'other' | 'unknown') : null,
+      pronouns: validated.pronouns ?? null,
+      primaryLanguage: validated.primaryLanguage ?? null,
+      // Communication Preferences & Consent
+      preferredChannel: validated.preferredChannel ? (validated.preferredChannel as 'sms' | 'email' | 'voice') : null,
+      smsOptIn: validated.smsOptIn ?? false,
+      smsOptInAt: validated.smsOptInAt ? new Date(validated.smsOptInAt) : null,
+      emailOptIn: validated.emailOptIn ?? false,
+      voiceOptIn: validated.voiceOptIn ?? false,
+      doNotContact: validated.doNotContact ?? false,
+      quietHoursStart: validated.quietHoursStart ?? null,
+      quietHoursEnd: validated.quietHoursEnd ?? null,
+      consentSource: validated.consentSource ? (validated.consentSource as 'web' | 'voice' | 'staff' | 'import') : null,
+      // Insurance Summary
+      primaryInsuranceId: validated.primaryInsuranceId ?? null,
+      secondaryInsuranceId: validated.secondaryInsuranceId ?? null,
+      insuranceStatus: validated.insuranceStatus ? (validated.insuranceStatus as 'verified' | 'missing' | 'expired' | 'self_pay') : null,
+      lastInsuranceVerifiedAt: validated.lastInsuranceVerifiedAt ? new Date(validated.lastInsuranceVerifiedAt) : null,
+      selfPay: validated.selfPay ?? false,
+      // Legacy
+      notes: validated.notes ?? null,
+    }
+
+    // Handle tags separately
+    const tags = validated.tags
+      ? {
+          create: validated.tags.map((tag) => ({ tag })),
+        }
+      : undefined
+
     const patient = await prisma.patient.create({
       data: {
-        ...validated,
-        practiceId: practiceId,
-        tags: validated.tags
-          ? {
-              create: validated.tags.map((tag) => ({ tag })),
-            }
-          : undefined,
+        ...patientData,
+        tags,
       },
       include: {
         tags: true,
