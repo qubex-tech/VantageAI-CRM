@@ -157,8 +157,9 @@ export default function EmailBuilder({
       const { rowId, colId, blockIndex } = activeData || {}
       const overData = over.data.current
       
-      if (rowId && colId && blockIndex !== undefined && 
-          overData?.rowId === rowId && overData?.colId === colId) {
+      if (rowId && colId && blockIndex !== undefined && overData &&
+          overData.rowId === rowId && overData.colId === colId &&
+          overData.blockIndex !== undefined) {
         const row = doc.rows.find((r) => r.id === rowId)
         if (!row) {
           activeId.current = null
@@ -378,8 +379,8 @@ export default function EmailBuilder({
     ? doc.rows
         .find((r) => r.id === selectedBlock.rowId)
         ?.columns.find((c) => c.id === selectedBlock.colId)
-        ?.blocks[selectedBlock.blockIndex]
-    : null
+        ?.blocks[selectedBlock.blockIndex] || undefined
+    : undefined
 
   return (
     <div className="flex flex-col h-full bg-gray-50">
@@ -740,7 +741,10 @@ function ColumnComponent({
         onDragOver(e)
       }}
     >
-      <SortableContext items={column.blocks.map((_, idx) => `block-${rowId}-${colId}-${idx}`)} strategy={verticalListSortingStrategy}>
+      <SortableContext 
+        items={column.blocks.map((_, idx) => `block-${rowId}-${colId}-${idx}`)} 
+        strategy={verticalListSortingStrategy}
+      >
         {column.blocks.map((block, blockIndex) => {
           const isSelected =
             selectedBlock?.rowId === rowId &&
@@ -948,7 +952,7 @@ function BlockRenderer({
       )
     case 'button':
       return (
-        <div className="p-4" style={{ textAlign: block.style?.textAlign || 'center' }}>
+        <div className="p-4 text-center">
           <a
             href={block.url || '#'}
             className="inline-block px-6 py-3 rounded text-white font-medium no-underline"
