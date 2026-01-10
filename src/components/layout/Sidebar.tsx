@@ -13,7 +13,8 @@ import {
   LogOut,
   Phone,
   Workflow,
-  Zap
+  Zap,
+  Megaphone
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useEffect } from 'react'
@@ -24,6 +25,7 @@ const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: Home },
   { href: '/patients', label: 'Patients', icon: Users },
   { href: '/appointments', label: 'Appointments', icon: Calendar },
+  { href: '/marketing', label: 'Marketing', icon: Megaphone },
   { href: '/calls', label: 'Calls', icon: Phone },
   { href: '/automations/workflows', label: 'Workflows', icon: Workflow },
   { href: '/workflows/automations', label: 'Workflow Automations', icon: Zap },
