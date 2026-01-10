@@ -216,10 +216,167 @@ async function main() {
 
   console.log('Created timeline entries')
 
+  // Create brand profile
+  const brandProfile = await prisma.brandProfile.upsert({
+    where: { tenantId: practice.id },
+    update: {},
+    create: {
+      tenantId: practice.id,
+      practiceName: practice.name,
+      primaryColor: '#2563eb',
+      secondaryColor: '#64748b',
+      fontFamily: 'Arial',
+      headerLayout: 'left',
+      emailFooterHtml: `<p>${practice.name}</p><p>${practice.address || ''}</p><p>Phone: ${practice.phone || ''}</p><p><a href="{{unsubscribe_url}}">Unsubscribe</a></p>`,
+      smsFooterText: 'Reply STOP to opt out',
+      defaultFromName: practice.name,
+      defaultFromEmail: practice.email || 'noreply@demopractice.com',
+      defaultReplyToEmail: practice.email || 'admin@demopractice.com',
+      defaultSmsSenderId: 'DEMOPRACTICE',
+      quietHoursStart: '20:00',
+      quietHoursEnd: '08:00',
+      timezone: 'America/New_York',
+    },
+  })
+
+  console.log('Created brand profile')
+
+  // Create email templates
+  const emailTemplate1 = await prisma.marketingTemplate.create({
+    data: {
+      tenantId: practice.id,
+      createdByUserId: admin.id,
+      channel: 'email',
+      name: 'Appointment Reminder',
+      category: 'reminder',
+      status: 'published',
+      editorType: 'dragdrop',
+      subject: 'Reminder: Your appointment on {{appointment.date}}',
+      preheader: 'This is a reminder for your upcoming appointment',
+      bodyJson: {
+        rows: [
+          {
+            columns: [
+              {
+                blocks: [
+                  { type: 'header' },
+                  {
+                    type: 'text',
+                    content: '<p>Hi {{patient.firstName}},</p><p>This is a reminder that you have an appointment scheduled:</p>',
+                  },
+                  {
+                    type: 'text',
+                    content: '<p><strong>Date:</strong> {{appointment.date}}<br><strong>Time:</strong> {{appointment.time}}<br><strong>Location:</strong> {{appointment.location}}<br><strong>Provider:</strong> {{appointment.providerName}}</p>',
+                  },
+                  {
+                    type: 'button',
+                    label: 'Confirm Appointment',
+                    url: '{{links.confirm}}',
+                  },
+                  { type: 'footer' },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      variablesUsed: ['patient.firstName', 'appointment.date', 'appointment.time', 'appointment.location', 'appointment.providerName', 'links.confirm'],
+      lastPublishedAt: new Date(),
+    },
+  })
+
+  const emailTemplate2 = await prisma.marketingTemplate.create({
+    data: {
+      tenantId: practice.id,
+      createdByUserId: admin.id,
+      channel: 'email',
+      name: 'Appointment Confirmation',
+      category: 'confirmation',
+      status: 'published',
+      editorType: 'html',
+      subject: 'Your appointment is confirmed',
+      bodyHtml: '<div><h1>Appointment Confirmed</h1><p>Hi {{patient.firstName}},</p><p>Your appointment has been confirmed for {{appointment.date}} at {{appointment.time}}.</p><p>We look forward to seeing you!</p></div>',
+      variablesUsed: ['patient.firstName', 'appointment.date', 'appointment.time'],
+      lastPublishedAt: new Date(),
+    },
+  })
+
+  // Create SMS templates
+  const smsTemplate1 = await prisma.marketingTemplate.create({
+    data: {
+      tenantId: practice.id,
+      createdByUserId: admin.id,
+      channel: 'sms',
+      name: 'Appointment Reminder SMS',
+      category: 'reminder',
+      status: 'published',
+      editorType: 'plaintext',
+      bodyText: 'Hi {{patient.firstName}}, reminder: appointment on {{appointment.date}} at {{appointment.time}} with {{appointment.providerName}}. Confirm: {{links.confirm}}',
+      variablesUsed: ['patient.firstName', 'appointment.date', 'appointment.time', 'appointment.providerName', 'links.confirm'],
+      lastPublishedAt: new Date(),
+    },
+  })
+
+  const smsTemplate2 = await prisma.marketingTemplate.create({
+    data: {
+      tenantId: practice.id,
+      createdByUserId: admin.id,
+      channel: 'sms',
+      name: 'Appointment Confirmation SMS',
+      category: 'confirmation',
+      status: 'draft',
+      editorType: 'plaintext',
+      bodyText: 'Your appointment with {{practice.name}} is confirmed for {{appointment.date}} at {{appointment.time}}. Location: {{appointment.location}}',
+      variablesUsed: ['practice.name', 'appointment.date', 'appointment.time', 'appointment.location'],
+    },
+  })
+
+  const smsTemplate3 = await prisma.marketingTemplate.create({
+    data: {
+      tenantId: practice.id,
+      createdByUserId: admin.id,
+      channel: 'sms',
+      name: 'Review Request',
+      category: 'reviews',
+      status: 'published',
+      editorType: 'plaintext',
+      bodyText: 'Thank you for visiting {{practice.name}}! We\'d love your feedback. Review us: {{links.review}}',
+      variablesUsed: ['practice.name', 'links.review'],
+      lastPublishedAt: new Date(),
+    },
+  })
+
+  // Create template versions for published templates
+  await prisma.marketingTemplateVersion.create({
+    data: {
+      templateId: emailTemplate1.id,
+      tenantId: practice.id,
+      versionNumber: 1,
+      snapshot: {
+        id: emailTemplate1.id,
+        channel: emailTemplate1.channel,
+        name: emailTemplate1.name,
+        category: emailTemplate1.category,
+        subject: emailTemplate1.subject,
+        preheader: emailTemplate1.preheader,
+        bodyJson: emailTemplate1.bodyJson,
+        editorType: emailTemplate1.editorType,
+        variablesUsed: emailTemplate1.variablesUsed,
+      },
+      createdByUserId: admin.id,
+    },
+  })
+
+  console.log('Created marketing templates (2 email, 3 SMS)')
+
   console.log('✅ Seeding completed!')
   console.log('\nLogin credentials:')
   console.log('Email: admin@demopractice.com')
   console.log('Password: demo123')
+  console.log('\nMarketing Module:')
+  console.log('- Brand profile created')
+  console.log('- 2 email templates (1 published, 1 draft)')
+  console.log('- 3 SMS templates (2 published, 1 draft)')
 }
 
 main()

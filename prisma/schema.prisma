@@ -36,6 +36,11 @@ model Practice {
   outboxEvents         OutboxEvent[]
   automationRules      AutomationRule[]
   automationRuns       AutomationRun[]
+  brandProfile         BrandProfile?
+  templates            MarketingTemplate[]
+  templateVersions     MarketingTemplateVersion[]
+  templateAssets       MarketingTemplateAsset[]
+  marketingAuditLogs   MarketingAuditLog[]
 
   @@map("practices")
 }
@@ -50,11 +55,15 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  practice            Practice?            @relation(fields: [practiceId], references: [id], onDelete: Cascade)
-  auditLogs           AuditLog[]
-  healixConversations HealixConversation[]
-  healixActionLogs    HealixActionLog[]
-  patientNotes        PatientNote[]
+  practice                         Practice?                  @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  auditLogs                        AuditLog[]
+  healixConversations              HealixConversation[]
+  healixActionLogs                 HealixActionLog[]
+  patientNotes                     PatientNote[]
+  marketingTemplatesCreated        MarketingTemplate[]        @relation("MarketingTemplateCreator")
+  marketingTemplateVersionsCreated MarketingTemplateVersion[] @relation("MarketingTemplateVersionCreator")
+  marketingTemplateAssetsCreated   MarketingTemplateAsset[]   @relation("MarketingTemplateAssetCreator")
+  marketingAuditLogs               MarketingAuditLog[]        @relation("MarketingAuditLogActor")
 
   @@index([practiceId])
   @@index([email])
@@ -535,4 +544,121 @@ model AutomationActionLog {
   @@index([status])
   @@index([createdAt])
   @@map("automation_action_logs")
+}
+
+// Marketing Module Models
+
+model BrandProfile {
+  id                  String   @id @default(uuid())
+  tenantId            String   @unique // practiceId, using tenantId for clarity in marketing context
+  practiceName        String
+  logoUrl             String?
+  primaryColor        String   @default("#2563eb")
+  secondaryColor      String?
+  fontFamily          String   @default("Arial") // Enum: Arial, Helvetica, Georgia, Times New Roman, Courier New
+  headerLayout        String   @default("left") // Enum: left, center
+  emailFooterHtml     String?
+  smsFooterText       String? // e.g., "Reply STOP to opt out"
+  defaultFromName     String
+  defaultFromEmail    String
+  defaultReplyToEmail String?
+  defaultSmsSenderId  String? // Could be Twilio numberId later; for now string
+  quietHoursStart     String   @default("09:00") // Time format: HH:mm
+  quietHoursEnd       String   @default("17:00") // Time format: HH:mm
+  timezone            String   @default("America/Chicago")
+  updatedAt           DateTime @updatedAt
+  createdAt           DateTime @default(now())
+
+  practice Practice @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("brand_profiles")
+}
+
+model MarketingTemplate {
+  id               String    @id @default(uuid())
+  tenantId         String // practiceId
+  channel          String // Enum: email, sms
+  name             String
+  category         String // Enum: reminder, confirmation, reactivation, followup, reviews, broadcast, custom
+  status           String    @default("draft") // Enum: draft, published, archived
+  editorType       String    @default("dragdrop") // Enum: dragdrop, html, plaintext (sms uses plaintext)
+  subject          String? // Email only
+  preheader        String? // Email only
+  bodyJson         Json? // Dragdrop structure for email builder
+  bodyHtml         String? // Stored HTML if HTML editor OR generated output snapshot
+  bodyText         String? // SMS body
+  variablesUsed    Json? // List of variable keys used: ["patient.firstName", "appointment.date", etc.]
+  complianceConfig Json? // Flags/settings for injection behavior
+  lastPublishedAt  DateTime?
+  createdByUserId  String
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  practice  Practice                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  versions  MarketingTemplateVersion[]
+  createdBy User                       @relation("MarketingTemplateCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, channel])
+  @@index([tenantId, status])
+  @@index([tenantId, category])
+  @@index([createdByUserId])
+  @@map("marketing_templates")
+}
+
+model MarketingTemplateVersion {
+  id              String   @id @default(uuid())
+  templateId      String
+  tenantId        String
+  versionNumber   Int
+  snapshot        Json // Full template snapshot (all fields needed to render)
+  createdByUserId String
+  createdAt       DateTime @default(now())
+
+  template  MarketingTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  practice  Practice          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy User              @relation("MarketingTemplateVersionCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+  @@index([tenantId])
+  @@index([templateId, versionNumber])
+  @@map("marketing_template_versions")
+}
+
+model MarketingTemplateAsset {
+  id              String   @id @default(uuid())
+  tenantId        String
+  type            String // Enum: image, file
+  url             String
+  meta            Json? // width/height/alt, etc.
+  createdByUserId String
+  createdAt       DateTime @default(now())
+
+  practice  Practice @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy User     @relation("MarketingTemplateAssetCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([createdByUserId])
+  @@map("marketing_template_assets")
+}
+
+model MarketingAuditLog {
+  id          String   @id @default(uuid())
+  tenantId    String
+  actorUserId String? // Null for system actions
+  actorType   String // Enum: staff, agent, system
+  action      String // e.g., TEMPLATE_CREATED, TEMPLATE_PUBLISHED, BRAND_UPDATED, TEST_SENT
+  entityType  String // Template, BrandProfile, etc.
+  entityId    String
+  metadata    Json? // Additional context
+  createdAt   DateTime @default(now())
+
+  practice Practice @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actor    User?    @relation("MarketingAuditLogActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([tenantId, entityType, entityId])
+  @@index([createdAt])
+  @@map("marketing_audit_logs")
 }

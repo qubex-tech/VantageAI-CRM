@@ -129,3 +129,75 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 })
 
+// Marketing Module schemas
+export const brandProfileSchema = z.object({
+  practiceName: z.string().min(1, 'Practice name is required'),
+  logoUrl: z.string().url().optional().nullable(),
+  primaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Primary color must be a valid hex color').optional(),
+  secondaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Secondary color must be a valid hex color').optional().nullable(),
+  fontFamily: z.enum(['Arial', 'Helvetica', 'Georgia', 'Times New Roman', 'Courier New']).optional(),
+  headerLayout: z.enum(['left', 'center']).optional(),
+  emailFooterHtml: z.string().optional().nullable(),
+  smsFooterText: z.string().optional().nullable(),
+  defaultFromName: z.string().min(1, 'Default from name is required'),
+  defaultFromEmail: z.string().email('Default from email must be valid'),
+  defaultReplyToEmail: z.string().email('Reply-to email must be valid').optional().nullable(),
+  defaultSmsSenderId: z.string().optional().nullable(),
+  quietHoursStart: z.string().regex(/^([0-1][0-9]|2[0-3]):[0-5][0-9]$/, 'Quiet hours start must be in HH:mm format').optional(),
+  quietHoursEnd: z.string().regex(/^([0-1][0-9]|2[0-3]):[0-5][0-9]$/, 'Quiet hours end must be in HH:mm format').optional(),
+  timezone: z.string().optional(),
+})
+
+export const marketingTemplateSchema = z.object({
+  channel: z.enum(['email', 'sms']),
+  name: z.string().min(1, 'Template name is required'),
+  category: z.enum(['reminder', 'confirmation', 'reactivation', 'followup', 'reviews', 'broadcast', 'custom']),
+  status: z.enum(['draft', 'published', 'archived']).optional(),
+  editorType: z.enum(['dragdrop', 'html', 'plaintext']).optional(),
+  subject: z.string().optional().nullable(),
+  preheader: z.string().optional().nullable(),
+  bodyJson: z.any().optional().nullable(),
+  bodyHtml: z.string().optional().nullable(),
+  bodyText: z.string().optional().nullable(),
+  variablesUsed: z.array(z.string()).optional().nullable(),
+  complianceConfig: z.any().optional().nullable(),
+})
+
+export const previewTemplateSchema = z.object({
+  templateId: z.string().uuid(),
+  sampleContext: z.object({
+    patient: z.object({
+      firstName: z.string().optional(),
+      lastName: z.string().optional(),
+      preferredName: z.string().optional(),
+    }).optional(),
+    practice: z.object({
+      name: z.string().optional(),
+      phone: z.string().optional(),
+      address: z.string().optional(),
+    }).optional(),
+    appointment: z.object({
+      date: z.string().optional(),
+      time: z.string().optional(),
+      location: z.string().optional(),
+      providerName: z.string().optional(),
+    }).optional(),
+    links: z.object({
+      confirm: z.string().url().optional(),
+      reschedule: z.string().url().optional(),
+      cancel: z.string().url().optional(),
+    }).optional(),
+  }).optional(),
+})
+
+export const testSendEmailSchema = z.object({
+  templateId: z.string().uuid(),
+  to: z.string().email('Valid email address is required'),
+  sampleContext: previewTemplateSchema.shape.sampleContext.optional(),
+})
+
+export const testSendSmsSchema = z.object({
+  templateId: z.string().uuid(),
+  to: z.string().min(10, 'Valid phone number is required'),
+  sampleContext: previewTemplateSchema.shape.sampleContext.optional(),
+})

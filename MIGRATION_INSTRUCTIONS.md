@@ -1,56 +1,91 @@
-# Workflow Migration Instructions
+# Marketing Module - Migration Instructions
 
-The workflow feature requires new database tables that need to be created via a migration.
+## Important: Run Prisma Migration First
 
-## For Local Development
+The TypeScript errors you see are because Prisma Client hasn't been regenerated with the new models yet. Follow these steps:
 
-Run the migration locally:
+### 1. Generate Prisma Migration
 
 ```bash
-npx prisma migrate dev --name add_workflows
+cd "/Users/saqibnasir/Downloads/Medical CRM"
+npx prisma migrate dev --name add_marketing_module
 ```
 
 This will:
-1. Create the migration file
-2. Apply it to your local database
-3. Generate the Prisma client
+- Create a migration file with all the new models
+- Apply the migration to your database
+- Regenerate Prisma Client with the new models
 
-## For Production (Vercel)
-
-You have two options:
-
-### Option 1: Run Migration Manually (Recommended)
-
-1. Get your production `DATABASE_URL` from Vercel environment variables
-2. Run the migration locally pointing to production:
+### 2. Regenerate Prisma Client (if migration doesn't do it automatically)
 
 ```bash
-DATABASE_URL="your-production-database-url" npx prisma migrate deploy
+npx prisma generate
 ```
 
-**Important**: Make sure you're using the correct `DATABASE_URL` from your production environment!
+### 3. Verify Everything Works
 
-### Option 2: Add to Build Process
+After running the migration, the TypeScript errors should be resolved. The Prisma Client will include:
+- `prisma.brandProfile`
+- `prisma.marketingTemplate`
+- `prisma.marketingTemplateVersion`
+- `prisma.marketingTemplateAsset`
+- `prisma.marketingAuditLog`
 
-Add a postinstall script to run migrations automatically. However, this requires careful handling of connection pooling.
-
-## What the Migration Creates
-
-The migration will create three new tables:
-- `workflows` - Stores workflow definitions
-- `workflow_steps` - Stores workflow steps (conditions and actions)
-- `workflow_runs` - Stores workflow execution history
-
-## Verify Migration
-
-After running the migration, you can verify the tables were created:
+### 4. Run Seed (Optional)
 
 ```bash
-npx prisma studio
+npx prisma db seed
 ```
 
-Or check directly in your database:
-- `workflows` table should exist
-- `workflow_steps` table should exist  
-- `workflow_runs` table should exist
+This will create demo data including:
+- Brand profile for your practice
+- 2 email templates
+- 3 SMS templates
 
+### 5. Start Development Server
+
+```bash
+npm run dev
+```
+
+Navigate to `/marketing` to see the marketing dashboard.
+
+## If Migration Fails
+
+If you encounter any issues during migration:
+
+1. **Check Database Connection**: Ensure your `DATABASE_URL` in `.env` is correct
+2. **Check Existing Schema**: The migration should be compatible with your existing schema
+3. **Manual Migration**: If needed, you can manually create the tables using the SQL in the migration file
+
+## Models Added
+
+The following models were added to your Prisma schema:
+
+- `BrandProfile` - Brand settings and configuration
+- `MarketingTemplate` - Email and SMS templates
+- `MarketingTemplateVersion` - Version history for templates
+- `MarketingTemplateAsset` - Uploaded assets (images/files)
+- `MarketingAuditLog` - Audit trail for marketing actions
+
+All models are tenant-scoped using `tenantId` (which maps to `practiceId`).
+
+## Next Steps
+
+After running the migration:
+
+1. ✅ Prisma Client will be regenerated with all new models
+2. ✅ TypeScript errors will be resolved
+3. ✅ You can start using the Marketing Module APIs
+4. ✅ UI pages will be able to fetch data from the database
+
+## Troubleshooting
+
+### Error: "Property 'brandProfile' does not exist"
+- **Solution**: Run `npx prisma generate` to regenerate Prisma Client
+
+### Error: "Table 'brand_profiles' does not exist"
+- **Solution**: Run `npx prisma migrate dev` to apply migrations
+
+### Error: "Migration failed"
+- **Solution**: Check your database connection and ensure you have the necessary permissions
