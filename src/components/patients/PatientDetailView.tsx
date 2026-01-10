@@ -118,12 +118,27 @@ function calculateAge(dateOfBirth: Date): number {
   return age
 }
 
+interface PatientNote {
+  id: string
+  type: string
+  content: string
+  createdAt: string | Date // API returns as string (JSON), but can be Date object
+  updatedAt: string | Date
+  user: {
+    id: string
+    name: string
+    email: string
+  }
+}
+
 export function PatientDetailView({ patient }: PatientDetailViewProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'activity' | 'appointments' | 'calls'>('overview')
   const [sidebarTab, setSidebarTab] = useState<'details' | 'comments'>('details')
   const [isEditing, setIsEditing] = useState(false)
   const [composeEmailOpen, setComposeEmailOpen] = useState(false)
   const [notesOpen, setNotesOpen] = useState(false)
+  const [patientNotes, setPatientNotes] = useState<PatientNote[]>([])
+  const [notesLoading, setNotesLoading] = useState(false)
   const healixOpen = useHealixOpen()
   
   // Collapsible sections state
@@ -132,10 +147,50 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
     contactInfo: false,
     communication: false,
     insurance: false,
+    notes: true, // Expand notes section by default
   })
   
   const toggleSection = (section: string) => {
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }))
+  }
+  
+  // Fetch structured notes
+  useEffect(() => {
+    const fetchNotes = async () => {
+      setNotesLoading(true)
+      try {
+        const response = await fetch(`/api/patients/${patient.id}/notes`)
+        if (response.ok) {
+          const data = await response.json()
+          setPatientNotes(data.notes || [])
+        }
+      } catch (error) {
+        console.error('Error fetching patient notes:', error)
+      } finally {
+        setNotesLoading(false)
+      }
+    }
+    
+    fetchNotes()
+  }, [patient.id])
+  
+  // Refresh notes when dialog closes (after note is added/edited/deleted)
+  const handleNotesChange = () => {
+    const fetchNotes = async () => {
+      setNotesLoading(true)
+      try {
+        const response = await fetch(`/api/patients/${patient.id}/notes`)
+        if (response.ok) {
+          const data = await response.json()
+          setPatientNotes(data.notes || [])
+        }
+      } catch (error) {
+        console.error('Error fetching patient notes:', error)
+      } finally {
+        setNotesLoading(false)
+      }
+    }
+    fetchNotes()
   }
   
   const age = patient.dateOfBirth ? calculateAge(patient.dateOfBirth) : 0
@@ -954,37 +1009,92 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
               )}
 
               {/* Notes Section */}
-              <div className="min-w-0">
-                <div className="flex items-center justify-between mb-4">
+              <div className="min-w-0 border-b border-gray-200 pb-4">
+                <button
+                  onClick={() => toggleSection('notes')}
+                  className="flex items-center justify-between w-full mb-3"
+                >
                   <h3 className="text-sm font-medium text-gray-900">Notes</h3>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setNotesOpen(true)}
-                    className="h-8 px-2 text-xs"
-                  >
-                    <Plus className="h-3 w-3 mr-1" />
-                    Manage Notes
-                  </Button>
-                </div>
-                {patient.notes ? (
-                  <div className="text-sm text-gray-700 whitespace-pre-wrap break-words min-w-0 mb-2">
-                    {patient.notes}
+                  <div className="flex items-center gap-2">
+                    {patientNotes.length > 0 && (
+                      <span className="text-xs text-gray-500">({patientNotes.length})</span>
+                    )}
+                    {expandedSections.notes ? (
+                      <ChevronUp className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                    )}
                   </div>
-                ) : (
-                  <div className="text-sm text-gray-500 italic mb-2">
-                    No legacy notes. Use "Manage Notes" to add structured notes.
+                </button>
+                
+                {expandedSections.notes && (
+                  <div className="space-y-3 min-w-0">
+                    {notesLoading ? (
+                      <div className="text-sm text-gray-500 py-2">Loading notes...</div>
+                    ) : patientNotes.length > 0 ? (
+                      <>
+                        {/* Show up to 3 most recent notes in sidebar */}
+                        {patientNotes.slice(0, 3).map((note) => (
+                          <div
+                            key={note.id}
+                            className="border border-gray-200 rounded-md p-3 bg-gray-50 min-w-0"
+                          >
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className={`px-2 py-0.5 text-xs font-medium rounded ${
+                                note.type === 'medical' ? 'bg-red-100 text-red-800' :
+                                note.type === 'contact' ? 'bg-cyan-100 text-cyan-800' :
+                                note.type === 'administrative' ? 'bg-blue-100 text-blue-800' :
+                                note.type === 'billing' ? 'bg-yellow-100 text-yellow-800' :
+                                note.type === 'appointment' ? 'bg-purple-100 text-purple-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {note.type.charAt(0).toUpperCase() + note.type.slice(1)}
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                {format(new Date(note.createdAt), 'MMM d, yyyy')}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-900 whitespace-pre-wrap break-words min-w-0 line-clamp-2">
+                              {note.content}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              By {note.user.name}
+                            </p>
+                          </div>
+                        ))}
+                        {patientNotes.length > 3 && (
+                          <div className="text-xs text-gray-500 text-center pt-1">
+                            +{patientNotes.length - 3} more note{patientNotes.length - 3 !== 1 ? 's' : ''}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="text-sm text-gray-500 italic py-2">
+                        No structured notes. Use "Manage Notes" to add notes.
+                      </div>
+                    )}
+                    
+                    {/* Legacy notes display (if exists) */}
+                    {patient.notes && (
+                      <div className="mt-3 pt-3 border-t border-gray-200">
+                        <div className="text-xs text-gray-500 mb-1">Legacy Note</div>
+                        <div className="text-sm text-gray-700 whitespace-pre-wrap break-words min-w-0">
+                          {patient.notes}
+                        </div>
+                      </div>
+                    )}
+                    
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setNotesOpen(true)}
+                      className="w-full mt-3"
+                    >
+                      <FileText className="h-4 w-4 mr-2" />
+                      {patientNotes.length > 0 ? 'View All Notes' : 'Manage Notes'}
+                    </Button>
                   </div>
                 )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setNotesOpen(true)}
-                  className="w-full"
-                >
-                  <FileText className="h-4 w-4 mr-2" />
-                  View All Notes
-                </Button>
               </div>
             </div>
           )}
@@ -1022,10 +1132,7 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
         open={notesOpen}
         onOpenChange={setNotesOpen}
         patientId={patient.id}
-        onNoteChange={() => {
-          // Refresh the page to get updated data
-          window.location.reload()
-        }}
+        onNoteChange={handleNotesChange}
       />
     </div>
   )
