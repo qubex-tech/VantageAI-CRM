@@ -23,8 +23,48 @@ import {
   Loader2
 } from 'lucide-react'
 import Link from 'next/link'
-import { getSmsStats } from '@/lib/marketing/render-sms'
-import { extractVariables } from '@/lib/marketing/variables'
+
+// Client-safe SMS stats calculation
+function calculateSmsStats(text: string): { characterCount: number; segments: number; encoding: 'GSM-7' | 'Unicode' } {
+  const chars = text.length
+  
+  // Simple check: if text contains non-GSM-7 characters, assume Unicode
+  const gsm7Pattern = /^[\x00-\x7F]*$/
+  const hasUnicode = !gsm7Pattern.test(text) || /[^\x20-\x7E\x09\x0A\x0D]/.test(text)
+  
+  const encoding = hasUnicode ? 'Unicode' : 'GSM-7'
+  const charsPerSegment = hasUnicode ? 70 : 160
+  
+  // Account for concatenation (messages over 1 segment need 6 extra chars for UDH)
+  let segments = 1
+  let remaining = chars
+  
+  while (remaining > charsPerSegment) {
+    segments++
+    remaining -= charsPerSegment
+    if (segments > 1) {
+      remaining -= 6 // UDH overhead for concatenated messages
+    }
+  }
+  
+  return { characterCount: chars, segments, encoding }
+}
+
+// Client-safe variable extraction
+function extractVariables(text: string): string[] {
+  const VARIABLE_PATTERN = /\{\{([^}]+)\}\}/g
+  const variables: string[] = []
+  const matches = text.matchAll(VARIABLE_PATTERN)
+  
+  for (const match of matches) {
+    const varKey = match[1].trim()
+    if (varKey && !variables.includes(varKey)) {
+      variables.push(varKey)
+    }
+  }
+  
+  return variables
+}
 
 interface TemplateEditorProps {
   template: {
@@ -88,10 +128,10 @@ export default function TemplateEditor({ template: initialTemplate, brandProfile
     // Extract variables from content when it changes
     if (template.channel === 'sms' && bodyText) {
       const vars = extractVariables(bodyText)
-      // Could update variablesUsed here
+      // Variables extracted for display/validation
     } else if (template.channel === 'email' && (bodyHtml || bodyText)) {
       const vars = extractVariables(bodyHtml || bodyText)
-      // Could update variablesUsed here
+      // Variables extracted for display/validation
     }
   }, [bodyText, bodyHtml, template.channel])
 
@@ -123,12 +163,18 @@ export default function TemplateEditor({ template: initialTemplate, brandProfile
         data.bodyText = null
       }
 
-      // Extract variables
+      // Extract variables from content
       const content = template.channel === 'sms' ? bodyText : (bodyHtml || JSON.stringify(data.bodyJson || {}))
       const subjectContent = template.channel === 'email' ? subject : ''
-      const variablesUsed = extractVariables(content + ' ' + subjectContent)
+      const allContent = content + ' ' + subjectContent
+      const variablesUsed = extractVariables(allContent)
       // Deduplicate variables
-      const uniqueVars = Array.from(new Set(variablesUsed))
+      const uniqueVars: string[] = []
+      for (const v of variablesUsed) {
+        if (!uniqueVars.includes(v)) {
+          uniqueVars.push(v)
+        }
+      }
       data.variablesUsed = uniqueVars
 
       const response = await fetch(`/api/marketing/templates/${template.id}`, {
@@ -254,7 +300,7 @@ export default function TemplateEditor({ template: initialTemplate, brandProfile
   }
 
   // SMS stats
-  const smsStats = template.channel === 'sms' && bodyText ? getSmsStats(bodyText) : null
+  const smsStats = template.channel === 'sms' && bodyText ? calculateSmsStats(bodyText) : null
 
   return (
     <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
