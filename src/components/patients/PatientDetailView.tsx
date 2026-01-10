@@ -235,7 +235,16 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
   const nextAppointment = upcomingAppointments.length > 0 ? upcomingAppointments[0] : null
 
   if (isEditing) {
-    return <EditPatientForm patient={patient} onCancel={() => setIsEditing(false)} />
+    return (
+      <EditPatientForm
+        patient={patient}
+        onCancel={() => setIsEditing(false)}
+        onSuccess={() => {
+          setIsEditing(false)
+          window.location.reload() // Force full refresh to get updated patient data
+        }}
+      />
+    )
   }
 
   return (

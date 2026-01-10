@@ -2,13 +2,52 @@ import { z } from 'zod'
 
 // Patient schemas
 export const patientSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  dateOfBirth: z.coerce.date(),
-  phone: z.string().min(10, 'Phone number is required'),
-  email: z.string().email().optional().or(z.literal('')),
-  address: z.string().optional(),
-  preferredContactMethod: z.enum(['phone', 'email', 'sms', 'mail']),
-  notes: z.string().optional(),
+  // Legacy fields (for backward compatibility)
+  name: z.string().optional(),
+  phone: z.string().optional(),
+  address: z.string().optional().nullable(),
+  preferredContactMethod: z.enum(['phone', 'email', 'sms', 'mail']).optional(),
+  
+  // Basic Information
+  externalEhrId: z.string().optional().nullable(),
+  firstName: z.string().optional().nullable(),
+  lastName: z.string().optional().nullable(),
+  preferredName: z.string().optional().nullable(),
+  dateOfBirth: z.coerce.date().optional().nullable(),
+  
+  // Contact Information
+  primaryPhone: z.string().optional().nullable(),
+  secondaryPhone: z.string().optional().nullable(),
+  email: z.string().email().optional().nullable().or(z.literal('')),
+  addressLine1: z.string().optional().nullable(),
+  addressLine2: z.string().optional().nullable(),
+  city: z.string().optional().nullable(),
+  state: z.string().optional().nullable(),
+  postalCode: z.string().optional().nullable(),
+  gender: z.enum(['male', 'female', 'other', 'unknown']).optional().nullable(),
+  pronouns: z.string().optional().nullable(),
+  primaryLanguage: z.string().optional().nullable(),
+  
+  // Communication Preferences & Consent
+  preferredChannel: z.enum(['sms', 'email', 'voice']).optional().nullable(),
+  smsOptIn: z.boolean().optional().nullable(),
+  smsOptInAt: z.coerce.date().optional().nullable(),
+  emailOptIn: z.boolean().optional().nullable(),
+  voiceOptIn: z.boolean().optional().nullable(),
+  doNotContact: z.boolean().optional().nullable(),
+  quietHoursStart: z.string().optional().nullable(), // HH:mm format
+  quietHoursEnd: z.string().optional().nullable(), // HH:mm format
+  consentSource: z.enum(['web', 'voice', 'staff', 'import']).optional().nullable(),
+  
+  // Insurance Summary
+  primaryInsuranceId: z.string().optional().nullable(),
+  secondaryInsuranceId: z.string().optional().nullable(),
+  insuranceStatus: z.enum(['verified', 'missing', 'expired', 'self_pay']).optional().nullable(),
+  lastInsuranceVerifiedAt: z.coerce.date().optional().nullable(),
+  selfPay: z.boolean().optional().nullable(),
+  
+  // Legacy fields
+  notes: z.string().optional().nullable(),
   tags: z.array(z.string()).optional(),
 })
 
