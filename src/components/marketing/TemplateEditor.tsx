@@ -23,6 +23,7 @@ import {
   Loader2
 } from 'lucide-react'
 import Link from 'next/link'
+import EmailBuilder from './EmailBuilder'
 
 // Client-safe SMS stats calculation
 function calculateSmsStats(text: string): { characterCount: number; segments: number; encoding: 'GSM-7' | 'Unicode' } {
@@ -481,24 +482,56 @@ export default function TemplateEditor({ template: initialTemplate, brandProfile
               )}
 
               {template.channel === 'email' && editorType === 'dragdrop' && (
-                <Card className="border-dashed">
-                  <CardContent className="pt-6">
-                    <div className="text-center py-12">
-                      <p className="text-sm text-gray-500 mb-2">Drag & Drop Builder</p>
-                      <p className="text-xs text-gray-400">
-                        Full drag-and-drop builder coming soon. For now, use HTML editor mode.
-                      </p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mt-4"
-                        onClick={() => setEditorType('html')}
-                      >
-                        Switch to HTML Editor
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
+                <div className="space-y-4">
+                  <div className="h-[600px] border border-gray-200 rounded-lg overflow-hidden">
+                    <EmailBuilder
+                      initialDoc={(template.bodyJson as any) || { rows: [], globalStyles: {} }}
+                      brandProfile={brandProfile}
+                      onSave={async (doc) => {
+                        // Save the bodyJson document
+                        setError('')
+                        setSaving(true)
+                        try {
+                          const response = await fetch(`/api/marketing/templates/${template.id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              name,
+                              subject,
+                              preheader,
+                              editorType: 'dragdrop',
+                              bodyJson: doc,
+                              bodyHtml: null,
+                              bodyText: null,
+                            }),
+                          })
+
+                          if (!response.ok) {
+                            const errorData = await response.json()
+                            throw new Error(errorData.error || 'Failed to save template')
+                          }
+
+                          const { template: updated } = await response.json()
+                          setTemplate(updated)
+                          router.refresh()
+                        } catch (err: any) {
+                          setError(err.message || 'Failed to save template')
+                        } finally {
+                          setSaving(false)
+                        }
+                      }}
+                      onPreview={handlePreview}
+                      saving={saving}
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setEditorType('html')}
+                  >
+                    Switch to HTML Editor
+                  </Button>
+                </div>
               )}
 
               {template.channel === 'sms' && (
