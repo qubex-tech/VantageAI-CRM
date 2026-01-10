@@ -33,7 +33,8 @@ import {
   MessageSquare,
   Plus,
   Shield,
-  Globe
+  Globe,
+  Pencil
 } from 'lucide-react'
 import { format, formatDistanceToNow } from 'date-fns'
 import { Button } from '@/components/ui/button'
@@ -739,17 +740,28 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
             <div className="space-y-4">
               {/* Basic Information Section */}
               <div className="min-w-0 border-b border-gray-200 pb-4">
-                <button
-                  onClick={() => toggleSection('basicInfo')}
-                  className="flex items-center justify-between w-full mb-3"
-                >
-                  <h3 className="text-sm font-medium text-gray-900">Basic Information</h3>
-                  {expandedSections.basicInfo ? (
-                    <ChevronUp className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                  )}
-                </button>
+                <div className="flex items-center justify-between mb-3 gap-2">
+                  <button
+                    onClick={() => toggleSection('basicInfo')}
+                    className="flex items-center justify-between flex-1 min-w-0"
+                  >
+                    <h3 className="text-sm font-medium text-gray-900">Basic Information</h3>
+                    {expandedSections.basicInfo ? (
+                      <ChevronUp className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                    )}
+                  </button>
+                  <Button
+                    onClick={() => setIsEditing(true)}
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2 flex-shrink-0"
+                    title="Edit Patient"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </div>
                 
                 {expandedSections.basicInfo && (
                   <div className="space-y-3 min-w-0">
@@ -1113,17 +1125,6 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
               No comments yet
             </div>
           )}
-        </div>
-
-        {/* Edit Button */}
-        <div className="border-t border-gray-200 p-4 flex-shrink-0">
-          <Button
-            onClick={() => setIsEditing(true)}
-            variant="outline"
-            className="w-full"
-          >
-            Edit Patient
-          </Button>
         </div>
       </div>
 
