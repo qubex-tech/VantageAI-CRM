@@ -11,24 +11,43 @@ let databaseUrl = process.env.DATABASE_URL || ''
 const portMatch = databaseUrl.match(/:(\d+)\//)
 const port = portMatch ? portMatch[1] : ''
 
-// Add connection_limit if not already present
+// Add/override connection_limit to prevent pool exhaustion
 // IMPORTANT: Supabase Session Mode has VERY limited pool size (typically 15-20 total connections)
 // For serverless environments (Vercel), we MUST use 1 connection per instance to avoid exhaustion
 // Transaction Mode (6543) is preferred for serverless as it has better pooling
-if (databaseUrl && !databaseUrl.includes('connection_limit')) {
+if (databaseUrl) {
   const urlMatch = databaseUrl.match(/^(postgresql?:\/\/[^?]+)(\?.*)?$/)
   if (urlMatch) {
     const baseUrl = urlMatch[1]
     const existingParams = urlMatch[2] || ''
     const params = new URLSearchParams(existingParams.replace(/^\?/, ''))
     
-    // Use 1 connection per instance for BOTH modes (critical for serverless)
-    // Transaction Mode (6543): 1 connection (pooler handles the rest)
-    // Session Mode (5432): 1 connection (required - pool is very limited)
-    params.set('connection_limit', '1')
+    // CRITICAL: Force connection_limit=1 for Session Mode (port 5432) to prevent exhaustion
+    // Even if already set, override it to ensure we don't exhaust the limited pool
+    // Transaction Mode (6543) can also use 1 connection efficiently
+    if (port === '5432') {
+      // Session Mode: MUST use 1 connection (pool is very limited)
+      params.set('connection_limit', '1')
+    } else if (port === '6543') {
+      // Transaction Mode: 1 connection is efficient (pooler handles the rest)
+      // Only set if not already present (allows override if needed)
+      if (!params.has('connection_limit')) {
+        params.set('connection_limit', '1')
+      }
+    } else {
+      // Unknown port: default to 1 for safety
+      if (!params.has('connection_limit')) {
+        params.set('connection_limit', '1')
+      }
+    }
     
     if (!params.has('pool_timeout')) {
       params.set('pool_timeout', '10') // Timeout after 10 seconds
+    }
+    
+    // Add connect_timeout for faster failure detection
+    if (!params.has('connect_timeout')) {
+      params.set('connect_timeout', '5') // Fail fast if connection can't be established
     }
     
     const paramString = params.toString()
