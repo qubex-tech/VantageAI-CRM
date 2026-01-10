@@ -13,8 +13,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Trash2, X } from 'lucide-react'
+import { Trash2, X, Loader2 } from 'lucide-react'
 import { FlowNodeData } from './FlowBuilder'
+import Link from 'next/link'
 
 interface NodeConfigPanelProps {
   node: Node<FlowNodeData>
@@ -156,12 +157,43 @@ const ELIGIBILITY_STATUS_OPTIONS = [
   'unknown',
 ]
 
+interface MarketingTemplate {
+  id: string
+  name: string
+  channel: 'email' | 'sms'
+  status: 'draft' | 'published' | 'archived'
+  editorType?: 'dragdrop' | 'html' | 'plaintext'
+  subject?: string | null
+  bodyHtml?: string | null
+  bodyText?: string | null
+  bodyJson?: any
+  category: string
+}
+
 export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: NodeConfigPanelProps) {
   const [config, setConfig] = useState(node.data.config || {})
+  const [templates, setTemplates] = useState<MarketingTemplate[]>([])
+  const [loadingTemplates, setLoadingTemplates] = useState(false)
 
   useEffect(() => {
     setConfig(node.data.config || {})
   }, [node.id, node.data.config])
+
+  // Fetch templates when email or SMS action is selected
+  useEffect(() => {
+    const actionType = config.actionType
+    if (actionType === 'send_email' || actionType === 'send_sms') {
+      fetchTemplates(actionType === 'send_email' ? 'email' : 'sms')
+    } else {
+      setTemplates([])
+    }
+  }, [config.actionType])
+
+  // Helper to check if selected template is drag-drop
+  const selectedTemplate = config.args?.templateId 
+    ? templates.find(t => t.id === config.args.templateId)
+    : null
+  const isDragDropTemplate = selectedTemplate?.editorType === 'dragdrop'
 
   const handleUpdate = (updates: any) => {
     const newConfig = { ...config, ...updates }
@@ -174,6 +206,75 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
     if (confirm('Are you sure you want to delete this node?')) {
       onDelete(node.id)
     }
+  }
+
+  const fetchTemplates = async (channel: 'email' | 'sms') => {
+    setLoadingTemplates(true)
+    try {
+      const response = await fetch(`/api/marketing/templates?channel=${channel}&status=published`)
+      if (response.ok) {
+        const data = await response.json()
+        setTemplates(data.templates || [])
+      } else {
+        console.error('Failed to fetch templates')
+        setTemplates([])
+      }
+    } catch (error) {
+      console.error('Error fetching templates:', error)
+      setTemplates([])
+    } finally {
+      setLoadingTemplates(false)
+    }
+  }
+
+  const handleTemplateSelect = (templateId: string) => {
+    if (!templateId) {
+      // If "None" is selected, clear templateId but keep existing content
+      const currentArgs = config.args || {}
+      const { templateId: _, ...argsWithoutTemplateId } = currentArgs
+      handleUpdate({ args: argsWithoutTemplateId })
+      return
+    }
+
+    const selectedTemplate = templates.find(t => t.id === templateId)
+    if (!selectedTemplate) return
+
+    const currentArgs = config.args || {}
+    const updates: any = {
+      args: {
+        ...currentArgs,
+        templateId: templateId,
+      },
+    }
+
+    if (selectedTemplate.channel === 'email') {
+      // For email templates, populate subject and body
+      // If template uses drag-drop builder (bodyJson), store templateId and render at execution
+      // Otherwise, populate subject and bodyHtml/bodyText for immediate use
+      if (selectedTemplate.editorType === 'dragdrop' && selectedTemplate.bodyJson) {
+        // Drag-drop template: store templateId, execution will render bodyJson
+        updates.args = {
+          ...updates.args,
+          subject: selectedTemplate.subject || '',
+          // Body will be rendered from bodyJson during execution
+        }
+      } else {
+        // HTML or plaintext template: populate fields directly
+        updates.args = {
+          ...updates.args,
+          subject: selectedTemplate.subject || '',
+          body: selectedTemplate.bodyHtml || selectedTemplate.bodyText || '',
+        }
+      }
+    } else if (selectedTemplate.channel === 'sms') {
+      // For SMS templates, populate message
+      updates.args = {
+        ...updates.args,
+        message: selectedTemplate.bodyText || '',
+      }
+    }
+
+    handleUpdate(updates)
   }
 
   // Get available fields for the trigger event
@@ -460,59 +561,158 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
             {/* Action-specific fields */}
             {config.actionType === 'send_email' && (
               <div className="space-y-2">
-                <Label>Patient ID</Label>
-                <Input
-                  placeholder="{appointment.patientId} or {patient.id} (auto-filled if empty)"
-                  value={config.args?.patientId || ''}
-                  onChange={(e) => {
-                    const currentArgs = config.args || {}
-                    handleUpdate({ args: { ...currentArgs, patientId: e.target.value } })
-                  }}
-                />
-                <p className="text-xs text-gray-500">Leave empty to auto-fill from event data</p>
-                <Label>Subject</Label>
-                <Input
-                  placeholder="Email subject"
-                  value={config.args?.subject || ''}
-                  onChange={(e) => {
-                    const currentArgs = config.args || {}
-                    handleUpdate({ args: { ...currentArgs, subject: e.target.value } })
-                  }}
-                />
-                <Label>Body</Label>
-                <textarea
-                  className="w-full min-h-[100px] px-3 py-2 border border-gray-300 rounded-md text-sm"
-                  placeholder="Email body"
-                  value={config.args?.body || ''}
-                  onChange={(e) => {
-                    const currentArgs = config.args || {}
-                    handleUpdate({ args: { ...currentArgs, body: e.target.value } })
-                  }}
-                />
+                <div>
+                  <Label>Email Template</Label>
+                  {loadingTemplates ? (
+                    <div className="flex items-center gap-2 text-sm text-gray-500 py-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Loading templates...</span>
+                    </div>
+                  ) : (
+                    <Select
+                      value={config.args?.templateId || ''}
+                      onValueChange={handleTemplateSelect}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a template (optional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">None - Use custom content</SelectItem>
+                        {templates.map((template) => (
+                          <SelectItem key={template.id} value={template.id}>
+                            {template.name}
+                            {template.category ? ` (${template.category})` : ''}
+                            {template.editorType === 'dragdrop' ? ' [Drag & Drop]' : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {templates.length === 0 && !loadingTemplates && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      No published email templates found.{' '}
+                      <Link href="/marketing/templates/new" className="text-blue-600 hover:underline" target="_blank">
+                        Create one
+                      </Link>
+                    </p>
+                  )}
+                  {isDragDropTemplate && (
+                    <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                      <span>⚠️</span>
+                      <span>Drag-and-drop template. The template will be rendered from its design during execution. You can still customize the subject below.</span>
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <Label>Patient ID</Label>
+                  <Input
+                    placeholder="{appointment.patientId} or {patient.id} (auto-filled if empty)"
+                    value={config.args?.patientId || ''}
+                    onChange={(e) => {
+                      const currentArgs = config.args || {}
+                      handleUpdate({ args: { ...currentArgs, patientId: e.target.value } })
+                    }}
+                  />
+                  <p className="text-xs text-gray-500">Leave empty to auto-fill from event data</p>
+                </div>
+                <div>
+                  <Label>Subject</Label>
+                  <Input
+                    placeholder="Email subject (populated from template if selected)"
+                    value={config.args?.subject || ''}
+                    onChange={(e) => {
+                      const currentArgs = config.args || {}
+                      handleUpdate({ args: { ...currentArgs, subject: e.target.value } })
+                    }}
+                  />
+                </div>
+                <div>
+                  <Label>Body</Label>
+                  {isDragDropTemplate ? (
+                    <div className="px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-50 text-gray-500 min-h-[100px] flex items-center">
+                      <span>This template uses drag-and-drop builder. Content will be rendered from the template design during execution.</span>
+                    </div>
+                  ) : (
+                    <textarea
+                      className="w-full min-h-[100px] px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      placeholder="Email body (populated from template if selected)"
+                      value={config.args?.body || ''}
+                      onChange={(e) => {
+                        const currentArgs = config.args || {}
+                        handleUpdate({ args: { ...currentArgs, body: e.target.value } })
+                      }}
+                    />
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    Use {'{{'}variable{'}}'} syntax for personalization (e.g., {'{{'}patient.firstName{'}}'})
+                  </p>
+                </div>
               </div>
             )}
 
             {config.actionType === 'send_sms' && (
               <div className="space-y-2">
-                <Label>Patient ID</Label>
-                <Input
-                  placeholder="{appointment.patientId} or {patient.id}"
-                  value={config.args?.patientId || ''}
-                  onChange={(e) => {
-                    const currentArgs = config.args || {}
-                    handleUpdate({ args: { ...currentArgs, patientId: e.target.value } })
-                  }}
-                />
-                <Label>Message</Label>
-                <textarea
-                  className="w-full min-h-[100px] px-3 py-2 border border-gray-300 rounded-md text-sm"
-                  placeholder="SMS message"
-                  value={config.args?.message || ''}
-                  onChange={(e) => {
-                    const currentArgs = config.args || {}
-                    handleUpdate({ args: { ...currentArgs, message: e.target.value } })
-                  }}
-                />
+                <div>
+                  <Label>SMS Template</Label>
+                  {loadingTemplates ? (
+                    <div className="flex items-center gap-2 text-sm text-gray-500 py-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Loading templates...</span>
+                    </div>
+                  ) : (
+                    <Select
+                      value={config.args?.templateId || ''}
+                      onValueChange={handleTemplateSelect}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a template (optional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">None - Use custom content</SelectItem>
+                        {templates.map((template) => (
+                          <SelectItem key={template.id} value={template.id}>
+                            {template.name}
+                            {template.category ? ` (${template.category})` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {templates.length === 0 && !loadingTemplates && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      No published SMS templates found.{' '}
+                      <Link href="/marketing/templates/new" className="text-blue-600 hover:underline" target="_blank">
+                        Create one
+                      </Link>
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <Label>Patient ID</Label>
+                  <Input
+                    placeholder="{appointment.patientId} or {patient.id}"
+                    value={config.args?.patientId || ''}
+                    onChange={(e) => {
+                      const currentArgs = config.args || {}
+                      handleUpdate({ args: { ...currentArgs, patientId: e.target.value } })
+                    }}
+                  />
+                </div>
+                <div>
+                  <Label>Message</Label>
+                  <textarea
+                    className="w-full min-h-[100px] px-3 py-2 border border-gray-300 rounded-md text-sm"
+                    placeholder="SMS message (populated from template if selected)"
+                    value={config.args?.message || ''}
+                    onChange={(e) => {
+                      const currentArgs = config.args || {}
+                      handleUpdate({ args: { ...currentArgs, message: e.target.value } })
+                    }}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Use {'{{'}variable{'}}'} syntax for personalization (e.g., {'{{'}patient.firstName{'}}'})
+                  </p>
+                </div>
               </div>
             )}
 

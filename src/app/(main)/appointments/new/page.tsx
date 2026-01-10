@@ -45,13 +45,13 @@ export default async function NewAppointmentPage({
   if (!user.practiceId) {
     redirect('/patients')
   }
-  const practiceId = user.practiceId
+  const practiceId = user.practiceId!
 
   // Fetch patient
   const patient = await prisma.patient.findFirst({
     where: {
       id: params.patientId,
-      practiceId: practiceId,
+      practiceId: practiceId as string,
       deletedAt: null,
     },
   })
@@ -63,7 +63,7 @@ export default async function NewAppointmentPage({
   // Fetch event type mappings
   const eventTypeMappings = await prisma.calEventTypeMapping.findMany({
     where: {
-      practiceId: practiceId,
+      practiceId,
     },
     orderBy: {
       visitTypeName: 'asc',
