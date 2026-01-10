@@ -6,14 +6,15 @@ const globalForPrisma = globalThis as unknown as {
 
 // Configure database URL
 // For Transaction Mode (port 6543): Use connection_limit=1 (recommended for serverless)
-// For Session Mode (port 5432): Use connection_limit=5 (has low total limits anyway)
+// For Session Mode (port 5432): Use connection_limit=1 (required for serverless - pool is very limited)
 let databaseUrl = process.env.DATABASE_URL || ''
 const portMatch = databaseUrl.match(/:(\d+)\//)
 const port = portMatch ? portMatch[1] : ''
 
 // Add connection_limit if not already present
-// For Transaction Mode, use 1 connection per instance (pooler handles the rest)
-// For Session Mode, use 5 connections per instance (but total pool is small)
+// IMPORTANT: Supabase Session Mode has VERY limited pool size (typically 15-20 total connections)
+// For serverless environments (Vercel), we MUST use 1 connection per instance to avoid exhaustion
+// Transaction Mode (6543) is preferred for serverless as it has better pooling
 if (databaseUrl && !databaseUrl.includes('connection_limit')) {
   const urlMatch = databaseUrl.match(/^(postgresql?:\/\/[^?]+)(\?.*)?$/)
   if (urlMatch) {
@@ -21,10 +22,10 @@ if (databaseUrl && !databaseUrl.includes('connection_limit')) {
     const existingParams = urlMatch[2] || ''
     const params = new URLSearchParams(existingParams.replace(/^\?/, ''))
     
-    // Transaction Mode (6543): Use 1 connection per instance (recommended)
-    // Session Mode (5432): Use 5 connections per instance
-    const connectionLimit = port === '6543' ? '1' : '5'
-    params.set('connection_limit', connectionLimit)
+    // Use 1 connection per instance for BOTH modes (critical for serverless)
+    // Transaction Mode (6543): 1 connection (pooler handles the rest)
+    // Session Mode (5432): 1 connection (required - pool is very limited)
+    params.set('connection_limit', '1')
     
     if (!params.has('pool_timeout')) {
       params.set('pool_timeout', '10') // Timeout after 10 seconds
@@ -53,18 +54,24 @@ const prismaClientOptions: Prisma.PrismaClientOptions = {
   // Prisma detects this automatically, but we can explicitly set connection parameters
 }
 
+// Critical: In serverless environments (Vercel), we MUST use a singleton pattern
+// Each route handler should reuse the same Prisma Client instance to prevent connection exhaustion
+// The global object is shared across all function invocations in the same runtime
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient(prismaClientOptions)
 
-// Ensure Prisma Client is reused across requests (important for serverless)
-if (process.env.NODE_ENV !== 'production') {
+// Always reuse the client in all environments to prevent connection leaks
+// In Vercel/serverless, this is especially critical for connection pooling
+if (!globalForPrisma.prisma) {
   globalForPrisma.prisma = prisma
-} else {
-  // In production, also reuse the client to prevent connection leaks
-  if (!globalForPrisma.prisma) {
-    globalForPrisma.prisma = prisma
-  }
+}
+
+// Cleanup on process exit (important for long-running processes)
+if (typeof process !== 'undefined') {
+  process.on('beforeExit', async () => {
+    await prisma.$disconnect()
+  })
 }
 
 /**
