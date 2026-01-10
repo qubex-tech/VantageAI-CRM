@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
 import {
   DndContext,
   closestCenter,
@@ -65,15 +65,26 @@ interface EmailBuilderProps {
   onSave: (doc: EmailDoc) => Promise<void>
   onPreview?: () => void
   saving?: boolean
+  previewMode?: 'desktop' | 'mobile'
+  onPreviewModeChange?: (mode: 'desktop' | 'mobile') => void
 }
 
-export default function EmailBuilder({
+export interface EmailBuilderRef {
+  undo: () => void
+  redo: () => void
+  canUndo: boolean
+  canRedo: boolean
+}
+
+const EmailBuilder = forwardRef<EmailBuilderRef, EmailBuilderProps>(function EmailBuilder({
   initialDoc,
   brandProfile,
   onSave,
   onPreview,
   saving = false,
-}: EmailBuilderProps) {
+  previewMode: externalPreviewMode,
+  onPreviewModeChange,
+}, ref) {
   const [doc, setDoc] = useState<EmailDoc>(
     initialDoc || {
       rows: [
@@ -101,10 +112,22 @@ export default function EmailBuilder({
 
   const [selectedBlock, setSelectedBlock] = useState<{ rowId: string; colId: string; blockIndex: number } | null>(null)
   const [selectedRow, setSelectedRow] = useState<string | null>(null)
-  const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop')
+  const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>(externalPreviewMode || 'desktop')
   const [history, setHistory] = useState<EmailDoc[]>([doc])
   const [historyIndex, setHistoryIndex] = useState(0)
   const [showVariablePicker, setShowVariablePicker] = useState(false)
+  
+  // Sync external preview mode
+  useEffect(() => {
+    if (externalPreviewMode !== undefined) {
+      setPreviewMode(externalPreviewMode)
+    }
+  }, [externalPreviewMode])
+  
+  const handlePreviewModeChange = (mode: 'desktop' | 'mobile') => {
+    setPreviewMode(mode)
+    onPreviewModeChange?.(mode)
+  }
   const [variablePickerPosition, setVariablePickerPosition] = useState<{ x: number; y: number } | null>(null)
 
   const sensors = useSensors(
@@ -357,23 +380,29 @@ export default function EmailBuilder({
     setHistoryIndex(newHistory.length - 1)
   }
 
-  const handleUndo = () => {
+  const handleUndo = useCallback(() => {
     if (historyIndex > 0) {
-      setHistoryIndex(historyIndex - 1)
-      setDoc(history[historyIndex - 1])
+      const newIndex = historyIndex - 1
+      setHistoryIndex(newIndex)
+      setDoc(history[newIndex])
     }
-  }
+  }, [historyIndex, history])
 
-  const handleRedo = () => {
+  const handleRedo = useCallback(() => {
     if (historyIndex < history.length - 1) {
-      setHistoryIndex(historyIndex + 1)
-      setDoc(history[historyIndex + 1])
+      const newIndex = historyIndex + 1
+      setHistoryIndex(newIndex)
+      setDoc(history[newIndex])
     }
-  }
-
-  const handleSave = async () => {
-    await onSave(doc)
-  }
+  }, [historyIndex, history.length, history])
+  
+  // Expose undo/redo functions to parent via ref
+  useImperativeHandle(ref, () => ({
+    undo: handleUndo,
+    redo: handleRedo,
+    canUndo: historyIndex > 0,
+    canRedo: historyIndex < history.length - 1,
+  }), [historyIndex, history.length, history, handleUndo, handleRedo])
 
   const selectedBlockData = selectedBlock
     ? doc.rows
@@ -382,63 +411,11 @@ export default function EmailBuilder({
         ?.blocks[selectedBlock.blockIndex] || undefined
     : undefined
 
+  // Expose undo/redo handlers via ref or callbacks for parent toolbar
+  // For now, we'll remove the toolbar and let parent handle everything
+  
   return (
     <div className="flex flex-col h-full bg-gray-50">
-      {/* Toolbar */}
-      <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleUndo}
-            disabled={historyIndex === 0}
-            title="Undo"
-          >
-            <Undo2 className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleRedo}
-            disabled={historyIndex === history.length - 1}
-            title="Redo"
-          >
-            <Redo2 className="h-4 w-4" />
-          </Button>
-          <div className="h-6 w-px bg-gray-300 mx-2" />
-          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-            <Button
-              variant={previewMode === 'desktop' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setPreviewMode('desktop')}
-              className="h-7"
-            >
-              <Monitor className="h-4 w-4" />
-            </Button>
-            <Button
-              variant={previewMode === 'mobile' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setPreviewMode('mobile')}
-              className="h-7"
-            >
-              <Smartphone className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {onPreview && (
-            <Button variant="outline" size="sm" onClick={onPreview}>
-              <Eye className="h-4 w-4 mr-2" />
-              Preview
-            </Button>
-          )}
-          <Button size="sm" onClick={handleSave} disabled={saving}>
-            <Save className="h-4 w-4 mr-2" />
-            {saving ? 'Saving...' : 'Save'}
-          </Button>
-        </div>
-      </div>
-
       <div className="flex flex-1 overflow-hidden">
         {/* Block Palette */}
         <BlockPalette onDragStart={(type) => {}} />
@@ -523,7 +500,7 @@ export default function EmailBuilder({
       </div>
     </div>
   )
-}
+})
 
 // Block Palette Component
 function BlockPalette({ onDragStart }: { onDragStart: (type: string) => void }) {
@@ -1352,3 +1329,7 @@ function PropertiesPanel({
     </div>
   )
 }
+
+EmailBuilder.displayName = 'EmailBuilder'
+
+export default EmailBuilder
