@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseSession } from '@/lib/auth-supabase'
 import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * Debug endpoint to test user sync
  * Helps diagnose sync failures

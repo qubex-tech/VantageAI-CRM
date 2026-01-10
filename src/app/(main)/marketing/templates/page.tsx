@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -26,7 +26,7 @@ interface Template {
   }
 }
 
-export default function TemplatesPage() {
+function TemplatesList() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [templates, setTemplates] = useState<Template[]>([])
@@ -248,5 +248,19 @@ export default function TemplatesPage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function TemplatesPage() {
+  return (
+    <Suspense fallback={
+      <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
+        <div className="text-center py-12">
+          <p className="text-sm text-gray-500">Loading...</p>
+        </div>
+      </div>
+    }>
+      <TemplatesList />
+    </Suspense>
   )
 }

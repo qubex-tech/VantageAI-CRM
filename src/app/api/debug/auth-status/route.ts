@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * Debug endpoint to check authentication status
  * Helps diagnose why authentication is failing

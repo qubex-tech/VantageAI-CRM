@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/middleware'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * Debug endpoint to view recent webhook activity
  * GET /api/debug/webhook-logs

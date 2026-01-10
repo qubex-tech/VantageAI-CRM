@@ -3,6 +3,8 @@ import { requireAuth } from '@/lib/middleware'
 import { getRetellClient } from '@/lib/retell-api'
 import { extractCallData } from '@/lib/process-call-data'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * Debug endpoint to inspect call data structure
  * GET /api/debug/call-data?callId=xxx

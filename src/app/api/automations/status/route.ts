@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * Diagnostic endpoint to check automation system status
  */
