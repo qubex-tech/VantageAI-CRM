@@ -34,6 +34,10 @@ if (databaseUrl) {
       if (!params.has('connection_limit')) {
         params.set('connection_limit', '1')
       }
+      // CRITICAL: Disable prepared statements for Transaction Mode (PgBouncer)
+      // Connection poolers don't support prepared statements
+      // This prevents "prepared statement already exists" errors
+      params.set('pgbouncer', 'true')
     } else {
       // Unknown port: default to 1 for safety
       if (!params.has('connection_limit')) {
