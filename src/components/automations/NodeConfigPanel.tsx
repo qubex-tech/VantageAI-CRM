@@ -638,8 +638,7 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                         <p className="font-medium mb-1">Visual Template Selected</p>
                         <p className="text-xs text-blue-700">
                           This template was created with the visual email builder. The email body will be automatically 
-                          generated from the template's design when this automation runs. Variables like {'{{'}patient.firstName{'}}'} 
-                          will be replaced with actual patient data.
+                          generated from the template's design when this automation runs. Variables will be replaced with actual patient data.
                         </p>
                       </div>
                     </div>
