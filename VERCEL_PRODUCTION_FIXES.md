@@ -24,6 +24,29 @@
 
 ---
 
+## Issue 3: Prepared Statement Already Exists Error
+
+**Error:** `PostgresError { code: "42P05", message: "prepared statement \"s1\" already exists" }`
+
+**Solution:** The code now automatically adds `pgbouncer=true` parameter when using Transaction Mode (port 6543).
+
+### Steps to Fix:
+
+1. **Already Fixed in Code:** The `src/lib/db.ts` file now automatically adds `?pgbouncer=true` to the connection string when using Transaction Mode (port 6543)
+
+2. **If you're still seeing this error:**
+   - Make sure you're using Transaction Mode (port 6543) in your DATABASE_URL
+   - The code will automatically append `pgbouncer=true` to disable prepared statements
+   - Redeploy your application after updating the DATABASE_URL
+
+**Why:**
+- Connection poolers (PgBouncer) used in Transaction Mode don't support prepared statements
+- Prisma uses prepared statements by default, which conflicts with connection poolers
+- Adding `pgbouncer=true` tells Prisma to disable prepared statements
+- This parameter is now automatically added by the code when using Transaction Mode
+
+---
+
 ## Issue 2: NextAuth NO_SECRET Error
 
 **Error:** `[next-auth][error][NO_SECRET] Please define a 'secret' in production.`
