@@ -60,8 +60,9 @@ const sendSmsSchema = z.object({
 
 const sendEmailSchema = z.object({
   patientId: z.string(),
-  subject: z.string(),
-  body: z.string(),
+  templateId: z.string().optional(), // Optional: use marketing template
+  subject: z.string().optional(), // Optional if templateId is provided
+  body: z.string().optional(), // Optional if templateId is provided
   toEmail: z.string().optional(), // If not provided, use patient's email
 })
 
@@ -425,7 +426,118 @@ async function sendEmail(
       toEmail,
       subject: args.subject,
       patientId: args.patientId,
+      templateId: args.templateId,
     })
+
+    let emailSubject = args.subject || ''
+    let emailBodyHtml = args.body || ''
+    let emailBodyText = args.body || ''
+
+    // If templateId is provided, fetch and render template
+    if (args.templateId) {
+      const template = await prisma.marketingTemplate.findFirst({
+        where: {
+          id: args.templateId,
+          tenantId: practiceId,
+          status: 'published',
+          channel: 'email',
+        },
+      })
+
+      if (!template) {
+        return {
+          status: 'failed',
+          error: `Template ${args.templateId} not found or not published`,
+        }
+      }
+
+      // Get brand profile for rendering
+      const brandProfile = await prisma.brandProfile.findUnique({
+        where: { tenantId: practiceId },
+      })
+
+      // Build variable context from patient and event data
+      const { replaceVariables } = await import('@/lib/marketing/variables')
+      const { renderEmailFromJson } = await import('@/lib/marketing/render-email')
+      type VariableContext = import('@/lib/marketing/types').VariableContext
+      
+      const context: VariableContext = {
+        patient: {
+          firstName: patient.firstName || patient.name?.split(' ')[0] || '',
+          lastName: patient.lastName || patient.name?.split(' ').slice(1).join(' ') || '',
+          preferredName: patient.preferredName || patient.firstName || patient.name?.split(' ')[0] || '',
+        },
+        practice: {
+          name: brandProfile?.practiceName || '',
+          phone: brandProfile?.defaultFromEmail || '',
+          address: '',
+        },
+        appointment: eventData.appointment ? {
+          date: eventData.appointment.startTime ? new Date(eventData.appointment.startTime).toLocaleDateString() : '',
+          time: eventData.appointment.startTime ? new Date(eventData.appointment.startTime).toLocaleTimeString() : '',
+          location: '',
+          providerName: '',
+        } : undefined,
+        links: {
+          confirm: '#',
+          reschedule: '#',
+          cancel: '#',
+        },
+      }
+
+      // Use template subject if provided, otherwise use args.subject
+      emailSubject = args.subject || template.subject || ''
+
+      // Replace variables in subject
+      if (emailSubject) {
+        emailSubject = replaceVariables(emailSubject, context)
+      }
+
+      // Render email body based on editor type
+      if (template.editorType === 'dragdrop' && template.bodyJson) {
+        // Drag-and-drop template: render from JSON
+        const rendered = renderEmailFromJson(
+          template.bodyJson as any,
+          brandProfile,
+          context
+        )
+        emailBodyHtml = rendered.html
+        emailBodyText = rendered.text
+      } else if (template.editorType === 'html' && template.bodyHtml) {
+        // HTML template: replace variables in HTML
+        emailBodyHtml = replaceVariables(template.bodyHtml, context)
+        emailBodyText = emailBodyHtml.replace(/<[^>]+>/g, '').replace(/\n/g, ' ')
+      } else if (template.bodyText) {
+        // Plain text template
+        emailBodyText = replaceVariables(template.bodyText, context)
+        emailBodyHtml = emailBodyText.replace(/\n/g, '<br>')
+      } else {
+        return {
+          status: 'failed',
+          error: 'Template has no content to render',
+        }
+      }
+
+      console.log(`[AUTOMATION] Template rendered:`, {
+        templateId: args.templateId,
+        editorType: template.editorType,
+        subject: emailSubject,
+        bodyLength: emailBodyHtml.length,
+      })
+    } else {
+      // No template: use provided subject and body directly
+      if (!emailSubject || !emailBodyHtml) {
+        return {
+          status: 'failed',
+          error: 'Subject and body are required when no template is provided',
+        }
+      }
+      // Convert plain text body to HTML if it looks like plain text
+      if (!emailBodyHtml.includes('<')) {
+        emailBodyHtml = emailBodyHtml.replace(/\n/g, '<br>')
+        emailBodyText = emailBodyHtml.replace(/<[^>]+>/g, '').replace(/\n/g, ' ')
+      }
+    }
 
     const { getSendgridClient } = await import('@/lib/sendgrid')
     const sendgridClient = await getSendgridClient(practiceId)
@@ -433,9 +545,9 @@ async function sendEmail(
     const result = await sendgridClient.sendEmail({
       to: toEmail,
       toName: patient.name,
-      subject: args.subject,
-      htmlContent: args.body.replace(/\n/g, '<br>'),
-      textContent: args.body,
+      subject: emailSubject,
+      htmlContent: emailBodyHtml,
+      textContent: emailBodyText,
     })
 
     if (!result.success) {
@@ -473,7 +585,7 @@ async function sendEmail(
             practiceId,
             userId: automationUserId,
             type: 'contact',
-            content: `[Automation Email] Sent to ${toEmail} (Subject: ${args.subject}, MessageId: ${result.messageId}): ${args.body.substring(0, 100)}${args.body.length > 100 ? '...' : ''}`,
+            content: `[Automation Email] Sent to ${toEmail} (Subject: ${emailSubject}, MessageId: ${result.messageId}): ${emailBodyText.substring(0, 100)}${emailBodyText.length > 100 ? '...' : ''}`,
           },
         })
         console.log(`[AUTOMATION] Email note created for patient ${args.patientId}`)
@@ -488,12 +600,13 @@ async function sendEmail(
       await logPatientActivity({
         patientId: args.patientId,
         type: 'email',
-        title: `Email sent: ${args.subject}`,
-        description: `Sent to ${toEmail}: ${args.body.substring(0, 100)}${args.body.length > 100 ? '...' : ''}`,
+        title: `Email sent: ${emailSubject}`,
+        description: `Sent to ${toEmail}: ${emailBodyText.substring(0, 100)}${emailBodyText.length > 100 ? '...' : ''}`,
         metadata: {
           toEmail,
-          subject: args.subject,
+          subject: emailSubject,
           messageId: result.messageId,
+          templateId: args.templateId,
           createdBy: 'automation',
         },
       })
@@ -507,8 +620,9 @@ async function sendEmail(
         action: 'send_email',
         patientId: args.patientId,
         toEmail,
-        subject: args.subject,
+        subject: emailSubject,
         messageId: result.messageId,
+        templateId: args.templateId,
       },
     }
   } catch (error) {

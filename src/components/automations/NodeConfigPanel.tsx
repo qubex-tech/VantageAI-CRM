@@ -597,9 +597,13 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                     </p>
                   )}
                   {isDragDropTemplate && (
-                    <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
-                      <span>⚠️</span>
-                      <span>Drag-and-drop template. The template will be rendered from its design during execution. You can still customize the subject below.</span>
+                    <p className="text-xs text-amber-600 mt-1 flex items-start gap-1">
+                      <span>ℹ️</span>
+                      <span>
+                        <strong>Visual template:</strong> This template was designed with a visual drag-and-drop editor. 
+                        The email content will be automatically rendered from the template design when the automation runs. 
+                        You can customize the subject line below, but the body content comes from the template.
+                      </span>
                     </p>
                   )}
                 </div>
@@ -629,8 +633,15 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                 <div>
                   <Label>Body</Label>
                   {isDragDropTemplate ? (
-                    <div className="px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-50 text-gray-500 min-h-[100px] flex items-center">
-                      <span>This template uses drag-and-drop builder. Content will be rendered from the template design during execution.</span>
+                    <div className="px-3 py-2 border border-gray-300 rounded-md text-sm bg-blue-50 text-blue-900 min-h-[100px] flex items-center">
+                      <div>
+                        <p className="font-medium mb-1">Visual Template Selected</p>
+                        <p className="text-xs text-blue-700">
+                          This template was created with the visual email builder. The email body will be automatically 
+                          generated from the template's design when this automation runs. Variables like {'{'}{'{'}}patient.firstName{'}'}{'}'} 
+                          will be replaced with actual patient data.
+                        </p>
+                      </div>
                     </div>
                   ) : (
                     <textarea
