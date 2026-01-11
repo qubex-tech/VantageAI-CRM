@@ -228,7 +228,7 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
   }
 
   const handleTemplateSelect = (templateId: string) => {
-    if (!templateId) {
+    if (!templateId || templateId === '__none__') {
       // If "None" is selected, clear templateId but keep existing content
       const currentArgs = config.args || {}
       const { templateId: _, ...argsWithoutTemplateId } = currentArgs
@@ -570,14 +570,14 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                     </div>
                   ) : (
                     <Select
-                      value={config.args?.templateId || ''}
+                      value={config.args?.templateId || '__none__'}
                       onValueChange={handleTemplateSelect}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select a template (optional)" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">None - Use custom content</SelectItem>
+                        <SelectItem value="__none__">None - Use custom content</SelectItem>
                         {templates.map((template) => (
                           <SelectItem key={template.id} value={template.id}>
                             {template.name}
@@ -661,14 +661,14 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                     </div>
                   ) : (
                     <Select
-                      value={config.args?.templateId || ''}
+                      value={config.args?.templateId || '__none__'}
                       onValueChange={handleTemplateSelect}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select a template (optional)" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">None - Use custom content</SelectItem>
+                        <SelectItem value="__none__">None - Use custom content</SelectItem>
                         {templates.map((template) => (
                           <SelectItem key={template.id} value={template.id}>
                             {template.name}
