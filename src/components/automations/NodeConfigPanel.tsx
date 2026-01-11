@@ -300,7 +300,7 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
         <p className="text-xs text-gray-500 mt-1">{node.type}</p>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ paddingBottom: '2rem' }}>
+      <div className="flex-1 overflow-y-auto p-4 pb-12 space-y-4">
         {/* Trigger Configuration */}
         {node.type === 'trigger' && (
           <div className="space-y-2">

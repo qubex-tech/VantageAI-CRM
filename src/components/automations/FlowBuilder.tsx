@@ -265,7 +265,7 @@ export function FlowBuilder({ initialWorkflow, onSave, onTest, onWorkflowChange 
 
         {/* Configuration Panel */}
         {selectedNode && (
-          <div className="w-80 bg-white border-l border-gray-200 flex flex-col overflow-hidden">
+          <div className="w-80 bg-white border-l border-gray-200 flex flex-col overflow-hidden min-h-0">
             <NodeConfigPanel
               node={selectedNode}
               onUpdate={updateNodeConfig}
