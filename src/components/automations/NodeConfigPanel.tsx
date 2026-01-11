@@ -289,7 +289,7 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
   )
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col min-h-0">
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-gray-900">Configure Node</h3>
