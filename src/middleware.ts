@@ -11,6 +11,11 @@ export async function middleware(req: NextRequest) {
   
   const { pathname } = req.nextUrl
 
+  // Redirect /portal to /portal/auth
+  if (pathname === '/portal' || pathname === '/portal/') {
+    return NextResponse.redirect(new URL('/portal/auth', req.url))
+  }
+
   // Allow access to auth pages and public API routes (webhooks)
   const publicPaths = ['/login', '/signup', '/forgot-password', '/reset-password', '/portal']
   const isPublicPath = publicPaths.some(path => pathname.startsWith(path))
