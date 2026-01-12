@@ -10,25 +10,82 @@ export async function middleware(req: NextRequest) {
   })
   
   const { pathname } = req.nextUrl
-
-  // Redirect /portal to /portal/auth
-  if (pathname === '/portal' || pathname === '/portal/') {
-    return NextResponse.redirect(new URL('/portal/auth', req.url))
-  }
-
-  // Allow access to auth pages and public API routes (webhooks)
-  const publicPaths = ['/login', '/signup', '/forgot-password', '/reset-password', '/portal']
-  const isPublicPath = publicPaths.some(path => pathname.startsWith(path))
+  const host = req.headers.get('host') || ''
   
-  // Allow Inngest endpoint (required for Inngest to call back)
-  // Allow portal routes (portal has its own auth)
-  if (isPublicPath || 
-      pathname.startsWith('/api/cal/webhook') || 
-      pathname.startsWith('/api/retell/webhook') ||
-      pathname.startsWith('/api/inngest') ||
-      pathname.startsWith('/api/portal') ||
-      pathname.startsWith('/api/webhooks')) {
+  // Check if request is for portal domain
+  const isPortalDomain = host === 'portal.getvantage.tech' || 
+                         host.startsWith('portal.getvantage.tech:') ||
+                         host.includes('.portal.getvantage.tech')
+  
+  // Check if request is for CRM domain (app.getvantage.tech or getvantage.tech)
+  const isCrmDomain = host === 'app.getvantage.tech' || 
+                      host.startsWith('app.getvantage.tech:') ||
+                      host === 'getvantage.tech' ||
+                      host.startsWith('getvantage.tech:') ||
+                      (!isPortalDomain && host.includes('getvantage.tech'))
+
+  // Portal domain routing
+  if (isPortalDomain) {
+    // Redirect /portal to /portal/auth on portal domain
+    if (pathname === '/portal' || pathname === '/portal/' || pathname === '/') {
+      return NextResponse.redirect(new URL('/portal/auth', req.url))
+    }
+    
+    // Block CRM routes on portal domain
+    if (pathname.startsWith('/dashboard') ||
+        pathname.startsWith('/patients') ||
+        pathname.startsWith('/appointments') ||
+        pathname.startsWith('/settings') ||
+        pathname.startsWith('/automations') ||
+        pathname.startsWith('/workflows') ||
+        pathname.startsWith('/calls') ||
+        pathname.startsWith('/marketing') ||
+        pathname.startsWith('/login') ||
+        pathname.startsWith('/signup') ||
+        pathname.startsWith('/forgot-password') ||
+        pathname.startsWith('/reset-password')) {
+      // Return 404 for CRM routes on portal domain
+      return new NextResponse('Not Found', { status: 404 })
+    }
+    
+    // Allow portal routes and portal API routes
+    if (pathname.startsWith('/portal') || 
+        pathname.startsWith('/api/portal')) {
+      return res
+    }
+    
+    // Allow webhooks on portal domain (shared infrastructure)
+    if (pathname.startsWith('/api/cal/webhook') || 
+        pathname.startsWith('/api/retell/webhook') ||
+        pathname.startsWith('/api/inngest') ||
+        pathname.startsWith('/api/webhooks')) {
+      return res
+    }
+    
+    // For portal domain, default to portal routes
     return res
+  }
+  
+  // CRM domain routing
+  if (isCrmDomain) {
+    // Block portal routes on CRM domain
+    if (pathname.startsWith('/portal')) {
+      // Return 404 for portal routes on CRM domain
+      return new NextResponse('Not Found', { status: 404 })
+    }
+    
+    // Allow access to auth pages and public API routes (webhooks)
+    const publicPaths = ['/login', '/signup', '/forgot-password', '/reset-password']
+    const isPublicPath = publicPaths.some(path => pathname.startsWith(path))
+    
+    // Allow Inngest endpoint (required for Inngest to call back)
+    if (isPublicPath || 
+        pathname.startsWith('/api/cal/webhook') || 
+        pathname.startsWith('/api/retell/webhook') ||
+        pathname.startsWith('/api/inngest') ||
+        pathname.startsWith('/api/webhooks')) {
+      return res
+    }
   }
 
   // Check Supabase session if configured
