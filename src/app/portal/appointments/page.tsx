@@ -3,6 +3,7 @@ import { getPatientSession } from '@/lib/portal-session'
 import { prisma } from '@/lib/db'
 import { format } from 'date-fns'
 import Link from 'next/link'
+import { ConfirmButton, CancelButton } from './appointment-actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -171,40 +172,18 @@ export default async function PortalAppointmentsPage({
                 {(canConfirm(apt) || canCancel(apt) || canReschedule(apt)) && (
                   <div className="flex gap-2 pt-4 border-t border-gray-200">
                     {canConfirm(apt) && (
-                      <form
-                        action={`/api/portal/appointments/${apt.id}/confirm`}
-                        method="POST"
-                        className="flex-1"
-                      >
-                        <button
-                          type="submit"
-                          className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm font-medium"
-                        >
-                          Confirm Appointment
-                        </button>
-                      </form>
+                      <ConfirmButton appointmentId={apt.id} />
                     )}
                     {canReschedule(apt) && (
                       <Link
-                        href={`/portal/appointments/${apt.id}/reschedule`}
+                        href={`/portal/appointments/${apt.id}/reschedule-request`}
                         className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors text-sm font-medium text-center"
                       >
                         Request Reschedule
                       </Link>
                     )}
                     {canCancel(apt) && (
-                      <form
-                        action={`/api/portal/appointments/${apt.id}/cancel`}
-                        method="POST"
-                        className="flex-1"
-                      >
-                        <button
-                          type="submit"
-                          className="w-full px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors text-sm font-medium"
-                        >
-                          Cancel
-                        </button>
-                      </form>
+                      <CancelButton appointmentId={apt.id} />
                     )}
                   </div>
                 )}
