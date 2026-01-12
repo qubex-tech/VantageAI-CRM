@@ -3,6 +3,7 @@ import { getPatientSession } from '@/lib/portal-session'
 import { prisma } from '@/lib/db'
 import { format } from 'date-fns'
 import Link from 'next/link'
+import { BackButton } from '@/components/portal/BackButton'
 
 /**
  * Portal Preferences Page
@@ -46,6 +47,9 @@ export default async function PortalPreferencesPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="mb-8">
+          <div className="mb-4">
+            <BackButton />
+          </div>
           <h1 className="text-3xl font-bold text-gray-900">Preferences</h1>
           <p className="text-gray-600 mt-2">Manage your communication and consent preferences</p>
         </div>

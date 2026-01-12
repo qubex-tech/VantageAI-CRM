@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getPatientSession } from '@/lib/portal-session'
 import { prisma } from '@/lib/db'
 import { format } from 'date-fns'
+import { BackButton } from '@/components/portal/BackButton'
 
 /**
  * Portal Messages Page
@@ -63,6 +64,9 @@ export default async function PortalMessagesPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="mb-8">
+          <div className="mb-4">
+            <BackButton />
+          </div>
           <h1 className="text-3xl font-bold text-gray-900">Messages</h1>
           <p className="text-gray-600 mt-2">View your communications with the practice</p>
         </div>
