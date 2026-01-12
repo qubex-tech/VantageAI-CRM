@@ -26,9 +26,9 @@ export async function middleware(req: NextRequest) {
 
   // Portal domain routing
   if (isPortalDomain) {
-    // Redirect /portal to /portal/auth on portal domain
-    if (pathname === '/portal' || pathname === '/portal/' || pathname === '/') {
-      return NextResponse.redirect(new URL('/portal/auth', req.url))
+    // Redirect root to /portal (let the page handle auth check)
+    if (pathname === '/') {
+      return NextResponse.redirect(new URL('/portal', req.url))
     }
     
     // Block CRM routes on portal domain

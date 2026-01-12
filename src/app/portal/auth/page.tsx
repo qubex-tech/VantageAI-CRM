@@ -64,8 +64,9 @@ export default function PortalAuthPage() {
         throw new Error(data.error || 'Invalid code')
       }
 
-      // Redirect to portal home
-      window.location.href = '/portal'
+      // Successfully verified - redirect to portal home
+      // Use window.location.replace to avoid back button issues
+      window.location.replace('/portal')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid code')
     } finally {
