@@ -33,11 +33,15 @@ export async function POST(req: NextRequest) {
         },
         include: {
           patientAccount: true,
-          communicationPreferences: true,
         },
       })
 
       if (patient) {
+        // Get existing communication preferences
+        const existingPreferences = await prisma.communicationPreference.findUnique({
+          where: { patientId: patient.id },
+        })
+
         // Update communication preferences
         await prisma.communicationPreference.upsert({
           where: { patientId: patient.id },
@@ -45,9 +49,9 @@ export async function POST(req: NextRequest) {
             practiceId: patient.practiceId,
             patientId: patient.id,
             smsEnabled: false,
-            emailEnabled: patient.communicationPreferences?.emailEnabled ?? true,
-            voiceEnabled: patient.communicationPreferences?.voiceEnabled ?? false,
-            portalEnabled: patient.communicationPreferences?.portalEnabled ?? true,
+            emailEnabled: true,
+            voiceEnabled: false,
+            portalEnabled: true,
           },
           update: {
             smsEnabled: false,
