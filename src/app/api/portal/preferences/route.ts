@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { requirePracticeContext } from '@/lib/tenant'
+import { requirePatientSession } from '@/lib/portal-session'
 import { communicationPreferenceSchema } from '@/lib/validations'
 
 /**
@@ -9,20 +9,12 @@ import { communicationPreferenceSchema } from '@/lib/validations'
  */
 export async function GET(req: NextRequest) {
   try {
-    const practiceContext = await requirePracticeContext(req)
-    
-    const patientId = req.headers.get('x-patient-id')
-    if (!patientId) {
-      return NextResponse.json(
-        { error: 'Patient ID required' },
-        { status: 401 }
-      )
-    }
+    const session = await requirePatientSession(req)
+    const { patientId } = session
 
     const preferences = await prisma.communicationPreference.findUnique({
       where: {
         patientId,
-        practiceId: practiceContext.practiceId,
       },
     })
 
@@ -41,32 +33,10 @@ export async function GET(req: NextRequest) {
  */
 export async function PUT(req: NextRequest) {
   try {
-    const practiceContext = await requirePracticeContext(req)
+    const session = await requirePatientSession(req)
+    const { patientId, practiceId } = session
     const body = await req.json()
     const parsed = communicationPreferenceSchema.parse(body)
-
-    const patientId = req.headers.get('x-patient-id')
-    if (!patientId) {
-      return NextResponse.json(
-        { error: 'Patient ID required' },
-        { status: 401 }
-      )
-    }
-
-    // Verify patient belongs to practice
-    const patient = await prisma.patient.findUnique({
-      where: {
-        id: patientId,
-        practiceId: practiceContext.practiceId,
-      },
-    })
-
-    if (!patient) {
-      return NextResponse.json(
-        { error: 'Patient not found' },
-        { status: 404 }
-      )
-    }
 
     // Upsert preferences
     const preferences = await prisma.communicationPreference.upsert({
@@ -74,7 +44,7 @@ export async function PUT(req: NextRequest) {
         patientId,
       },
       create: {
-        practiceId: practiceContext.practiceId,
+        practiceId,
         patientId,
         preferredChannel: parsed.preferredChannel || 'email',
         smsEnabled: parsed.smsEnabled ?? true,
@@ -102,7 +72,7 @@ export async function PUT(req: NextRequest) {
     // Create audit log
     await prisma.portalAuditLog.create({
       data: {
-        practiceId: practiceContext.practiceId,
+        practiceId,
         patientId,
         action: 'preference_updated',
         resourceType: 'communication_preference',

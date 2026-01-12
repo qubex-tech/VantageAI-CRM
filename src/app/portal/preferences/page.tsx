@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { format } from 'date-fns'
 import Link from 'next/link'
 import { BackButton } from '@/components/portal/BackButton'
+import { PreferencesForm } from './preferences-form'
 
 /**
  * Portal Preferences Page
@@ -59,83 +60,7 @@ export default async function PortalPreferencesPage() {
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-xl font-semibold mb-4">Communication Preferences</h2>
             
-            {preferences ? (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Preferred Contact Method
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <span className="px-3 py-2 bg-gray-100 rounded-md text-gray-900 capitalize">
-                      {preferences.preferredChannel || 'email'}
-                    </span>
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                    <span className={`inline-block px-3 py-2 rounded-md text-sm ${
-                      preferences.emailEnabled 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      {preferences.emailEnabled ? 'Enabled' : 'Disabled'}
-                    </span>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">SMS</label>
-                    <span className={`inline-block px-3 py-2 rounded-md text-sm ${
-                      preferences.smsEnabled 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      {preferences.smsEnabled ? 'Enabled' : 'Disabled'}
-                    </span>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Voice</label>
-                    <span className={`inline-block px-3 py-2 rounded-md text-sm ${
-                      preferences.voiceEnabled 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      {preferences.voiceEnabled ? 'Enabled' : 'Disabled'}
-                    </span>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Portal</label>
-                    <span className={`inline-block px-3 py-2 rounded-md text-sm ${
-                      preferences.portalEnabled 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      {preferences.portalEnabled ? 'Enabled' : 'Disabled'}
-                    </span>
-                  </div>
-                </div>
-                
-                {(preferences.quietHoursStart || preferences.quietHoursEnd) && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Quiet Hours
-                    </label>
-                    <p className="text-sm text-gray-600">
-                      {preferences.quietHoursStart} - {preferences.quietHoursEnd}
-                    </p>
-                  </div>
-                )}
-                
-                <p className="text-xs text-gray-500 mt-4">
-                  To update these preferences, please contact the practice or use the API endpoint.
-                </p>
-              </div>
-            ) : (
-              <p className="text-gray-500">No communication preferences set</p>
-            )}
+            <PreferencesForm initialPreferences={preferences} />
           </div>
           
           {/* Consent Records */}
@@ -186,13 +111,6 @@ export default async function PortalPreferencesPage() {
                 ))}
               </div>
             )}
-          </div>
-          
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-sm text-blue-800">
-              <strong>Note:</strong> To update your communication preferences or consent, 
-              please contact your practice directly or use the patient portal API.
-            </p>
           </div>
         </div>
       </div>
