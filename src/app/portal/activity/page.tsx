@@ -15,10 +15,13 @@ export default async function PortalActivityPage() {
     redirect('/portal/auth')
   }
   
-  // Get timeline entries (similar to CRM)
+  // Get timeline entries (similar to CRM) - exclude notes
   const timelineEntries = await prisma.patientTimelineEntry.findMany({
     where: {
       patientId: session.patientId,
+      type: {
+        not: 'note', // Exclude notes from patient portal
+      },
     },
     orderBy: { createdAt: 'desc' },
     take: 100,
