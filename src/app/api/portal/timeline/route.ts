@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { requirePracticeContext } from '@/lib/tenant'
+import { requirePatientSession } from '@/lib/portal-session'
 
 /**
  * GET /api/portal/timeline
@@ -8,15 +8,8 @@ import { requirePracticeContext } from '@/lib/tenant'
  */
 export async function GET(req: NextRequest) {
   try {
-    const practiceContext = await requirePracticeContext(req)
-    
-    const patientId = req.headers.get('x-patient-id')
-    if (!patientId) {
-      return NextResponse.json(
-        { error: 'Patient ID required' },
-        { status: 401 }
-      )
-    }
+    const session = await requirePatientSession(req)
+    const { patientId, practiceId } = session
 
     const searchParams = req.nextUrl.searchParams
     const limit = parseInt(searchParams.get('limit') || '50')
@@ -25,7 +18,7 @@ export async function GET(req: NextRequest) {
     // Get appointments
     const appointments = await prisma.appointment.findMany({
       where: {
-        practiceId: practiceContext.practiceId,
+        practiceId,
         patientId,
       },
       select: {
@@ -45,7 +38,7 @@ export async function GET(req: NextRequest) {
     // Get messages
     const messages = await prisma.portalMessage.findMany({
       where: {
-        practiceId: practiceContext.practiceId,
+        practiceId,
         patientId,
       },
       select: {
@@ -63,7 +56,7 @@ export async function GET(req: NextRequest) {
     // Get tasks
     const tasks = await prisma.patientTask.findMany({
       where: {
-        practiceId: practiceContext.practiceId,
+        practiceId,
         patientId,
       },
       select: {
@@ -83,7 +76,7 @@ export async function GET(req: NextRequest) {
     // Get consent changes
     const consentRecords = await prisma.consentRecord.findMany({
       where: {
-        practiceId: practiceContext.practiceId,
+        practiceId,
         patientId,
       },
       select: {
@@ -100,7 +93,7 @@ export async function GET(req: NextRequest) {
     // Get feedback
     const feedbacks = await prisma.feedback.findMany({
       where: {
-        practiceId: practiceContext.practiceId,
+        practiceId,
         patientId,
       },
       select: {
