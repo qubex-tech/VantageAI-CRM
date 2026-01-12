@@ -64,7 +64,8 @@ export default async function DashboardPage() {
       </div>
     )
   }
-  const practiceId = user.practiceId
+  // TypeScript: practiceId is guaranteed to be non-null after the check above
+  const practiceId: string = user.practiceId
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
