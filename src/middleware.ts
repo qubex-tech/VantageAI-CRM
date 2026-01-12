@@ -86,46 +86,46 @@ export async function middleware(req: NextRequest) {
         pathname.startsWith('/api/webhooks')) {
       return res
     }
-  }
-
-  // Check Supabase session if configured
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  
-  if (supabaseUrl && supabaseAnonKey) {
-    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-      cookies: {
-        getAll() {
-          return req.cookies.getAll()
+    
+    // Check Supabase session for CRM domain (portal has its own auth)
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    
+    if (supabaseUrl && supabaseAnonKey) {
+      const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+        cookies: {
+          getAll() {
+            return req.cookies.getAll()
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              res.cookies.set(name, value, options)
+            })
+          },
         },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            res.cookies.set(name, value, options)
-          })
-        },
-      },
-    })
+      })
 
-    // Use getUser() instead of getSession() - it refreshes the session automatically
-    // This ensures the session stays valid and cookies are properly updated
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+      // Use getUser() instead of getSession() - it refreshes the session automatically
+      // This ensures the session stays valid and cookies are properly updated
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
 
-    // Protect all other routes
-    if (!user && !pathname.startsWith('/api/auth')) {
-      const loginUrl = new URL('/login', req.url)
-      // Validate callbackUrl to prevent open redirect vulnerabilities
-      // Only allow relative paths starting with /
-      const safeCallbackUrl = pathname.startsWith('/') && !pathname.startsWith('//') 
-        ? pathname 
-        : '/dashboard'
-      loginUrl.searchParams.set('callbackUrl', safeCallbackUrl)
-      return NextResponse.redirect(loginUrl)
+      // Protect all other routes on CRM domain
+      if (!user && !pathname.startsWith('/api/auth')) {
+        const loginUrl = new URL('/login', req.url)
+        // Validate callbackUrl to prevent open redirect vulnerabilities
+        // Only allow relative paths starting with /
+        const safeCallbackUrl = pathname.startsWith('/') && !pathname.startsWith('//') 
+          ? pathname 
+          : '/dashboard'
+        loginUrl.searchParams.set('callbackUrl', safeCallbackUrl)
+        return NextResponse.redirect(loginUrl)
+      }
     }
+    // Note: If Supabase not configured, we'll allow access for now
+    // This allows the app to work with NextAuth until fully migrated
   }
-  // Note: If Supabase not configured, we'll allow access for now
-  // This allows the app to work with NextAuth until fully migrated
 
   return res
 }
