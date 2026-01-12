@@ -12,14 +12,17 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
   // Allow access to auth pages and public API routes (webhooks)
-  const publicPaths = ['/login', '/signup', '/forgot-password', '/reset-password']
+  const publicPaths = ['/login', '/signup', '/forgot-password', '/reset-password', '/portal']
   const isPublicPath = publicPaths.some(path => pathname.startsWith(path))
   
   // Allow Inngest endpoint (required for Inngest to call back)
+  // Allow portal routes (portal has its own auth)
   if (isPublicPath || 
       pathname.startsWith('/api/cal/webhook') || 
       pathname.startsWith('/api/retell/webhook') ||
-      pathname.startsWith('/api/inngest')) {
+      pathname.startsWith('/api/inngest') ||
+      pathname.startsWith('/api/portal') ||
+      pathname.startsWith('/api/webhooks')) {
     return res
   }
 

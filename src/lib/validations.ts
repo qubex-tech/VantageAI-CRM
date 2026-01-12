@@ -201,3 +201,62 @@ export const testSendSmsSchema = z.object({
   to: z.string().min(10, 'Valid phone number is required'),
   sampleContext: previewTemplateSchema.shape.sampleContext.optional(),
 })
+
+// Patient Portal schemas
+export const patientOTPRequestSchema = z.object({
+  email: z.string().email().optional(),
+  phone: z.string().optional(),
+})
+
+export const patientOTPVerifySchema = z.object({
+  code: z.string().length(6),
+})
+
+export const consentUpdateSchema = z.object({
+  consentType: z.enum(['marketing', 'sms', 'email', 'portal', 'data_sharing']),
+  consented: z.boolean(),
+})
+
+export const communicationPreferenceSchema = z.object({
+  preferredChannel: z.enum(['sms', 'email', 'voice', 'portal']).optional(),
+  smsEnabled: z.boolean().optional(),
+  emailEnabled: z.boolean().optional(),
+  voiceEnabled: z.boolean().optional(),
+  portalEnabled: z.boolean().optional(),
+  quietHoursStart: z.string().optional(),
+  quietHoursEnd: z.string().optional(),
+  frequencyCap: z.number().int().positive().optional(),
+  frequencyPeriod: z.enum(['day', 'week']).optional(),
+})
+
+export const messageCreateSchema = z.object({
+  threadId: z.string().optional(),
+  body: z.string().min(1),
+  subject: z.string().optional(),
+})
+
+export const appointmentConfirmSchema = z.object({
+  appointmentId: z.string(),
+})
+
+export const appointmentCancelSchema = z.object({
+  appointmentId: z.string(),
+  reason: z.string().optional(),
+})
+
+export const appointmentRescheduleRequestSchema = z.object({
+  appointmentId: z.string(),
+  requestedStartTime: z.coerce.date(),
+  reason: z.string().optional(),
+})
+
+export const feedbackSchema = z.object({
+  type: z.enum(['nps', 'csat', 'review']),
+  score: z.number().int().min(0).max(10).optional(),
+  comment: z.string().optional(),
+  reviewRequestId: z.string().optional(),
+})
+
+export const referralCreateSchema = z.object({
+  referredByPatientId: z.string().optional(),
+})

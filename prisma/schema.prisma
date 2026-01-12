@@ -16,6 +16,8 @@ model Practice {
   email     String?
   phone     String?
   address   String?
+  slug      String?  @unique // For subdomain routing: {slug}.portal.getvantage.tech
+  portalDomain String? // Custom domain mapping (optional)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -41,7 +43,27 @@ model Practice {
   templateVersions     MarketingTemplateVersion[]
   templateAssets       MarketingTemplateAsset[]
   marketingAuditLogs   MarketingAuditLog[]
+  // Patient Portal
+  patientAccounts      PatientAccount[]
+  consentRecords       ConsentRecord[]
+  communicationPreferences CommunicationPreference[]
+  conversationThreads  ConversationThread[]
+  portalMessages       PortalMessage[]
+  portalTasks          PatientTask[]
+  formSubmissions      FormSubmission[]
+  documentUploads      DocumentUpload[]
+  reviewRequests       ReviewRequest[]
+  feedbacks            Feedback[]
+  referralLinks        ReferralLink[]
+  referralAttributions ReferralAttribution[]
+  portalAuditLogs      PortalAuditLog[]
+  analyticsEvents      AnalyticsEvent[]
+  campaigns            Campaign[]
+  campaignEnrollments  CampaignEnrollment[]
+  guardianRelationships GuardianRelationship[]
 
+  @@index([slug])
+  @@index([portalDomain])
   @@map("practices")
 }
 
@@ -125,6 +147,21 @@ model Patient {
   tags               PatientTag[]
   timelineEntries    PatientTimelineEntry[]
   patientNotes       PatientNote[]
+  // Patient Portal
+  patientAccount     PatientAccount?
+  guardianships      GuardianRelationship[] @relation("Guardian")
+  dependents         GuardianRelationship[] @relation("Dependent")
+  consentRecords     ConsentRecord[]
+  communicationPreferences CommunicationPreference[]
+  conversationThreads  ConversationThread[]
+  portalMessages     PortalMessage[]
+  portalTasks        PatientTask[]
+  formSubmissions    FormSubmission[]
+  documentUploads    DocumentUpload[]
+  reviewRequests     ReviewRequest[]
+  feedbacks          Feedback[]
+  referralAttributions ReferralAttribution[]
+  campaignEnrollments CampaignEnrollment[]
 
   @@index([practiceId])
   @@index([phone])
@@ -661,4 +698,395 @@ model MarketingAuditLog {
   @@index([tenantId, entityType, entityId])
   @@index([createdAt])
   @@map("marketing_audit_logs")
+}
+
+// ========================================
+// PATIENT PORTAL MODELS
+// ========================================
+
+model PatientAccount {
+  id              String   @id @default(uuid())
+  practiceId      String
+  patientId       String   @unique
+  email           String?  @unique
+  phone           String?  @unique
+  emailVerified   Boolean  @default(false)
+  phoneVerified   Boolean  @default(false)
+  otpCode         String?
+  otpExpiresAt    DateTime?
+  otpAttempts     Int      @default(0)
+  lastLoginAt     DateTime?
+  inviteToken     String?  @unique
+  inviteTokenExpiresAt DateTime?
+  passwordHash    String? // For password-based auth (optional)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId])
+  @@index([practiceId, patientId])
+  @@index([email])
+  @@index([phone])
+  @@index([inviteToken])
+  @@map("patient_accounts")
+}
+
+model GuardianRelationship {
+  id              String   @id @default(uuid())
+  practiceId      String
+  guardianId      String
+  dependentId     String
+  relationship    String // 'parent', 'guardian', 'spouse', 'other'
+  isPrimary       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  practice  Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  guardian  Patient  @relation("Guardian", fields: [guardianId], references: [id], onDelete: Cascade)
+  dependent Patient  @relation("Dependent", fields: [dependentId], references: [id], onDelete: Cascade)
+
+  @@unique([guardianId, dependentId])
+  @@index([practiceId])
+  @@index([guardianId])
+  @@index([dependentId])
+  @@map("guardian_relationships")
+}
+
+model ConsentRecord {
+  id              String   @id @default(uuid())
+  practiceId      String
+  patientId       String
+  consentType     String // 'marketing', 'sms', 'email', 'portal', 'data_sharing'
+  consented       Boolean
+  method          String // 'web', 'sms', 'voice', 'staff', 'import'
+  source          String? // IP address, phone number, etc.
+  metadata        Json?
+  expiresAt       DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime @default(now())
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId, patientId])
+  @@index([practiceId, createdAt])
+  @@index([consentType])
+  @@map("consent_records")
+}
+
+model CommunicationPreference {
+  id                String   @id @default(uuid())
+  practiceId        String
+  patientId         String   @unique
+  preferredChannel  String   @default("email") // 'sms', 'email', 'voice', 'portal'
+  smsEnabled        Boolean  @default(true)
+  emailEnabled      Boolean  @default(true)
+  voiceEnabled      Boolean  @default(false)
+  portalEnabled     Boolean  @default(true)
+  quietHoursStart   String? // 'HH:mm'
+  quietHoursEnd     String? // 'HH:mm'
+  frequencyCap      Int?     // Max messages per day/week
+  frequencyPeriod   String?  // 'day', 'week'
+  unsubscribeToken  String?  @unique
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId, patientId])
+  @@index([unsubscribeToken])
+  @@map("communication_preferences")
+}
+
+model ConversationThread {
+  id          String   @id @default(uuid())
+  practiceId  String
+  patientId   String
+  subject     String?
+  status      String   @default("open") // 'open', 'closed', 'archived'
+  lastMessageAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  practice Practice       @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient  Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  messages PortalMessage[]
+
+  @@index([practiceId, patientId])
+  @@index([practiceId, lastMessageAt])
+  @@index([status])
+  @@map("conversation_threads")
+}
+
+model PortalMessage {
+  id          String   @id @default(uuid())
+  practiceId  String
+  patientId   String
+  threadId    String?
+  channel     String // 'PORTAL', 'SMS', 'EMAIL', 'VOICE'
+  direction   String // 'inbound', 'outbound'
+  subject     String?
+  body        String // For PORTAL, may include PHI
+  bodyHtml    String? // For EMAIL
+  metadata    Json? // Channel-specific data (Twilio SID, SendGrid ID, etc.)
+  status      String   @default("sent") // 'sent', 'delivered', 'read', 'failed'
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  practice Practice           @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient  Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  thread   ConversationThread? @relation(fields: [threadId], references: [id], onDelete: SetNull)
+
+  @@index([practiceId, patientId])
+  @@index([practiceId, createdAt])
+  @@index([threadId])
+  @@index([channel, status])
+  @@map("portal_messages")
+}
+
+model PatientTask {
+  id          String   @id @default(uuid())
+  practiceId  String
+  patientId   String
+  type        String // 'intake', 'document_upload', 'form_completion', 'payment', 'other'
+  title       String
+  description String?
+  status      String   @default("pending") // 'pending', 'in_progress', 'completed', 'cancelled'
+  dueDate     DateTime?
+  completedAt DateTime?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId, patientId])
+  @@index([practiceId, status])
+  @@index([practiceId, dueDate])
+  @@map("patient_tasks")
+}
+
+model FormSubmission {
+  id          String   @id @default(uuid())
+  practiceId  String
+  patientId   String
+  formType    String // 'intake', 'consent', 'registration', 'other'
+  formData    Json // Structured form response
+  status      String   @default("submitted") // 'submitted', 'reviewed', 'approved'
+  submittedAt DateTime @default(now())
+  reviewedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId, patientId])
+  @@index([practiceId, submittedAt])
+  @@index([formType])
+  @@map("form_submissions")
+}
+
+model DocumentUpload {
+  id          String   @id @default(uuid())
+  practiceId  String
+  patientId   String
+  taskId      String? // Optional link to PatientTask
+  fileName    String
+  fileUrl     String
+  fileType    String? // MIME type
+  fileSize    Int? // Bytes
+  category    String? // 'insurance', 'id', 'medical_record', 'other'
+  status      String   @default("uploaded") // 'uploaded', 'reviewed', 'approved', 'rejected'
+  uploadedAt  DateTime @default(now())
+  reviewedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId, patientId])
+  @@index([practiceId, uploadedAt])
+  @@index([category])
+  @@map("document_uploads")
+}
+
+model ReviewRequest {
+  id          String   @id @default(uuid())
+  practiceId  String
+  patientId   String
+  appointmentId String?
+  requestedAt DateTime @default(now())
+  sentAt      DateTime?
+  completedAt DateTime?
+  channel     String? // 'email', 'sms', 'portal'
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  practice Practice  @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient  Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  feedbacks Feedback[]
+
+  @@index([practiceId, patientId])
+  @@index([practiceId, requestedAt])
+  @@map("review_requests")
+}
+
+model Feedback {
+  id            String   @id @default(uuid())
+  practiceId    String
+  patientId     String
+  reviewRequestId String?
+  type          String // 'nps', 'csat', 'review'
+  score         Int? // NPS: 0-10, CSAT: 1-5
+  comment       String?
+  isPublic      Boolean  @default(false) // For public review sites
+  isResolved    Boolean  @default(false)
+  resolvedAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  practice     Practice      @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient      Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  reviewRequest ReviewRequest? @relation(fields: [reviewRequestId], references: [id], onDelete: SetNull)
+
+  @@index([practiceId, patientId])
+  @@index([practiceId, createdAt])
+  @@index([type])
+  @@map("feedback")
+}
+
+model ReferralLink {
+  id          String   @id @default(uuid())
+  practiceId  String
+  code        String   @unique
+  name        String?
+  expiresAt   DateTime?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  practice     Practice            @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  attributions ReferralAttribution[]
+
+  @@index([practiceId])
+  @@index([code])
+  @@map("referral_links")
+}
+
+model ReferralAttribution {
+  id            String   @id @default(uuid())
+  practiceId    String
+  patientId     String
+  referralLinkId String
+  referredByPatientId String? // If another patient referred them
+  source        String? // 'link', 'patient_referral'
+  createdAt     DateTime @default(now())
+
+  practice     Practice    @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient      Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  referralLink ReferralLink @relation(fields: [referralLinkId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId, patientId])
+  @@index([referralLinkId])
+  @@map("referral_attributions")
+}
+
+model Campaign {
+  id          String   @id @default(uuid())
+  practiceId  String
+  name        String
+  description String?
+  type        String // 'welcome', 'reactivation', 'educational', 'promotional', 'custom'
+  isActive    Boolean  @default(true)
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  practice         Practice            @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  enrollments      CampaignEnrollment[]
+
+  @@index([practiceId])
+  @@index([practiceId, isActive])
+  @@map("campaigns")
+}
+
+model CampaignEnrollment {
+  id          String   @id @default(uuid())
+  practiceId  String
+  patientId   String
+  campaignId  String
+  enrolledAt  DateTime @default(now())
+  status      String   @default("active") // 'active', 'paused', 'completed', 'unsubscribed'
+  unsubscribedAt DateTime?
+  events      CampaignEvent[]
+
+  practice Practice        @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient  Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  campaign Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, campaignId])
+  @@index([practiceId, patientId])
+  @@index([campaignId])
+  @@index([status])
+  @@map("campaign_enrollments")
+}
+
+model CampaignEvent {
+  id              String   @id @default(uuid())
+  enrollmentId    String
+  eventType       String // 'sent', 'delivered', 'opened', 'clicked', 'bounced', 'failed'
+  eventData       Json?
+  occurredAt      DateTime @default(now())
+
+  enrollment CampaignEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@index([enrollmentId])
+  @@index([occurredAt])
+  @@map("campaign_events")
+}
+
+model PortalAuditLog {
+  id           String   @id @default(uuid())
+  practiceId   String
+  patientId    String?
+  action       String // 'consent_changed', 'preference_updated', 'message_sent', 'task_completed', etc.
+  resourceType String?
+  resourceId   String?
+  changes      Json?
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId])
+  @@index([practiceId, patientId])
+  @@index([practiceId, createdAt])
+  @@index([action])
+  @@map("portal_audit_logs")
+}
+
+model AnalyticsEvent {
+  id          String   @id @default(uuid())
+  practiceId  String
+  patientId   String?
+  eventType   String // 'page_view', 'action', 'conversion'
+  eventName   String
+  properties  Json?
+  sessionId   String?
+  createdAt   DateTime @default(now())
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId])
+  @@index([practiceId, patientId])
+  @@index([practiceId, createdAt])
+  @@index([eventType, eventName])
+  @@map("analytics_events")
 }
