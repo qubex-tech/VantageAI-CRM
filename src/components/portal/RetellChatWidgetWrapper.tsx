@@ -26,8 +26,8 @@ export async function RetellChatWidgetWrapper() {
   // TODO: Add publicKey field to RetellIntegration schema
   const publicKey = process.env.NEXT_PUBLIC_RETELL_PUBLIC_KEY
 
-  // Use the provided agent ID (from user) or fall back to integration's agent ID or env var
-  const agentId = 'agent_9c98e3b0c1f058ba99fb135c39' || process.env.NEXT_PUBLIC_RETELL_AGENT_ID || retellIntegration?.agentId
+  // Use the provided agent ID (from user) as default, can be overridden by env var or integration
+  const agentId = process.env.NEXT_PUBLIC_RETELL_AGENT_ID || retellIntegration?.agentId || 'agent_9c98e3b0c1f058ba99fb135c39'
 
   // Only render if we have a public key
   if (!publicKey) {
