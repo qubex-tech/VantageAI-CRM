@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation'
 import { getPatientSession } from '@/lib/portal-session'
 import { prisma } from '@/lib/db'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * Portal Home Page
  * Shows dashboard if logged in, redirects to auth if not
@@ -71,46 +73,46 @@ export default async function PortalHomePage() {
             {patient.appointments.length === 0 ? (
               <p className="text-gray-500">No upcoming appointments</p>
             ) : (
-              <ul className="space-y-3">
-                {patient.appointments.map((apt) => (
-                  <li key={apt.id} className="border-b border-gray-200 pb-3 last:border-0">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">{apt.visitType}</p>
-                        <p className="text-sm text-gray-600 mt-1">
-                          {new Date(apt.startTime).toLocaleDateString('en-US', {
-                            weekday: 'short',
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric',
-                          })}
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          {new Date(apt.startTime).toLocaleTimeString('en-US', {
-                            hour: 'numeric',
-                            minute: '2-digit',
-                          })}
-                        </p>
+              <>
+                <ul className="space-y-3">
+                  {patient.appointments.map((apt) => (
+                    <li key={apt.id} className="border-b border-gray-200 pb-3 last:border-0">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-900">{apt.visitType}</p>
+                          <p className="text-sm text-gray-600 mt-1">
+                            {new Date(apt.startTime).toLocaleDateString('en-US', {
+                              weekday: 'short',
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })}
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            {new Date(apt.startTime).toLocaleTimeString('en-US', {
+                              hour: 'numeric',
+                              minute: '2-digit',
+                            })}
+                          </p>
+                        </div>
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          apt.status === 'confirmed' ? 'bg-green-100 text-green-800' :
+                          apt.status === 'scheduled' ? 'bg-blue-100 text-blue-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {apt.status}
+                        </span>
                       </div>
-                      <span className={`text-xs px-2 py-1 rounded-full ${
-                        apt.status === 'confirmed' ? 'bg-green-100 text-green-800' :
-                        apt.status === 'scheduled' ? 'bg-blue-100 text-blue-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {apt.status}
-                      </span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-              {patient.appointments.length > 0 && (
+                    </li>
+                  ))}
+                </ul>
                 <a
                   href="/portal/appointments"
                   className="mt-4 text-sm text-blue-600 hover:text-blue-800 block text-center"
                 >
                   View all appointments →
                 </a>
-              )}
+              </>
             )}
           </div>
           
