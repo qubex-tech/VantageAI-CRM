@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { requirePracticeContext } from '@/lib/tenant'
+import { getPracticeContext } from '@/lib/tenant'
 import { patientOTPVerifySchema } from '@/lib/validations'
 import { verifyPatientOTP } from '@/lib/patient-auth'
 import { cookies } from 'next/headers'
@@ -11,7 +11,6 @@ import { cookies } from 'next/headers'
  */
 export async function POST(req: NextRequest) {
   try {
-    const practiceContext = await requirePracticeContext(req)
     const body = await req.json()
     const parsed = patientOTPVerifySchema.parse(body)
     const { code } = parsed
@@ -27,18 +26,30 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Find patient
+    // Try to get practice context from domain (for subdomain routing)
+    // If no practice found, we'll search across all practices
+    const practiceContext = await getPracticeContext(req)
+    
+    // Build patient search query
+    const phoneDigits = phone ? phone.replace(/[^\d]/g, '') : ''
+    const patientWhere: any = {
+      OR: email
+        ? [{ email }]
+        : [
+            { phone: { contains: phoneDigits } },
+            { primaryPhone: { contains: phoneDigits } },
+            { secondaryPhone: { contains: phoneDigits } },
+          ],
+    }
+
+    // If we have a practice context from domain (subdomain routing), scope to that practice
+    if (practiceContext) {
+      patientWhere.practiceId = practiceContext.practiceId
+    }
+
+    // Find patient (across all practices if no domain context)
     const patient = await prisma.patient.findFirst({
-      where: {
-        practiceId: practiceContext.practiceId,
-        OR: email
-          ? [{ email }]
-          : [
-              { phone: { contains: phone!.replace(/[^\d]/g, '') } },
-              { primaryPhone: { contains: phone!.replace(/[^\d]/g, '') } },
-              { secondaryPhone: { contains: phone!.replace(/[^\d]/g, '') } },
-            ],
-      },
+      where: patientWhere,
       include: {
         patientAccount: true,
       },
@@ -51,9 +62,12 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Use the patient's practiceId (found from patient record)
+    const patientPracticeId = patient.practiceId
+
     // Verify OTP
     const isValid = await verifyPatientOTP(
-      practiceContext.practiceId,
+      patientPracticeId,
       patient.id,
       code
     )
@@ -68,7 +82,7 @@ export async function POST(req: NextRequest) {
     // Create session (simple cookie-based for now)
     // In production, use JWT or secure session management
     const cookieStore = await cookies()
-    const sessionToken = `${patient.id}:${practiceContext.practiceId}:${Date.now()}`
+    const sessionToken = `${patient.id}:${patientPracticeId}:${Date.now()}`
     cookieStore.set('portal_session', sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -79,7 +93,7 @@ export async function POST(req: NextRequest) {
     // Create audit log
     await prisma.portalAuditLog.create({
       data: {
-        practiceId: practiceContext.practiceId,
+        practiceId: patientPracticeId,
         patientId: patient.id,
         action: 'login',
         ipAddress: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined,

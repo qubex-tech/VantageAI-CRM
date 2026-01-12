@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { requirePracticeContext } from '@/lib/tenant'
+import { getPracticeContext } from '@/lib/tenant'
 import { patientOTPRequestSchema } from '@/lib/validations'
 import { createPatientOTP } from '@/lib/patient-auth'
 
@@ -10,7 +10,6 @@ import { createPatientOTP } from '@/lib/patient-auth'
  */
 export async function POST(req: NextRequest) {
   try {
-    const practiceContext = await requirePracticeContext(req)
     const body = await req.json()
     const parsed = patientOTPRequestSchema.parse(body)
 
@@ -21,17 +20,38 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Try to get practice context from domain (for subdomain routing)
+    // If no practice found, we'll search across all practices
+    const practiceContext = await getPracticeContext(req)
+    
+    // Build patient search query
+    const phoneDigits = parsed.phone ? parsed.phone.replace(/[^\d]/g, '') : ''
+    const patientWhere: any = {
+      OR: parsed.email
+        ? [{ email: parsed.email }]
+        : [
+            { phone: { contains: phoneDigits } },
+            { primaryPhone: { contains: phoneDigits } },
+            { secondaryPhone: { contains: phoneDigits } },
+          ],
+    }
+
+    // If we have a practice context from domain (subdomain routing), scope to that practice
+    if (practiceContext) {
+      patientWhere.practiceId = practiceContext.practiceId
+    }
+
     // Find patient by email or phone
     const patient = await prisma.patient.findFirst({
-      where: {
-        practiceId: practiceContext.practiceId,
-        OR: parsed.email
-          ? [{ email: parsed.email }]
-          : [
-              { phone: { contains: parsed.phone!.replace(/[^\d]/g, '') } },
-              { primaryPhone: { contains: parsed.phone!.replace(/[^\d]/g, '') } },
-              { secondaryPhone: { contains: parsed.phone!.replace(/[^\d]/g, '') } },
-            ],
+      where: patientWhere,
+      include: {
+        practice: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
       },
     })
 
@@ -43,11 +63,14 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Use the patient's practiceId (found from patient record)
+    const patientPracticeId = patient.practiceId
+
     // Create or update patient account
     await prisma.patientAccount.upsert({
       where: { patientId: patient.id },
       create: {
-        practiceId: practiceContext.practiceId,
+        practiceId: patientPracticeId,
         patientId: patient.id,
         email: parsed.email || null,
         phone: parsed.phone || null,
@@ -62,7 +85,7 @@ export async function POST(req: NextRequest) {
     const channel = parsed.email ? 'email' : 'sms'
     const recipient = parsed.email || parsed.phone!
     await createPatientOTP(
-      practiceContext.practiceId,
+      patientPracticeId,
       patient.id,
       channel,
       recipient
