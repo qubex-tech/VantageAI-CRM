@@ -1,5 +1,6 @@
 import { ReactNode } from 'react'
 import { PortalSidebar } from '@/components/portal/PortalSidebar'
+import { RetellChatWidgetWrapper } from '@/components/portal/RetellChatWidgetWrapper'
 
 /**
  * Portal Layout
@@ -17,6 +18,8 @@ export default function PortalLayout({
       <div className="md:ml-64 pt-14 md:pt-0">
         {children}
       </div>
+      {/* Retell Chat Widget - appears on all portal pages */}
+      <RetellChatWidgetWrapper />
     </div>
   )
 }
