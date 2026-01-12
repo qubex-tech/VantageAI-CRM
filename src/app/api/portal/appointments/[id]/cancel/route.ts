@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { requirePracticeContext } from '@/lib/tenant'
+import { requirePatientSession } from '@/lib/portal-session'
 import { appointmentCancelSchema } from '@/lib/validations'
 
 /**
@@ -12,24 +12,17 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const practiceContext = await requirePracticeContext(req)
+    const session = await requirePatientSession(req)
+    const { patientId, practiceId } = session
     const { id: appointmentId } = await params
     const body = await req.json()
     const parsed = appointmentCancelSchema.parse(body)
-    
-    const patientId = req.headers.get('x-patient-id')
-    if (!patientId) {
-      return NextResponse.json(
-        { error: 'Patient ID required' },
-        { status: 401 }
-      )
-    }
 
     // Verify appointment belongs to patient
     const appointment = await prisma.appointment.findFirst({
       where: {
         id: appointmentId,
-        practiceId: practiceContext.practiceId,
+        practiceId,
         patientId,
       },
     })
@@ -53,7 +46,7 @@ export async function POST(
     // Create audit log
     await prisma.portalAuditLog.create({
       data: {
-        practiceId: practiceContext.practiceId,
+        practiceId,
         patientId,
         action: 'appointment_cancelled',
         resourceType: 'appointment',

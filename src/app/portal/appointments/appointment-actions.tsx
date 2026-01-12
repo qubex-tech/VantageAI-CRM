@@ -48,10 +48,16 @@ export function CancelButton({ appointmentId }: { appointmentId: string }) {
       return
     }
     
+    const reason = prompt('Please provide a reason for cancellation (optional):') || undefined
+    
     setLoading(true)
     try {
       const response = await fetch(`/api/portal/appointments/${appointmentId}/cancel`, {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ reason }),
       })
       
       if (!response.ok) {
