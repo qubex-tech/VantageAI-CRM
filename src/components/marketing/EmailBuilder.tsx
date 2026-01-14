@@ -51,7 +51,7 @@ import {
   Layers,
   Library,
   Plus,
-  Duplicate,
+  Copy as DuplicateIcon,
   Settings,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -427,6 +427,83 @@ const EmailBuilder = forwardRef<EmailBuilderRef, EmailBuilderProps>(function Ema
     updateDoc(newDoc)
   }
 
+  // Row/Section Management Functions
+  const addRow = (columnCount: 1 | 2 | 3 | 4 = 1) => {
+    const newDoc = { ...doc }
+    const rowId = `row-${Date.now()}`
+    const columns: Column[] = []
+    
+    const columnWidth = 100 / columnCount
+    for (let i = 0; i < columnCount; i++) {
+      columns.push({
+        id: `col-${rowId}-${i}`,
+        width: columnWidth,
+        blocks: [],
+      })
+    }
+    
+    newDoc.rows.push({
+      id: rowId,
+      columns,
+    })
+    updateDoc(newDoc)
+    setSelectedRow(rowId)
+  }
+
+  const deleteRow = (rowId: string) => {
+    const newDoc = { ...doc }
+    newDoc.rows = newDoc.rows.filter((r) => r.id !== rowId)
+    updateDoc(newDoc)
+    if (selectedRow === rowId) {
+      setSelectedRow(null)
+    }
+    if (selectedBlock?.rowId === rowId) {
+      setSelectedBlock(null)
+    }
+  }
+
+  const duplicateRow = (rowId: string) => {
+    const newDoc = { ...doc }
+    const row = newDoc.rows.find((r) => r.id === rowId)
+    if (!row) return
+
+    const duplicatedRow = JSON.parse(JSON.stringify(row))
+    duplicatedRow.id = `row-${Date.now()}`
+    // Update column IDs
+    duplicatedRow.columns = duplicatedRow.columns.map((col: Column, idx: number) => ({
+      ...col,
+      id: `col-${duplicatedRow.id}-${idx}`,
+    }))
+
+    const rowIndex = newDoc.rows.findIndex((r) => r.id === rowId)
+    newDoc.rows.splice(rowIndex + 1, 0, duplicatedRow)
+    updateDoc(newDoc)
+    setSelectedRow(duplicatedRow.id)
+  }
+
+  const changeColumnLayout = (rowId: string, columnCount: 1 | 2 | 3 | 4) => {
+    const newDoc = { ...doc }
+    const row = newDoc.rows.find((r) => r.id === rowId)
+    if (!row) return
+
+    const columnWidth = 100 / columnCount
+    const existingBlocks = row.columns.flatMap((col) => col.blocks)
+    
+    // Redistribute blocks across new columns
+    const newColumns: Column[] = []
+    for (let i = 0; i < columnCount; i++) {
+      const blocksForColumn = existingBlocks.filter((_, idx) => idx % columnCount === i)
+      newColumns.push({
+        id: `col-${rowId}-${i}`,
+        width: columnWidth,
+        blocks: blocksForColumn,
+      })
+    }
+
+    row.columns = newColumns
+    updateDoc(newDoc)
+  }
+
   const updateDoc = (newDoc: EmailDoc) => {
     setDoc(newDoc)
     // Add to history
@@ -507,6 +584,10 @@ const EmailBuilder = forwardRef<EmailBuilderRef, EmailBuilderProps>(function Ema
                 onSelectRow={(rowId) => setSelectedRow(rowId)}
                 onDeleteBlock={deleteBlock}
                 onDuplicateBlock={duplicateBlock}
+                onAddRow={addRow}
+                onDeleteRow={deleteRow}
+                onDuplicateRow={duplicateRow}
+                onChangeColumnLayout={changeColumnLayout}
                 brandProfile={brandProfile}
                 showVariablePicker={showVariablePicker}
                 onInsertVariable={(variable) => {
@@ -700,6 +781,10 @@ function Canvas({
   onSelectRow,
   onDeleteBlock,
   onDuplicateBlock,
+  onAddRow,
+  onDeleteRow,
+  onDuplicateRow,
+  onChangeColumnLayout,
   brandProfile,
   showVariablePicker,
   onInsertVariable,
@@ -713,6 +798,10 @@ function Canvas({
   onSelectRow: (rowId: string) => void
   onDeleteBlock: () => void
   onDuplicateBlock: () => void
+  onAddRow: (columnCount: 1 | 2 | 3 | 4) => void
+  onDeleteRow: (rowId: string) => void
+  onDuplicateRow: (rowId: string) => void
+  onChangeColumnLayout: (rowId: string, columnCount: 1 | 2 | 3 | 4) => void
   brandProfile?: any
   showVariablePicker: boolean
   onInsertVariable: (variable: string) => void
@@ -722,6 +811,47 @@ function Canvas({
 
   return (
     <div className="relative">
+      {/* Add Row Buttons */}
+      <div className="mb-4 flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-gray-500 font-medium">Add Section:</span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onAddRow(1)}
+          className="text-xs"
+        >
+          <Plus className="h-3 w-3 mr-1" />
+          1 Column
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onAddRow(2)}
+          className="text-xs"
+        >
+          <Plus className="h-3 w-3 mr-1" />
+          2 Columns
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onAddRow(3)}
+          className="text-xs"
+        >
+          <Plus className="h-3 w-3 mr-1" />
+          3 Columns
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onAddRow(4)}
+          className="text-xs"
+        >
+          <Plus className="h-3 w-3 mr-1" />
+          4 Columns
+        </Button>
+      </div>
+
       {doc.rows.map((row, rowIndex) => (
         <RowComponent
           key={row.id || `row-${rowIndex}`}
@@ -735,6 +865,9 @@ function Canvas({
           onSelectBlock={onSelectBlock}
           onDeleteBlock={onDeleteBlock}
           onDuplicateBlock={onDuplicateBlock}
+          onDeleteRow={onDeleteRow}
+          onDuplicateRow={onDuplicateRow}
+          onChangeColumnLayout={onChangeColumnLayout}
           brandProfile={brandProfile}
           showVariablePicker={showVariablePicker}
           onInsertVariable={onInsertVariable}
@@ -774,6 +907,9 @@ function RowComponent({
   onSelectBlock,
   onDeleteBlock,
   onDuplicateBlock,
+  onDeleteRow,
+  onDuplicateRow,
+  onChangeColumnLayout,
   brandProfile,
   showVariablePicker,
   onInsertVariable,
@@ -788,6 +924,9 @@ function RowComponent({
   onSelectBlock: (rowId: string, colId: string, blockIndex: number) => void
   onDeleteBlock: () => void
   onDuplicateBlock: () => void
+  onDeleteRow: (rowId: string) => void
+  onDuplicateRow: (rowId: string) => void
+  onChangeColumnLayout: (rowId: string, columnCount: 1 | 2 | 3 | 4) => void
   brandProfile?: any
   showVariablePicker: boolean
   onInsertVariable: (variable: string) => void
@@ -815,6 +954,50 @@ function RowComponent({
         <div className="absolute inset-0 bg-black bg-opacity-10 rounded-lg pointer-events-none" />
       )}
       <div className={`relative ${rowStyle.backgroundImage ? 'bg-white bg-opacity-90' : ''}`}>
+      {/* Row Controls */}
+      {isSelected && (
+        <div className="absolute -left-32 top-2 flex flex-col items-center gap-1 z-10">
+          <button
+            className="p-1 bg-white border border-gray-300 rounded shadow-sm hover:bg-gray-50"
+            title="Duplicate Section"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDuplicateRow(rowId)
+            }}
+          >
+            <DuplicateIcon className="h-4 w-4 text-gray-600" />
+          </button>
+          <button
+            className="p-1 bg-white border border-red-300 rounded shadow-sm hover:bg-red-50"
+            title="Delete Section"
+            onClick={(e) => {
+              e.stopPropagation()
+              if (confirm('Delete this section? All blocks in it will be removed.')) {
+                onDeleteRow(rowId)
+              }
+            }}
+          >
+            <Trash2 className="h-4 w-4 text-red-600" />
+          </button>
+          <div className="border-t border-gray-300 my-1 w-6" />
+          <div className="p-1 bg-white border border-gray-300 rounded shadow-sm">
+            <Select
+              value={String(row.columns.length)}
+              onValueChange={(value) => onChangeColumnLayout(rowId, parseInt(value) as 1 | 2 | 3 | 4)}
+            >
+              <SelectTrigger className="h-6 w-12 text-xs p-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">1 Col</SelectItem>
+                <SelectItem value="2">2 Col</SelectItem>
+                <SelectItem value="3">3 Col</SelectItem>
+                <SelectItem value="4">4 Col</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      )}
       <div className="absolute -left-8 top-2 flex items-center gap-1 opacity-0 group-hover:opacity-100">
         <GripVertical className="h-4 w-4 text-gray-400 cursor-move" />
       </div>
