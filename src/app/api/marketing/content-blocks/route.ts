@@ -87,7 +87,13 @@ export async function POST(req: NextRequest) {
       data: {
         tenantId: user.practiceId,
         createdByUserId: user.id,
-        ...validated,
+        name: validated.name,
+        description: validated.description,
+        blockData: validated.blockData,
+        blockType: validated.blockType,
+        category: validated.category,
+        tags: validated.tags,
+        isGlobal: validated.isGlobal ?? false,
       },
       include: {
         createdBy: {
