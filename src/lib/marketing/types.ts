@@ -20,6 +20,14 @@ export interface EmailDoc {
 export interface Row {
   id?: string
   columns: Column[]
+  style?: {
+    backgroundColor?: string
+    backgroundImage?: string
+    backgroundSize?: 'cover' | 'contain' | 'auto'
+    backgroundPosition?: string
+    padding?: string
+    margin?: string
+  }
 }
 
 export interface Column {
@@ -36,6 +44,10 @@ export type Block =
   | DividerBlock
   | SpacerBlock
   | FooterBlock
+  | SocialLinksBlock
+  | VideoBlock
+  | HtmlBlock
+  | ProductBlock
 
 export interface HeaderBlock {
   type: 'header'
@@ -96,6 +108,55 @@ export interface FooterBlock {
   type: 'footer'
   content?: string // Override footer
   showUnsubscribe?: boolean
+}
+
+export interface SocialLinksBlock {
+  type: 'social'
+  links: Array<{
+    platform: 'facebook' | 'twitter' | 'instagram' | 'linkedin' | 'youtube' | 'custom'
+    url: string
+    icon?: string // Custom icon URL
+  }>
+  style?: {
+    align?: 'left' | 'center' | 'right'
+    iconSize?: string
+    spacing?: string
+  }
+}
+
+export interface VideoBlock {
+  type: 'video'
+  url: string
+  thumbnail?: string
+  alt?: string
+  style?: {
+    width?: string
+    height?: string
+    align?: 'left' | 'center' | 'right'
+  }
+}
+
+export interface HtmlBlock {
+  type: 'html'
+  content: string // Raw HTML code
+  style?: {
+    padding?: string
+  }
+}
+
+export interface ProductBlock {
+  type: 'product'
+  productId?: string
+  name: string
+  description?: string
+  imageUrl?: string
+  price?: string
+  buttonLabel?: string
+  buttonUrl?: string
+  style?: {
+    layout?: 'horizontal' | 'vertical'
+    imageAlign?: 'left' | 'right' | 'top'
+  }
 }
 
 export interface GlobalStyles {

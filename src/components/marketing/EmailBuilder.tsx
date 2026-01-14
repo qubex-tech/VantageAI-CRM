@@ -44,6 +44,15 @@ import {
   Italic,
   Link as LinkIcon,
   Code,
+  Share2,
+  Play,
+  FileCode,
+  Package,
+  Layers,
+  Library,
+  Plus,
+  Duplicate,
+  Settings,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -265,6 +274,53 @@ const EmailBuilder = forwardRef<EmailBuilderRef, EmailBuilderProps>(function Ema
           type: 'footer',
           showUnsubscribe: true,
         }
+      case 'social':
+        return {
+          type: 'social',
+          links: [
+            { platform: 'facebook', url: '' },
+            { platform: 'twitter', url: '' },
+            { platform: 'instagram', url: '' },
+          ],
+          style: {
+            align: 'center',
+            iconSize: '24px',
+            spacing: '12px',
+          },
+        }
+      case 'video':
+        return {
+          type: 'video',
+          url: '',
+          thumbnail: '',
+          alt: 'Video',
+          style: {
+            width: '100%',
+            align: 'center',
+          },
+        }
+      case 'html':
+        return {
+          type: 'html',
+          content: '<!-- Add your custom HTML here -->',
+          style: {
+            padding: '20px',
+          },
+        }
+      case 'product':
+        return {
+          type: 'product',
+          name: 'Product Name',
+          description: 'Product description',
+          imageUrl: '',
+          price: '$0.00',
+          buttonLabel: 'Learn More',
+          buttonUrl: '#',
+          style: {
+            layout: 'horizontal',
+            imageAlign: 'left',
+          },
+        }
       default:
         return {
           type: 'text',
@@ -418,7 +474,14 @@ const EmailBuilder = forwardRef<EmailBuilderRef, EmailBuilderProps>(function Ema
     <div className="flex flex-col h-full bg-gray-50">
       <div className="flex flex-1 overflow-hidden">
         {/* Block Palette */}
-        <BlockPalette onDragStart={(type) => {}} />
+        <BlockPalette 
+          onDragStart={(type) => {}} 
+          onAddSavedBlock={(block) => {
+            // TODO: Load saved block and add to canvas
+            console.log('Add saved block:', block)
+          }}
+          savedBlocks={[]}
+        />
 
         {/* Canvas */}
         <div className="flex-1 overflow-auto bg-gray-100 p-4">
@@ -503,41 +566,126 @@ const EmailBuilder = forwardRef<EmailBuilderRef, EmailBuilderProps>(function Ema
 })
 
 // Block Palette Component
-function BlockPalette({ onDragStart }: { onDragStart: (type: string) => void }) {
+function BlockPalette({ 
+  onDragStart,
+  onAddSavedBlock,
+  savedBlocks = [],
+}: { 
+  onDragStart: (type: string) => void
+  onAddSavedBlock?: (block: any) => void
+  savedBlocks?: Array<{ id: string; name: string; category?: string }>
+}) {
+  const [activeTab, setActiveTab] = useState<'blocks' | 'saved'>('blocks')
+  
   const blocks = [
-    { type: 'header', label: 'Header', icon: Type },
-    { type: 'text', label: 'Text', icon: Type },
-    { type: 'image', label: 'Image', icon: ImageIcon },
-    { type: 'button', label: 'Button', icon: Square },
-    { type: 'divider', label: 'Divider', icon: Minus },
-    { type: 'spacer', label: 'Spacer', icon: ArrowUpDown },
-    { type: 'footer', label: 'Footer', icon: Type },
+    { type: 'header', label: 'Header', icon: Type, category: 'structure' },
+    { type: 'text', label: 'Text', icon: Type, category: 'content' },
+    { type: 'image', label: 'Image', icon: ImageIcon, category: 'media' },
+    { type: 'button', label: 'Button', icon: Square, category: 'cta' },
+    { type: 'divider', label: 'Divider', icon: Minus, category: 'structure' },
+    { type: 'spacer', label: 'Spacer', icon: ArrowUpDown, category: 'structure' },
+    { type: 'footer', label: 'Footer', icon: Type, category: 'structure' },
+    { type: 'social', label: 'Social Links', icon: Share2, category: 'social' },
+    { type: 'video', label: 'Video', icon: Play, category: 'media' },
+    { type: 'html', label: 'HTML Code', icon: FileCode, category: 'advanced' },
+    { type: 'product', label: 'Product', icon: Package, category: 'content' },
   ]
+  
+  const blocksByCategory = blocks.reduce((acc, block) => {
+    const cat = block.category || 'other'
+    if (!acc[cat]) acc[cat] = []
+    acc[cat].push(block)
+    return acc
+  }, {} as Record<string, typeof blocks>)
 
   return (
-    <div className="w-64 bg-white border-r border-gray-200 overflow-y-auto">
+    <div className="w-64 bg-white border-r border-gray-200 overflow-y-auto flex flex-col">
       <div className="p-4 border-b border-gray-200">
-        <h3 className="font-semibold text-sm text-gray-900">Blocks</h3>
+        <h3 className="font-semibold text-sm text-gray-900">Content Blocks</h3>
         <p className="text-xs text-gray-500 mt-1">Drag to add</p>
       </div>
-      <div className="p-2 space-y-1">
-        {blocks.map((block) => {
-          const Icon = block.icon
-          return (
-            <div
-              key={block.type}
-              draggable
-              onDragStart={(e) => {
-                e.dataTransfer.setData('blockType', block.type)
-                onDragStart(block.type)
-              }}
-              className="flex items-center gap-2 p-3 bg-gray-50 hover:bg-gray-100 rounded-lg cursor-move transition-colors"
-            >
-              <Icon className="h-4 w-4 text-gray-500" />
-              <span className="text-sm text-gray-700">{block.label}</span>
-            </div>
-          )
-        })}
+      
+      {/* Tabs */}
+      <div className="flex border-b border-gray-200">
+        <button
+          onClick={() => setActiveTab('blocks')}
+          className={`flex-1 px-4 py-2 text-xs font-medium transition-colors ${
+            activeTab === 'blocks'
+              ? 'text-gray-900 border-b-2 border-gray-900'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Blocks
+        </button>
+        <button
+          onClick={() => setActiveTab('saved')}
+          className={`flex-1 px-4 py-2 text-xs font-medium transition-colors ${
+            activeTab === 'saved'
+              ? 'text-gray-900 border-b-2 border-gray-900'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Saved ({savedBlocks.length})
+        </button>
+      </div>
+      
+      <div className="flex-1 overflow-y-auto p-2">
+        {activeTab === 'blocks' ? (
+          <div className="space-y-4">
+            {Object.entries(blocksByCategory).map(([category, categoryBlocks]) => (
+              <div key={category}>
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 px-2">
+                  {category}
+                </h4>
+                <div className="space-y-1">
+                  {categoryBlocks.map((block) => {
+                    const Icon = block.icon
+                    return (
+                      <div
+                        key={block.type}
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('blockType', block.type)
+                          onDragStart(block.type)
+                        }}
+                        className="flex items-center gap-2 p-3 bg-gray-50 hover:bg-gray-100 rounded-lg cursor-move transition-colors"
+                      >
+                        <Icon className="h-4 w-4 text-gray-500" />
+                        <span className="text-sm text-gray-700">{block.label}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {savedBlocks.length === 0 ? (
+              <div className="text-center py-8 text-sm text-gray-500">
+                <Library className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                <p>No saved blocks yet</p>
+                <p className="text-xs mt-1">Save blocks to reuse them</p>
+              </div>
+            ) : (
+              savedBlocks.map((block) => (
+                <div
+                  key={block.id}
+                  onClick={() => onAddSavedBlock?.(block)}
+                  className="flex items-center gap-2 p-3 bg-gray-50 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors"
+                >
+                  <Layers className="h-4 w-4 text-gray-500" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-700 truncate">{block.name}</p>
+                    {block.category && (
+                      <p className="text-xs text-gray-500">{block.category}</p>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -644,11 +792,29 @@ function RowComponent({
   showVariablePicker: boolean
   onInsertVariable: (variable: string) => void
 }) {
+  const rowStyle = row.style || {}
+  const backgroundStyle: React.CSSProperties = {
+    backgroundColor: rowStyle.backgroundColor,
+    backgroundImage: rowStyle.backgroundImage ? `url(${rowStyle.backgroundImage})` : undefined,
+    backgroundSize: rowStyle.backgroundSize || 'cover',
+    backgroundPosition: rowStyle.backgroundPosition || 'center',
+    padding: rowStyle.padding,
+    margin: rowStyle.margin,
+  }
+
   return (
     <div
-      className={`relative border-2 ${isSelected ? 'border-blue-500' : 'border-transparent'} rounded-lg mb-2`}
+      className={`relative border-2 rounded-lg mb-2 ${
+        isSelected ? 'border-blue-500' : 'border-transparent'
+      }`}
+      style={backgroundStyle}
       onClick={onSelect}
     >
+      {/* Overlay for background images to ensure content is readable */}
+      {rowStyle.backgroundImage && (
+        <div className="absolute inset-0 bg-black bg-opacity-10 rounded-lg pointer-events-none" />
+      )}
+      <div className={`relative ${rowStyle.backgroundImage ? 'bg-white bg-opacity-90' : ''}`}>
       <div className="absolute -left-8 top-2 flex items-center gap-1 opacity-0 group-hover:opacity-100">
         <GripVertical className="h-4 w-4 text-gray-400 cursor-move" />
       </div>
@@ -669,6 +835,7 @@ function RowComponent({
           onInsertVariable={onInsertVariable}
         />
       ))}
+      </div>
     </div>
   )
 }

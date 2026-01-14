@@ -11,56 +11,57 @@ datasource db {
 }
 
 model Practice {
-  id        String   @id @default(uuid())
-  name      String
-  email     String?
-  phone     String?
-  address   String?
-  slug      String?  @unique // For subdomain routing: {slug}.portal.getvantage.tech
+  id           String   @id @default(uuid())
+  name         String
+  email        String?
+  phone        String?
+  address      String?
+  slug         String?  @unique // For subdomain routing: {slug}.portal.getvantage.tech
   portalDomain String? // Custom domain mapping (optional)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  users                User[]
-  patients             Patient[]
-  insurancePolicies    InsurancePolicy[]
-  appointments         Appointment[]
-  calIntegrations      CalIntegration[]
-  calEventTypeMappings CalEventTypeMapping[]
-  retellIntegrations   RetellIntegration[]
-  sendgridIntegrations SendgridIntegration[]
-  voiceConversations   VoiceConversation[]
-  workflows            Workflow[]
-  auditLogs            AuditLog[]
-  healixConversations  HealixConversation[]
-  healixActionLogs     HealixActionLog[]
-  patientNotes         PatientNote[]
-  outboxEvents         OutboxEvent[]
-  automationRules      AutomationRule[]
-  automationRuns       AutomationRun[]
-  brandProfile         BrandProfile?
-  templates            MarketingTemplate[]
-  templateVersions     MarketingTemplateVersion[]
-  templateAssets       MarketingTemplateAsset[]
-  marketingAuditLogs   MarketingAuditLog[]
+  users                    User[]
+  patients                 Patient[]
+  insurancePolicies        InsurancePolicy[]
+  appointments             Appointment[]
+  calIntegrations          CalIntegration[]
+  calEventTypeMappings     CalEventTypeMapping[]
+  retellIntegrations       RetellIntegration[]
+  sendgridIntegrations     SendgridIntegration[]
+  voiceConversations       VoiceConversation[]
+  workflows                Workflow[]
+  auditLogs                AuditLog[]
+  healixConversations      HealixConversation[]
+  healixActionLogs         HealixActionLog[]
+  patientNotes             PatientNote[]
+  outboxEvents             OutboxEvent[]
+  automationRules          AutomationRule[]
+  automationRuns           AutomationRun[]
+  brandProfile             BrandProfile?
+  templates                MarketingTemplate[]
+  templateVersions         MarketingTemplateVersion[]
+  templateAssets           MarketingTemplateAsset[]
+  contentBlocks            MarketingContentBlock[]
+  marketingAuditLogs       MarketingAuditLog[]
   // Patient Portal
-  patientAccounts      PatientAccount[]
-  consentRecords       ConsentRecord[]
+  patientAccounts          PatientAccount[]
+  consentRecords           ConsentRecord[]
   communicationPreferences CommunicationPreference[]
-  conversationThreads  ConversationThread[]
-  portalMessages       PortalMessage[]
-  portalTasks          PatientTask[]
-  formSubmissions      FormSubmission[]
-  documentUploads      DocumentUpload[]
-  reviewRequests       ReviewRequest[]
-  feedbacks            Feedback[]
-  referralLinks        ReferralLink[]
-  referralAttributions ReferralAttribution[]
-  portalAuditLogs      PortalAuditLog[]
-  analyticsEvents      AnalyticsEvent[]
-  campaigns            Campaign[]
-  campaignEnrollments  CampaignEnrollment[]
-  guardianRelationships GuardianRelationship[]
+  conversationThreads      ConversationThread[]
+  portalMessages           PortalMessage[]
+  portalTasks              PatientTask[]
+  formSubmissions          FormSubmission[]
+  documentUploads          DocumentUpload[]
+  reviewRequests           ReviewRequest[]
+  feedbacks                Feedback[]
+  referralLinks            ReferralLink[]
+  referralAttributions     ReferralAttribution[]
+  portalAuditLogs          PortalAuditLog[]
+  analyticsEvents          AnalyticsEvent[]
+  campaigns                Campaign[]
+  campaignEnrollments      CampaignEnrollment[]
+  guardianRelationships    GuardianRelationship[]
 
   @@index([slug])
   @@index([portalDomain])
@@ -85,6 +86,7 @@ model User {
   marketingTemplatesCreated        MarketingTemplate[]        @relation("MarketingTemplateCreator")
   marketingTemplateVersionsCreated MarketingTemplateVersion[] @relation("MarketingTemplateVersionCreator")
   marketingTemplateAssetsCreated   MarketingTemplateAsset[]   @relation("MarketingTemplateAssetCreator")
+  marketingContentBlocksCreated    MarketingContentBlock[]    @relation("MarketingContentBlockCreator")
   marketingAuditLogs               MarketingAuditLog[]        @relation("MarketingAuditLogActor")
 
   @@index([practiceId])
@@ -140,28 +142,28 @@ model Patient {
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
-  practice           Practice               @relation(fields: [practiceId], references: [id], onDelete: Cascade)
-  insurancePolicies  InsurancePolicy[]
-  appointments       Appointment[]
-  voiceConversations VoiceConversation[]
-  tags               PatientTag[]
-  timelineEntries    PatientTimelineEntry[]
-  patientNotes       PatientNote[]
+  practice                 Practice                  @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  insurancePolicies        InsurancePolicy[]
+  appointments             Appointment[]
+  voiceConversations       VoiceConversation[]
+  tags                     PatientTag[]
+  timelineEntries          PatientTimelineEntry[]
+  patientNotes             PatientNote[]
   // Patient Portal
-  patientAccount     PatientAccount?
-  guardianships      GuardianRelationship[] @relation("Guardian")
-  dependents         GuardianRelationship[] @relation("Dependent")
-  consentRecords     ConsentRecord[]
+  patientAccount           PatientAccount?
+  guardianships            GuardianRelationship[]    @relation("Guardian")
+  dependents               GuardianRelationship[]    @relation("Dependent")
+  consentRecords           ConsentRecord[]
   communicationPreferences CommunicationPreference[]
-  conversationThreads  ConversationThread[]
-  portalMessages     PortalMessage[]
-  portalTasks        PatientTask[]
-  formSubmissions    FormSubmission[]
-  documentUploads    DocumentUpload[]
-  reviewRequests     ReviewRequest[]
-  feedbacks          Feedback[]
-  referralAttributions ReferralAttribution[]
-  campaignEnrollments CampaignEnrollment[]
+  conversationThreads      ConversationThread[]
+  portalMessages           PortalMessage[]
+  portalTasks              PatientTask[]
+  formSubmissions          FormSubmission[]
+  documentUploads          DocumentUpload[]
+  reviewRequests           ReviewRequest[]
+  feedbacks                Feedback[]
+  referralAttributions     ReferralAttribution[]
+  campaignEnrollments      CampaignEnrollment[]
 
   @@index([practiceId])
   @@index([phone])
@@ -680,6 +682,31 @@ model MarketingTemplateAsset {
   @@map("marketing_template_assets")
 }
 
+model MarketingContentBlock {
+  id              String   @id @default(uuid())
+  tenantId        String
+  name            String
+  description     String?
+  blockData       Json // The block or row structure (can be a single block or a full row)
+  blockType       String // 'block' or 'row' - indicates if this is a reusable block or a full row/section
+  category        String? // 'header', 'footer', 'cta', 'product', 'custom', etc.
+  tags            Json? // Array of tags for filtering
+  isGlobal        Boolean  @default(false) // If true, updates propagate to all templates using it
+  usageCount      Int      @default(0) // Track how many templates use this block
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  practice  Practice @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy User     @relation("MarketingContentBlockCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, category])
+  @@index([tenantId, isGlobal])
+  @@index([createdByUserId])
+  @@map("marketing_content_blocks")
+}
+
 model MarketingAuditLog {
   id          String   @id @default(uuid())
   tenantId    String
@@ -705,22 +732,22 @@ model MarketingAuditLog {
 // ========================================
 
 model PatientAccount {
-  id              String   @id @default(uuid())
-  practiceId      String
-  patientId       String   @unique
-  email           String?  @unique
-  phone           String?  @unique
-  emailVerified   Boolean  @default(false)
-  phoneVerified   Boolean  @default(false)
-  otpCode         String?
-  otpExpiresAt    DateTime?
-  otpAttempts     Int      @default(0)
-  lastLoginAt     DateTime?
-  inviteToken     String?  @unique
+  id                   String    @id @default(uuid())
+  practiceId           String
+  patientId            String    @unique
+  email                String?   @unique
+  phone                String?   @unique
+  emailVerified        Boolean   @default(false)
+  phoneVerified        Boolean   @default(false)
+  otpCode              String?
+  otpExpiresAt         DateTime?
+  otpAttempts          Int       @default(0)
+  lastLoginAt          DateTime?
+  inviteToken          String?   @unique
   inviteTokenExpiresAt DateTime?
-  passwordHash    String? // For password-based auth (optional)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  passwordHash         String? // For password-based auth (optional)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
@@ -734,14 +761,14 @@ model PatientAccount {
 }
 
 model GuardianRelationship {
-  id              String   @id @default(uuid())
-  practiceId      String
-  guardianId      String
-  dependentId     String
-  relationship    String // 'parent', 'guardian', 'spouse', 'other'
-  isPrimary       Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id           String   @id @default(uuid())
+  practiceId   String
+  guardianId   String
+  dependentId  String
+  relationship String // 'parent', 'guardian', 'spouse', 'other'
+  isPrimary    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   practice  Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   guardian  Patient  @relation("Guardian", fields: [guardianId], references: [id], onDelete: Cascade)
@@ -755,17 +782,17 @@ model GuardianRelationship {
 }
 
 model ConsentRecord {
-  id              String   @id @default(uuid())
-  practiceId      String
-  patientId       String
-  consentType     String // 'marketing', 'sms', 'email', 'portal', 'data_sharing'
-  consented       Boolean
-  method          String // 'web', 'sms', 'voice', 'staff', 'import'
-  source          String? // IP address, phone number, etc.
-  metadata        Json?
-  expiresAt       DateTime?
-  revokedAt       DateTime?
-  createdAt       DateTime @default(now())
+  id          String    @id @default(uuid())
+  practiceId  String
+  patientId   String
+  consentType String // 'marketing', 'sms', 'email', 'portal', 'data_sharing'
+  consented   Boolean
+  method      String // 'web', 'sms', 'voice', 'staff', 'import'
+  source      String? // IP address, phone number, etc.
+  metadata    Json?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
 
   practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
@@ -777,21 +804,21 @@ model ConsentRecord {
 }
 
 model CommunicationPreference {
-  id                String   @id @default(uuid())
-  practiceId        String
-  patientId         String   @unique
-  preferredChannel  String   @default("email") // 'sms', 'email', 'voice', 'portal'
-  smsEnabled        Boolean  @default(true)
-  emailEnabled      Boolean  @default(true)
-  voiceEnabled      Boolean  @default(false)
-  portalEnabled     Boolean  @default(true)
-  quietHoursStart   String? // 'HH:mm'
-  quietHoursEnd     String? // 'HH:mm'
-  frequencyCap      Int?     // Max messages per day/week
-  frequencyPeriod   String?  // 'day', 'week'
-  unsubscribeToken  String?  @unique
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id               String   @id @default(uuid())
+  practiceId       String
+  patientId        String   @unique
+  preferredChannel String   @default("email") // 'sms', 'email', 'voice', 'portal'
+  smsEnabled       Boolean  @default(true)
+  emailEnabled     Boolean  @default(true)
+  voiceEnabled     Boolean  @default(false)
+  portalEnabled    Boolean  @default(true)
+  quietHoursStart  String? // 'HH:mm'
+  quietHoursEnd    String? // 'HH:mm'
+  frequencyCap     Int? // Max messages per day/week
+  frequencyPeriod  String? // 'day', 'week'
+  unsubscribeToken String?  @unique
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
@@ -802,17 +829,17 @@ model CommunicationPreference {
 }
 
 model ConversationThread {
-  id          String   @id @default(uuid())
-  practiceId  String
-  patientId   String
-  subject     String?
-  status      String   @default("open") // 'open', 'closed', 'archived'
+  id            String    @id @default(uuid())
+  practiceId    String
+  patientId     String
+  subject       String?
+  status        String    @default("open") // 'open', 'closed', 'archived'
   lastMessageAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  practice Practice       @relation(fields: [practiceId], references: [id], onDelete: Cascade)
-  patient  Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  practice Practice        @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient  Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
   messages PortalMessage[]
 
   @@index([practiceId, patientId])
@@ -822,22 +849,22 @@ model ConversationThread {
 }
 
 model PortalMessage {
-  id          String   @id @default(uuid())
-  practiceId  String
-  patientId   String
-  threadId    String?
-  channel     String // 'PORTAL', 'SMS', 'EMAIL', 'VOICE'
-  direction   String // 'inbound', 'outbound'
-  subject     String?
-  body        String // For PORTAL, may include PHI
-  bodyHtml    String? // For EMAIL
-  metadata    Json? // Channel-specific data (Twilio SID, SendGrid ID, etc.)
-  status      String   @default("sent") // 'sent', 'delivered', 'read', 'failed'
-  readAt      DateTime?
-  createdAt   DateTime @default(now())
+  id         String    @id @default(uuid())
+  practiceId String
+  patientId  String
+  threadId   String?
+  channel    String // 'PORTAL', 'SMS', 'EMAIL', 'VOICE'
+  direction  String // 'inbound', 'outbound'
+  subject    String?
+  body       String // For PORTAL, may include PHI
+  bodyHtml   String? // For EMAIL
+  metadata   Json? // Channel-specific data (Twilio SID, SendGrid ID, etc.)
+  status     String    @default("sent") // 'sent', 'delivered', 'read', 'failed'
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
 
-  practice Practice           @relation(fields: [practiceId], references: [id], onDelete: Cascade)
-  patient  Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  practice Practice            @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient  Patient             @relation(fields: [patientId], references: [id], onDelete: Cascade)
   thread   ConversationThread? @relation(fields: [threadId], references: [id], onDelete: SetNull)
 
   @@index([practiceId, patientId])
@@ -848,18 +875,18 @@ model PortalMessage {
 }
 
 model PatientTask {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   practiceId  String
   patientId   String
   type        String // 'intake', 'document_upload', 'form_completion', 'payment', 'other'
   title       String
   description String?
-  status      String   @default("pending") // 'pending', 'in_progress', 'completed', 'cancelled'
+  status      String    @default("pending") // 'pending', 'in_progress', 'completed', 'cancelled'
   dueDate     DateTime?
   completedAt DateTime?
   metadata    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
@@ -871,16 +898,16 @@ model PatientTask {
 }
 
 model FormSubmission {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   practiceId  String
   patientId   String
   formType    String // 'intake', 'consent', 'registration', 'other'
   formData    Json // Structured form response
-  status      String   @default("submitted") // 'submitted', 'reviewed', 'approved'
-  submittedAt DateTime @default(now())
+  status      String    @default("submitted") // 'submitted', 'reviewed', 'approved'
+  submittedAt DateTime  @default(now())
   reviewedAt  DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
@@ -892,20 +919,20 @@ model FormSubmission {
 }
 
 model DocumentUpload {
-  id          String   @id @default(uuid())
-  practiceId  String
-  patientId   String
-  taskId      String? // Optional link to PatientTask
-  fileName    String
-  fileUrl     String
-  fileType    String? // MIME type
-  fileSize    Int? // Bytes
-  category    String? // 'insurance', 'id', 'medical_record', 'other'
-  status      String   @default("uploaded") // 'uploaded', 'reviewed', 'approved', 'rejected'
-  uploadedAt  DateTime @default(now())
-  reviewedAt  DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String    @id @default(uuid())
+  practiceId String
+  patientId  String
+  taskId     String? // Optional link to PatientTask
+  fileName   String
+  fileUrl    String
+  fileType   String? // MIME type
+  fileSize   Int? // Bytes
+  category   String? // 'insurance', 'id', 'medical_record', 'other'
+  status     String    @default("uploaded") // 'uploaded', 'reviewed', 'approved', 'rejected'
+  uploadedAt DateTime  @default(now())
+  reviewedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
@@ -917,19 +944,19 @@ model DocumentUpload {
 }
 
 model ReviewRequest {
-  id          String   @id @default(uuid())
-  practiceId  String
-  patientId   String
+  id            String    @id @default(uuid())
+  practiceId    String
+  patientId     String
   appointmentId String?
-  requestedAt DateTime @default(now())
-  sentAt      DateTime?
-  completedAt DateTime?
-  channel     String? // 'email', 'sms', 'portal'
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  requestedAt   DateTime  @default(now())
+  sentAt        DateTime?
+  completedAt   DateTime?
+  channel       String? // 'email', 'sms', 'portal'
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  practice Practice  @relation(fields: [practiceId], references: [id], onDelete: Cascade)
-  patient  Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  practice  Practice   @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient   Patient    @relation(fields: [patientId], references: [id], onDelete: Cascade)
   feedbacks Feedback[]
 
   @@index([practiceId, patientId])
@@ -938,21 +965,21 @@ model ReviewRequest {
 }
 
 model Feedback {
-  id            String   @id @default(uuid())
-  practiceId    String
-  patientId     String
+  id              String    @id @default(uuid())
+  practiceId      String
+  patientId       String
   reviewRequestId String?
-  type          String // 'nps', 'csat', 'review'
-  score         Int? // NPS: 0-10, CSAT: 1-5
-  comment       String?
-  isPublic      Boolean  @default(false) // For public review sites
-  isResolved    Boolean  @default(false)
-  resolvedAt    DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  type            String // 'nps', 'csat', 'review'
+  score           Int? // NPS: 0-10, CSAT: 1-5
+  comment         String?
+  isPublic        Boolean   @default(false) // For public review sites
+  isResolved      Boolean   @default(false)
+  resolvedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  practice     Practice      @relation(fields: [practiceId], references: [id], onDelete: Cascade)
-  patient      Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  practice      Practice       @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient       Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
   reviewRequest ReviewRequest? @relation(fields: [reviewRequestId], references: [id], onDelete: SetNull)
 
   @@index([practiceId, patientId])
@@ -962,16 +989,16 @@ model Feedback {
 }
 
 model ReferralLink {
-  id          String   @id @default(uuid())
-  practiceId  String
-  code        String   @unique
-  name        String?
-  expiresAt   DateTime?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String    @id @default(uuid())
+  practiceId String
+  code       String    @unique
+  name       String?
+  expiresAt  DateTime?
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
-  practice     Practice            @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  practice     Practice              @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   attributions ReferralAttribution[]
 
   @@index([practiceId])
@@ -980,16 +1007,16 @@ model ReferralLink {
 }
 
 model ReferralAttribution {
-  id            String   @id @default(uuid())
-  practiceId    String
-  patientId     String
-  referralLinkId String
+  id                  String   @id @default(uuid())
+  practiceId          String
+  patientId           String
+  referralLinkId      String
   referredByPatientId String? // If another patient referred them
-  source        String? // 'link', 'patient_referral'
-  createdAt     DateTime @default(now())
+  source              String? // 'link', 'patient_referral'
+  createdAt           DateTime @default(now())
 
-  practice     Practice    @relation(fields: [practiceId], references: [id], onDelete: Cascade)
-  patient      Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  practice     Practice     @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient      Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
   referralLink ReferralLink @relation(fields: [referralLinkId], references: [id], onDelete: Cascade)
 
   @@index([practiceId, patientId])
@@ -1008,8 +1035,8 @@ model Campaign {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  practice         Practice            @relation(fields: [practiceId], references: [id], onDelete: Cascade)
-  enrollments      CampaignEnrollment[]
+  practice    Practice             @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  enrollments CampaignEnrollment[]
 
   @@index([practiceId])
   @@index([practiceId, isActive])
@@ -1017,18 +1044,18 @@ model Campaign {
 }
 
 model CampaignEnrollment {
-  id          String   @id @default(uuid())
-  practiceId  String
-  patientId   String
-  campaignId  String
-  enrolledAt  DateTime @default(now())
-  status      String   @default("active") // 'active', 'paused', 'completed', 'unsubscribed'
+  id             String          @id @default(uuid())
+  practiceId     String
+  patientId      String
+  campaignId     String
+  enrolledAt     DateTime        @default(now())
+  status         String          @default("active") // 'active', 'paused', 'completed', 'unsubscribed'
   unsubscribedAt DateTime?
-  events      CampaignEvent[]
+  events         CampaignEvent[]
 
-  practice Practice        @relation(fields: [practiceId], references: [id], onDelete: Cascade)
-  patient  Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  campaign Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@unique([patientId, campaignId])
   @@index([practiceId, patientId])
@@ -1038,11 +1065,11 @@ model CampaignEnrollment {
 }
 
 model CampaignEvent {
-  id              String   @id @default(uuid())
-  enrollmentId    String
-  eventType       String // 'sent', 'delivered', 'opened', 'clicked', 'bounced', 'failed'
-  eventData       Json?
-  occurredAt      DateTime @default(now())
+  id           String   @id @default(uuid())
+  enrollmentId String
+  eventType    String // 'sent', 'delivered', 'opened', 'clicked', 'bounced', 'failed'
+  eventData    Json?
+  occurredAt   DateTime @default(now())
 
   enrollment CampaignEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
 
@@ -1073,14 +1100,14 @@ model PortalAuditLog {
 }
 
 model AnalyticsEvent {
-  id          String   @id @default(uuid())
-  practiceId  String
-  patientId   String?
-  eventType   String // 'page_view', 'action', 'conversion'
-  eventName   String
-  properties  Json?
-  sessionId   String?
-  createdAt   DateTime @default(now())
+  id         String   @id @default(uuid())
+  practiceId String
+  patientId  String?
+  eventType  String // 'page_view', 'action', 'conversion'
+  eventName  String
+  properties Json?
+  sessionId  String?
+  createdAt  DateTime @default(now())
 
   practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
 
