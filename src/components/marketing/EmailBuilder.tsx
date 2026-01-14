@@ -685,10 +685,6 @@ const EmailBuilder = forwardRef<EmailBuilderRef, EmailBuilderProps>(function Ema
               }
             }}
           />
-              }
-              setShowVariablePicker(!showVariablePicker)
-            }}
-          />
           {showVariablePicker && variablePickerPosition && (
             <div
               style={{
