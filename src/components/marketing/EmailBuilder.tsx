@@ -94,6 +94,8 @@ const EmailBuilder = forwardRef<EmailBuilderRef, EmailBuilderProps>(function Ema
   previewMode: externalPreviewMode,
   onPreviewModeChange,
 }, ref) {
+  const [savedBlocks, setSavedBlocks] = useState<Array<{ id: string; name: string; category?: string }>>([])
+  const [loadingSavedBlocks, setLoadingSavedBlocks] = useState(false)
   const [doc, setDoc] = useState<EmailDoc>(
     initialDoc || {
       rows: [
@@ -120,6 +122,25 @@ const EmailBuilder = forwardRef<EmailBuilderRef, EmailBuilderProps>(function Ema
   )
 
   const [selectedBlock, setSelectedBlock] = useState<{ rowId: string; colId: string; blockIndex: number } | null>(null)
+
+  // Load saved content blocks
+  useEffect(() => {
+    const loadSavedBlocks = async () => {
+      try {
+        setLoadingSavedBlocks(true)
+        const response = await fetch('/api/marketing/content-blocks')
+        if (response.ok) {
+          const data = await response.json()
+          setSavedBlocks(data.blocks || [])
+        }
+      } catch (error) {
+        console.error('Failed to load saved blocks:', error)
+      } finally {
+        setLoadingSavedBlocks(false)
+      }
+    }
+    loadSavedBlocks()
+  }, [])
   const [selectedRow, setSelectedRow] = useState<string | null>(null)
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>(externalPreviewMode || 'desktop')
   const [history, setHistory] = useState<EmailDoc[]>([doc])
@@ -553,11 +574,46 @@ const EmailBuilder = forwardRef<EmailBuilderRef, EmailBuilderProps>(function Ema
         {/* Block Palette */}
         <BlockPalette 
           onDragStart={(type) => {}} 
-          onAddSavedBlock={(block) => {
-            // TODO: Load saved block and add to canvas
-            console.log('Add saved block:', block)
+          onAddSavedBlock={async (block) => {
+            try {
+              const response = await fetch(`/api/marketing/content-blocks/${block.id}`)
+              if (response.ok) {
+                const data = await response.json()
+                const blockData = data.block.blockData
+                
+                if (data.block.blockType === 'row') {
+                  // Add as a new row
+                  const newDoc = { ...doc }
+                  newDoc.rows.push({
+                    ...blockData,
+                    id: `row-${Date.now()}`,
+                  })
+                  updateDoc(newDoc)
+                } else {
+                  // Add as a block to the first column of the first row
+                  if (doc.rows.length === 0) {
+                    addRow(1)
+                  }
+                  const firstRow = doc.rows[0]
+                  if (firstRow && firstRow.columns.length > 0) {
+                    const firstCol = firstRow.columns[0]
+                    const newDoc = { ...doc }
+                    const row = newDoc.rows.find((r) => r.id === firstRow.id)
+                    if (row) {
+                      const col = row.columns.find((c) => c.id === firstCol.id)
+                      if (col) {
+                        col.blocks.push(blockData)
+                        updateDoc(newDoc)
+                      }
+                    }
+                  }
+                }
+              }
+            } catch (error) {
+              console.error('Failed to load saved block:', error)
+            }
           }}
-          savedBlocks={[]}
+          savedBlocks={savedBlocks}
         />
 
         {/* Canvas */}
@@ -615,6 +671,20 @@ const EmailBuilder = forwardRef<EmailBuilderRef, EmailBuilderProps>(function Ema
               if (panel) {
                 const rect = panel.getBoundingClientRect()
                 setVariablePickerPosition({ x: rect.left - 400, y: rect.top })
+              }
+            }}
+            onSavedBlocksUpdate={async () => {
+              try {
+                const response = await fetch('/api/marketing/content-blocks')
+                if (response.ok) {
+                  const data = await response.json()
+                  setSavedBlocks(data.blocks || [])
+                }
+              } catch (error) {
+                console.error('Failed to reload saved blocks:', error)
+              }
+            }}
+          />
               }
               setShowVariablePicker(!showVariablePicker)
             }}
@@ -1749,6 +1819,45 @@ function PropertiesPanel({
           <Button variant="outline" size="sm" onClick={onDuplicate} className="w-full">
             <Copy className="h-3 w-3 mr-2" />
             Duplicate Block
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={async () => {
+              // Save block to content library
+              const name = prompt('Enter a name for this block:')
+              if (name) {
+                try {
+                  const response = await fetch('/api/marketing/content-blocks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      name,
+                      blockData: block,
+                      blockType: 'block',
+                      category: 'custom',
+                    }),
+                  })
+                  if (response.ok) {
+                    alert('Block saved to library!')
+                    // Reload saved blocks
+                    const blocksResponse = await fetch('/api/marketing/content-blocks')
+                    if (blocksResponse.ok) {
+                      if (onSavedBlocksUpdate) {
+                        onSavedBlocksUpdate()
+                      }
+                    }
+                  }
+                } catch (error) {
+                  console.error('Failed to save block:', error)
+                  alert('Failed to save block')
+                }
+              }
+            }}
+            className="w-full"
+          >
+            <Library className="h-3 w-3 mr-2" />
+            Save to Library
           </Button>
           <Button variant="destructive" size="sm" onClick={onDelete} className="w-full">
             <Trash2 className="h-3 w-3 mr-2" />
