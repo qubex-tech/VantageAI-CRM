@@ -64,6 +64,7 @@ export interface TextBlock {
     fontWeight?: string
     textAlign?: 'left' | 'center' | 'right'
     padding?: string
+    backgroundColor?: string
   }
 }
 
