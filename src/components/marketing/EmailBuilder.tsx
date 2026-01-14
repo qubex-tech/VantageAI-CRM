@@ -1150,6 +1150,86 @@ function BlockRenderer({
           )}
         </div>
       )
+    case 'social':
+      return (
+        <div className="p-4 bg-gray-50 border border-gray-200 rounded">
+          <div className="flex items-center justify-center gap-4">
+            {block.links?.map((link, idx) => (
+              <a
+                key={idx}
+                href={link.url || '#'}
+                className="text-gray-600 hover:text-gray-900"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {link.platform === 'facebook' && '📘'}
+                {link.platform === 'twitter' && '🐦'}
+                {link.platform === 'instagram' && '📷'}
+                {link.platform === 'linkedin' && '💼'}
+                {link.platform === 'youtube' && '📺'}
+                {link.platform === 'custom' && '🔗'}
+              </a>
+            ))}
+          </div>
+        </div>
+      )
+    case 'video':
+      return (
+        <div className="p-4">
+          {block.url ? (
+            <div className="relative aspect-video bg-gray-100 rounded border border-gray-200">
+              {block.thumbnail ? (
+                <img src={block.thumbnail} alt={block.alt || 'Video'} className="w-full h-full object-cover rounded" />
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <Play className="h-12 w-12 text-gray-400" />
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="p-8 text-center text-gray-400 border-2 border-dashed border-gray-300 rounded">
+              <Play className="h-8 w-8 mx-auto mb-2" />
+              <p className="text-sm">Add video URL</p>
+            </div>
+          )}
+        </div>
+      )
+    case 'html':
+      return (
+        <div className="p-4 bg-gray-50 border border-gray-200 rounded">
+          <div className="flex items-center gap-2 mb-2">
+            <Code className="h-4 w-4 text-gray-500" />
+            <span className="text-xs font-medium text-gray-700">HTML Code</span>
+          </div>
+          <div className="text-xs text-gray-600 font-mono bg-white p-2 rounded border border-gray-200 max-h-32 overflow-auto">
+            {block.content || '<!-- Add HTML code -->'}
+          </div>
+        </div>
+      )
+    case 'product':
+      return (
+        <div className="p-4 bg-gray-50 border border-gray-200 rounded">
+          <div className={`flex gap-4 ${block.style?.layout === 'vertical' ? 'flex-col' : 'flex-row'}`}>
+            {block.imageUrl && (
+              <img
+                src={block.imageUrl}
+                alt={block.name}
+                className={`${block.style?.layout === 'vertical' ? 'w-full' : 'w-32'} h-32 object-cover rounded`}
+              />
+            )}
+            <div className="flex-1">
+              <h3 className="font-semibold text-gray-900">{block.name}</h3>
+              {block.description && <p className="text-sm text-gray-600 mt-1">{block.description}</p>}
+              {block.price && <p className="text-lg font-bold text-gray-900 mt-2">{block.price}</p>}
+              {block.buttonLabel && (
+                <button className="mt-3 px-4 py-2 bg-blue-600 text-white rounded text-sm">
+                  {block.buttonLabel}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )
     default:
       return <div className="p-4">Unknown block type</div>
   }
