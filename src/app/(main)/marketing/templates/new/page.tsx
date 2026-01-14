@@ -284,6 +284,8 @@ export default function NewTemplatePage() {
           </form>
         </CardContent>
       </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
