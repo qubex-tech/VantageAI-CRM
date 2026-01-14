@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
       tenantId: user.practiceId,
       actorUserId: user.id,
       actorType: 'staff',
-      action: 'TEMPLATE_CREATED', // Using existing action type
+      action: 'TEMPLATE_CREATED',
       entityType: 'ContentBlock',
       entityId: block.id,
       metadata: { name: block.name, blockType: block.blockType },

@@ -14,7 +14,7 @@ export type MarketingAuditAction =
   | 'TEST_SENT'
   | 'ASSET_UPLOADED'
 
-export type MarketingEntityType = 'Template' | 'BrandProfile' | 'Senders' | 'Asset'
+export type MarketingEntityType = 'Template' | 'BrandProfile' | 'Senders' | 'Asset' | 'ContentBlock'
 
 interface MarketingAuditLogParams {
   tenantId: string
