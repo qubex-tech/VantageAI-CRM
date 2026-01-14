@@ -106,25 +106,31 @@ export default function PortalAuthPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email *</Label>
+                <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value)
+                    if (e.target.value) setPhone('') // Clear phone if email is entered
+                  }}
                   placeholder="your@email.com"
                 />
               </div>
               <div className="space-y-2">
-                <p className="text-sm text-gray-500">OR</p>
+                <p className="text-sm text-gray-500 text-center">OR</p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="phone">Phone *</Label>
+                <Label htmlFor="phone">Phone</Label>
                 <Input
                   id="phone"
                   type="tel"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  onChange={(e) => {
+                    setPhone(e.target.value)
+                    if (e.target.value) setEmail('') // Clear email if phone is entered
+                  }}
                   placeholder="+1234567890"
                 />
               </div>
