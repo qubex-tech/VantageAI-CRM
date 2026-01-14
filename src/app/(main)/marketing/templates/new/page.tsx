@@ -165,7 +165,7 @@ export default function NewTemplatePage() {
                             <p className="text-sm text-gray-600 mt-1">{template.description}</p>
                           </div>
                           <div className="flex flex-wrap gap-1">
-                            {template.tags.map((tag) => (
+                            {template.tags.map((tag: string) => (
                               <span
                                 key={tag}
                                 className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded"
