@@ -4,6 +4,7 @@ import { getPracticeContext } from '@/lib/tenant'
 import { patientOTPVerifySchema } from '@/lib/validations'
 import { verifyPatientOTP } from '@/lib/patient-auth'
 import { cookies } from 'next/headers'
+import { patientNameMatches } from '@/lib/name-matching'
 
 /**
  * POST /api/portal/auth/verify
@@ -13,11 +14,11 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const parsed = patientOTPVerifySchema.parse(body)
-    const { code } = parsed
+    const { code, fullName } = parsed
 
     // Get patient identifier from request
-    const email = body.email as string | undefined
-    const phone = body.phone as string | undefined
+    const email = parsed.email
+    const phone = parsed.phone
 
     if (!email && !phone) {
       return NextResponse.json(
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
     // If no practice found, we'll search across all practices
     const practiceContext = await getPracticeContext(req)
     
-    // Build patient search query
+    // Build patient search query (by email or phone)
     const phoneDigits = phone ? phone.replace(/[^\d]/g, '') : ''
     const patientWhere: any = {
       OR: email
@@ -47,20 +48,27 @@ export async function POST(req: NextRequest) {
       patientWhere.practiceId = practiceContext.practiceId
     }
 
-    // Find patient (across all practices if no domain context)
-    const patient = await prisma.patient.findFirst({
+    // Find patients (may return multiple if family shares contact info)
+    const patients = await prisma.patient.findMany({
       where: patientWhere,
       include: {
         patientAccount: true,
       },
     })
 
-    if (!patient || !patient.patientAccount) {
+    // Filter by name match (flexible matching)
+    const matchingPatient = patients.find(patient => 
+      patientNameMatches(patient, fullName)
+    )
+
+    if (!matchingPatient || !matchingPatient.patientAccount) {
       return NextResponse.json(
         { error: 'Invalid code' },
         { status: 401 }
       )
     }
+
+    const patient = matchingPatient
 
     // Use the patient's practiceId (found from patient record)
     const patientPracticeId = patient.practiceId

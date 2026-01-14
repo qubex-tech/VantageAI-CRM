@@ -14,6 +14,7 @@ export default function PortalAuthPage() {
   const [step, setStep] = useState<'request' | 'verify'>('request')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
+  const [fullName, setFullName] = useState('')
   const [code, setCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -27,7 +28,11 @@ export default function PortalAuthPage() {
       const response = await fetch('/api/portal/auth/otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email || undefined, phone: phone || undefined }),
+        body: JSON.stringify({ 
+          email: email || undefined, 
+          phone: phone || undefined,
+          fullName: fullName.trim(),
+        }),
       })
 
       if (!response.ok) {
@@ -56,6 +61,7 @@ export default function PortalAuthPage() {
           code,
           email: email || undefined,
           phone: phone || undefined,
+          fullName: fullName.trim(),
         }),
       })
 
@@ -81,7 +87,7 @@ export default function PortalAuthPage() {
           <CardTitle>Patient Portal</CardTitle>
           <CardDescription>
             {step === 'request'
-              ? 'Enter your email or phone number to receive a login code'
+              ? 'Enter your full name and email or phone number to receive a login code'
               : 'Enter the code sent to your email or phone'}
           </CardDescription>
         </CardHeader>
@@ -89,7 +95,18 @@ export default function PortalAuthPage() {
           {step === 'request' ? (
             <form onSubmit={handleRequestOTP} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email (optional)</Label>
+                <Label htmlFor="fullName">Full Name *</Label>
+                <Input
+                  id="fullName"
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="John Doe"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email *</Label>
                 <Input
                   id="email"
                   type="email"
@@ -99,7 +116,10 @@ export default function PortalAuthPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="phone">Phone (optional)</Label>
+                <p className="text-sm text-gray-500">OR</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phone">Phone *</Label>
                 <Input
                   id="phone"
                   type="tel"
@@ -108,8 +128,11 @@ export default function PortalAuthPage() {
                   placeholder="+1234567890"
                 />
               </div>
+              <p className="text-xs text-gray-500">
+                Please provide your full name and either email or phone number. This helps us identify you if you share contact information with family members.
+              </p>
               {error && <p className="text-sm text-red-600">{error}</p>}
-              <Button type="submit" className="w-full" disabled={loading || (!email && !phone)}>
+              <Button type="submit" className="w-full" disabled={loading || !fullName.trim() || (!email && !phone)}>
                 {loading ? 'Sending...' : 'Send Code'}
               </Button>
             </form>

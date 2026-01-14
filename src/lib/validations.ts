@@ -206,10 +206,14 @@ export const testSendSmsSchema = z.object({
 export const patientOTPRequestSchema = z.object({
   email: z.string().email().optional(),
   phone: z.string().optional(),
+  fullName: z.string().min(1, 'Full name is required'),
 })
 
 export const patientOTPVerifySchema = z.object({
   code: z.string().length(6),
+  email: z.string().email().optional(),
+  phone: z.string().optional(),
+  fullName: z.string().min(1, 'Full name is required'),
 })
 
 export const consentUpdateSchema = z.object({

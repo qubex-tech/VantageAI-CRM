@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { getPracticeContext } from '@/lib/tenant'
 import { patientOTPRequestSchema } from '@/lib/validations'
 import { createPatientOTP } from '@/lib/patient-auth'
+import { patientNameMatches } from '@/lib/name-matching'
 
 /**
  * POST /api/portal/auth/otp
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest) {
     // If no practice found, we'll search across all practices
     const practiceContext = await getPracticeContext(req)
     
-    // Build patient search query
+    // Build patient search query (by email or phone)
     const phoneDigits = parsed.phone ? parsed.phone.replace(/[^\d]/g, '') : ''
     const patientWhere: any = {
       OR: parsed.email
@@ -41,8 +42,8 @@ export async function POST(req: NextRequest) {
       patientWhere.practiceId = practiceContext.practiceId
     }
 
-    // Find patient by email or phone
-    const patient = await prisma.patient.findFirst({
+    // Find patients by email or phone (may return multiple if family shares contact info)
+    const patients = await prisma.patient.findMany({
       where: patientWhere,
       include: {
         practice: {
@@ -55,13 +56,20 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    if (!patient) {
+    // Filter by name match (flexible matching)
+    const matchingPatient = patients.find(patient => 
+      patientNameMatches(patient, parsed.fullName)
+    )
+
+    if (!matchingPatient) {
       // Don't reveal if patient exists (security)
       return NextResponse.json(
         { message: 'If an account exists, an OTP has been sent' },
         { status: 200 }
       )
     }
+
+    const patient = matchingPatient
 
     // Use the patient's practiceId (found from patient record)
     const patientPracticeId = patient.practiceId
