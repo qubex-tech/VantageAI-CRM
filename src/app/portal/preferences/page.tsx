@@ -5,15 +5,53 @@ import { format } from 'date-fns'
 import Link from 'next/link'
 import { BackButton } from '@/components/portal/BackButton'
 import { PreferencesForm } from './preferences-form'
+import { Label } from '@/components/ui/label'
 
 /**
- * Portal Preferences Page
- * Shows consent records and communication preferences
+ * Portal Profile and Preferences Page
+ * Shows patient profile information, consent records, and communication preferences
  */
 export default async function PortalPreferencesPage() {
   const session = await getPatientSession()
   
   if (!session) {
+    redirect('/portal/auth')
+  }
+  
+  // Get patient information
+  const patient = await prisma.patient.findUnique({
+    where: {
+      id: session.patientId,
+      practiceId: session.practiceId,
+    },
+    select: {
+      id: true,
+      name: true,
+      firstName: true,
+      lastName: true,
+      preferredName: true,
+      dateOfBirth: true,
+      email: true,
+      phone: true,
+      primaryPhone: true,
+      secondaryPhone: true,
+      addressLine1: true,
+      addressLine2: true,
+      city: true,
+      state: true,
+      postalCode: true,
+      address: true, // Legacy field
+      gender: true,
+      preferredContactMethod: true,
+      practice: {
+        select: {
+          name: true,
+        },
+      },
+    },
+  })
+  
+  if (!patient) {
     redirect('/portal/auth')
   }
   
@@ -51,11 +89,116 @@ export default async function PortalPreferencesPage() {
           <div className="mb-4">
             <BackButton />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900">Preferences</h1>
-          <p className="text-gray-600 mt-2">Manage your communication and consent preferences</p>
+          <h1 className="text-3xl font-bold text-gray-900">Profile and Preferences</h1>
+          <p className="text-gray-600 mt-2">View your profile information and manage your communication preferences</p>
         </div>
         
         <div className="space-y-6">
+          {/* Profile Information */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-xl font-semibold mb-4">Profile Information</h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Name */}
+              <div>
+                <Label className="text-sm font-medium text-gray-700">Full Name</Label>
+                <p className="mt-1 text-gray-900">
+                  {patient.preferredName || 
+                   (patient.firstName && patient.lastName 
+                     ? `${patient.firstName} ${patient.lastName}` 
+                     : patient.name || 'Not provided')}
+                </p>
+                {patient.preferredName && patient.firstName && patient.lastName && (
+                  <p className="mt-1 text-sm text-gray-500">
+                    Legal name: {patient.firstName} {patient.lastName}
+                  </p>
+                )}
+              </div>
+              
+              {/* Date of Birth */}
+              {patient.dateOfBirth && (
+                <div>
+                  <Label className="text-sm font-medium text-gray-700">Date of Birth</Label>
+                  <p className="mt-1 text-gray-900">
+                    {format(new Date(patient.dateOfBirth), 'MMMM d, yyyy')}
+                  </p>
+                </div>
+              )}
+              
+              {/* Email */}
+              <div>
+                <Label className="text-sm font-medium text-gray-700">Email Address</Label>
+                <p className="mt-1 text-gray-900">
+                  {patient.email || 'Not provided'}
+                </p>
+              </div>
+              
+              {/* Primary Phone */}
+              <div>
+                <Label className="text-sm font-medium text-gray-700">Primary Phone</Label>
+                <p className="mt-1 text-gray-900">
+                  {patient.primaryPhone || patient.phone || 'Not provided'}
+                </p>
+              </div>
+              
+              {/* Secondary Phone */}
+              {patient.secondaryPhone && (
+                <div>
+                  <Label className="text-sm font-medium text-gray-700">Secondary Phone</Label>
+                  <p className="mt-1 text-gray-900">
+                    {patient.secondaryPhone}
+                  </p>
+                </div>
+              )}
+              
+              {/* Gender */}
+              {patient.gender && (
+                <div>
+                  <Label className="text-sm font-medium text-gray-700">Gender</Label>
+                  <p className="mt-1 text-gray-900 capitalize">
+                    {patient.gender}
+                  </p>
+                </div>
+              )}
+              
+              {/* Address */}
+              {(patient.addressLine1 || patient.address) && (
+                <div className="md:col-span-2">
+                  <Label className="text-sm font-medium text-gray-700">Address</Label>
+                  <p className="mt-1 text-gray-900">
+                    {patient.addressLine1 || patient.address}
+                    {patient.addressLine2 && `, ${patient.addressLine2}`}
+                    {patient.city && `, ${patient.city}`}
+                    {patient.state && `, ${patient.state}`}
+                    {patient.postalCode && ` ${patient.postalCode}`}
+                  </p>
+                </div>
+              )}
+              
+              {/* Practice */}
+              <div>
+                <Label className="text-sm font-medium text-gray-700">Practice</Label>
+                <p className="mt-1 text-gray-900">
+                  {patient.practice.name}
+                </p>
+              </div>
+              
+              {/* Preferred Contact Method */}
+              {patient.preferredContactMethod && (
+                <div>
+                  <Label className="text-sm font-medium text-gray-700">Preferred Contact Method</Label>
+                  <p className="mt-1 text-gray-900 capitalize">
+                    {patient.preferredContactMethod}
+                  </p>
+                </div>
+              )}
+            </div>
+            
+            <p className="mt-4 text-xs text-gray-500">
+              To update your profile information, please contact your practice directly.
+            </p>
+          </div>
+          
           {/* Communication Preferences */}
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-xl font-semibold mb-4">Communication Preferences</h2>

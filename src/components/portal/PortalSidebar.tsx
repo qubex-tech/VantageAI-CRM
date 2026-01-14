@@ -20,7 +20,7 @@ const navItems = [
   { href: '/portal', label: 'Home', icon: Home },
   { href: '/portal/appointments', label: 'Appointments', icon: Calendar },
   { href: '/portal/messages', label: 'Messages', icon: MessageSquare },
-  { href: '/portal/preferences', label: 'Preferences', icon: Settings },
+  { href: '/portal/preferences', label: 'Profile and Preferences', icon: Settings },
   { href: '/portal/activity', label: 'Activity', icon: Activity },
 ]
 
