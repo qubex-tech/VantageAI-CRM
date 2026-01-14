@@ -1497,6 +1497,7 @@ function PropertiesPanel({
   onDuplicate,
   brandProfile,
   onShowVariablePicker,
+  onSavedBlocksUpdate,
 }: {
   block: Block | undefined
   doc: EmailDoc
@@ -1505,6 +1506,7 @@ function PropertiesPanel({
   onDuplicate: () => void
   brandProfile?: any
   onShowVariablePicker: () => void
+  onSavedBlocksUpdate?: () => Promise<void>
 }) {
   if (!block) {
     return (
