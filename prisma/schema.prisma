@@ -29,6 +29,7 @@ model Practice {
   calEventTypeMappings     CalEventTypeMapping[]
   retellIntegrations       RetellIntegration[]
   sendgridIntegrations     SendgridIntegration[]
+  twilioIntegrations       TwilioIntegration[]
   voiceConversations       VoiceConversation[]
   workflows                Workflow[]
   auditLogs                AuditLog[]
@@ -343,6 +344,23 @@ model SendgridIntegration {
 
   @@index([practiceId])
   @@map("sendgrid_integrations")
+}
+
+model TwilioIntegration {
+  id                   String   @id @default(uuid())
+  practiceId           String   @unique
+  accountSid           String
+  authToken            String
+  messagingServiceSid  String?
+  fromNumber           String?
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId])
+  @@map("twilio_integrations")
 }
 
 model VoiceConversation {

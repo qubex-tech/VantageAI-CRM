@@ -2,6 +2,7 @@ import { prisma } from './db'
 import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import { getSendgridClient } from './sendgrid'
+import { getTwilioClient } from './twilio'
 
 /**
  * Generate a 6-digit OTP code
@@ -105,10 +106,20 @@ This is an automated message from ${practiceName}. Please do not reply to this e
       
       return true
     } else if (channel === 'sms') {
-      // TODO: Integrate with Twilio for SMS
-      // For now, log the OTP (in production, this should send actual SMS)
-      console.log(`[SMS] OTP for ${recipient}: ${code}`)
-      console.warn('SMS OTP sending not yet implemented. Please configure Twilio integration.')
+      const twilioClient = await getTwilioClient(practiceId)
+      const result = await twilioClient.sendSms({
+        to: recipient,
+        body: `Your patient portal login code is ${code}. This code expires in 10 minutes.`,
+      })
+
+      if (!result.success) {
+        console.error(`Failed to send OTP SMS to ${recipient}:`, result.error)
+        if (process.env.NODE_ENV !== 'production') {
+          console.log(`[SMS] OTP for ${recipient}: ${code}`)
+        }
+        return false
+      }
+
       return true
     }
     

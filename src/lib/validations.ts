@@ -80,6 +80,18 @@ export const sendgridIntegrationSchema = z.object({
   fromName: z.string().optional(),
 })
 
+export const twilioIntegrationSchema = z.object({
+  accountSid: z.string().min(1, 'Account SID is required'),
+  authToken: z.string().min(1, 'Auth token is required'),
+  messagingServiceSid: z.string().optional().or(z.literal('')).transform(val => val === '' ? undefined : val),
+  fromNumber: z.string().optional().or(z.literal('')).transform(val => val === '' ? undefined : val),
+}).refine((data) => {
+  return Boolean(data.messagingServiceSid || data.fromNumber)
+}, {
+  message: 'Provide either a Messaging Service SID or a From Number',
+  path: ['messagingServiceSid'],
+})
+
 export const bookAppointmentSchema = z.object({
   patientId: z.string().uuid(),
   eventTypeId: z.string().min(1, 'Event type ID is required'),

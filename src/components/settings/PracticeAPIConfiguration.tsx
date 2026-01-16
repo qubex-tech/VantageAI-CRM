@@ -13,6 +13,7 @@ import { Loader2 } from 'lucide-react'
 import { CalSettings } from './CalSettings'
 import { RetellSettings } from './RetellSettings'
 import { SendgridSettings } from './SendgridSettings'
+import { TwilioSettings } from './TwilioSettings'
 
 interface Practice {
   id: string
@@ -27,6 +28,7 @@ export function PracticeAPIConfiguration() {
   const [calIntegration, setCalIntegration] = useState<any>(null)
   const [retellIntegration, setRetellIntegration] = useState<any>(null)
   const [sendgridIntegration, setSendgridIntegration] = useState<any>(null)
+  const [twilioIntegration, setTwilioIntegration] = useState<any>(null)
   const [eventTypeMappings, setEventTypeMappings] = useState<any[]>([])
 
   // Fetch all practices
@@ -55,6 +57,7 @@ export function PracticeAPIConfiguration() {
       setCalIntegration(null)
       setRetellIntegration(null)
       setSendgridIntegration(null)
+      setTwilioIntegration(null)
       setEventTypeMappings([])
       return
     }
@@ -88,6 +91,13 @@ export function PracticeAPIConfiguration() {
         if (sendgridResponse.ok) {
           const sendgridData = await sendgridResponse.json()
           setSendgridIntegration(sendgridData.integration)
+        }
+
+        // Fetch Twilio integration
+        const twilioResponse = await fetch(`/api/settings/twilio?practiceId=${selectedPracticeId}`)
+        if (twilioResponse.ok) {
+          const twilioData = await twilioResponse.json()
+          setTwilioIntegration(twilioData.integration)
         }
       } catch (error) {
         console.error('Error fetching integrations:', error)
@@ -175,6 +185,10 @@ export function PracticeAPIConfiguration() {
                 practiceId={selectedPracticeId}
                 initialIntegration={sendgridIntegration}
               />
+              <TwilioSettingsWithPracticeId
+                practiceId={selectedPracticeId}
+                initialIntegration={twilioIntegration}
+              />
             </>
           )}
         </div>
@@ -226,3 +240,12 @@ function SendgridSettingsWithPracticeId({
   return <SendgridSettings initialIntegration={initialIntegration} practiceId={practiceId} />
 }
 
+function TwilioSettingsWithPracticeId({
+  practiceId,
+  initialIntegration,
+}: {
+  practiceId: string
+  initialIntegration: any
+}) {
+  return <TwilioSettings initialIntegration={initialIntegration} practiceId={practiceId} />
+}

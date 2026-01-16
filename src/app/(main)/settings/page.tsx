@@ -6,6 +6,7 @@ import { isVantageAdmin, canConfigureAPIs } from '@/lib/permissions'
 import { CalSettings } from '@/components/settings/CalSettings'
 import { RetellSettings } from '@/components/settings/RetellSettings'
 import { SendgridSettings } from '@/components/settings/SendgridSettings'
+import { TwilioSettings } from '@/components/settings/TwilioSettings'
 import { PracticeManagement } from '@/components/settings/PracticeManagement'
 import { PracticeAPIConfiguration } from '@/components/settings/PracticeAPIConfiguration'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -52,6 +53,7 @@ export default async function SettingsPage() {
   let calIntegration = null
   let retellIntegration = null
   let sendgridIntegration = null
+  let twilioIntegration = null
 
   if (user.practiceId) {
     const practiceId = user.practiceId
@@ -74,6 +76,16 @@ export default async function SettingsPage() {
     } catch (error) {
       // Table might not exist if migration hasn't been run yet
       console.error('Error fetching SendGrid integration (table may not exist):', error)
+    }
+
+    // Fetch Twilio integration, handle gracefully if table doesn't exist yet
+    try {
+      twilioIntegration = await prisma.twilioIntegration.findUnique({
+        where: { practiceId: practiceId },
+      })
+    } catch (error) {
+      // Table might not exist if migration hasn't been run yet
+      console.error('Error fetching Twilio integration (table may not exist):', error)
     }
   }
 
@@ -130,6 +142,8 @@ export default async function SettingsPage() {
                 <RetellSettings initialIntegration={retellIntegration} />
 
                 <SendgridSettings initialIntegration={sendgridIntegration} />
+
+                <TwilioSettings initialIntegration={twilioIntegration} />
               </div>
             </TabsContent>
           )}

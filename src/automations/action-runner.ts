@@ -326,9 +326,34 @@ async function sendSms(
     }
   }
 
-  // For now, log SMS (Twilio integration can be added later)
-  // In production, you'd integrate with Twilio or SendGrid SMS API
-  console.log(`[AUTOMATION SMS] To: ${phoneNumber}, Message: ${args.message}`)
+  console.log(`[AUTOMATION SMS] Sending via Twilio:`, {
+    practiceId,
+    patientId: args.patientId,
+    to: phoneNumber,
+  })
+
+  let smsResult: { success: boolean; messageId?: string; error?: string }
+
+  try {
+    const { getTwilioClient } = await import('@/lib/twilio')
+    const twilioClient = await getTwilioClient(practiceId)
+    smsResult = await twilioClient.sendSms({
+      to: phoneNumber,
+      body: args.message,
+    })
+  } catch (error: any) {
+    return {
+      status: 'failed',
+      error: error?.message || 'Failed to send SMS via Twilio',
+    }
+  }
+
+  if (!smsResult.success) {
+    return {
+      status: 'failed',
+      error: smsResult.error || 'Failed to send SMS via Twilio',
+    }
+  }
 
   // Create a note to track SMS sent
   try {
@@ -345,13 +370,14 @@ async function sendSms(
     }))?.id
 
     if (automationUserId) {
+      const messageSuffix = smsResult.messageId ? ` (MessageId: ${smsResult.messageId})` : ''
       await prisma.patientNote.create({
         data: {
           patientId: args.patientId,
           practiceId,
           userId: automationUserId,
           type: 'contact',
-          content: `[Automation SMS] Sent to ${phoneNumber}: ${args.message}`,
+          content: `[Automation SMS] Sent to ${phoneNumber}${messageSuffix}: ${args.message}`,
         },
       })
     }
@@ -368,6 +394,7 @@ async function sendSms(
       description: `Sent to ${phoneNumber}: ${args.message.substring(0, 100)}${args.message.length > 100 ? '...' : ''}`,
       metadata: {
         phoneNumber,
+        messageId: smsResult.messageId,
         createdBy: 'automation',
       },
     })
@@ -382,7 +409,7 @@ async function sendSms(
       patientId: args.patientId,
       phoneNumber,
       message: args.message,
-      note: 'SMS logged (Twilio integration can be added for actual sending)',
+      messageId: smsResult.messageId,
     },
   }
 }
@@ -1009,8 +1036,34 @@ async function sendReminder(
       }
     }
   } else if (contactMethod === 'sms' && patient.phone) {
-    // Log SMS (Twilio integration can be added)
-    console.log(`[AUTOMATION REMINDER SMS] To: ${patient.phone}, Message: ${args.message}`)
+    console.log(`[AUTOMATION REMINDER SMS] Sending via Twilio:`, {
+      practiceId,
+      patientId: args.patientId,
+      to: patient.phone,
+    })
+
+    let smsResult: { success: boolean; messageId?: string; error?: string }
+
+    try {
+      const { getTwilioClient } = await import('@/lib/twilio')
+      const twilioClient = await getTwilioClient(practiceId)
+      smsResult = await twilioClient.sendSms({
+        to: patient.phone,
+        body: args.message,
+      })
+    } catch (error: any) {
+      return {
+        status: 'failed',
+        error: error?.message || 'Failed to send reminder SMS via Twilio',
+      }
+    }
+
+    if (!smsResult.success) {
+      return {
+        status: 'failed',
+        error: smsResult.error || 'Failed to send reminder SMS via Twilio',
+      }
+    }
     
     // Create a note to track reminder sent
     try {
@@ -1026,13 +1079,14 @@ async function sendReminder(
       }))?.id
 
       if (automationUserId) {
+        const messageSuffix = smsResult.messageId ? ` (MessageId: ${smsResult.messageId})` : ''
         await prisma.patientNote.create({
           data: {
             patientId: args.patientId,
             practiceId,
             userId: automationUserId,
             type: 'contact',
-            content: `[Automation Reminder SMS] Sent to ${patient.phone}: ${args.message}`,
+            content: `[Automation Reminder SMS] Sent to ${patient.phone}${messageSuffix}: ${args.message}`,
           },
         })
       }
@@ -1051,6 +1105,7 @@ async function sendReminder(
           reminderType: args.reminderType,
           method: 'sms',
           phoneNumber: patient.phone,
+          messageId: smsResult.messageId,
           createdBy: 'automation',
         },
       })
@@ -1065,7 +1120,7 @@ async function sendReminder(
         patientId: args.patientId,
         reminderType: args.reminderType,
         method: 'sms',
-        note: 'Reminder SMS logged (Twilio integration can be added)',
+        messageId: smsResult.messageId,
       },
     }
   } else {
