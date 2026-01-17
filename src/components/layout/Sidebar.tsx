@@ -27,7 +27,6 @@ const navItems = [
   { href: '/appointments', label: 'Appointments', icon: Calendar },
   { href: '/marketing', label: 'Marketing', icon: Megaphone },
   { href: '/calls', label: 'Calls', icon: Phone },
-  { href: '/automations/workflows', label: 'Workflows', icon: Workflow },
   { href: '/workflows/automations', label: 'Workflow Automations', icon: Zap },
   { href: '/settings', label: 'Settings', icon: Settings },
 ]
