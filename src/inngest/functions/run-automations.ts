@@ -48,6 +48,36 @@ function substituteVariables(args: any, eventData: Record<string, any>): any {
   return args
 }
 
+function buildAutomationContext(eventData: Record<string, any>) {
+  const patient = eventData.patient || {}
+  const appointment = eventData.appointment || {}
+  const appointmentStart = appointment.startTime ? new Date(appointment.startTime) : null
+  const nameParts = typeof patient.name === 'string' ? patient.name.split(' ') : []
+  const inferredFirstName = nameParts[0] || ''
+  const inferredLastName = nameParts.slice(1).join(' ') || ''
+
+  return {
+    ...eventData,
+    patient: {
+      ...patient,
+      firstName: patient.firstName || inferredFirstName,
+      lastName: patient.lastName || inferredLastName,
+      preferredName: patient.preferredName || patient.firstName || inferredFirstName,
+    },
+    appointment: {
+      ...appointment,
+      date: appointment.date || (appointmentStart ? appointmentStart.toLocaleDateString() : undefined),
+      time: appointment.time || (appointmentStart ? appointmentStart.toLocaleTimeString() : undefined),
+    },
+    links: {
+      confirm: '#',
+      reschedule: '#',
+      cancel: '#',
+      ...(eventData.links || {}),
+    },
+  }
+}
+
 /**
  * Event payload structure for crm/event.received
  */
@@ -191,7 +221,8 @@ export const runAutomationsForEvent = inngest.createFunction(
                 }
 
                 // Substitute variables in action args (e.g., {appointment.patientId} -> actual value)
-                let processedArgs = substituteVariables(rawArgs, payload.data)
+                const automationContext = buildAutomationContext(payload.data)
+                let processedArgs = substituteVariables(rawArgs, automationContext)
                 
                 // Auto-fill patientId from event data if missing and action requires it
                 const actionsRequiringPatientId = ['create_note', 'send_email', 'send_sms', 'send_reminder', 'update_patient_fields', 'tag_patient', 'create_insurance_policy']
