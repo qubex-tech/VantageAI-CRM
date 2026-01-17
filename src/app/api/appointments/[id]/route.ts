@@ -82,7 +82,12 @@ export async function PATCH(
           select: {
             id: true,
             name: true,
+            firstName: true,
+            lastName: true,
+            preferredName: true,
             phone: true,
+            primaryPhone: true,
+            secondaryPhone: true,
             email: true,
           },
         },
@@ -118,6 +123,7 @@ export async function PATCH(
           endTime: appointment.endTime.toISOString(),
           visitType: appointment.visitType,
         },
+        patient: appointment.patient,
         changes: validated,
         userId: user.id,
       },
@@ -138,6 +144,7 @@ export async function PATCH(
               status: appointment.status,
               visitType: appointment.visitType,
             },
+            patient: appointment.patient,
             userId: user.id,
           },
         })
@@ -154,6 +161,7 @@ export async function PATCH(
               status: appointment.status,
               visitType: appointment.visitType,
             },
+            patient: appointment.patient,
             userId: user.id,
           },
         })
@@ -170,6 +178,7 @@ export async function PATCH(
               status: appointment.status,
               visitType: appointment.visitType,
             },
+            patient: appointment.patient,
             userId: user.id,
           },
         })
@@ -224,7 +233,12 @@ export async function DELETE(
           select: {
             id: true,
             name: true,
+            firstName: true,
+            lastName: true,
+            preferredName: true,
             phone: true,
+            primaryPhone: true,
+            secondaryPhone: true,
             email: true,
           },
         },
@@ -254,6 +268,7 @@ export async function DELETE(
           endTime: appointment.endTime.toISOString(),
           visitType: appointment.visitType,
         },
+        patient: appointment.patient,
         userId: user.id,
       },
     })

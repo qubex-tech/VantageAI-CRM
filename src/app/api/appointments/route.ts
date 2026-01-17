@@ -107,7 +107,12 @@ export async function POST(req: NextRequest) {
             select: {
               id: true,
               name: true,
+              firstName: true,
+              lastName: true,
+              preferredName: true,
               phone: true,
+              primaryPhone: true,
+              secondaryPhone: true,
               email: true,
             },
           },
@@ -145,6 +150,7 @@ export async function POST(req: NextRequest) {
             endTime: appointment.endTime.toISOString(),
             visitType: appointment.visitType,
           },
+          patient: appointment.patient,
           userId: user.id,
         },
       })
@@ -165,7 +171,12 @@ export async function POST(req: NextRequest) {
           select: {
             id: true,
             name: true,
+            firstName: true,
+            lastName: true,
+            preferredName: true,
             phone: true,
+            primaryPhone: true,
+            secondaryPhone: true,
             email: true,
           },
         },
@@ -196,6 +207,7 @@ export async function POST(req: NextRequest) {
           endTime: appointment.endTime.toISOString(),
           visitType: appointment.visitType,
         },
+        patient: appointment.patient,
         userId: user.id,
       },
     })
