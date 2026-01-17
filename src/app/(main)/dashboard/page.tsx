@@ -90,6 +90,7 @@ export default async function DashboardPage() {
           id: true,
           name: true,
           phone: true,
+          primaryPhone: true,
         },
       },
     },
@@ -169,7 +170,7 @@ export default async function DashboardPage() {
                     className="block py-2 border-b border-gray-100 last:border-0 hover:bg-gray-50 -mx-2 px-2 rounded-md transition-colors"
                   >
                     <p className="text-sm font-medium text-gray-900">{patient.name}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{patient.phone}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{patient.primaryPhone || patient.phone}</p>
                   </Link>
                 ))
               )}

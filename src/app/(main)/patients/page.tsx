@@ -66,6 +66,7 @@ export default async function PatientsPage({
         ? [
             { name: { contains: search, mode: 'insensitive' as const } },
             { phone: { contains: search } },
+            { primaryPhone: { contains: search } },
             { email: { contains: search, mode: 'insensitive' as const } },
           ]
         : undefined,

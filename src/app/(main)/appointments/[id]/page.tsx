@@ -193,10 +193,10 @@ export default async function AppointmentDetailPage({
                 <p className="text-sm font-medium text-gray-500">Name</p>
                 <p className="text-sm text-gray-900 mt-1">{appointment.patient.name}</p>
               </div>
-              {appointment.patient.phone && (
+              {(appointment.patient.primaryPhone || appointment.patient.phone) && (
                 <div>
                   <p className="text-sm font-medium text-gray-500">Phone</p>
-                  <p className="text-sm text-gray-900 mt-1">{appointment.patient.phone}</p>
+                  <p className="text-sm text-gray-900 mt-1">{appointment.patient.primaryPhone || appointment.patient.phone}</p>
                 </div>
               )}
               {appointment.patient.email && (

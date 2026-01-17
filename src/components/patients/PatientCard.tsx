@@ -9,6 +9,7 @@ interface PatientCardProps {
     id: string
     name: string
     phone: string
+    primaryPhone?: string | null
     email?: string | null
     dateOfBirth: Date
     createdAt: Date
@@ -31,7 +32,7 @@ export function PatientCard({ patient }: PatientCardProps) {
         <CardContent className="space-y-2">
           <div className="text-sm text-gray-600 space-y-1">
             <p>Age: {age} years</p>
-            <p>Phone: {patient.phone}</p>
+            <p>Phone: {patient.primaryPhone || patient.phone}</p>
             {patient.email && <p>Email: {patient.email}</p>}
           </div>
           {patient._count && (

@@ -70,9 +70,10 @@ export function PatientsList({ initialPatients }: PatientsListProps) {
     // Basic search filter
     if (search) {
       const searchLower = search.toLowerCase()
+      const phoneNumber = patient.primaryPhone || patient.phone || ''
       const matchesSearch =
         patient.name.toLowerCase().includes(searchLower) ||
-        patient.phone.includes(search) ||
+        phoneNumber.includes(search) ||
         (patient.email && patient.email.toLowerCase().includes(searchLower))
       if (!matchesSearch) return false
     }
@@ -162,7 +163,7 @@ export function PatientsList({ initialPatients }: PatientsListProps) {
           fieldValue = patient.email || ''
           break
         case 'phone':
-          fieldValue = patient.phone
+          fieldValue = patient.primaryPhone || patient.phone || ''
           break
         case 'age':
           fieldValue = calculateAge(new Date(patient.dateOfBirth))
@@ -265,7 +266,7 @@ export function PatientsList({ initialPatients }: PatientsListProps) {
                           href={`/patients/${patient.id}`}
                           className="block text-sm text-gray-900"
                         >
-                          {patient.phone}
+                          {patient.primaryPhone || patient.phone}
                         </Link>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

@@ -101,6 +101,7 @@ export default async function AppointmentsPage({
           id: true,
           name: true,
           phone: true,
+          primaryPhone: true,
         },
       },
     },
