@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { ComposeEmail } from './ComposeEmail'
+import { ComposeSms } from './ComposeSms'
 import { PatientNotes } from './PatientNotes'
 import { useHealixOpen } from '@/components/healix/HealixButton'
 import Link from 'next/link'
@@ -38,6 +39,13 @@ import {
 } from 'lucide-react'
 import { format, formatDistanceToNow } from 'date-fns'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { EditPatientForm } from './EditPatientForm'
 import { cn } from '@/lib/utils'
 
@@ -137,6 +145,7 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
   const [sidebarTab, setSidebarTab] = useState<'details' | 'comments'>('details')
   const [isEditing, setIsEditing] = useState(false)
   const [composeEmailOpen, setComposeEmailOpen] = useState(false)
+  const [composeSmsOpen, setComposeSmsOpen] = useState(false)
   const [notesOpen, setNotesOpen] = useState(false)
   const [patientNotes, setPatientNotes] = useState<PatientNote[]>([])
   const [notesLoading, setNotesLoading] = useState(false)
@@ -267,16 +276,6 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0 ml-4">
-            <Button 
-              type="button"
-              variant="outline" 
-              size="sm" 
-              className="gap-2"
-              onClick={() => setComposeEmailOpen(true)}
-            >
-              <Mail className="h-4 w-4" />
-              Compose email
-            </Button>
             <Button variant="ghost" size="icon">
               <Clipboard className="h-4 w-4" />
             </Button>
@@ -289,9 +288,24 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
             <Button variant="ghost" size="icon">
               <CheckSquare className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="icon">
-              <Send className="h-4 w-4" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label="Send message">
+                  <Send className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Send message</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => setComposeEmailOpen(true)}>
+                  <Mail className="mr-2 h-4 w-4" />
+                  Email
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setComposeSmsOpen(true)}>
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  SMS
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button variant="ghost" size="icon">
               <Bell className="h-4 w-4" />
             </Button>
@@ -1133,6 +1147,15 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
         open={composeEmailOpen}
         onOpenChange={setComposeEmailOpen}
         patientEmail={patient.email || undefined}
+        patientName={patient.name}
+        patientId={patient.id}
+      />
+
+      {/* Compose SMS Dialog */}
+      <ComposeSms
+        open={composeSmsOpen}
+        onOpenChange={setComposeSmsOpen}
+        patientPhone={patient.primaryPhone || patient.phone || undefined}
         patientName={patient.name}
         patientId={patient.id}
       />
