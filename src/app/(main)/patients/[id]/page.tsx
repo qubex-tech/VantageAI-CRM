@@ -40,7 +40,7 @@ export default async function PatientDetailPage({
   if (!user.practiceId) {
     notFound()
   }
-  const practiceId = user.practiceId
+  const practiceId: string = user.practiceId as string
 
   const patient = await prisma.patient.findFirst({
     where: {
@@ -68,20 +68,6 @@ export default async function PatientDetailPage({
       </div>
     )
   }
-
-  // Debug: Log appointments count
-  console.log('[PatientDetailPage] Patient appointments count:', patient.appointments?.length || 0)
-  console.log('[PatientDetailPage] Patient ID:', patient.id)
-  console.log('[PatientDetailPage] Practice ID:', practiceId)
-  
-  // Also verify appointments exist for this patient directly
-  const directAppointmentCount = await prisma.appointment.count({
-    where: {
-      patientId: patient.id,
-      practiceId: practiceId,
-    },
-  })
-  console.log('[PatientDetailPage] Direct appointment count query:', directAppointmentCount)
 
   return <PatientDetailView patient={patient} />
 }

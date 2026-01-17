@@ -45,13 +45,14 @@ export default async function NewAppointmentPage({
   if (!user.practiceId) {
     redirect('/patients')
   }
-  const practiceId = user.practiceId!
+  // TypeScript type narrowing - after the check above, practiceId is guaranteed to be non-null
+  const practiceId: string = user.practiceId as string
 
   // Fetch patient
   const patient = await prisma.patient.findFirst({
     where: {
       id: params.patientId,
-      practiceId: practiceId as string,
+      practiceId,
       deletedAt: null,
     },
   })
