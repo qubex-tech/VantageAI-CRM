@@ -93,6 +93,34 @@ export async function PATCH(
     const updateData: any = { ...validated }
     delete updateData.tags
 
+    // Ensure required fields are maintained if not provided
+    // Phone is required in Prisma schema, so ensure it's set
+    if (!updateData.phone && !updateData.primaryPhone) {
+      // Keep existing phone if not updating
+      updateData.phone = existing.phone
+    } else if (updateData.primaryPhone && !updateData.phone) {
+      // Use primaryPhone as phone if phone not provided
+      updateData.phone = updateData.primaryPhone
+    } else if (updateData.phone && !updateData.primaryPhone) {
+      // Use phone as primaryPhone if primaryPhone not provided
+      updateData.primaryPhone = updateData.phone
+    }
+
+    // Ensure name is set (required in Prisma)
+    if (!updateData.name) {
+      // Construct from firstName/lastName if available, otherwise keep existing
+      if (updateData.firstName || updateData.lastName) {
+        updateData.name = [updateData.firstName, updateData.lastName].filter(Boolean).join(' ').trim() || existing.name
+      } else {
+        updateData.name = existing.name
+      }
+    }
+
+    // Ensure preferredContactMethod is set (required in Prisma)
+    if (!updateData.preferredContactMethod) {
+      updateData.preferredContactMethod = existing.preferredContactMethod
+    }
+
     const patient = await prisma.patient.update({
       where: { id },
       data: updateData,

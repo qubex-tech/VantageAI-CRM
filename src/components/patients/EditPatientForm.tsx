@@ -154,59 +154,133 @@ export function EditPatientForm({ patient, onCancel, onSuccess }: EditPatientFor
       return value && value.trim() ? value.trim() : null
     }
 
-    // Build update data - include all fields that have been modified
+    // Build update data - only include fields that have values or need to be updated
     const updateData: any = {}
 
-    // Legacy fields - ensure name and phone are set
+    // Legacy fields - ensure name and phone are always set (required by Prisma)
     const displayName = formData.name || (formData.firstName && formData.lastName ? `${formData.firstName} ${formData.lastName}`.trim() : formData.firstName || formData.lastName)
-    updateData.name = displayName || toNullIfEmpty(displayName) || ''
-    const phoneValue = formData.primaryPhone || formData.phone
+    // Always set name - use existing if not provided
+    updateData.name = displayName && displayName.trim() ? displayName.trim() : patient.name
+    
+    // Phone handling - ensure phone is always set (required by Prisma)
+    const primaryPhoneValue = formData.primaryPhone?.trim() || ''
+    const phoneValue = formData.phone?.trim() || primaryPhoneValue || patient.phone || patient.primaryPhone || ''
+    
     if (phoneValue) {
       updateData.phone = phoneValue
-      updateData.primaryPhone = formData.primaryPhone || phoneValue
     }
-    updateData.preferredContactMethod = formData.preferredContactMethod
+    
+    // Set primaryPhone if provided, otherwise use phone value
+    if (primaryPhoneValue) {
+      updateData.primaryPhone = primaryPhoneValue
+    } else if (phoneValue && phoneValue !== patient.primaryPhone) {
+      updateData.primaryPhone = phoneValue
+    }
+    
+    // Only update preferredContactMethod if it changed
+    if (formData.preferredContactMethod && formData.preferredContactMethod !== patient.preferredContactMethod) {
+      updateData.preferredContactMethod = formData.preferredContactMethod
+    }
 
-    // Basic Information
-    updateData.externalEhrId = toNullIfEmpty(formData.externalEhrId)
-    updateData.firstName = toNullIfEmpty(formData.firstName)
-    updateData.lastName = toNullIfEmpty(formData.lastName)
-    updateData.preferredName = toNullIfEmpty(formData.preferredName)
-    updateData.dateOfBirth = formData.dateOfBirth ? formData.dateOfBirth : null
+    // Basic Information - only include if changed
+    if (formData.externalEhrId !== (patient.externalEhrId || '')) {
+      updateData.externalEhrId = toNullIfEmpty(formData.externalEhrId)
+    }
+    if (formData.firstName !== (patient.firstName || '')) {
+      updateData.firstName = toNullIfEmpty(formData.firstName)
+    }
+    if (formData.lastName !== (patient.lastName || '')) {
+      updateData.lastName = toNullIfEmpty(formData.lastName)
+    }
+    if (formData.preferredName !== (patient.preferredName || '')) {
+      updateData.preferredName = toNullIfEmpty(formData.preferredName)
+    }
+    if (formData.dateOfBirth !== formatDateForInput(patient.dateOfBirth)) {
+      updateData.dateOfBirth = formData.dateOfBirth ? formData.dateOfBirth : null
+    }
 
-    // Contact Information
-    updateData.primaryPhone = toNullIfEmpty(formData.primaryPhone) || phoneValue || null
-    updateData.secondaryPhone = toNullIfEmpty(formData.secondaryPhone)
-    updateData.email = toNullIfEmpty(formData.email)
-    updateData.addressLine1 = toNullIfEmpty(formData.addressLine1)
-    updateData.addressLine2 = toNullIfEmpty(formData.addressLine2)
-    updateData.city = toNullIfEmpty(formData.city)
-    updateData.state = toNullIfEmpty(formData.state)
-    updateData.postalCode = toNullIfEmpty(formData.postalCode)
-    updateData.gender = formData.gender ? formData.gender : null
-    updateData.pronouns = toNullIfEmpty(formData.pronouns)
-    updateData.primaryLanguage = toNullIfEmpty(formData.primaryLanguage)
+    // Contact Information - only include if changed
+    if (formData.secondaryPhone !== (patient.secondaryPhone || '')) {
+      updateData.secondaryPhone = toNullIfEmpty(formData.secondaryPhone)
+    }
+    if (formData.email !== (patient.email || '')) {
+      updateData.email = toNullIfEmpty(formData.email)
+    }
+    if (formData.addressLine1 !== (patient.addressLine1 || patient.address || '')) {
+      updateData.addressLine1 = toNullIfEmpty(formData.addressLine1)
+    }
+    if (formData.addressLine2 !== (patient.addressLine2 || '')) {
+      updateData.addressLine2 = toNullIfEmpty(formData.addressLine2)
+    }
+    if (formData.city !== (patient.city || '')) {
+      updateData.city = toNullIfEmpty(formData.city)
+    }
+    if (formData.state !== (patient.state || '')) {
+      updateData.state = toNullIfEmpty(formData.state)
+    }
+    if (formData.postalCode !== (patient.postalCode || '')) {
+      updateData.postalCode = toNullIfEmpty(formData.postalCode)
+    }
+    if (formData.gender !== (patient.gender || '')) {
+      updateData.gender = formData.gender ? formData.gender : null
+    }
+    if (formData.pronouns !== (patient.pronouns || '')) {
+      updateData.pronouns = toNullIfEmpty(formData.pronouns)
+    }
+    if (formData.primaryLanguage !== (patient.primaryLanguage || '')) {
+      updateData.primaryLanguage = toNullIfEmpty(formData.primaryLanguage)
+    }
 
-    // Communication Preferences & Consent
-    updateData.preferredChannel = formData.preferredChannel ? formData.preferredChannel : null
-    updateData.smsOptIn = formData.smsOptIn
-    updateData.smsOptInAt = formData.smsOptInAt ? formData.smsOptInAt : null
-    updateData.emailOptIn = formData.emailOptIn
-    updateData.voiceOptIn = formData.voiceOptIn
-    updateData.doNotContact = formData.doNotContact
-    updateData.quietHoursStart = toNullIfEmpty(formData.quietHoursStart)
-    updateData.quietHoursEnd = toNullIfEmpty(formData.quietHoursEnd)
-    updateData.consentSource = formData.consentSource ? formData.consentSource : null
+    // Communication Preferences & Consent - only include if changed
+    if (formData.preferredChannel !== (patient.preferredChannel || patient.preferredContactMethod || '')) {
+      updateData.preferredChannel = formData.preferredChannel ? formData.preferredChannel : null
+    }
+    if (formData.smsOptIn !== (patient.smsOptIn ?? false)) {
+      updateData.smsOptIn = formData.smsOptIn
+    }
+    if (formData.smsOptInAt !== formatDateForInput(patient.smsOptInAt)) {
+      updateData.smsOptInAt = formData.smsOptInAt ? formData.smsOptInAt : null
+    }
+    if (formData.emailOptIn !== (patient.emailOptIn ?? false)) {
+      updateData.emailOptIn = formData.emailOptIn
+    }
+    if (formData.voiceOptIn !== (patient.voiceOptIn ?? false)) {
+      updateData.voiceOptIn = formData.voiceOptIn
+    }
+    if (formData.doNotContact !== (patient.doNotContact ?? false)) {
+      updateData.doNotContact = formData.doNotContact
+    }
+    if (formData.quietHoursStart !== (patient.quietHoursStart || '')) {
+      updateData.quietHoursStart = toNullIfEmpty(formData.quietHoursStart)
+    }
+    if (formData.quietHoursEnd !== (patient.quietHoursEnd || '')) {
+      updateData.quietHoursEnd = toNullIfEmpty(formData.quietHoursEnd)
+    }
+    if (formData.consentSource !== (patient.consentSource || '')) {
+      updateData.consentSource = formData.consentSource ? formData.consentSource : null
+    }
 
-    // Insurance Summary
-    updateData.primaryInsuranceId = toNullIfEmpty(formData.primaryInsuranceId)
-    updateData.secondaryInsuranceId = toNullIfEmpty(formData.secondaryInsuranceId)
-    updateData.insuranceStatus = formData.insuranceStatus ? formData.insuranceStatus : null
-    updateData.lastInsuranceVerifiedAt = formData.lastInsuranceVerifiedAt ? formData.lastInsuranceVerifiedAt : null
-    updateData.selfPay = formData.selfPay
+    // Insurance Summary - only include if changed
+    if (formData.primaryInsuranceId !== (patient.primaryInsuranceId || '')) {
+      updateData.primaryInsuranceId = toNullIfEmpty(formData.primaryInsuranceId)
+    }
+    if (formData.secondaryInsuranceId !== (patient.secondaryInsuranceId || '')) {
+      updateData.secondaryInsuranceId = toNullIfEmpty(formData.secondaryInsuranceId)
+    }
+    if (formData.insuranceStatus !== (patient.insuranceStatus || '')) {
+      updateData.insuranceStatus = formData.insuranceStatus ? formData.insuranceStatus : null
+    }
+    if (formData.lastInsuranceVerifiedAt !== formatDateForInput(patient.lastInsuranceVerifiedAt)) {
+      updateData.lastInsuranceVerifiedAt = formData.lastInsuranceVerifiedAt ? formData.lastInsuranceVerifiedAt : null
+    }
+    if (formData.selfPay !== (patient.selfPay ?? false)) {
+      updateData.selfPay = formData.selfPay
+    }
 
-    // Legacy
-    updateData.notes = toNullIfEmpty(formData.notes)
+    // Legacy - only include if changed
+    if (formData.notes !== (patient.notes || '')) {
+      updateData.notes = toNullIfEmpty(formData.notes)
+    }
 
     try {
       const response = await fetch(`/api/patients/${patient.id}`, {
@@ -216,8 +290,22 @@ export function EditPatientForm({ patient, onCancel, onSuccess }: EditPatientFor
       })
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to update patient')
+        const errorData = await response.json()
+        // Provide more detailed error messages
+        let errorMessage = errorData.error || 'Failed to update patient'
+        if (errorData.details) {
+          // Handle Zod validation errors
+          if (Array.isArray(errorData.details.issues)) {
+            const issues = errorData.details.issues.map((issue: any) => {
+              const path = issue.path?.join('.') || 'field'
+              return `${path}: ${issue.message}`
+            }).join(', ')
+            errorMessage = `Validation error: ${issues}`
+          } else {
+            errorMessage = `${errorMessage}: ${JSON.stringify(errorData.details)}`
+          }
+        }
+        throw new Error(errorMessage)
       }
 
       if (onSuccess) {
@@ -340,9 +428,19 @@ export function EditPatientForm({ patient, onCancel, onSuccess }: EditPatientFor
                       id="primaryPhone"
                       type="tel"
                       value={formData.primaryPhone}
-                      onChange={(e) => setFormData({ ...formData, primaryPhone: e.target.value })}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        setFormData({ 
+                          ...formData, 
+                          primaryPhone: value,
+                          // Sync phone field if it's empty
+                          phone: formData.phone || value
+                        })
+                      }}
                       required
+                      placeholder="e.g., +1-555-123-4567"
                     />
+                    <p className="text-xs text-gray-500">This will also update the legacy phone field</p>
                   </div>
 
                   <div className="space-y-2">
@@ -689,16 +787,26 @@ export function EditPatientForm({ patient, onCancel, onSuccess }: EditPatientFor
             </div>
 
             {error && (
-              <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">{error}</div>
+              <div className="text-sm text-red-600 bg-red-50 border border-red-200 p-3 rounded-md flex items-start gap-2">
+                <span className="font-medium">Error:</span>
+                <span className="flex-1">{error}</span>
+              </div>
             )}
 
-            <div className="flex gap-3 pt-4">
+            <div className="flex gap-3 pt-4 border-t border-gray-200">
               <Button
                 type="submit"
                 className="flex-1 bg-gray-900 hover:bg-gray-800 text-white"
                 disabled={loading}
               >
-                {loading ? 'Saving...' : 'Save Changes'}
+                {loading ? (
+                  <>
+                    <span className="inline-block animate-spin mr-2">⏳</span>
+                    Saving...
+                  </>
+                ) : (
+                  'Save Changes'
+                )}
               </Button>
               {onCancel && (
                 <Button
