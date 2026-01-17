@@ -4,32 +4,38 @@ import { evaluateConditions } from '@/automations/condition-evaluator'
 import { runAction } from '@/automations/action-runner'
 
 /**
- * Substitute variables in action args (e.g., {appointment.patientId} -> actual value)
+ * Substitute variables in action args (e.g., {appointment.patientId} or {{patient.firstName}})
  */
 function substituteVariables(args: any, eventData: Record<string, any>): any {
+  const resolvePath = (rawPath: string, match: string) => {
+    const path = String(rawPath).trim()
+    const keys = path.split('.')
+    let value: any = eventData
+    for (const key of keys) {
+      if (value && typeof value === 'object' && key in value) {
+        value = value[key]
+      } else {
+        console.warn(`[AUTOMATION] Variable not found: ${path} in eventData`, {
+          path,
+          availableKeys: Object.keys(eventData),
+          eventData,
+        })
+        return match // Return original if path not found
+      }
+    }
+    const finalValue = value !== undefined && value !== null ? String(value) : match
+    if (finalValue === match) {
+      console.warn(`[AUTOMATION] Variable substitution failed for ${path}, keeping placeholder`)
+    }
+    return finalValue
+  }
+
   if (typeof args === 'string') {
-    // Replace {variable.path} with actual values
-    return args.replace(/\{([^}]+)\}/g, (match, path) => {
-      const keys = path.split('.')
-      let value: any = eventData
-      for (const key of keys) {
-        if (value && typeof value === 'object' && key in value) {
-          value = value[key]
-        } else {
-          console.warn(`[AUTOMATION] Variable not found: ${path} in eventData`, {
-            path,
-            availableKeys: Object.keys(eventData),
-            eventData,
-          })
-          return match // Return original if path not found
-        }
-      }
-      const finalValue = value !== undefined && value !== null ? String(value) : match
-      if (finalValue === match) {
-        console.warn(`[AUTOMATION] Variable substitution failed for ${path}, keeping placeholder`)
-      }
-      return finalValue
-    })
+    // Replace {{variable.path}} (marketing-style) first
+    let substituted = args.replace(/\{\{([^}]+)\}\}/g, (match, path) => resolvePath(path, match))
+    // Replace {variable.path} (legacy) while avoiding double-brace matches
+    substituted = substituted.replace(/(?<!\{)\{([^}]+)\}(?!\})/g, (match, path) => resolvePath(path, match))
+    return substituted
   } else if (Array.isArray(args)) {
     return args.map(item => substituteVariables(item, eventData))
   } else if (args && typeof args === 'object') {

@@ -523,22 +523,37 @@ async function sendEmail(
       // Render email body based on editor type
       if (template.editorType === 'dragdrop' && template.bodyJson) {
         // Drag-and-drop template: render from JSON
-        const rendered = renderEmailFromJson(
-          template.bodyJson as any,
-          brandProfile,
-          context
-        )
-        emailBodyHtml = rendered.html
-        emailBodyText = rendered.text
-      } else if (template.editorType === 'html' && template.bodyHtml) {
+        let bodyJson = template.bodyJson as any
+        if (typeof bodyJson === 'string') {
+          try {
+            bodyJson = JSON.parse(bodyJson)
+          } catch (parseError) {
+            console.warn(`[AUTOMATION] Failed to parse bodyJson for template ${template.id}:`, parseError)
+            bodyJson = null
+          }
+        }
+        if (bodyJson && bodyJson.rows) {
+          const rendered = renderEmailFromJson(
+            bodyJson,
+            brandProfile,
+            context
+          )
+          emailBodyHtml = rendered.html
+          emailBodyText = rendered.text
+        } else {
+          // Fallback to HTML/text if dragdrop JSON is invalid
+          console.warn(`[AUTOMATION] Dragdrop template missing valid bodyJson, falling back to HTML/text`)
+        }
+      }
+      if (!emailBodyHtml && template.editorType === 'html' && template.bodyHtml) {
         // HTML template: replace variables in HTML
         emailBodyHtml = replaceVariables(template.bodyHtml, context)
         emailBodyText = emailBodyHtml.replace(/<[^>]+>/g, '').replace(/\n/g, ' ')
-      } else if (template.bodyText) {
+      } else if (!emailBodyHtml && template.bodyText) {
         // Plain text template
         emailBodyText = replaceVariables(template.bodyText, context)
         emailBodyHtml = emailBodyText.replace(/\n/g, '<br>')
-      } else {
+      } else if (!emailBodyHtml) {
         return {
           status: 'failed',
           error: 'Template has no content to render',

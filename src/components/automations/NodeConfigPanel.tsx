@@ -654,7 +654,7 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                     />
                   )}
                   <p className="text-xs text-gray-500 mt-1">
-                    Use {'{{'}variable{'}}'} syntax for personalization (e.g., {'{{'}patient.firstName{'}}'})
+                    Use {'{{'}variable{'}}'} or {'{'}variable{'}'} for personalization (e.g., {'{{'}patient.firstName{'}}'})
                   </p>
                 </div>
               </div>
