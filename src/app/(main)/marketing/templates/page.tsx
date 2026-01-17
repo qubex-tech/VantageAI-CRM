@@ -193,6 +193,13 @@ function TemplatesList() {
                         </h3>
                       </Link>
                       <span className={`px-2 py-0.5 text-xs rounded-full ${
+                        template.channel === 'email'
+                          ? 'bg-blue-50 text-blue-700'
+                          : 'bg-purple-50 text-purple-700'
+                      }`}>
+                        {template.channel === 'email' ? 'Email' : 'SMS'}
+                      </span>
+                      <span className={`px-2 py-0.5 text-xs rounded-full ${
                         template.status === 'published' 
                           ? 'bg-green-100 text-green-700' 
                           : template.status === 'archived'

@@ -3,7 +3,7 @@
 
 import { EmailDoc } from './types'
 
-export interface TemplateLibraryItem {
+interface BaseTemplateLibraryItem {
   id: string
   name: string
   description: string
@@ -11,9 +11,20 @@ export interface TemplateLibraryItem {
   channel: 'email' | 'sms'
   thumbnail?: string
   preview?: string
-  template: EmailDoc
   tags: string[]
 }
+
+export interface EmailTemplateLibraryItem extends BaseTemplateLibraryItem {
+  channel: 'email'
+  template: EmailDoc
+}
+
+export interface SmsTemplateLibraryItem extends BaseTemplateLibraryItem {
+  channel: 'sms'
+  bodyText: string
+}
+
+export type TemplateLibraryItem = EmailTemplateLibraryItem | SmsTemplateLibraryItem
 
 export const TEMPLATE_LIBRARY: TemplateLibraryItem[] = [
   // Appointment Reminder Email
@@ -544,6 +555,39 @@ export const TEMPLATE_LIBRARY: TemplateLibraryItem[] = [
         linkColor: '#2563eb',
       },
     },
+  },
+  // Appointment Reminder SMS
+  {
+    id: 'appointment-reminder-sms',
+    name: 'Appointment Reminder (SMS)',
+    description: 'Short reminder with date/time and quick actions',
+    category: 'reminder',
+    channel: 'sms',
+    tags: ['appointment', 'reminder', 'sms'],
+    bodyText:
+      'Hi {{patient.firstName}}, reminder: your appointment is {{appointment.date}} at {{appointment.time}} with {{practice.name}}. Confirm: {{links.confirm}}. Reply STOP to opt out.',
+  },
+  // Appointment Confirmation SMS
+  {
+    id: 'appointment-confirmation-sms',
+    name: 'Appointment Confirmation (SMS)',
+    description: 'Confirmation message right after booking',
+    category: 'confirmation',
+    channel: 'sms',
+    tags: ['appointment', 'confirmation', 'sms'],
+    bodyText:
+      'Thanks {{patient.firstName}}! Your appointment is confirmed for {{appointment.date}} at {{appointment.time}}. Need changes? {{links.reschedule}}. Reply STOP to opt out.',
+  },
+  // Review Request SMS
+  {
+    id: 'review-request-sms',
+    name: 'Review Request (SMS)',
+    description: 'Quick review request with link',
+    category: 'reviews',
+    channel: 'sms',
+    tags: ['review', 'feedback', 'sms'],
+    bodyText:
+      'Hi {{patient.firstName}}, thanks for visiting {{practice.name}}. Please share your feedback: {{links.confirm}}. Reply STOP to opt out.',
   },
 ]
 

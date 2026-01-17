@@ -146,6 +146,12 @@ export default function TemplateEditor({ template: initialTemplate, brandProfile
     }
   }, [bodyText, bodyHtml, template.channel])
 
+  useEffect(() => {
+    if (template.channel === 'sms' && editorType !== 'plaintext') {
+      setEditorType('plaintext')
+    }
+  }, [template.channel, editorType])
+
   const handleSave = async () => {
     setError('')
     setSaving(true)
@@ -155,7 +161,7 @@ export default function TemplateEditor({ template: initialTemplate, brandProfile
         name,
         subject: template.channel === 'email' ? subject : null,
         preheader: template.channel === 'email' ? preheader : null,
-        editorType,
+        editorType: template.channel === 'sms' ? 'plaintext' : editorType,
       }
 
       if (template.channel === 'sms') {
@@ -360,6 +366,13 @@ export default function TemplateEditor({ template: initialTemplate, brandProfile
             )}
             <span className="font-medium text-gray-900">{name}</span>
             <span className={`px-2 py-0.5 text-xs rounded-full ${
+              template.channel === 'email'
+                ? 'bg-blue-50 text-blue-700'
+                : 'bg-purple-50 text-purple-700'
+            }`}>
+              {template.channel === 'email' ? 'Email' : 'SMS'}
+            </span>
+            <span className={`px-2 py-0.5 text-xs rounded-full ${
               template.status === 'published' 
                 ? 'bg-green-100 text-green-700' 
                 : template.status === 'archived'
@@ -539,6 +552,10 @@ export default function TemplateEditor({ template: initialTemplate, brandProfile
             {/* Template Metadata */}
             <div className="pt-4 border-t border-gray-200 space-y-2 text-xs text-gray-500">
               <div className="flex justify-between">
+                <span>Channel:</span>
+                <span className="text-gray-900 uppercase">{template.channel}</span>
+              </div>
+              <div className="flex justify-between">
                 <span>Category:</span>
                 <span className="text-gray-900 capitalize">{template.category}</span>
               </div>
@@ -663,7 +680,10 @@ export default function TemplateEditor({ template: initialTemplate, brandProfile
               <div className="mb-4">
                 <Label htmlFor="bodyText" className="text-sm font-medium text-gray-700">Message Text *</Label>
                 <p className="text-xs text-gray-500 mt-1">
-                  Use {'{{'}variable{'}}'} syntax for personalization.
+                  SMS is text-only. Keep messages short and use {'{{'}variable{'}}'} placeholders.
+                </p>
+                <p className="text-xs text-gray-400 mt-1">
+                  GSM-7: 160 chars per segment. Unicode (emojis/non-Latin): 70 chars per segment.
                 </p>
               </div>
               <Textarea
@@ -701,6 +721,33 @@ export default function TemplateEditor({ template: initialTemplate, brandProfile
                   className="text-xs"
                 >
                   Insert: practice.name
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBodyText(bodyText + '{{practice.phone}}')}
+                  className="text-xs"
+                >
+                  Insert: practice.phone
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBodyText(bodyText + '{{links.confirm}}')}
+                  className="text-xs"
+                >
+                  Insert: links.confirm
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBodyText(bodyText + ' Reply STOP to opt out.')}
+                  className="text-xs"
+                >
+                  Insert: opt-out text
                 </Button>
               </div>
               

@@ -35,6 +35,7 @@ export default function NewTemplatePage() {
         body: JSON.stringify({
           ...formData,
           status: 'draft',
+          editorType: formData.channel === 'sms' ? 'plaintext' : 'dragdrop',
           bodyText: formData.channel === 'sms' ? '' : undefined,
           bodyHtml: formData.channel === 'email' ? '' : undefined,
           bodyJson: formData.channel === 'email' ? { rows: [] } : undefined,
@@ -73,10 +74,10 @@ export default function NewTemplatePage() {
           name: `${template.name} (Copy)`,
           category: template.category,
           status: 'draft',
-          editorType: 'dragdrop',
-          bodyJson: template.template,
+          editorType: template.channel === 'sms' ? 'plaintext' : 'dragdrop',
+          bodyJson: template.channel === 'email' ? template.template : undefined,
           bodyHtml: undefined,
-          bodyText: undefined,
+          bodyText: template.channel === 'sms' ? template.bodyText : undefined,
         }),
       })
 
@@ -94,7 +95,7 @@ export default function NewTemplatePage() {
   }
 
   const emailTemplates = getTemplatesByChannel('email')
-  const smsTemplates: any[] = [] // No SMS templates in library yet
+  const smsTemplates = getTemplatesByChannel('sms')
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
@@ -163,6 +164,15 @@ export default function NewTemplatePage() {
                           <div>
                             <h3 className="font-semibold text-gray-900">{template.name}</h3>
                             <p className="text-sm text-gray-600 mt-1">{template.description}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs px-2 py-1 rounded-full ${
+                              template.channel === 'email'
+                                ? 'bg-blue-50 text-blue-700'
+                                : 'bg-purple-50 text-purple-700'
+                            }`}>
+                              {template.channel === 'email' ? 'Email' : 'SMS'}
+                            </span>
                           </div>
                           <div className="flex flex-wrap gap-1">
                             {template.tags.map((tag: string) => (
@@ -233,6 +243,11 @@ export default function NewTemplatePage() {
                   </SelectItem>
                 </SelectContent>
               </Select>
+              {formData.channel === 'sms' && (
+                <p className="text-xs text-gray-500">
+                  SMS templates are text-only. Keep messages short and use {'{{'}variable{'}}'} placeholders.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
