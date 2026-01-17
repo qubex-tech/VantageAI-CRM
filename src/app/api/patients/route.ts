@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
           ? [
               { name: { contains: search, mode: 'insensitive' as const } },
               { phone: { contains: search } },
+              { primaryPhone: { contains: search } },
               { email: { contains: search, mode: 'insensitive' as const } },
             ]
           : undefined,

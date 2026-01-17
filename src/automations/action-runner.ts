@@ -317,7 +317,7 @@ async function sendSms(
     }
   }
 
-  const phoneNumber = args.phoneNumber || patient.phone
+  const phoneNumber = args.phoneNumber || patient.primaryPhone || patient.phone
 
   if (!phoneNumber) {
     return {
@@ -1035,11 +1035,12 @@ async function sendReminder(
         error: error instanceof Error ? error.message : 'Failed to send reminder email',
       }
     }
-  } else if (contactMethod === 'sms' && patient.phone) {
+  } else if (contactMethod === 'sms' && (patient.primaryPhone || patient.phone)) {
+    const patientPhone = patient.primaryPhone || patient.phone
     console.log(`[AUTOMATION REMINDER SMS] Sending via Twilio:`, {
       practiceId,
       patientId: args.patientId,
-      to: patient.phone,
+      to: patientPhone,
     })
 
     let smsResult: { success: boolean; messageId?: string; error?: string }
@@ -1048,7 +1049,7 @@ async function sendReminder(
       const { getTwilioClient } = await import('@/lib/twilio')
       const twilioClient = await getTwilioClient(practiceId)
       smsResult = await twilioClient.sendSms({
-        to: patient.phone,
+        to: patientPhone,
         body: args.message,
       })
     } catch (error: any) {
@@ -1086,7 +1087,7 @@ async function sendReminder(
             practiceId,
             userId: automationUserId,
             type: 'contact',
-            content: `[Automation Reminder SMS] Sent to ${patient.phone}${messageSuffix}: ${args.message}`,
+            content: `[Automation Reminder SMS] Sent to ${patientPhone}${messageSuffix}: ${args.message}`,
           },
         })
       }
@@ -1100,11 +1101,11 @@ async function sendReminder(
         patientId: args.patientId,
         type: 'reminder',
         title: `${args.reminderType.charAt(0).toUpperCase() + args.reminderType.slice(1)} reminder sent via SMS`,
-        description: `Sent to ${patient.phone}: ${args.message.substring(0, 100)}${args.message.length > 100 ? '...' : ''}`,
+        description: `Sent to ${patientPhone}: ${args.message.substring(0, 100)}${args.message.length > 100 ? '...' : ''}`,
         metadata: {
           reminderType: args.reminderType,
           method: 'sms',
-          phoneNumber: patient.phone,
+          phoneNumber: patientPhone,
           messageId: smsResult.messageId,
           createdBy: 'automation',
         },

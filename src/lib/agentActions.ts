@@ -49,11 +49,14 @@ export async function findOrCreatePatientByPhone(
   const normalizedPhone = String(phone).replace(/\D/g, '')
   
   // Try to find existing patient - use exact match on normalized phone
-  // First try exact match on normalized phone
+  // First try exact match on normalized phone (check both phone and primaryPhone)
   let patient = await prisma.patient.findFirst({
     where: {
       practiceId,
-      phone: normalizedPhone,
+      OR: [
+        { phone: normalizedPhone },
+        { primaryPhone: normalizedPhone },
+      ],
       deletedAt: null,
     },
   })
@@ -69,10 +72,15 @@ export async function findOrCreatePatientByPhone(
       select: {
         id: true,
         phone: true,
+        primaryPhone: true,
       },
     })
 
-    const matchedPatient = allPatients.find(p => p.phone ? String(p.phone).replace(/\D/g, '') === normalizedPhone : false)
+    const matchedPatient = allPatients.find(p => {
+      const phoneNormalized = p.phone ? String(p.phone).replace(/\D/g, '') : ''
+      const primaryPhoneNormalized = p.primaryPhone ? String(p.primaryPhone).replace(/\D/g, '') : ''
+      return phoneNormalized === normalizedPhone || primaryPhoneNormalized === normalizedPhone
+    })
     if (matchedPatient) {
       // Reload full patient record
       patient = await prisma.patient.findUnique({
@@ -215,7 +223,7 @@ export async function bookAppointment(
     responses: {
       name: patient.name,
       email: patient.email.trim(),
-      phone: patient.phone?.trim() || undefined,
+      phone: (patient.primaryPhone || patient.phone)?.trim() || undefined,
       notes: reason,
     },
   })
