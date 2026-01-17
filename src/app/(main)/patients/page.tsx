@@ -54,17 +54,13 @@ export default async function PatientsPage({
       </div>
     )
   }
-  const practiceId = user.practiceId
+  const practiceId: string = user.practiceId as string
 
   const search = params.search || ''
 
-  if (!session.user.practiceId) {
-    return { patients: [], total: 0 }
-  }
-
   const patients = await prisma.patient.findMany({
     where: {
-      practiceId: practiceId,
+      practiceId,
       deletedAt: null,
       OR: search
         ? [
