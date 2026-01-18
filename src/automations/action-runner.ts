@@ -466,7 +466,6 @@ async function sendEmail(
         where: {
           id: args.templateId,
           tenantId: practiceId,
-          status: 'published',
           channel: 'email',
         },
       })
@@ -474,8 +473,15 @@ async function sendEmail(
       if (!template) {
         return {
           status: 'failed',
-          error: `Template ${args.templateId} not found or not published`,
+          error: `Template ${args.templateId} not found`,
         }
+      }
+
+      if (template.status !== 'published') {
+        console.warn(`[AUTOMATION] Using email template that is not published:`, {
+          templateId: template.id,
+          status: template.status,
+        })
       }
 
       // Get brand profile for rendering
