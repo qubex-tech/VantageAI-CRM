@@ -69,5 +69,20 @@ export default async function PatientDetailPage({
     )
   }
 
-  return <PatientDetailView patient={patient} />
+  // Get users for task assignment
+  const users = await prisma.user.findMany({
+    where: {
+      practiceId,
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+    orderBy: {
+      name: 'asc',
+    },
+  })
+
+  return <PatientDetailView patient={patient} users={users} currentUserId={user.id} />
 }

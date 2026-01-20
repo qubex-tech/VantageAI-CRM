@@ -47,6 +47,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { EditPatientForm } from './EditPatientForm'
+import { PatientTasks } from '@/components/tasks/PatientTasks'
 import { cn } from '@/lib/utils'
 
 interface PatientDetailViewProps {
@@ -112,6 +113,8 @@ interface PatientDetailViewProps {
       metadata: any
     }>
   }
+  users?: Array<{ id: string; name: string; email: string }>
+  currentUserId?: string
 }
 
 function calculateAge(dateOfBirth: Date): number {
@@ -140,7 +143,7 @@ interface PatientNote {
   }
 }
 
-export function PatientDetailView({ patient }: PatientDetailViewProps) {
+export function PatientDetailView({ patient, users = [], currentUserId = '' }: PatientDetailViewProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'activity' | 'appointments' | 'calls'>('overview')
   const [sidebarTab, setSidebarTab] = useState<'details' | 'comments'>('details')
   const [isEditing, setIsEditing] = useState(false)
@@ -157,6 +160,7 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
     contactInfo: false,
     communication: false,
     insurance: false,
+    tasks: false,
     notes: true, // Expand notes section by default
   })
   
@@ -1042,6 +1046,32 @@ export function PatientDetailView({ patient }: PatientDetailViewProps) {
                   </div>
                 </div>
               )}
+
+              {/* Tasks Section */}
+              <div className="min-w-0 border-b border-gray-200 pb-4">
+                <button
+                  onClick={() => toggleSection('tasks')}
+                  className="flex items-center justify-between w-full mb-3"
+                >
+                  <h3 className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                    <CheckSquare className="h-4 w-4" />
+                    Tasks
+                  </h3>
+                  {expandedSections.tasks ? (
+                    <ChevronUp className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  )}
+                </button>
+                
+                {expandedSections.tasks && (
+                  <PatientTasks
+                    patientId={patient.id}
+                    users={users}
+                    currentUserId={currentUserId}
+                  />
+                )}
+              </div>
 
               {/* Notes Section */}
               <div className="min-w-0 border-b border-gray-200 pb-4">

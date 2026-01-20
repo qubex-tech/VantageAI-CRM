@@ -2,13 +2,14 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Calendar, Home, Users, Settings, Workflow, Zap, Megaphone } from 'lucide-react'
+import { Calendar, Home, Users, Settings, Workflow, Zap, Megaphone, CheckSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: Home },
   { href: '/patients', label: 'Patients', icon: Users },
   { href: '/appointments', label: 'Appointments', icon: Calendar },
+  { href: '/tasks', label: 'Tasks', icon: CheckSquare },
   { href: '/marketing', label: 'Marketing', icon: Megaphone },
   { href: '/automations/workflows', label: 'Workflows', icon: Workflow },
   { href: '/workflows/automations', label: 'Automations', icon: Zap },

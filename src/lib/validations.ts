@@ -276,3 +276,24 @@ export const feedbackSchema = z.object({
 export const referralCreateSchema = z.object({
   referredByPatientId: z.string().optional(),
 })
+
+// Task Management schemas
+export const taskSchema = z.object({
+  title: z.string().min(1, 'Title is required').max(200, 'Title must be less than 200 characters'),
+  description: z.string().max(5000, 'Description must be less than 5000 characters').optional().nullable(),
+  category: z.enum(['general', 'follow_up', 'document_review', 'billing', 'appointment_prep', 'insurance', 'administrative', 'clinical', 'other']).default('general'),
+  priority: z.enum(['low', 'medium', 'high', 'urgent']).default('medium'),
+  status: z.enum(['pending', 'in_progress', 'completed', 'cancelled', 'on_hold']).default('pending'),
+  dueDate: z.coerce.date().optional().nullable(),
+  patientId: z.string().uuid().optional().nullable(), // null for personal tasks
+  appointmentId: z.string().uuid().optional().nullable(),
+  assignedTo: z.string().uuid().optional().nullable(), // null for unassigned/general tasks
+  isRecurring: z.boolean().default(false),
+  recurrenceRule: z.string().optional().nullable(), // e.g., "daily", "weekly", "monthly"
+  metadata: z.record(z.any()).optional().nullable(),
+  relatedTaskIds: z.array(z.string().uuid()).optional().default([]),
+})
+
+export const taskCommentSchema = z.object({
+  content: z.string().min(1, 'Comment cannot be empty').max(2000, 'Comment must be less than 2000 characters'),
+})

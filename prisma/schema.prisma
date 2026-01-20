@@ -63,6 +63,8 @@ model Practice {
   campaigns                Campaign[]
   campaignEnrollments      CampaignEnrollment[]
   guardianRelationships    GuardianRelationship[]
+  tasks                    Task[]
+  taskComments             TaskComment[]
 
   @@index([slug])
   @@index([portalDomain])
@@ -89,6 +91,9 @@ model User {
   marketingTemplateAssetsCreated   MarketingTemplateAsset[]   @relation("MarketingTemplateAssetCreator")
   marketingContentBlocksCreated    MarketingContentBlock[]    @relation("MarketingContentBlockCreator")
   marketingAuditLogs               MarketingAuditLog[]        @relation("MarketingAuditLogActor")
+  assignedTasks                    Task[]                     @relation("AssignedTasks")
+  createdTasks                     Task[]                     @relation("CreatedTasks")
+  taskComments                     TaskComment[]
 
   @@index([practiceId])
   @@index([email])
@@ -159,6 +164,7 @@ model Patient {
   conversationThreads      ConversationThread[]
   portalMessages           PortalMessage[]
   portalTasks              PatientTask[]
+  tasks                    Task[]
   formSubmissions          FormSubmission[]
   documentUploads          DocumentUpload[]
   reviewRequests           ReviewRequest[]
@@ -347,15 +353,15 @@ model SendgridIntegration {
 }
 
 model TwilioIntegration {
-  id                   String   @id @default(uuid())
-  practiceId           String   @unique
-  accountSid           String
-  authToken            String
-  messagingServiceSid  String?
-  fromNumber           String?
-  isActive             Boolean  @default(true)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  id                  String   @id @default(uuid())
+  practiceId          String   @unique
+  accountSid          String
+  authToken           String
+  messagingServiceSid String?
+  fromNumber          String?
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
 
@@ -1134,4 +1140,78 @@ model AnalyticsEvent {
   @@index([practiceId, createdAt])
   @@index([eventType, eventName])
   @@map("analytics_events")
+}
+
+// Comprehensive Task Management System
+model Task {
+  id             String    @id @default(uuid())
+  practiceId     String
+  // Task assignment and ownership
+  assignedTo     String? // User ID - null means unassigned (general/anyone can execute)
+  createdBy      String // User ID who created the task
+  // Task context
+  patientId      String? // null for personal tasks, set for patient-related tasks
+  appointmentId  String? // Optional link to appointment
+  // Task details
+  title          String
+  description    String?
+  category       String    @default("general") // 'general', 'follow_up', 'document_review', 'billing', 'appointment_prep', 'insurance', 'administrative', 'clinical', 'other'
+  priority       String    @default("medium") // 'low', 'medium', 'high', 'urgent'
+  status         String    @default("pending") // 'pending', 'in_progress', 'completed', 'cancelled', 'on_hold'
+  // Dates
+  dueDate        DateTime?
+  completedAt    DateTime?
+  // Task metadata
+  metadata       Json? // Additional structured data
+  // Recurring tasks
+  isRecurring    Boolean   @default(false)
+  recurrenceRule String? // e.g., "daily", "weekly", "monthly", cron expression
+  parentTaskId   String? // For recurring task series
+  // Task relationships
+  relatedTaskIds String[] // Array of related task IDs
+  // Timestamps
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  practice   Practice      @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient    Patient?      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  assignee   User?         @relation("AssignedTasks", fields: [assignedTo], references: [id], onDelete: SetNull)
+  creator    User          @relation("CreatedTasks", fields: [createdBy], references: [id], onDelete: Cascade)
+  comments   TaskComment[]
+  parentTask Task?         @relation("RecurringTasks", fields: [parentTaskId], references: [id], onDelete: SetNull)
+  childTasks Task[]        @relation("RecurringTasks")
+
+  @@index([practiceId])
+  @@index([practiceId, assignedTo])
+  @@index([practiceId, patientId])
+  @@index([practiceId, status])
+  @@index([practiceId, dueDate])
+  @@index([practiceId, createdBy])
+  @@index([assignedTo])
+  @@index([patientId])
+  @@index([status, dueDate])
+  @@index([deletedAt])
+  @@map("tasks")
+}
+
+model TaskComment {
+  id        String    @id @default(uuid())
+  taskId    String
+  userId    String
+  practiceId String?
+  content   String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  task      Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  practice  Practice? @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([userId])
+  @@index([practiceId])
+  @@index([createdAt])
+  @@map("task_comments")
 }
