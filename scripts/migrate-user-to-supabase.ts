@@ -35,8 +35,10 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
  */
 async function userExistsInSupabase(email: string): Promise<boolean> {
   try {
-    const { data, error } = await supabase.auth.admin.getUserByEmail(email)
-    return !error && data.user !== null
+    // Use listUsers with filter instead of getUserByEmail which doesn't exist
+    const { data, error } = await supabase.auth.admin.listUsers()
+    if (error) return false
+    return data.users.some(user => user.email === email)
   } catch (error) {
     return false
   }

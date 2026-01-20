@@ -123,6 +123,11 @@ export async function PATCH(
       updateData.completedAt = null
     }
 
+    // Convert null metadata to undefined for Prisma
+    if ('metadata' in updateData && updateData.metadata === null) {
+      updateData.metadata = undefined
+    }
+
     // Validate patient exists if patientId is being updated
     if (updateData.patientId !== undefined && updateData.patientId !== null) {
       const patient = await prisma.patient.findFirst({

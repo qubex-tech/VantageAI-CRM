@@ -210,7 +210,7 @@ export async function POST(req: NextRequest) {
         assignedTo: validated.assignedTo,
         isRecurring: validated.isRecurring,
         recurrenceRule: validated.recurrenceRule,
-        metadata: validated.metadata,
+        metadata: validated.metadata || undefined,
         relatedTaskIds: validated.relatedTaskIds || [],
       },
       include: {
