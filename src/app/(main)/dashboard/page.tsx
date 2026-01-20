@@ -557,11 +557,18 @@ export default async function DashboardPage() {
                 ))
               )}
             </div>
-            <Link href="/tasks">
-              <Button variant="ghost" className="w-full mt-4 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-50">
-                View All Tasks →
-              </Button>
-            </Link>
+            <div className="flex gap-2 mt-4">
+              <Link href="/tasks/new" className="flex-1">
+                <Button variant="outline" className="w-full text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-50">
+                  + New Task
+                </Button>
+              </Link>
+              <Link href="/tasks" className="flex-1">
+                <Button variant="ghost" className="w-full text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-50">
+                  View All →
+                </Button>
+              </Link>
+            </div>
           </CardContent>
         </Card>
 
