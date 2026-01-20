@@ -207,20 +207,28 @@ export async function POST(req: NextRequest) {
 
       // Include dashboard context if available (rolling 14-day window)
       if (contextPayload.dashboardContext) {
-        const dashboard = contextPayload.dashboardContext
+        const dashboard = contextPayload.dashboardContext as {
+          windowStart?: string
+          windowEnd?: string
+          recentPatients?: Array<{ name: string; lastSeenAt?: string }>
+          upcomingPatients?: Array<{ name: string; nextVisitAt?: string }>
+          recentAppointments?: Array<{ id: string }>
+          upcomingAppointments?: Array<{ id: string }>
+          recentNotes?: Array<{ patientName: string; type: string }>
+        }
         contextParts.push(`\nDashboard Context (Rolling 14 Days):`)
         if (dashboard.windowStart && dashboard.windowEnd) {
           contextParts.push(`- Window: ${new Date(dashboard.windowStart).toLocaleDateString()} to ${new Date(dashboard.windowEnd).toLocaleDateString()}`)
         }
         if (dashboard.recentPatients && dashboard.recentPatients.length > 0) {
           contextParts.push(`- Recent patients (last 7 days): ${dashboard.recentPatients.length}`)
-          dashboard.recentPatients.slice(0, 5).forEach((patient) => {
+          dashboard.recentPatients.slice(0, 5).forEach((patient: { name: string; lastSeenAt?: string }) => {
             contextParts.push(`  • ${patient.name}${patient.lastSeenAt ? ` (last seen ${new Date(patient.lastSeenAt).toLocaleDateString()})` : ''}`)
           })
         }
         if (dashboard.upcomingPatients && dashboard.upcomingPatients.length > 0) {
           contextParts.push(`- Upcoming patients (next 7 days): ${dashboard.upcomingPatients.length}`)
-          dashboard.upcomingPatients.slice(0, 5).forEach((patient) => {
+          dashboard.upcomingPatients.slice(0, 5).forEach((patient: { name: string; nextVisitAt?: string }) => {
             contextParts.push(`  • ${patient.name}${patient.nextVisitAt ? ` (next visit ${new Date(patient.nextVisitAt).toLocaleDateString()})` : ''}`)
           })
         }
@@ -232,7 +240,7 @@ export async function POST(req: NextRequest) {
         }
         if (dashboard.recentNotes && dashboard.recentNotes.length > 0) {
           contextParts.push(`- Recent notes: ${dashboard.recentNotes.length}`)
-          dashboard.recentNotes.slice(0, 3).forEach((note) => {
+          dashboard.recentNotes.slice(0, 3).forEach((note: { patientName: string; type: string }) => {
             contextParts.push(`  • ${note.patientName} (${note.type})`)
           })
         }
