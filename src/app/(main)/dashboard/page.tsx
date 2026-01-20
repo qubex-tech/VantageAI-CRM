@@ -195,39 +195,47 @@ export default async function DashboardPage() {
   })
 
   // Get tasks assigned to current user or unassigned
-  const myTasks = await prisma.task.findMany({
-    where: {
-      practiceId: practiceId,
-      deletedAt: null,
-      status: {
-        not: 'completed',
+  // Wrap in try-catch in case Task table doesn't exist yet (migration not run)
+  let myTasks: any[] = []
+  try {
+    myTasks = await prisma.task.findMany({
+      where: {
+        practiceId: practiceId,
+        deletedAt: null,
+        status: {
+          not: 'completed',
+        },
+        OR: [
+          { assignedTo: user.id },
+          { assignedTo: null },
+        ],
       },
-      OR: [
-        { assignedTo: user.id },
-        { assignedTo: null },
+      include: {
+        patient: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        assignee: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: [
+        { dueDate: 'asc' },
+        { priority: 'desc' },
+        { createdAt: 'desc' },
       ],
-    },
-    include: {
-      patient: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-      assignee: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-    },
-    orderBy: [
-      { dueDate: 'asc' },
-      { priority: 'desc' },
-      { createdAt: 'desc' },
-    ],
-    take: 5,
-  })
+      take: 5,
+    })
+  } catch (error) {
+    // Task table might not exist yet - silently fail and show empty tasks
+    console.warn('[Dashboard] Tasks table may not exist yet:', error)
+    myTasks = []
+  }
 
   const recentPatientMap = new Map<string, { id: string; name: string; lastSeenAt: Date; dateOfBirth?: Date | null }>()
   recentAppointments.forEach((apt) => {
