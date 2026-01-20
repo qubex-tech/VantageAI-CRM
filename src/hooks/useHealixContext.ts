@@ -17,11 +17,13 @@ export interface HealixContextPayload {
       id: string
       name: string
       lastSeenAt?: string
+      dateOfBirth?: string
     }>
     upcomingPatients?: Array<{
       id: string
       name: string
       nextVisitAt?: string
+      dateOfBirth?: string
     }>
     recentAppointments?: Array<{
       id: string

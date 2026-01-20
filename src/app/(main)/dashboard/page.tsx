@@ -131,6 +131,7 @@ export default async function DashboardPage() {
         select: {
           id: true,
           name: true,
+          dateOfBirth: true,
           primaryPhone: true,
           phone: true,
         },
@@ -158,6 +159,7 @@ export default async function DashboardPage() {
         select: {
           id: true,
           name: true,
+          dateOfBirth: true,
           primaryPhone: true,
           phone: true,
         },
@@ -192,24 +194,26 @@ export default async function DashboardPage() {
     take: 10,
   })
 
-  const recentPatientMap = new Map<string, { id: string; name: string; lastSeenAt: Date }>()
+  const recentPatientMap = new Map<string, { id: string; name: string; lastSeenAt: Date; dateOfBirth?: Date | null }>()
   recentAppointments.forEach((apt) => {
     if (!recentPatientMap.has(apt.patient.id)) {
       recentPatientMap.set(apt.patient.id, {
         id: apt.patient.id,
         name: apt.patient.name,
         lastSeenAt: apt.startTime,
+        dateOfBirth: apt.patient.dateOfBirth ?? undefined,
       })
     }
   })
 
-  const upcomingPatientMap = new Map<string, { id: string; name: string; nextVisitAt: Date }>()
+  const upcomingPatientMap = new Map<string, { id: string; name: string; nextVisitAt: Date; dateOfBirth?: Date | null }>()
   upcomingAppointments.forEach((apt) => {
     if (!upcomingPatientMap.has(apt.patient.id)) {
       upcomingPatientMap.set(apt.patient.id, {
         id: apt.patient.id,
         name: apt.patient.name,
         nextVisitAt: apt.startTime,
+        dateOfBirth: apt.patient.dateOfBirth ?? undefined,
       })
     }
   })
@@ -228,11 +232,13 @@ export default async function DashboardPage() {
       id: patient.id,
       name: patient.name,
       lastSeenAt: patient.lastSeenAt.toISOString(),
+      dateOfBirth: patient.dateOfBirth ? patient.dateOfBirth.toISOString() : undefined,
     })),
     upcomingPatients: upcomingPatientsWindow.map((patient) => ({
       id: patient.id,
       name: patient.name,
       nextVisitAt: patient.nextVisitAt.toISOString(),
+      dateOfBirth: patient.dateOfBirth ? patient.dateOfBirth.toISOString() : undefined,
     })),
     recentAppointments: recentAppointments.map((apt) => ({
       id: apt.id,

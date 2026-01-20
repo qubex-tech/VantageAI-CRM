@@ -210,8 +210,8 @@ export async function POST(req: NextRequest) {
         const dashboard = contextPayload.dashboardContext as {
           windowStart?: string
           windowEnd?: string
-          recentPatients?: Array<{ name: string; lastSeenAt?: string }>
-          upcomingPatients?: Array<{ name: string; nextVisitAt?: string }>
+          recentPatients?: Array<{ name: string; lastSeenAt?: string; dateOfBirth?: string }>
+          upcomingPatients?: Array<{ name: string; nextVisitAt?: string; dateOfBirth?: string }>
           recentAppointments?: Array<{ id: string }>
           upcomingAppointments?: Array<{ id: string }>
           recentNotes?: Array<{ patientName: string; type: string }>
@@ -220,16 +220,31 @@ export async function POST(req: NextRequest) {
         if (dashboard.windowStart && dashboard.windowEnd) {
           contextParts.push(`- Window: ${new Date(dashboard.windowStart).toLocaleDateString()} to ${new Date(dashboard.windowEnd).toLocaleDateString()}`)
         }
+        const formatAge = (dob?: string) => {
+          if (!dob) return null
+          const birthDate = new Date(dob)
+          if (Number.isNaN(birthDate.getTime())) return null
+          const now = new Date()
+          let age = now.getFullYear() - birthDate.getFullYear()
+          const monthDiff = now.getMonth() - birthDate.getMonth()
+          if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birthDate.getDate())) {
+            age -= 1
+          }
+          return age
+        }
+
         if (dashboard.recentPatients && dashboard.recentPatients.length > 0) {
           contextParts.push(`- Recent patients (last 7 days): ${dashboard.recentPatients.length}`)
-          dashboard.recentPatients.slice(0, 5).forEach((patient: { name: string; lastSeenAt?: string }) => {
-            contextParts.push(`  • ${patient.name}${patient.lastSeenAt ? ` (last seen ${new Date(patient.lastSeenAt).toLocaleDateString()})` : ''}`)
+          dashboard.recentPatients.slice(0, 5).forEach((patient: { name: string; lastSeenAt?: string; dateOfBirth?: string }) => {
+            const age = formatAge(patient.dateOfBirth)
+            contextParts.push(`  • ${patient.name}${typeof age === 'number' ? ` (age ${age})` : ''}${patient.lastSeenAt ? ` (last seen ${new Date(patient.lastSeenAt).toLocaleDateString()})` : ''}`)
           })
         }
         if (dashboard.upcomingPatients && dashboard.upcomingPatients.length > 0) {
           contextParts.push(`- Upcoming patients (next 7 days): ${dashboard.upcomingPatients.length}`)
-          dashboard.upcomingPatients.slice(0, 5).forEach((patient: { name: string; nextVisitAt?: string }) => {
-            contextParts.push(`  • ${patient.name}${patient.nextVisitAt ? ` (next visit ${new Date(patient.nextVisitAt).toLocaleDateString()})` : ''}`)
+          dashboard.upcomingPatients.slice(0, 5).forEach((patient: { name: string; nextVisitAt?: string; dateOfBirth?: string }) => {
+            const age = formatAge(patient.dateOfBirth)
+            contextParts.push(`  • ${patient.name}${typeof age === 'number' ? ` (age ${age})` : ''}${patient.nextVisitAt ? ` (next visit ${new Date(patient.nextVisitAt).toLocaleDateString()})` : ''}`)
           })
         }
         if (dashboard.recentAppointments && dashboard.recentAppointments.length > 0) {
