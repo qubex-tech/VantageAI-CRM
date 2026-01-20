@@ -10,6 +10,44 @@ export interface HealixContextPayload {
   appointmentId?: string
   invoiceId?: string
   visibleFields?: Record<string, any>
+  dashboardContext?: {
+    windowStart?: string
+    windowEnd?: string
+    recentPatients?: Array<{
+      id: string
+      name: string
+      lastSeenAt?: string
+    }>
+    upcomingPatients?: Array<{
+      id: string
+      name: string
+      nextVisitAt?: string
+    }>
+    recentAppointments?: Array<{
+      id: string
+      patientId: string
+      patientName: string
+      startTime: string
+      status: string
+      visitType?: string | null
+    }>
+    upcomingAppointments?: Array<{
+      id: string
+      patientId: string
+      patientName: string
+      startTime: string
+      status: string
+      visitType?: string | null
+    }>
+    recentNotes?: Array<{
+      id: string
+      patientId: string
+      patientName: string
+      type: string
+      createdAt: string
+      contentPreview?: string
+    }>
+  }
   timelineEvents?: Array<{
     type: string
     title: string

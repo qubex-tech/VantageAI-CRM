@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
 import { X, Send, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useHealixContext, type HealixContextPayload } from '@/hooks/useHealixContext'
+import { type HealixContextPayload } from '@/hooks/useHealixContext'
 import { parseHealixResponse, formatMarkdown } from '@/lib/healix-formatter'
 
 export interface HealixMessage {
@@ -29,9 +29,17 @@ interface HealixPanelProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   context: HealixContextPayload
+  initialPrompt?: string
+  onInitialPromptConsumed?: () => void
 }
 
-export function HealixPanel({ open, onOpenChange, context }: HealixPanelProps) {
+export function HealixPanel({
+  open,
+  onOpenChange,
+  context,
+  initialPrompt,
+  onInitialPromptConsumed,
+}: HealixPanelProps) {
   const [messages, setMessages] = useState<HealixMessage[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -205,6 +213,13 @@ export function HealixPanel({ open, onOpenChange, context }: HealixPanelProps) {
       setCurrentResponse('')
     }
   }, [conversationId, context, isLoading])
+
+  // Auto-send initial prompt if provided (used by dashboard command center)
+  useEffect(() => {
+    if (!open || !initialPrompt || isLoading) return
+    sendMessage(initialPrompt)
+    onInitialPromptConsumed?.()
+  }, [open, initialPrompt, isLoading, sendMessage, onInitialPromptConsumed])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()

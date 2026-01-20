@@ -3,9 +3,10 @@ import { getSupabaseSession } from '@/lib/auth-supabase'
 import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { prisma } from '@/lib/db'
-import { format } from 'date-fns'
+import { addDays, endOfDay, format, formatDistanceToNow, startOfDay, subDays } from 'date-fns'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import { HealixCommandCenter } from '@/components/healix/HealixCommandCenter'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,10 +68,11 @@ export default async function DashboardPage() {
   // TypeScript: practiceId is guaranteed to be non-null after the check above
   const practiceId: string = user.practiceId
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const tomorrow = new Date(today)
-  tomorrow.setDate(tomorrow.getDate() + 1)
+  const now = new Date()
+  const today = startOfDay(now)
+  const tomorrow = addDays(today, 1)
+  const windowStart = subDays(today, 7)
+  const windowEnd = addDays(endOfDay(now), 7)
 
   // Get today's appointments
   const appointments = await prisma.appointment.findMany({
@@ -112,6 +114,186 @@ export default async function DashboardPage() {
     take: 5,
   })
 
+  // Rolling 14-day context: past 7 days and next 7 days
+  const recentAppointments = await prisma.appointment.findMany({
+    where: {
+      practiceId: practiceId,
+      startTime: {
+        gte: windowStart,
+        lt: today,
+      },
+      status: {
+        not: 'cancelled',
+      },
+    },
+    include: {
+      patient: {
+        select: {
+          id: true,
+          name: true,
+          primaryPhone: true,
+          phone: true,
+        },
+      },
+    },
+    orderBy: {
+      startTime: 'desc',
+    },
+    take: 20,
+  })
+
+  const upcomingAppointments = await prisma.appointment.findMany({
+    where: {
+      practiceId: practiceId,
+      startTime: {
+        gte: today,
+        lte: windowEnd,
+      },
+      status: {
+        not: 'cancelled',
+      },
+    },
+    include: {
+      patient: {
+        select: {
+          id: true,
+          name: true,
+          primaryPhone: true,
+          phone: true,
+        },
+      },
+    },
+    orderBy: {
+      startTime: 'asc',
+    },
+    take: 20,
+  })
+
+  const recentNotes = await prisma.patientNote.findMany({
+    where: {
+      practiceId: practiceId,
+      deletedAt: null,
+      createdAt: {
+        gte: windowStart,
+        lt: today,
+      },
+    },
+    include: {
+      patient: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+    take: 10,
+  })
+
+  const recentPatientMap = new Map<string, { id: string; name: string; lastSeenAt: Date }>()
+  recentAppointments.forEach((apt) => {
+    if (!recentPatientMap.has(apt.patient.id)) {
+      recentPatientMap.set(apt.patient.id, {
+        id: apt.patient.id,
+        name: apt.patient.name,
+        lastSeenAt: apt.startTime,
+      })
+    }
+  })
+
+  const upcomingPatientMap = new Map<string, { id: string; name: string; nextVisitAt: Date }>()
+  upcomingAppointments.forEach((apt) => {
+    if (!upcomingPatientMap.has(apt.patient.id)) {
+      upcomingPatientMap.set(apt.patient.id, {
+        id: apt.patient.id,
+        name: apt.patient.name,
+        nextVisitAt: apt.startTime,
+      })
+    }
+  })
+
+  const recentPatientsWindow = Array.from(recentPatientMap.values())
+  const upcomingPatientsWindow = Array.from(upcomingPatientMap.values())
+
+  const followUpPatients = recentPatientsWindow
+    .filter((patient) => !upcomingPatientMap.has(patient.id))
+    .slice(0, 5)
+
+  const healixDashboardContext = {
+    windowStart: windowStart.toISOString(),
+    windowEnd: windowEnd.toISOString(),
+    recentPatients: recentPatientsWindow.map((patient) => ({
+      id: patient.id,
+      name: patient.name,
+      lastSeenAt: patient.lastSeenAt.toISOString(),
+    })),
+    upcomingPatients: upcomingPatientsWindow.map((patient) => ({
+      id: patient.id,
+      name: patient.name,
+      nextVisitAt: patient.nextVisitAt.toISOString(),
+    })),
+    recentAppointments: recentAppointments.map((apt) => ({
+      id: apt.id,
+      patientId: apt.patient.id,
+      patientName: apt.patient.name,
+      startTime: apt.startTime.toISOString(),
+      status: apt.status,
+      visitType: apt.visitType || null,
+    })),
+    upcomingAppointments: upcomingAppointments.map((apt) => ({
+      id: apt.id,
+      patientId: apt.patient.id,
+      patientName: apt.patient.name,
+      startTime: apt.startTime.toISOString(),
+      status: apt.status,
+      visitType: apt.visitType || null,
+    })),
+    recentNotes: recentNotes.map((note) => ({
+      id: note.id,
+      patientId: note.patientId,
+      patientName: note.patient?.name || 'Unknown',
+      type: note.type,
+      createdAt: note.createdAt.toISOString(),
+      contentPreview: note.content.substring(0, 120),
+    })),
+  }
+
+  const healixContext = {
+    route: '/dashboard',
+    screenTitle: 'Dashboard',
+    dashboardContext: healixDashboardContext,
+  }
+
+  const healixStats = {
+    recentPatients: recentPatientsWindow.length,
+    recentNotes: recentNotes.length,
+    upcomingPatients: upcomingPatientsWindow.length,
+    upcomingAppointments: upcomingAppointments.length,
+  }
+
+  const recentActivity = [
+    ...recentAppointments.map((apt) => ({
+      id: apt.id,
+      type: 'appointment' as const,
+      patientId: apt.patient.id,
+      patientName: apt.patient.name,
+      timestamp: apt.startTime,
+      detail: `${apt.visitType || 'Visit'} • ${apt.status}`,
+    })),
+    ...recentNotes.map((note) => ({
+      id: note.id,
+      type: 'note' as const,
+      patientId: note.patientId,
+      patientName: note.patient?.name || 'Unknown',
+      timestamp: note.createdAt,
+      detail: `${note.type} note`,
+    })),
+  ]
+    .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+    .slice(0, 8)
+
   return (
     <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8 min-w-0 max-w-full">
       <div className="mb-8">
@@ -119,7 +301,105 @@ export default async function DashboardPage() {
         <p className="text-sm text-gray-500">Welcome back, {user.name || user.email || 'User'}</p>
       </div>
 
+      <div className="mb-8">
+        <HealixCommandCenter context={healixContext} stats={healixStats} />
+      </div>
+
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 min-w-0 max-w-full">
+        <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold text-gray-900">Next 7 Days</CardTitle>
+            <CardDescription className="text-sm text-gray-500">
+              {upcomingAppointments.length} upcoming appointments
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {upcomingAppointments.length === 0 ? (
+                <p className="text-sm text-gray-500 py-4">No upcoming appointments</p>
+              ) : (
+                upcomingAppointments.slice(0, 6).map((apt: any) => (
+                  <div key={apt.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{apt.patient.name}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {format(apt.startTime, 'MMM d, h:mm a')} • {apt.visitType || 'Visit'}
+                      </p>
+                    </div>
+                    <span className="ml-3 text-xs px-2 py-1 rounded-md bg-gray-100 text-gray-700 font-medium">
+                      {apt.status}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+            <Link href="/appointments">
+              <Button variant="ghost" className="w-full mt-4 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-50">
+                View Schedule →
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+
+        <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold text-gray-900">Recent Activity</CardTitle>
+            <CardDescription className="text-sm text-gray-500">Last 7 days</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {recentActivity.length === 0 ? (
+                <p className="text-sm text-gray-500 py-4">No recent activity</p>
+              ) : (
+                recentActivity.map((item) => (
+                  <Link
+                    key={item.id}
+                    href={`/patients/${item.patientId}`}
+                    className="block py-2 border-b border-gray-100 last:border-0 hover:bg-gray-50 -mx-2 px-2 rounded-md transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-gray-900 truncate">{item.patientName}</p>
+                      <span className="text-xs text-gray-400">
+                        {formatDistanceToNow(item.timestamp, { addSuffix: true })}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5 capitalize">{item.detail}</p>
+                  </Link>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold text-gray-900">Needs Follow-up</CardTitle>
+            <CardDescription className="text-sm text-gray-500">
+              Patients seen without a next visit
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {followUpPatients.length === 0 ? (
+                <p className="text-sm text-gray-500 py-4">All recent patients have upcoming visits</p>
+              ) : (
+                followUpPatients.map((patient) => (
+                  <Link
+                    key={patient.id}
+                    href={`/patients/${patient.id}`}
+                    className="block py-2 border-b border-gray-100 last:border-0 hover:bg-gray-50 -mx-2 px-2 rounded-md transition-colors"
+                  >
+                    <p className="text-sm font-medium text-gray-900">{patient.name}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Last seen {format(patient.lastSeenAt, 'MMM d')}
+                    </p>
+                  </Link>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-semibold text-gray-900">Today&apos;s Appointments</CardTitle>

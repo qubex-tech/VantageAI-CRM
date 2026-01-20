@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Sparkles } from 'lucide-react'
 import { HealixPanel } from './HealixPanel'
-import { useHealixContext } from '@/hooks/useHealixContext'
+import { useHealixContext, type HealixContextPayload } from '@/hooks/useHealixContext'
 
 export interface HealixButtonProps {
   patientId?: string
@@ -37,6 +37,75 @@ export function useHealixOpen() {
   return open
 }
 
+// Global state to control panel open/close
+let healixPanelOpenState = false
+const panelListeners = new Set<() => void>()
+
+export function setHealixPanelOpen(open: boolean) {
+  healixPanelOpenState = open
+  panelListeners.forEach(listener => listener())
+}
+
+export function useHealixPanelOpen() {
+  const [open, setOpen] = useState(healixPanelOpenState)
+
+  useEffect(() => {
+    const listener = () => setOpen(healixPanelOpenState)
+    panelListeners.add(listener)
+    return () => {
+      panelListeners.delete(listener)
+    }
+  }, [])
+
+  return open
+}
+
+// Global state for pending prompt (e.g. dashboard command center)
+let healixPendingPrompt: string | null = null
+const pendingPromptListeners = new Set<() => void>()
+
+export function setHealixPendingPrompt(prompt: string | null) {
+  healixPendingPrompt = prompt
+  pendingPromptListeners.forEach(listener => listener())
+}
+
+export function useHealixPendingPrompt() {
+  const [prompt, setPrompt] = useState(healixPendingPrompt)
+
+  useEffect(() => {
+    const listener = () => setPrompt(healixPendingPrompt)
+    pendingPromptListeners.add(listener)
+    return () => {
+      pendingPromptListeners.delete(listener)
+    }
+  }, [])
+
+  return prompt
+}
+
+// Global override for Healix context (e.g. dashboard 14-day window)
+let healixContextOverride: HealixContextPayload | null = null
+const contextOverrideListeners = new Set<() => void>()
+
+export function setHealixContextOverride(context: HealixContextPayload | null) {
+  healixContextOverride = context
+  contextOverrideListeners.forEach(listener => listener())
+}
+
+export function useHealixContextOverride() {
+  const [context, setContext] = useState(healixContextOverride)
+
+  useEffect(() => {
+    const listener = () => setContext(healixContextOverride)
+    contextOverrideListeners.add(listener)
+    return () => {
+      contextOverrideListeners.delete(listener)
+    }
+  }, [])
+
+  return context
+}
+
 export function HealixButton({
   patientId,
   appointmentId,
@@ -44,7 +113,9 @@ export function HealixButton({
   screenTitle,
   visibleFields,
 }: HealixButtonProps) {
-  const [open, setOpen] = useState(false)
+  const open = useHealixPanelOpen()
+  const contextOverride = useHealixContextOverride()
+  const pendingPrompt = useHealixPendingPrompt()
   const { context } = useHealixContext({
     patientId,
     appointmentId,
@@ -62,13 +133,19 @@ export function HealixButton({
       <Button
         variant="outline"
         size="sm"
-        onClick={() => setOpen(!open)}
+        onClick={() => setHealixPanelOpen(!open)}
         className="gap-2"
       >
         <Sparkles className="h-4 w-4" />
         <span className="hidden sm:inline">Healix</span>
       </Button>
-      <HealixPanel open={open} onOpenChange={setOpen} context={context} />
+      <HealixPanel
+        open={open}
+        onOpenChange={setHealixPanelOpen}
+        context={contextOverride ?? context}
+        initialPrompt={pendingPrompt ?? undefined}
+        onInitialPromptConsumed={() => setHealixPendingPrompt(null)}
+      />
     </>
   )
 }

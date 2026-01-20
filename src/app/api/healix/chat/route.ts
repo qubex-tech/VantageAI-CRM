@@ -204,6 +204,39 @@ export async function POST(req: NextRequest) {
           contextParts.push(`- Notes: ${apt.notes}`)
         }
       }
+
+      // Include dashboard context if available (rolling 14-day window)
+      if (contextPayload.dashboardContext) {
+        const dashboard = contextPayload.dashboardContext
+        contextParts.push(`\nDashboard Context (Rolling 14 Days):`)
+        if (dashboard.windowStart && dashboard.windowEnd) {
+          contextParts.push(`- Window: ${new Date(dashboard.windowStart).toLocaleDateString()} to ${new Date(dashboard.windowEnd).toLocaleDateString()}`)
+        }
+        if (dashboard.recentPatients && dashboard.recentPatients.length > 0) {
+          contextParts.push(`- Recent patients (last 7 days): ${dashboard.recentPatients.length}`)
+          dashboard.recentPatients.slice(0, 5).forEach((patient) => {
+            contextParts.push(`  • ${patient.name}${patient.lastSeenAt ? ` (last seen ${new Date(patient.lastSeenAt).toLocaleDateString()})` : ''}`)
+          })
+        }
+        if (dashboard.upcomingPatients && dashboard.upcomingPatients.length > 0) {
+          contextParts.push(`- Upcoming patients (next 7 days): ${dashboard.upcomingPatients.length}`)
+          dashboard.upcomingPatients.slice(0, 5).forEach((patient) => {
+            contextParts.push(`  • ${patient.name}${patient.nextVisitAt ? ` (next visit ${new Date(patient.nextVisitAt).toLocaleDateString()})` : ''}`)
+          })
+        }
+        if (dashboard.recentAppointments && dashboard.recentAppointments.length > 0) {
+          contextParts.push(`- Recent appointments: ${dashboard.recentAppointments.length}`)
+        }
+        if (dashboard.upcomingAppointments && dashboard.upcomingAppointments.length > 0) {
+          contextParts.push(`- Upcoming appointments: ${dashboard.upcomingAppointments.length}`)
+        }
+        if (dashboard.recentNotes && dashboard.recentNotes.length > 0) {
+          contextParts.push(`- Recent notes: ${dashboard.recentNotes.length}`)
+          dashboard.recentNotes.slice(0, 3).forEach((note) => {
+            contextParts.push(`  • ${note.patientName} (${note.type})`)
+          })
+        }
+      }
       
       if (contextPayload.visibleFields && Object.keys(contextPayload.visibleFields).length > 0) {
         contextParts.push(`\nVisible page fields: ${JSON.stringify(contextPayload.visibleFields)}`)
