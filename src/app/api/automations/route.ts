@@ -39,7 +39,81 @@ export async function GET(req: NextRequest) {
       },
     })
 
-    return NextResponse.json({ rules })
+    const runs = await prisma.automationRun.findMany({
+      where: {
+        practiceId: user.practiceId,
+      },
+      select: {
+        ruleId: true,
+        status: true,
+        startedAt: true,
+        finishedAt: true,
+      },
+    })
+
+    const runStatsByRule: Record<string, {
+      succeeded: number
+      failed: number
+      running: number
+      averageDurationMs: number | null
+      durationCount: number
+      durationTotalMs: number
+    }> = {}
+
+    for (const run of runs) {
+      if (!runStatsByRule[run.ruleId]) {
+        runStatsByRule[run.ruleId] = {
+          succeeded: 0,
+          failed: 0,
+          running: 0,
+          averageDurationMs: null,
+          durationCount: 0,
+          durationTotalMs: 0,
+        }
+      }
+
+      const stats = runStatsByRule[run.ruleId]
+
+      if (run.status === 'succeeded') {
+        stats.succeeded += 1
+      } else if (run.status === 'failed') {
+        stats.failed += 1
+      } else if (run.status === 'running') {
+        stats.running += 1
+      }
+
+      if (run.finishedAt) {
+        const durationMs = run.finishedAt.getTime() - run.startedAt.getTime()
+        if (durationMs >= 0) {
+          stats.durationTotalMs += durationMs
+          stats.durationCount += 1
+        }
+      }
+    }
+
+    const rulesWithStats = rules.map((rule) => {
+      const stats = runStatsByRule[rule.id]
+      return {
+        ...rule,
+        runStats: stats
+          ? {
+              succeeded: stats.succeeded,
+              failed: stats.failed,
+              running: stats.running,
+              averageDurationMs: stats.durationCount > 0
+                ? Math.round(stats.durationTotalMs / stats.durationCount)
+                : null,
+            }
+          : {
+              succeeded: 0,
+              failed: 0,
+              running: 0,
+              averageDurationMs: null,
+            },
+      }
+    })
+
+    return NextResponse.json({ rules: rulesWithStats })
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to fetch rules' },

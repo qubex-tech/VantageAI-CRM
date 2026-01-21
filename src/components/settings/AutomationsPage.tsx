@@ -32,6 +32,12 @@ interface AutomationRule {
   _count?: {
     runs: number
   }
+  runStats?: {
+    succeeded: number
+    failed: number
+    running: number
+    averageDurationMs: number | null
+  }
 }
 
 interface AutomationsPageProps {
@@ -65,6 +71,17 @@ export function AutomationsPage({ initialRules, practiceId, userId }: Automation
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+
+  const formatDuration = (durationMs: number | null | undefined) => {
+    if (!durationMs || durationMs <= 0) return '—'
+    const totalSeconds = Math.round(durationMs / 1000)
+    if (totalSeconds < 60) return `${totalSeconds}s`
+    const totalMinutes = Math.round(totalSeconds / 60)
+    if (totalMinutes < 60) return `${totalMinutes}m`
+    const hours = Math.floor(totalMinutes / 60)
+    const minutes = totalMinutes % 60
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
+  }
   
   // Form state
   const [formData, setFormData] = useState({
@@ -557,6 +574,35 @@ export function AutomationsPage({ initialRules, practiceId, userId }: Automation
                       condition(s)
                     </div>
                   )}
+                </div>
+                <div className="mt-4 border-t pt-4">
+                  <div className="text-sm font-medium mb-2">Runs</div>
+                  <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                    <div className="rounded-md border p-3">
+                      <div className="text-xs text-gray-500">Completed</div>
+                      <div className="text-lg font-semibold">
+                        {rule.runStats?.succeeded ?? 0}
+                      </div>
+                    </div>
+                    <div className="rounded-md border p-3">
+                      <div className="text-xs text-gray-500">Failed</div>
+                      <div className="text-lg font-semibold">
+                        {rule.runStats?.failed ?? 0}
+                      </div>
+                    </div>
+                    <div className="rounded-md border p-3">
+                      <div className="text-xs text-gray-500">In progress</div>
+                      <div className="text-lg font-semibold">
+                        {rule.runStats?.running ?? 0}
+                      </div>
+                    </div>
+                    <div className="rounded-md border p-3">
+                      <div className="text-xs text-gray-500">Avg duration</div>
+                      <div className="text-lg font-semibold">
+                        {formatDuration(rule.runStats?.averageDurationMs)}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>
