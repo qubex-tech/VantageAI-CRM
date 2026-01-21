@@ -76,6 +76,8 @@ interface EmailBuilderProps {
   saving?: boolean
   previewMode?: 'desktop' | 'mobile'
   onPreviewModeChange?: (mode: 'desktop' | 'mobile') => void
+  hidePalette?: boolean
+  onAddSavedBlock?: (block: any) => void
 }
 
 export interface EmailBuilderRef {
@@ -93,6 +95,8 @@ const EmailBuilder = forwardRef<EmailBuilderRef, EmailBuilderProps>(function Ema
   saving = false,
   previewMode: externalPreviewMode,
   onPreviewModeChange,
+  hidePalette = false,
+  onAddSavedBlock,
 }, ref) {
   const [savedBlocks, setSavedBlocks] = useState<Array<{ id: string; name: string; category?: string }>>([])
   const [loadingSavedBlocks, setLoadingSavedBlocks] = useState(false)
@@ -123,24 +127,34 @@ const EmailBuilder = forwardRef<EmailBuilderRef, EmailBuilderProps>(function Ema
 
   const [selectedBlock, setSelectedBlock] = useState<{ rowId: string; colId: string; blockIndex: number } | null>(null)
 
-  // Load saved content blocks
+  // Load saved content blocks (only if palette is visible)
   useEffect(() => {
-    const loadSavedBlocks = async () => {
-      try {
-        setLoadingSavedBlocks(true)
-        const response = await fetch('/api/marketing/content-blocks')
-        if (response.ok) {
-          const data = await response.json()
-          setSavedBlocks(data.blocks || [])
+    if (!hidePalette) {
+      const loadSavedBlocks = async () => {
+        try {
+          setLoadingSavedBlocks(true)
+          const response = await fetch('/api/marketing/content-blocks')
+          if (response.ok) {
+            const data = await response.json()
+            setSavedBlocks(data.blocks || [])
+          }
+        } catch (error) {
+          console.error('Failed to load saved blocks:', error)
+        } finally {
+          setLoadingSavedBlocks(false)
         }
-      } catch (error) {
-        console.error('Failed to load saved blocks:', error)
-      } finally {
-        setLoadingSavedBlocks(false)
       }
+      loadSavedBlocks()
     }
-    loadSavedBlocks()
-  }, [])
+  }, [hidePalette])
+  
+  // Handle external saved block addition
+  useEffect(() => {
+    if (onAddSavedBlock) {
+      // Create a handler that can be called from parent
+      // This will be handled via a callback passed to TemplateEditor
+    }
+  }, [onAddSavedBlock])
   const [selectedRow, setSelectedRow] = useState<string | null>(null)
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>(externalPreviewMode || 'desktop')
   const [history, setHistory] = useState<EmailDoc[]>([doc])
@@ -179,10 +193,37 @@ const EmailBuilder = forwardRef<EmailBuilderRef, EmailBuilderProps>(function Ema
   }
   
   // Handle HTML5 drag-and-drop from palette (separate from DndContext)
-  const handlePaletteDrop = (e: React.DragEvent, rowId: string, colId: string) => {
+  const handlePaletteDrop = async (e: React.DragEvent, rowId: string, colId: string) => {
     e.preventDefault()
     const blockType = e.dataTransfer.getData('blockType')
-    if (blockType) {
+    const savedBlockId = e.dataTransfer.getData('savedBlockId')
+    
+    if (savedBlockId && blockType === 'saved') {
+      // Handle saved block
+      try {
+        const response = await fetch(`/api/marketing/content-blocks/${savedBlockId}`)
+        if (response.ok) {
+          const data = await response.json()
+          const blockData = data.block.blockData
+          
+          if (data.block.blockType === 'row') {
+            // Add as a new row
+            const newDoc = { ...doc }
+            newDoc.rows.push({
+              ...blockData,
+              id: `row-${Date.now()}`,
+            })
+            updateDoc(newDoc)
+          } else {
+            // Add as a block to the specified column
+            addBlockToRow(rowId, colId, blockData)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load saved block:', error)
+      }
+    } else if (blockType) {
+      // Handle regular block type
       const newBlock = createNewBlock(blockType)
       addBlockToRow(rowId, colId, newBlock)
     }
@@ -568,53 +609,64 @@ const EmailBuilder = forwardRef<EmailBuilderRef, EmailBuilderProps>(function Ema
   // Expose undo/redo handlers via ref or callbacks for parent toolbar
   // For now, we'll remove the toolbar and let parent handle everything
   
+  // Handler for adding saved blocks from external source
+  const handleAddSavedBlock = async (block: any) => {
+    if (onAddSavedBlock) {
+      onAddSavedBlock(block)
+      return
+    }
+    
+    // Default handler (when palette is internal)
+    try {
+      const response = await fetch(`/api/marketing/content-blocks/${block.id}`)
+      if (response.ok) {
+        const data = await response.json()
+        const blockData = data.block.blockData
+        
+        if (data.block.blockType === 'row') {
+          // Add as a new row
+          const newDoc = { ...doc }
+          newDoc.rows.push({
+            ...blockData,
+            id: `row-${Date.now()}`,
+          })
+          updateDoc(newDoc)
+        } else {
+          // Add as a block to the first column of the first row
+          if (doc.rows.length === 0) {
+            addRow(1)
+          }
+          const firstRow = doc.rows[0]
+          if (firstRow && firstRow.columns.length > 0) {
+            const firstCol = firstRow.columns[0]
+            const newDoc = { ...doc }
+            const row = newDoc.rows.find((r) => r.id === firstRow.id)
+            if (row) {
+              const col = row.columns.find((c) => c.id === firstCol.id)
+              if (col) {
+                col.blocks.push(blockData)
+                updateDoc(newDoc)
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load saved block:', error)
+    }
+  }
+  
   return (
     <div className="flex flex-col h-full bg-gray-50">
       <div className="flex flex-1 overflow-hidden">
-        {/* Block Palette */}
-        <BlockPalette 
-          onDragStart={(type) => {}} 
-          onAddSavedBlock={async (block) => {
-            try {
-              const response = await fetch(`/api/marketing/content-blocks/${block.id}`)
-              if (response.ok) {
-                const data = await response.json()
-                const blockData = data.block.blockData
-                
-                if (data.block.blockType === 'row') {
-                  // Add as a new row
-                  const newDoc = { ...doc }
-                  newDoc.rows.push({
-                    ...blockData,
-                    id: `row-${Date.now()}`,
-                  })
-                  updateDoc(newDoc)
-                } else {
-                  // Add as a block to the first column of the first row
-                  if (doc.rows.length === 0) {
-                    addRow(1)
-                  }
-                  const firstRow = doc.rows[0]
-                  if (firstRow && firstRow.columns.length > 0) {
-                    const firstCol = firstRow.columns[0]
-                    const newDoc = { ...doc }
-                    const row = newDoc.rows.find((r) => r.id === firstRow.id)
-                    if (row) {
-                      const col = row.columns.find((c) => c.id === firstCol.id)
-                      if (col) {
-                        col.blocks.push(blockData)
-                        updateDoc(newDoc)
-                      }
-                    }
-                  }
-                }
-              }
-            } catch (error) {
-              console.error('Failed to load saved block:', error)
-            }
-          }}
-          savedBlocks={savedBlocks}
-        />
+        {/* Block Palette - Only show if not hidden */}
+        {!hidePalette && (
+          <BlockPalette 
+            onDragStart={(type) => {}} 
+            onAddSavedBlock={handleAddSavedBlock}
+            savedBlocks={savedBlocks}
+          />
+        )}
 
         {/* Canvas */}
         <div className="flex-1 overflow-auto bg-gray-100 p-4">
