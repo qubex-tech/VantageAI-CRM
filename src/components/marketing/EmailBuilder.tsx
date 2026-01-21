@@ -709,9 +709,10 @@ const EmailBuilder = forwardRef<EmailBuilderRef, EmailBuilderProps>(function Ema
           </DndContext>
         </div>
 
-        {/* Properties Panel */}
-        <div className="relative">
-          <PropertiesPanel
+        {/* Properties Panel - Only render when a block is selected */}
+        {selectedBlockData && (
+          <div className="relative">
+            <PropertiesPanel
             block={selectedBlockData}
             doc={doc}
             onUpdate={updateBlock}
@@ -758,7 +759,8 @@ const EmailBuilder = forwardRef<EmailBuilderRef, EmailBuilderProps>(function Ema
               />
             </div>
           )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -1557,17 +1559,11 @@ function PropertiesPanel({
   onSavedBlocksUpdate?: () => Promise<void>
 }) {
   if (!block) {
-    return (
-      <div className="w-80 bg-white border-l border-gray-200 overflow-y-auto p-4">
-        <div className="text-sm text-gray-500 text-center mt-8">
-          Select a block to edit its properties
-        </div>
-      </div>
-    )
+    return null
   }
 
   return (
-    <div className="w-80 bg-white border-l border-gray-200 overflow-y-auto" data-properties-panel>
+    <div className="w-80 bg-white border-l border-gray-200 overflow-y-auto transition-all duration-300 ease-in-out" data-properties-panel>
       <div className="p-4 border-b border-gray-200">
         <h3 className="font-semibold text-sm text-gray-900 capitalize">{block.type} Properties</h3>
       </div>

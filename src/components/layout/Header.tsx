@@ -2,9 +2,12 @@
 
 import { HealixButton } from '@/components/healix/HealixButton'
 import { usePathname } from 'next/navigation'
+import { useSidebar } from './SidebarProvider'
+import { cn } from '@/lib/utils'
 
 export function Header() {
   const pathname = usePathname()
+  const { isCollapsed } = useSidebar()
 
   // Extract entity IDs from pathname if available
   const patientIdMatch = pathname.match(/\/patients\/([^/]+)/)
@@ -18,7 +21,13 @@ export function Header() {
     .join(' / ') || 'Dashboard'
 
   return (
-    <header className="fixed top-0 right-0 z-40 md:left-64 flex items-center justify-end px-4 py-2 h-14 bg-white border-b border-gray-200 transition-all duration-300 ease-in-out max-w-full">
+    <header 
+      className={cn(
+        "fixed top-0 right-0 z-40 flex items-center justify-end px-4 py-2 h-14 bg-white border-b border-gray-200 transition-all duration-300 ease-in-out max-w-full",
+        // Responsive left margin based on sidebar state
+        isCollapsed ? "md:left-16" : "md:left-64"
+      )}
+    >
       <div className="flex items-center gap-2">
         <HealixButton
           patientId={patientIdMatch?.[1]}
