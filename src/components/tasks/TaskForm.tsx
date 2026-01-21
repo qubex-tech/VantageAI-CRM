@@ -35,7 +35,7 @@ export function TaskForm({ task, users, currentUserId, patientId, onSuccess }: T
     priority: task?.priority || 'medium',
     status: task?.status || 'pending',
     dueDate: task?.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
-    assignedTo: task?.assignedTo || '',
+    assignedTo: task?.assignedTo || 'unassigned',
     patientId: task?.patientId || patientId || '',
   })
 
@@ -52,7 +52,7 @@ export function TaskForm({ task, users, currentUserId, patientId, onSuccess }: T
         priority: formData.priority,
         status: formData.status,
         dueDate: formData.dueDate ? new Date(formData.dueDate).toISOString() : null,
-        assignedTo: formData.assignedTo || null,
+        assignedTo: formData.assignedTo === 'unassigned' ? null : formData.assignedTo || null,
         patientId: formData.patientId || null,
       }
 
@@ -199,7 +199,7 @@ export function TaskForm({ task, users, currentUserId, patientId, onSuccess }: T
                   <SelectValue placeholder="Unassigned" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Unassigned</SelectItem>
+                  <SelectItem value="unassigned">Unassigned</SelectItem>
                   {users.map((user) => (
                     <SelectItem key={user.id} value={user.id}>
                       {user.name}
