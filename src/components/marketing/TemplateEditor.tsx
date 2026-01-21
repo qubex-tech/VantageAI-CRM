@@ -901,7 +901,27 @@ export default function TemplateEditor({ template: initialTemplate, brandProfile
                   )}
                   <div className="border border-gray-200 rounded-lg overflow-hidden">
                     <iframe
-                      srcDoc={preview.html}
+                      srcDoc={`
+                        <!DOCTYPE html>
+                        <html>
+                          <head>
+                            <meta charset="utf-8">
+                            <style>
+                              body {
+                                margin: 0;
+                                padding: 24px;
+                                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                              }
+                              * {
+                                box-sizing: border-box;
+                              }
+                            </style>
+                          </head>
+                          <body>
+                            ${preview.html || ''}
+                          </body>
+                        </html>
+                      `}
                       className="w-full h-[600px] border-0"
                       title="Email Preview"
                     />
