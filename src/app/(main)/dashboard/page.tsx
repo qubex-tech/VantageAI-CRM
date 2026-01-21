@@ -7,6 +7,7 @@ import { addDays, endOfDay, format, formatDistanceToNow, startOfDay, subDays } f
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { HealixCommandCenter } from '@/components/healix/HealixCommandCenter'
+import { MyTasksCard } from '@/components/dashboard/MyTasksCard'
 
 export const dynamic = 'force-dynamic'
 
@@ -192,6 +193,40 @@ export default async function DashboardPage() {
       createdAt: 'desc',
     },
     take: 10,
+  })
+
+  // Get users for task assignment dropdown
+  const users = await prisma.user.findMany({
+    where: {
+      practiceId,
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+    orderBy: {
+      name: 'asc',
+    },
+  })
+
+  // Get patients for task linking
+  const patients = await prisma.patient.findMany({
+    where: {
+      practiceId,
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      primaryPhone: true,
+      phone: true,
+    },
+    take: 100, // Limit for performance
+    orderBy: {
+      name: 'asc',
+    },
   })
 
   // Get tasks assigned to current user or unassigned
@@ -512,65 +547,12 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold text-gray-900">My Tasks</CardTitle>
-            <CardDescription className="text-sm text-gray-500">
-              {myTasks.length} pending task{myTasks.length !== 1 ? 's' : ''}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {myTasks.length === 0 ? (
-                <p className="text-sm text-gray-500 py-4">No pending tasks</p>
-              ) : (
-                myTasks.map((task: any) => (
-                  <Link
-                    key={task.id}
-                    href={`/tasks/${task.id}`}
-                    className="block py-2 border-b border-gray-100 last:border-0 hover:bg-gray-50 -mx-2 px-2 rounded-md transition-colors"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{task.title}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          {task.patient && (
-                            <p className="text-xs text-gray-500 truncate">{task.patient.name}</p>
-                          )}
-                          {task.dueDate && (
-                            <span className="text-xs text-gray-400">
-                              • {format(new Date(task.dueDate), 'MMM d')}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <span className={`text-xs px-2 py-0.5 rounded-md font-medium ${
-                        task.priority === 'urgent' ? 'bg-red-100 text-red-700' :
-                        task.priority === 'high' ? 'bg-orange-100 text-orange-700' :
-                        task.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-blue-100 text-blue-700'
-                      }`}>
-                        {task.priority}
-                      </span>
-                    </div>
-                  </Link>
-                ))
-              )}
-            </div>
-            <div className="flex gap-2 mt-4">
-              <Link href="/tasks/new" className="flex-1">
-                <Button variant="outline" className="w-full text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-50">
-                  + New Task
-                </Button>
-              </Link>
-              <Link href="/tasks" className="flex-1">
-                <Button variant="ghost" className="w-full text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-50">
-                  View All →
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
+        <MyTasksCard
+          tasks={myTasks}
+          users={users}
+          patients={patients}
+          currentUserId={user.id}
+        />
 
         <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
           <CardHeader className="pb-3">
