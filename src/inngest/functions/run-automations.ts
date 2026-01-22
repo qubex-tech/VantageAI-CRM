@@ -48,7 +48,10 @@ function substituteVariables(args: any, eventData: Record<string, any>): any {
   return args
 }
 
-function buildAutomationContext(eventData: Record<string, any>) {
+function buildAutomationContext(
+  eventData: Record<string, any>,
+  practice?: { name?: string | null; phone?: string | null; address?: string | null }
+) {
   const patient = eventData.patient || {}
   const appointment = eventData.appointment || {}
   const appointmentStart = appointment.startTime ? new Date(appointment.startTime) : null
@@ -68,6 +71,11 @@ function buildAutomationContext(eventData: Record<string, any>) {
 
   return {
     ...eventData,
+    practice: {
+      name: practice?.name,
+      phone: practice?.phone,
+      address: practice?.address,
+    },
     patient: {
       ...patient,
       firstName: patient.firstName || inferredFirstName,
@@ -78,6 +86,8 @@ function buildAutomationContext(eventData: Record<string, any>) {
       ...appointment,
       date: appointment.date || (appointmentStart ? appointmentStart.toLocaleDateString() : undefined),
       time: appointment.time || (appointmentStart ? appointmentStart.toLocaleTimeString() : undefined),
+      location: appointment.location || practice?.address,
+      providerName: appointment.providerName || appointment.provider?.name,
       minutesUntilStart,
       hoursUntilStart,
       daysUntilStart,
@@ -164,12 +174,19 @@ export const runAutomationsForEvent = inngest.createFunction(
       }
     )
 
+    const practice = await step.run('load-practice', async () => {
+      return prisma.practice.findUnique({
+        where: { id: practiceId },
+        select: { name: true, phone: true, address: true },
+      })
+    })
+
     // Step 2: Evaluate conditions for each rule
     const evaluatedRules = await step.run(
       'evaluate-conditions',
       async () => {
         const results = []
-        const automationContext = buildAutomationContext(payload.data)
+        const automationContext = buildAutomationContext(payload.data, practice || undefined)
         for (const rule of matchingRules) {
           try {
             const matches = evaluateConditions(
@@ -232,7 +249,7 @@ export const runAutomationsForEvent = inngest.createFunction(
             }
 
             // Substitute variables in action args (e.g., {appointment.patientId} -> actual value)
-            const automationContext = buildAutomationContext(payload.data)
+            const automationContext = buildAutomationContext(payload.data, practice || undefined)
             let processedArgs = substituteVariables(rawArgs, automationContext)
 
             // Auto-fill patientId from event data if missing and action requires it
