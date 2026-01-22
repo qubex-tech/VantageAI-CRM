@@ -102,10 +102,23 @@ export default function BrandSettingsPage() {
     setError('')
     setSuccess('')
     try {
+      const payload = {
+        ...form,
+        practiceName: form.practiceName.trim(),
+        defaultFromName: form.defaultFromName.trim(),
+        defaultFromEmail: form.defaultFromEmail.trim(),
+        logoUrl: form.logoUrl.trim() ? form.logoUrl.trim() : null,
+        secondaryColor: form.secondaryColor.trim() ? form.secondaryColor.trim() : null,
+        defaultReplyToEmail: form.defaultReplyToEmail.trim() ? form.defaultReplyToEmail.trim() : null,
+        defaultSmsSenderId: form.defaultSmsSenderId.trim() ? form.defaultSmsSenderId.trim() : null,
+        quietHoursStart: form.quietHoursStart.trim() ? form.quietHoursStart.trim() : undefined,
+        quietHoursEnd: form.quietHoursEnd.trim() ? form.quietHoursEnd.trim() : undefined,
+        timezone: form.timezone.trim() ? form.timezone.trim() : undefined,
+      }
       const response = await fetch('/api/marketing/brand', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       })
 
       if (!response.ok) {
