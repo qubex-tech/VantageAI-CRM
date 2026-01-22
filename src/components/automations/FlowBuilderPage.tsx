@@ -170,6 +170,102 @@ export function FlowBuilderPage({ practiceId, userId, initialRules = [], initial
   const [success, setSuccess] = useState('')
   const isEditing = !!initialRule
 
+  const isMissingValue = (value: any) => {
+    if (value === null || value === undefined) return true
+    if (typeof value === 'string') return value.trim().length === 0
+    return false
+  }
+
+  const validateWorkflow = (workflow: { nodes: Node<FlowNodeData>[]; edges: Edge[] }) => {
+    const errors: string[] = []
+    const triggerNode = workflow.nodes.find((n) => n.type === 'trigger')
+    if (!triggerNode) {
+      errors.push('Add a trigger before saving.')
+    } else if (isMissingValue(triggerNode.data.config?.eventName)) {
+      errors.push('Select a trigger event.')
+    }
+
+    const actionNodes = workflow.nodes.filter((n) => n.type === 'action')
+    if (actionNodes.length === 0) {
+      errors.push('Add at least one action.')
+    }
+
+    actionNodes.forEach((node, index) => {
+      const actionType = node.data.config?.actionType
+      const args = node.data.config?.args || {}
+      const actionLabel = actionType ? actionType.replace(/_/g, ' ') : `action ${index + 1}`
+
+      if (isMissingValue(actionType)) {
+        errors.push(`Select an action type for ${actionLabel}.`)
+        return
+      }
+
+      switch (actionType) {
+        case 'send_email': {
+          const hasTemplate = !isMissingValue(args.templateId)
+          if (!hasTemplate && (isMissingValue(args.subject) || isMissingValue(args.body))) {
+            errors.push(`Add subject and body (or pick a template) for ${actionLabel}.`)
+          }
+          break
+        }
+        case 'send_sms': {
+          const hasTemplate = !isMissingValue(args.templateId)
+          if (!hasTemplate && isMissingValue(args.message)) {
+            errors.push(`Add a message (or pick a template) for ${actionLabel}.`)
+          }
+          break
+        }
+        case 'send_reminder':
+          if (isMissingValue(args.message)) {
+            errors.push(`Add a message for ${actionLabel}.`)
+          }
+          break
+        case 'create_note':
+          if (isMissingValue(args.content)) {
+            errors.push(`Add note content for ${actionLabel}.`)
+          }
+          break
+        case 'delay_seconds':
+          if (typeof args.seconds !== 'number' || args.seconds <= 0) {
+            errors.push(`Set a delay in seconds (> 0) for ${actionLabel}.`)
+          }
+          break
+        case 'update_patient_fields': {
+          const fields = args.fields || {}
+          const hasFields = Object.values(fields).some((value) => !isMissingValue(value))
+          if (!hasFields) {
+            errors.push(`Select at least one field to update for ${actionLabel}.`)
+          }
+          break
+        }
+        case 'tag_patient':
+          if (isMissingValue(args.tag)) {
+            errors.push(`Add a tag for ${actionLabel}.`)
+          }
+          break
+        case 'create_task':
+          if (isMissingValue(args.title)) {
+            errors.push(`Add a title for ${actionLabel}.`)
+          }
+          break
+        case 'update_appointment_status':
+          if (isMissingValue(args.appointmentId) || isMissingValue(args.status)) {
+            errors.push(`Add appointment ID and status for ${actionLabel}.`)
+          }
+          break
+        case 'create_insurance_policy':
+          if (isMissingValue(args.providerName) || isMissingValue(args.memberId) || isMissingValue(args.policyHolderName)) {
+            errors.push(`Add provider name, member ID, and policy holder name for ${actionLabel}.`)
+          }
+          break
+        default:
+          break
+      }
+    })
+
+    return errors
+  }
+
   // Reset workflow name when initialRule changes (e.g., when switching between edit/create)
   useEffect(() => {
     setWorkflowName(initialRule?.name || '')
@@ -192,6 +288,12 @@ export function FlowBuilderPage({ practiceId, userId, initialRules = [], initial
     async (workflow: { nodes: Node<FlowNodeData>[]; edges: Edge[] }) => {
       if (!workflowName.trim()) {
         setError('Please enter a workflow name')
+        return
+      }
+
+      const validationErrors = validateWorkflow(workflow)
+      if (validationErrors.length > 0) {
+        setError(validationErrors.join(' '))
         return
       }
 
