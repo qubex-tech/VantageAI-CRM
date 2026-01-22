@@ -189,182 +189,175 @@ export const runAutomationsForEvent = inngest.createFunction(
     )
 
     // Step 3: Execute actions for each matching rule
-    const executionResults = await step.run(
-      'execute-actions',
-      async () => {
-        const results = []
-        
-        for (const rule of evaluatedRules) {
-          // Create AutomationRun
-          const run = await prisma.automationRun.create({
-            data: {
-              practiceId,
-              ruleId: rule.id,
-              sourceEventId: payload.sourceEventId,
-              status: 'running',
-            },
-          })
+    const executionResults = []
 
+    for (const rule of evaluatedRules) {
+      // Create AutomationRun
+      const run = await prisma.automationRun.create({
+        data: {
+          practiceId,
+          ruleId: rule.id,
+          sourceEventId: payload.sourceEventId,
+          status: 'running',
+        },
+      })
+
+      try {
+        const actions = rule.actionsJson as any[]
+        console.log(`[AUTOMATION] Rule ${rule.id} has ${actions.length} actions to execute`)
+        console.log(`[AUTOMATION] Actions from database:`, JSON.stringify(actions, null, 2))
+
+        const actionResults = []
+
+        // Execute actions sequentially
+        for (const [index, action] of actions.entries()) {
           try {
-            const actions = rule.actionsJson as any[]
-            console.log(`[AUTOMATION] Rule ${rule.id} has ${actions.length} actions to execute`)
-            console.log(`[AUTOMATION] Actions from database:`, JSON.stringify(actions, null, 2))
-            
-            const actionResults = []
+            console.log(`[AUTOMATION] Executing action: ${action.type}`, {
+              ruleId: rule.id,
+              runId: run.id,
+              actionObject: action,
+              originalArgs: action.args,
+              originalArgsType: typeof action.args,
+              originalArgsKeys: action.args ? Object.keys(action.args) : [],
+              actionKeys: Object.keys(action),
+              eventData: payload.data,
+              eventDataKeys: Object.keys(payload.data),
+            })
 
-            // Execute actions sequentially
-            for (const [index, action] of actions.entries()) {
-              try {
-                console.log(`[AUTOMATION] Executing action: ${action.type}`, {
-                  ruleId: rule.id,
-                  runId: run.id,
-                  actionObject: action,
-                  originalArgs: action.args,
-                  originalArgsType: typeof action.args,
-                  originalArgsKeys: action.args ? Object.keys(action.args) : [],
-                  actionKeys: Object.keys(action),
-                  eventData: payload.data,
-                  eventDataKeys: Object.keys(payload.data),
-                })
+            // Ensure args is an object
+            const rawArgs = action.args || {}
+            if (typeof rawArgs !== 'object' || Array.isArray(rawArgs)) {
+              console.error(`[AUTOMATION] Invalid args structure:`, rawArgs)
+              throw new Error(`Action args must be an object, got ${typeof rawArgs}`)
+            }
 
-                // Ensure args is an object
-                const rawArgs = action.args || {}
-                if (typeof rawArgs !== 'object' || Array.isArray(rawArgs)) {
-                  console.error(`[AUTOMATION] Invalid args structure:`, rawArgs)
-                  throw new Error(`Action args must be an object, got ${typeof rawArgs}`)
-                }
+            // Substitute variables in action args (e.g., {appointment.patientId} -> actual value)
+            const automationContext = buildAutomationContext(payload.data)
+            let processedArgs = substituteVariables(rawArgs, automationContext)
 
-                // Substitute variables in action args (e.g., {appointment.patientId} -> actual value)
-                const automationContext = buildAutomationContext(payload.data)
-                let processedArgs = substituteVariables(rawArgs, automationContext)
-                
-                // Auto-fill patientId from event data if missing and action requires it
-                const actionsRequiringPatientId = ['create_note', 'send_email', 'send_sms', 'send_reminder', 'update_patient_fields', 'tag_patient', 'create_insurance_policy']
-                if (actionsRequiringPatientId.includes(action.type) && !processedArgs.patientId) {
-                  // Try to extract patientId from common event data paths
-                  const patientId = 
-                    payload.data.appointment?.patientId ||
-                    payload.data.patient?.id ||
-                    payload.data.patientId ||
-                    payload.data.entityId // Fallback to entityId if it's a patient entity
-                  
-                  if (patientId) {
-                    console.log(`[AUTOMATION] Auto-filled patientId from event data:`, patientId)
-                    processedArgs = { ...processedArgs, patientId }
-                  } else {
-                    console.warn(`[AUTOMATION] Could not auto-fill patientId for action ${action.type}. Event data:`, Object.keys(payload.data))
-                  }
-                }
-                
-                // Auto-fill type for create_note if missing
-                if (action.type === 'create_note' && !processedArgs.type) {
-                  console.log(`[AUTOMATION] Auto-filling type='general' for create_note`)
-                  processedArgs = { ...processedArgs, type: 'general' }
-                }
-                
-                console.log(`[AUTOMATION] Processed args after variable substitution:`, {
-                  processedArgs,
-                  processedArgsKeys: Object.keys(processedArgs),
-                  processedArgsValues: Object.entries(processedArgs).map(([k, v]) => ({
-                    key: k,
-                    value: v,
-                    valueType: typeof v,
-                    isEmpty: v === '' || v === null || v === undefined,
-                  })),
-                })
+            // Auto-fill patientId from event data if missing and action requires it
+            const actionsRequiringPatientId = ['create_note', 'send_email', 'send_sms', 'send_reminder', 'update_patient_fields', 'tag_patient', 'create_insurance_policy']
+            if (actionsRequiringPatientId.includes(action.type) && !processedArgs.patientId) {
+              // Try to extract patientId from common event data paths
+              const patientId =
+                payload.data.appointment?.patientId ||
+                payload.data.patient?.id ||
+                payload.data.patientId ||
+                payload.data.entityId // Fallback to entityId if it's a patient entity
 
-                if (action.type === 'delay_seconds') {
-                  const delaySeconds = typeof processedArgs.seconds === 'number'
-                    ? processedArgs.seconds
-                    : Number(processedArgs.seconds)
-                  if (!Number.isNaN(delaySeconds) && delaySeconds > 0) {
-                    await step.sleep(
-                      `delay-${run.id}-${index}`,
-                      `${delaySeconds}s`
-                    )
-                  }
-                }
-                
-                const result = await runAction({
-                  practiceId,
-                  runId: run.id,
-                  actionType: action.type,
-                  actionArgs: processedArgs,
-                  eventData: {
-                    ...payload.data,
-                    userId: rule.createdByUserId, // Pass rule creator as userId for actions
-                  },
-                })
-
-                console.log(`[AUTOMATION] Action result:`, {
-                  actionType: action.type,
-                  status: result.status,
-                  result: result.result,
-                  error: result.error,
-                })
-
-                actionResults.push({
-                  actionType: action.type,
-                  status: result.status,
-                  result: result.result,
-                  error: result.error,
-                })
-              } catch (error) {
-                console.error(`[AUTOMATION] Action execution error:`, {
-                  actionType: action.type,
-                  error: error instanceof Error ? error.message : 'Unknown error',
-                  stack: error instanceof Error ? error.stack : undefined,
-                })
-                actionResults.push({
-                  actionType: action.type,
-                  status: 'failed',
-                  error: error instanceof Error ? error.message : 'Unknown error',
-                })
+              if (patientId) {
+                console.log(`[AUTOMATION] Auto-filled patientId from event data:`, patientId)
+                processedArgs = { ...processedArgs, patientId }
+              } else {
+                console.warn(`[AUTOMATION] Could not auto-fill patientId for action ${action.type}. Event data:`, Object.keys(payload.data))
               }
             }
 
-            // Mark run as succeeded
-            await prisma.automationRun.update({
-              where: { id: run.id },
-              data: {
-                status: 'succeeded',
-                finishedAt: new Date(),
-                result: {
-                  actionsExecuted: actionResults.length,
-                  actionResults,
-                },
+            // Auto-fill type for create_note if missing
+            if (action.type === 'create_note' && !processedArgs.type) {
+              console.log(`[AUTOMATION] Auto-filling type='general' for create_note`)
+              processedArgs = { ...processedArgs, type: 'general' }
+            }
+
+            console.log(`[AUTOMATION] Processed args after variable substitution:`, {
+              processedArgs,
+              processedArgsKeys: Object.keys(processedArgs),
+              processedArgsValues: Object.entries(processedArgs).map(([k, v]) => ({
+                key: k,
+                value: v,
+                valueType: typeof v,
+                isEmpty: v === '' || v === null || v === undefined,
+              })),
+            })
+
+            if (action.type === 'delay_seconds') {
+              const delaySeconds = typeof processedArgs.seconds === 'number'
+                ? processedArgs.seconds
+                : Number(processedArgs.seconds)
+              if (!Number.isNaN(delaySeconds) && delaySeconds > 0) {
+                await step.sleep(
+                  `delay-${run.id}-${index}`,
+                  `${delaySeconds}s`
+                )
+              }
+            }
+
+            const result = await runAction({
+              practiceId,
+              runId: run.id,
+              actionType: action.type,
+              actionArgs: processedArgs,
+              eventData: {
+                ...payload.data,
+                userId: rule.createdByUserId, // Pass rule creator as userId for actions
               },
             })
 
-            results.push({
-              ruleId: rule.id,
-              ruleName: rule.name,
-              status: 'succeeded',
-              actionsExecuted: actionResults.length,
+            console.log(`[AUTOMATION] Action result:`, {
+              actionType: action.type,
+              status: result.status,
+              result: result.result,
+              error: result.error,
+            })
+
+            actionResults.push({
+              actionType: action.type,
+              status: result.status,
+              result: result.result,
+              error: result.error,
             })
           } catch (error) {
-            // Mark run as failed
-            await prisma.automationRun.update({
-              where: { id: run.id },
-              data: {
-                status: 'failed',
-                finishedAt: new Date(),
-                error: error instanceof Error ? error.message : 'Unknown error',
-              },
+            console.error(`[AUTOMATION] Action execution error:`, {
+              actionType: action.type,
+              error: error instanceof Error ? error.message : 'Unknown error',
+              stack: error instanceof Error ? error.stack : undefined,
             })
-
-            results.push({
-              ruleId: rule.id,
-              ruleName: rule.name,
+            actionResults.push({
+              actionType: action.type,
               status: 'failed',
               error: error instanceof Error ? error.message : 'Unknown error',
             })
           }
         }
 
-        return results
+        // Mark run as succeeded
+        await prisma.automationRun.update({
+          where: { id: run.id },
+          data: {
+            status: 'succeeded',
+            finishedAt: new Date(),
+            result: {
+              actionsExecuted: actionResults.length,
+              actionResults,
+            },
+          },
+        })
+
+        executionResults.push({
+          ruleId: rule.id,
+          ruleName: rule.name,
+          status: 'succeeded',
+          actionsExecuted: actionResults.length,
+        })
+      } catch (error) {
+        // Mark run as failed
+        await prisma.automationRun.update({
+          where: { id: run.id },
+          data: {
+            status: 'failed',
+            finishedAt: new Date(),
+            error: error instanceof Error ? error.message : 'Unknown error',
+          },
+        })
+
+        executionResults.push({
+          ruleId: rule.id,
+          ruleName: rule.name,
+          status: 'failed',
+          error: error instanceof Error ? error.message : 'Unknown error',
+        })
       }
-    )
+    }
 
     return {
       summary: {
