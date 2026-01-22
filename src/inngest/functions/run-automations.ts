@@ -52,6 +52,16 @@ function buildAutomationContext(eventData: Record<string, any>) {
   const patient = eventData.patient || {}
   const appointment = eventData.appointment || {}
   const appointmentStart = appointment.startTime ? new Date(appointment.startTime) : null
+  const now = new Date()
+  const minutesUntilStart = appointmentStart
+    ? Math.round((appointmentStart.getTime() - now.getTime()) / (1000 * 60))
+    : undefined
+  const hoursUntilStart = typeof minutesUntilStart === 'number'
+    ? Math.round(minutesUntilStart / 60)
+    : undefined
+  const daysUntilStart = typeof hoursUntilStart === 'number'
+    ? Math.round(hoursUntilStart / 24)
+    : undefined
   const nameParts = typeof patient.name === 'string' ? patient.name.split(' ') : []
   const inferredFirstName = nameParts[0] || ''
   const inferredLastName = nameParts.slice(1).join(' ') || ''
@@ -68,6 +78,9 @@ function buildAutomationContext(eventData: Record<string, any>) {
       ...appointment,
       date: appointment.date || (appointmentStart ? appointmentStart.toLocaleDateString() : undefined),
       time: appointment.time || (appointmentStart ? appointmentStart.toLocaleTimeString() : undefined),
+      minutesUntilStart,
+      hoursUntilStart,
+      daysUntilStart,
     },
     links: {
       confirm: '#',
@@ -156,11 +169,12 @@ export const runAutomationsForEvent = inngest.createFunction(
       'evaluate-conditions',
       async () => {
         const results = []
+        const automationContext = buildAutomationContext(payload.data)
         for (const rule of matchingRules) {
           try {
             const matches = evaluateConditions(
               rule.conditionsJson as any,
-              payload.data
+              automationContext
             )
             if (matches) {
               results.push(rule)
@@ -199,7 +213,7 @@ export const runAutomationsForEvent = inngest.createFunction(
             const actionResults = []
 
             // Execute actions sequentially
-            for (const action of actions) {
+            for (const [index, action] of actions.entries()) {
               try {
                 console.log(`[AUTOMATION] Executing action: ${action.type}`, {
                   ruleId: rule.id,
@@ -258,6 +272,18 @@ export const runAutomationsForEvent = inngest.createFunction(
                     isEmpty: v === '' || v === null || v === undefined,
                   })),
                 })
+
+                if (action.type === 'delay_seconds') {
+                  const delaySeconds = typeof processedArgs.seconds === 'number'
+                    ? processedArgs.seconds
+                    : Number(processedArgs.seconds)
+                  if (!Number.isNaN(delaySeconds) && delaySeconds > 0) {
+                    await step.sleep(
+                      `delay-${run.id}-${index}`,
+                      `${delaySeconds}s`
+                    )
+                  }
+                }
                 
                 const result = await runAction({
                   practiceId,

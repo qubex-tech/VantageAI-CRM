@@ -75,6 +75,9 @@ const EVENT_FIELDS: Record<string, Array<{ value: string; label: string; type: '
     { value: 'appointment.visitType', label: 'Visit Type', type: 'string' },
     { value: 'appointment.startTime', label: 'Start Time', type: 'date' },
     { value: 'appointment.endTime', label: 'End Time', type: 'date' },
+    { value: 'appointment.minutesUntilStart', label: 'Minutes Until Start', type: 'number' },
+    { value: 'appointment.hoursUntilStart', label: 'Hours Until Start', type: 'number' },
+    { value: 'appointment.daysUntilStart', label: 'Days Until Start', type: 'number' },
     ...PATIENT_FIELDS,
   ],
   'crm/appointment.updated': [
@@ -82,7 +85,24 @@ const EVENT_FIELDS: Record<string, Array<{ value: string; label: string; type: '
     { value: 'appointment.patientId', label: 'Patient ID', type: 'string' },
     { value: 'appointment.status', label: 'Status', type: 'string' },
     { value: 'appointment.visitType', label: 'Visit Type', type: 'string' },
+    { value: 'appointment.startTime', label: 'Start Time', type: 'date' },
+    { value: 'appointment.endTime', label: 'End Time', type: 'date' },
+    { value: 'appointment.minutesUntilStart', label: 'Minutes Until Start', type: 'number' },
+    { value: 'appointment.hoursUntilStart', label: 'Hours Until Start', type: 'number' },
+    { value: 'appointment.daysUntilStart', label: 'Days Until Start', type: 'number' },
     { value: 'changes.status', label: 'Status Changed', type: 'string' },
+    ...PATIENT_FIELDS,
+  ],
+  'crm/appointment.upcoming': [
+    { value: 'appointment.id', label: 'Appointment ID', type: 'string' },
+    { value: 'appointment.patientId', label: 'Patient ID', type: 'string' },
+    { value: 'appointment.status', label: 'Status', type: 'string' },
+    { value: 'appointment.visitType', label: 'Visit Type', type: 'string' },
+    { value: 'appointment.startTime', label: 'Start Time', type: 'date' },
+    { value: 'appointment.endTime', label: 'End Time', type: 'date' },
+    { value: 'appointment.minutesUntilStart', label: 'Minutes Until Start', type: 'number' },
+    { value: 'appointment.hoursUntilStart', label: 'Hours Until Start', type: 'number' },
+    { value: 'appointment.daysUntilStart', label: 'Days Until Start', type: 'number' },
     ...PATIENT_FIELDS,
   ],
   'crm/appointment.cancelled': [
@@ -343,6 +363,7 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
               <SelectContent>
                 <SelectItem value="crm/appointment.created">Appointment Created</SelectItem>
                 <SelectItem value="crm/appointment.updated">Appointment Updated</SelectItem>
+                <SelectItem value="crm/appointment.upcoming">Appointment Upcoming (Scheduled)</SelectItem>
                 <SelectItem value="crm/appointment.cancelled">Appointment Cancelled</SelectItem>
                 <SelectItem value="crm/appointment.confirmed">Appointment Confirmed</SelectItem>
                 <SelectItem value="crm/appointment.completed">Appointment Completed</SelectItem>
@@ -512,11 +533,20 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                             </Select>
                           ) : (
                             <Input
+                              type={(() => {
+                                const fieldMeta = uniqueFields.find((field) => field.value === condition.field)
+                                return fieldMeta?.type === 'number' ? 'number' : 'text'
+                              })()}
                               placeholder="Enter value"
-                              value={condition.value || ''}
+                              value={condition.value ?? ''}
                               onChange={(e) => {
+                                const fieldMeta = uniqueFields.find((field) => field.value === condition.field)
+                                const rawValue = e.target.value
+                                const value = fieldMeta?.type === 'number'
+                                  ? (rawValue === '' ? '' : Number(rawValue))
+                                  : rawValue
                                 const newConditions = [...(config.conditions || [])]
-                                newConditions[index] = { ...condition, value: e.target.value }
+                                newConditions[index] = { ...condition, value }
                                 handleUpdate({ conditions: newConditions })
                               }}
                             />

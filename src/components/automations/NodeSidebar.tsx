@@ -13,6 +13,7 @@ const TRIGGER_OPTIONS = [
   // Appointments
   { value: 'crm/appointment.created', label: 'Appointment Created', icon: Calendar, category: 'Appointments' },
   { value: 'crm/appointment.updated', label: 'Appointment Updated', icon: Calendar, category: 'Appointments' },
+  { value: 'crm/appointment.upcoming', label: 'Appointment Upcoming (Scheduled)', icon: Clock, category: 'Appointments' },
   { value: 'crm/appointment.cancelled', label: 'Appointment Cancelled', icon: XCircle, category: 'Appointments' },
   { value: 'crm/appointment.confirmed', label: 'Appointment Confirmed', icon: CheckCircle, category: 'Appointments' },
   { value: 'crm/appointment.completed', label: 'Appointment Completed', icon: CheckCircle, category: 'Appointments' },

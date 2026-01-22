@@ -50,6 +50,7 @@ interface AutomationsPageProps {
 const TRIGGER_EVENTS = [
   { value: 'crm/appointment.created', label: 'Appointment Created' },
   { value: 'crm/appointment.updated', label: 'Appointment Updated' },
+  { value: 'crm/appointment.upcoming', label: 'Appointment Upcoming (Scheduled)' },
   { value: 'crm/patient.created', label: 'Patient Created' },
   { value: 'crm/patient.updated', label: 'Patient Updated' },
   { value: 'crm/message.drafted', label: 'Message Drafted' },
