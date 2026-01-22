@@ -5,20 +5,26 @@ import { emitEvent } from '@/lib/outbox'
 const UPCOMING_WINDOW_HOURS = 48
 const SCHEDULE_CRON = '*/15 * * * *'
 
+function toDate(value: Date | string) {
+  return value instanceof Date ? value : new Date(value)
+}
+
 function buildAppointmentReminderPayload(appointment: {
   id: string
   practiceId: string
   patientId: string
-  startTime: Date
-  endTime: Date
+  startTime: Date | string
+  endTime: Date | string
   status: string
   visitType: string
   timezone: string
   patient: any
 }) {
   const now = new Date()
+  const startTime = toDate(appointment.startTime)
+  const endTime = toDate(appointment.endTime)
   const minutesUntilStart = Math.round(
-    (appointment.startTime.getTime() - now.getTime()) / (1000 * 60)
+    (startTime.getTime() - now.getTime()) / (1000 * 60)
   )
   const hoursUntilStart = Math.round(minutesUntilStart / 60)
   const daysUntilStart = Math.round(hoursUntilStart / 24)
@@ -28,8 +34,8 @@ function buildAppointmentReminderPayload(appointment: {
       id: appointment.id,
       patientId: appointment.patientId,
       status: appointment.status,
-      startTime: appointment.startTime.toISOString(),
-      endTime: appointment.endTime.toISOString(),
+      startTime: startTime.toISOString(),
+      endTime: endTime.toISOString(),
       visitType: appointment.visitType,
       timezone: appointment.timezone,
       minutesUntilStart,
