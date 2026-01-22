@@ -59,6 +59,16 @@ const config = {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+        // Override Tailwind defaults for more rounded corners
+        none: "0",
+        sm: "0.5rem", // 8px (was 0.125rem/2px)
+        DEFAULT: "0.625rem", // 10px - default for rounded (was 0.25rem/4px)
+        md: "0.75rem", // 12px (was 0.375rem/6px)
+        lg: "1rem", // 16px (was 0.5rem/8px)
+        xl: "1.25rem", // 20px (was 0.75rem/12px)
+        "2xl": "1.5rem", // 24px
+        "3xl": "2rem", // 32px
+        full: "9999px",
       },
       keyframes: {
         "accordion-down": {
