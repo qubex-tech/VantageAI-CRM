@@ -570,6 +570,37 @@ export default function TemplateEditor({ template: initialTemplate, brandProfile
                     </div>
                   </div>
                 )}
+                {lintResult && !lintResult.isValid && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 space-y-2">
+                    <div className="flex items-center gap-2 font-medium">
+                      <AlertCircle className="h-4 w-4" />
+                      <span>Fix these validation errors to publish</span>
+                    </div>
+                    <ul className="space-y-1">
+                      {lintResult.errors?.map((lintError: any, index: number) => (
+                        <li key={`${lintError.field}-${index}`}>• {lintError.message}</li>
+                      ))}
+                    </ul>
+                    {template.channel === 'sms' && (
+                      <div className="pt-2 border-t border-amber-200">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const optOutText = ' Reply STOP to opt out.'
+                            if (!bodyText.toLowerCase().includes('stop')) {
+                              setBodyText(bodyText.trim() + optOutText)
+                            }
+                          }}
+                          className="text-xs"
+                        >
+                          Add opt-out text
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="name" className="text-xs font-medium text-gray-700">Template Name *</Label>
