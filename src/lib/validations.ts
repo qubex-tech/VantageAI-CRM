@@ -198,6 +198,7 @@ export const previewTemplateSchema = z.object({
       confirm: z.string().url().optional(),
       reschedule: z.string().url().optional(),
       cancel: z.string().url().optional(),
+      portalVerified: z.string().url().optional(),
     }).optional(),
   }).optional(),
 })

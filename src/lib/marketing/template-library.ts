@@ -211,7 +211,7 @@ export const TEMPLATE_LIBRARY: TemplateLibraryItem[] = [
                 {
                   type: 'button',
                   label: 'Access Patient Portal',
-                  url: '#',
+                  url: '{{links.portalVerified}}',
                   style: {
                     backgroundColor: '#2563eb',
                     textColor: '#ffffff',

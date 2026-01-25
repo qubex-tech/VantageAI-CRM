@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getPracticeContext } from '@/lib/tenant'
 import { patientOTPRequestSchema } from '@/lib/validations'
-import { createPatientOTP } from '@/lib/patient-auth'
+import { createPatientOTP, verifyInviteTokenAnyPractice } from '@/lib/patient-auth'
 import { patientNameMatches } from '@/lib/name-matching'
+import { cookies } from 'next/headers'
+
+function normalizeDigits(value: string) {
+  return value.replace(/[^\d]/g, '')
+}
 
 /**
  * POST /api/portal/auth/otp
@@ -11,6 +15,25 @@ import { patientNameMatches } from '@/lib/name-matching'
  */
 export async function POST(req: NextRequest) {
   try {
+    const cookieStore = await cookies()
+    const inviteToken = cookieStore.get('portal_invite')?.value
+    if (!inviteToken) {
+      return NextResponse.json(
+        { error: 'Secure invite required. Please use the invite link your practice sent you.' },
+        { status: 403 }
+      )
+    }
+
+    const invite = await verifyInviteTokenAnyPractice(inviteToken)
+    if (!invite) {
+      // Clear stale token
+      cookieStore.delete('portal_invite')
+      return NextResponse.json(
+        { error: 'Invite link is invalid or expired. Please request a new invite from your practice.' },
+        { status: 403 }
+      )
+    }
+
     const body = await req.json()
     const parsed = patientOTPRequestSchema.parse(body)
 
@@ -21,77 +44,52 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Try to get practice context from domain (for subdomain routing)
-    // If no practice found, we'll search across all practices
-    const practiceContext = await getPracticeContext(req)
-    
-    // Build patient search query (by email or phone)
-    const phoneDigits = parsed.phone ? parsed.phone.replace(/[^\d]/g, '') : ''
-    const patientWhere: any = {
-      OR: parsed.email
-        ? [{ email: parsed.email }]
-        : [
-            { phone: { contains: phoneDigits } },
-            { primaryPhone: { contains: phoneDigits } },
-            { secondaryPhone: { contains: phoneDigits } },
-          ],
-    }
-
-    // If we have a practice context from domain (subdomain routing), scope to that practice
-    if (practiceContext) {
-      patientWhere.practiceId = practiceContext.practiceId
-    }
-
-    // Find patients by email or phone (may return multiple if family shares contact info)
-    const patients = await prisma.patient.findMany({
-      where: patientWhere,
-      include: {
-        practice: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-          },
-        },
+    // Lock OTP issuance to the invited patient only (prevents guessing).
+    const patient = await prisma.patient.findFirst({
+      where: {
+        id: invite.patientId,
+        practiceId: invite.practiceId,
+        deletedAt: null,
       },
     })
 
-    // Filter by name match (flexible matching)
-    const matchingPatient = patients.find(patient => 
-      patientNameMatches(patient, parsed.fullName)
-    )
-
-    if (!matchingPatient) {
-      // Don't reveal if patient exists (security)
+    if (!patient || !patientNameMatches(patient, parsed.fullName)) {
+      // Don't reveal details (security)
       return NextResponse.json(
         { message: 'If an account exists, an OTP has been sent' },
         { status: 200 }
       )
     }
 
-    const patient = matchingPatient
-
-    // Use the patient's practiceId (found from patient record)
     const patientPracticeId = patient.practiceId
 
-    // Create or update patient account
-    await prisma.patientAccount.upsert({
-      where: { patientId: patient.id },
-      create: {
-        practiceId: patientPracticeId,
-        patientId: patient.id,
-        email: parsed.email || null,
-        phone: parsed.phone || null,
-      },
-      update: {
-        email: parsed.email || undefined,
-        phone: parsed.phone || undefined,
-      },
-    })
-
-    // Generate and send OTP
     const channel = parsed.email ? 'email' : 'sms'
     const recipient = parsed.email || parsed.phone!
+
+    // Extra safety: only allow OTP to be sent to a contact already on the patient record.
+    if (channel === 'email') {
+      const patientEmail = patient.email?.trim().toLowerCase()
+      if (!patientEmail || patientEmail !== parsed.email!.trim().toLowerCase()) {
+        return NextResponse.json(
+          { message: 'If an account exists, an OTP has been sent' },
+          { status: 200 }
+        )
+      }
+    } else {
+      const enteredDigits = normalizeDigits(parsed.phone || '')
+      const matchesAny =
+        Boolean(enteredDigits) &&
+        [patient.phone, patient.primaryPhone, patient.secondaryPhone]
+          .filter(Boolean)
+          .some((p) => normalizeDigits(String(p)).includes(enteredDigits) || enteredDigits.includes(normalizeDigits(String(p))))
+      if (!matchesAny) {
+        return NextResponse.json(
+          { message: 'If an account exists, an OTP has been sent' },
+          { status: 200 }
+        )
+      }
+    }
+
     await createPatientOTP(
       patientPracticeId,
       patient.id,

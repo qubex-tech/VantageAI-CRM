@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
  * OTP-based login (email or SMS)
  */
 export default function PortalAuthPage() {
+  const searchParams = useSearchParams()
   const [step, setStep] = useState<'request' | 'verify'>('request')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
@@ -18,6 +20,8 @@ export default function PortalAuthPage() {
   const [code, setCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  const inviteError = searchParams.get('error')
 
   const handleRequestOTP = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -92,6 +96,16 @@ export default function PortalAuthPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {inviteError && step === 'request' && (
+            <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              {inviteError === 'invite_required' && (
+                <p>You need a secure invite link from your practice to access this portal.</p>
+              )}
+              {inviteError === 'invalid_invite' && (
+                <p>Your invite link is invalid or expired. Please request a new invite from your practice.</p>
+              )}
+            </div>
+          )}
           {step === 'request' ? (
             <form onSubmit={handleRequestOTP} className="space-y-4">
               <div className="space-y-2">
@@ -134,6 +148,9 @@ export default function PortalAuthPage() {
                   placeholder="+1234567890"
                 />
               </div>
+              <p className="text-xs text-gray-500">
+                For security, portal access requires a secure invite link from your practice.
+              </p>
               <p className="text-xs text-gray-500">
                 Please provide your full name and either email or phone number. This helps us identify you if you share contact information with family members.
               </p>
