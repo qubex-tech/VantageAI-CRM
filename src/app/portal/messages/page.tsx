@@ -15,30 +15,68 @@ export default async function PortalMessagesPage() {
     redirect('/portal/auth')
   }
   
-  // Get patient messages
-  const threads = await prisma.conversationThread.findMany({
-    where: {
-      practiceId: session.practiceId,
-      patientId: session.patientId,
-    },
-    include: {
-      messages: {
-        orderBy: { createdAt: 'desc' },
-        take: 1, // Get latest message for preview
+  let threads: any[] = []
+  let unthreadedMessages: any[] = []
+  try {
+    // Get patient messages
+    threads = await prisma.conversationThread.findMany({
+      where: {
+        practiceId: session.practiceId,
+        patientId: session.patientId,
       },
-    },
-    orderBy: { lastMessageAt: 'desc' },
-  })
-  
-  // Get unthreaded messages
-  const unthreadedMessages = await prisma.portalMessage.findMany({
-    where: {
-      practiceId: session.practiceId,
-      patientId: session.patientId,
-      threadId: null,
-    },
-    orderBy: { createdAt: 'desc' },
-  })
+      include: {
+        messages: {
+          orderBy: { createdAt: 'desc' },
+          take: 1, // Get latest message for preview
+        },
+      },
+      orderBy: { lastMessageAt: 'desc' },
+    })
+
+    // Get unthreaded messages
+    unthreadedMessages = await prisma.portalMessage.findMany({
+      where: {
+        practiceId: session.practiceId,
+        patientId: session.patientId,
+        threadId: null,
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+  } catch (e) {
+    console.error('[portal/messages] failed to load messages:', e)
+    // Graceful fallback (avoid throwing a server component render error)
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-4xl mx-auto px-4 py-8">
+          <div className="mb-8">
+            <div className="mb-4">
+              <BackButton />
+            </div>
+            <h1 className="text-3xl font-bold text-gray-900">Messages</h1>
+            <p className="text-gray-600 mt-2">We couldn’t load your messages right now.</p>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-8">
+            <p className="text-gray-700">Please try again in a moment.</p>
+            <div className="mt-4 flex gap-2">
+              <a
+                href="/portal/messages"
+                className="px-4 py-2 rounded-md bg-gray-900 text-white text-sm font-medium"
+              >
+                Try again
+              </a>
+              <a
+                href="/portal/auth"
+                className="px-4 py-2 rounded-md border border-gray-200 text-gray-900 text-sm font-medium"
+              >
+                Go to login
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
   
   const getChannelLabel = (channel: string) => {
     switch (channel) {

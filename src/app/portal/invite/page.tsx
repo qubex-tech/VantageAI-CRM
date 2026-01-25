@@ -21,20 +21,32 @@ export default async function PortalInvitePage({
     redirect('/portal/auth?error=invite_required')
   }
 
-  const invite = await verifyInviteTokenAnyPractice(token)
+  let invite: Awaited<ReturnType<typeof verifyInviteTokenAnyPractice>>
+  try {
+    invite = await verifyInviteTokenAnyPractice(token)
+  } catch (e) {
+    // If verification fails due to a transient server/db issue, fail closed but gracefully.
+    console.error('[portal/invite] verifyInviteTokenAnyPractice failed:', e)
+    redirect('/portal/auth?error=invalid_invite')
+  }
 
   if (!invite) {
     redirect('/portal/auth?error=invalid_invite')
   }
 
-  const cookieStore = await cookies()
-  cookieStore.set('portal_invite', token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 15 * 60, // 15 minutes
-    path: '/',
-  })
+  try {
+    const cookieStore = await cookies()
+    cookieStore.set('portal_invite', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 15 * 60, // 15 minutes
+      path: '/',
+    })
+  } catch (e) {
+    console.error('[portal/invite] failed to set invite cookie:', e)
+    redirect('/portal/auth?error=invalid_invite')
+  }
 
   redirect('/portal/auth')
 }
