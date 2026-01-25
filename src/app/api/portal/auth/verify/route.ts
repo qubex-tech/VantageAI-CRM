@@ -24,7 +24,16 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const invite = await verifyInviteTokenAnyPractice(inviteToken)
+    let invite: Awaited<ReturnType<typeof verifyInviteTokenAnyPractice>>
+    try {
+      invite = await verifyInviteTokenAnyPractice(inviteToken)
+    } catch (e) {
+      console.error('[portal/auth/verify] verifyInviteTokenAnyPractice failed:', e)
+      return NextResponse.json(
+        { error: 'We could not verify your invite right now. Please try again in a moment.' },
+        { status: 503 }
+      )
+    }
     if (!invite) {
       cookieStore.delete('portal_invite')
       return NextResponse.json(
