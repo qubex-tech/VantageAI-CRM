@@ -151,7 +151,8 @@ If you did not expect this message, you can ignore it.
     }
 
     const twilioClient = await getTwilioClient(user.practiceId)
-    const message = `Secure Patient Portal link: ${urlResult.url} (expires ${urlResult.expiresAt.toLocaleDateString()}).`
+    // Put the URL on its own line to avoid mobile clients including punctuation in the link.
+    const message = `Secure Patient Portal link:\n${urlResult.url}\nExpires ${urlResult.expiresAt.toLocaleDateString()}.`
     const result = await twilioClient.sendSms({
       to: phone,
       body: message,

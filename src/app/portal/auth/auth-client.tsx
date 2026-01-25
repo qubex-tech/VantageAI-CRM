@@ -102,6 +102,9 @@ export default function PortalAuthClient() {
               {inviteError === 'invalid_invite' && (
                 <p>Your invite link is invalid or expired. Please request a new invite from your practice.</p>
               )}
+              {inviteError === 'invite_verify_failed' && (
+                <p>We couldn’t verify your invite right now. Please try opening the link again in a moment.</p>
+              )}
             </div>
           )}
 

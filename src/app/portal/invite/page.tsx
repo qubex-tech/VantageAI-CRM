@@ -4,6 +4,12 @@ import { verifyInviteTokenAnyPractice } from '@/lib/patient-auth'
 
 export const dynamic = 'force-dynamic'
 
+function extractInviteToken(raw: string): string | null {
+  // Our current invite tokens are 32-byte hex strings (64 chars).
+  const match = raw.toLowerCase().match(/[0-9a-f]{64}/)
+  return match ? match[0] : null
+}
+
 /**
  * Token-based portal entrypoint.
  *
@@ -21,13 +27,15 @@ export default async function PortalInvitePage({
     redirect('/portal/auth?error=invite_required')
   }
 
+  const normalizedToken = extractInviteToken(token) || token
+
   let invite: Awaited<ReturnType<typeof verifyInviteTokenAnyPractice>>
   try {
-    invite = await verifyInviteTokenAnyPractice(token)
+    invite = await verifyInviteTokenAnyPractice(normalizedToken)
   } catch (e) {
-    // If verification fails due to a transient server/db issue, fail closed but gracefully.
+    // If verification fails due to a transient server/db issue, avoid telling the user it's "invalid".
     console.error('[portal/invite] verifyInviteTokenAnyPractice failed:', e)
-    redirect('/portal/auth?error=invalid_invite')
+    redirect('/portal/auth?error=invite_verify_failed')
   }
 
   if (!invite) {
@@ -36,7 +44,7 @@ export default async function PortalInvitePage({
 
   try {
     const cookieStore = await cookies()
-    cookieStore.set('portal_invite', token, {
+    cookieStore.set('portal_invite', normalizedToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
@@ -45,7 +53,7 @@ export default async function PortalInvitePage({
     })
   } catch (e) {
     console.error('[portal/invite] failed to set invite cookie:', e)
-    redirect('/portal/auth?error=invalid_invite')
+    redirect('/portal/auth?error=invite_verify_failed')
   }
 
   redirect('/portal/auth')
