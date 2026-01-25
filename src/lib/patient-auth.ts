@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import { getSendgridClient } from './sendgrid'
 import { getTwilioClient } from './twilio'
+import { buildVerifiedPatientPortalUrl } from './portal-invite'
 
 /**
  * Generate a 6-digit OTP code
@@ -249,9 +250,16 @@ export async function generateInviteToken(
   const token = crypto.randomBytes(32).toString('hex')
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
 
-  await prisma.patientAccount.update({
+  // Ensure patient account exists, then set (rotate) invite token.
+  await prisma.patientAccount.upsert({
     where: { patientId },
-    data: {
+    create: {
+      practiceId,
+      patientId,
+      inviteToken: token,
+      inviteTokenExpiresAt: expiresAt,
+    },
+    update: {
       inviteToken: token,
       inviteTokenExpiresAt: expiresAt,
     },
@@ -282,4 +290,74 @@ export async function verifyInviteToken(
   }
 
   return { patientId: account.patientId }
+}
+
+/**
+ * Verify invite token without knowing practiceId (token-based fallback).
+ */
+export async function verifyInviteTokenAnyPractice(token: string): Promise<{ patientId: string; practiceId: string } | null> {
+  const account = await prisma.patientAccount.findFirst({
+    where: {
+      inviteToken: token,
+      inviteTokenExpiresAt: {
+        gt: new Date(),
+      },
+    },
+    select: {
+      patientId: true,
+      practiceId: true,
+    },
+  })
+
+  if (!account) return null
+  return { patientId: account.patientId, practiceId: account.practiceId }
+}
+
+/**
+ * Get or create a fresh verified portal URL for a patient.
+ * This rotates the token if missing/expired.
+ */
+export async function getOrCreateVerifiedPatientPortalUrl(params: {
+  practiceId: string
+  patientId: string
+}): Promise<{ url: string; inviteToken: string; expiresAt: Date }> {
+  const existing = await prisma.patientAccount.findFirst({
+    where: {
+      practiceId: params.practiceId,
+      patientId: params.patientId,
+    },
+    select: {
+      inviteToken: true,
+      inviteTokenExpiresAt: true,
+    },
+  })
+
+  const isValid =
+    Boolean(existing?.inviteToken) &&
+    Boolean(existing?.inviteTokenExpiresAt) &&
+    (existing!.inviteTokenExpiresAt as Date) > new Date()
+
+  let inviteToken = existing?.inviteToken || null
+  let expiresAt = existing?.inviteTokenExpiresAt || null
+
+  if (!isValid) {
+    inviteToken = await generateInviteToken(params.practiceId, params.patientId)
+    const refreshed = await prisma.patientAccount.findFirst({
+      where: { practiceId: params.practiceId, patientId: params.patientId },
+      select: { inviteTokenExpiresAt: true },
+    })
+    expiresAt = refreshed?.inviteTokenExpiresAt || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+  }
+
+  const practice = await prisma.practice.findUnique({
+    where: { id: params.practiceId },
+    select: { slug: true },
+  })
+
+  const url = buildVerifiedPatientPortalUrl({
+    practice: practice ? { slug: practice.slug } : null,
+    inviteToken: inviteToken!,
+  })
+
+  return { url, inviteToken: inviteToken!, expiresAt: expiresAt as Date }
 }

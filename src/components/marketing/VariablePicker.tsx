@@ -43,6 +43,7 @@ const VARIABLE_CATEGORIES = [
       { key: 'links.confirm', label: 'Confirm Link', example: 'https://example.com/confirm' },
       { key: 'links.reschedule', label: 'Reschedule Link', example: 'https://example.com/reschedule' },
       { key: 'links.cancel', label: 'Cancel Link', example: 'https://example.com/cancel' },
+      { key: 'links.portalVerified', label: 'Verified Portal Link', example: 'https://portal.getvantage.tech/portal/invite?token=…' },
     ],
   },
 ]

@@ -44,6 +44,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { EditPatientForm } from './EditPatientForm'
@@ -149,6 +153,10 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
   const [isEditing, setIsEditing] = useState(false)
   const [composeEmailOpen, setComposeEmailOpen] = useState(false)
   const [composeSmsOpen, setComposeSmsOpen] = useState(false)
+  const [portalInviteState, setPortalInviteState] = useState<{
+    status: 'idle' | 'sending' | 'success' | 'error'
+    message?: string
+  }>({ status: 'idle' })
   const [notesOpen, setNotesOpen] = useState(false)
   const [patientNotes, setPatientNotes] = useState<PatientNote[]>([])
   const [notesLoading, setNotesLoading] = useState(false)
@@ -166,6 +174,32 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
   
   const toggleSection = (section: string) => {
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }))
+  }
+
+  const sendPortalInvite = async (channel: 'email' | 'sms' | 'auto' = 'auto') => {
+    setPortalInviteState({ status: 'sending' })
+    try {
+      const res = await fetch(`/api/patients/${patient.id}/portal-invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data?.error || 'Failed to send portal invite')
+      }
+      setPortalInviteState({
+        status: 'success',
+        message: `Secure portal invite sent via ${data.channel} to ${data.sentTo}.`,
+      })
+    } catch (e) {
+      setPortalInviteState({
+        status: 'error',
+        message: e instanceof Error ? e.message : 'Failed to send portal invite',
+      })
+    } finally {
+      window.setTimeout(() => setPortalInviteState({ status: 'idle' }), 6000)
+    }
   }
   
   // Fetch structured notes
@@ -308,6 +342,23 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                   <MessageSquare className="mr-2 h-4 w-4" />
                   SMS
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger disabled={portalInviteState.status === 'sending'}>
+                    <Shield className="mr-2 h-4 w-4" />
+                    {portalInviteState.status === 'sending' ? 'Sending portal invite…' : 'Portal invite'}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuItem onClick={() => sendPortalInvite('email')}>
+                      <Mail className="mr-2 h-4 w-4" />
+                      Send via Email
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => sendPortalInvite('sms')}>
+                      <MessageSquare className="mr-2 h-4 w-4" />
+                      Send via SMS
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
               </DropdownMenuContent>
             </DropdownMenu>
             <Button variant="ghost" size="icon">
@@ -319,6 +370,19 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
             <div className="h-8 w-8 rounded-full bg-gray-300 ml-2"></div>
           </div>
         </div>
+
+        {portalInviteState.status !== 'idle' && portalInviteState.message && (
+          <div
+            className={cn(
+              'px-6 py-2 text-sm border-b',
+              portalInviteState.status === 'success' && 'bg-green-50 text-green-800 border-green-200',
+              portalInviteState.status === 'error' && 'bg-red-50 text-red-800 border-red-200',
+              portalInviteState.status === 'sending' && 'bg-gray-50 text-gray-700 border-gray-200'
+            )}
+          >
+            {portalInviteState.message}
+          </div>
+        )}
 
         {/* Navigation Tabs */}
         <div className="border-b border-gray-200 px-6 bg-white">

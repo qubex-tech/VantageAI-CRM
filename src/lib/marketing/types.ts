@@ -191,6 +191,11 @@ export interface VariableContext {
     confirm?: string
     reschedule?: string
     cancel?: string
+    /**
+     * Secure patient portal invite URL (verified link).
+     * Example: https://{practiceSlug}.portal.getvantage.tech/portal/invite?token=...
+     */
+    portalVerified?: string
   }
 }
 

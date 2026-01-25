@@ -69,6 +69,7 @@ export async function POST(
         confirm: 'https://example.com/confirm',
         reschedule: 'https://example.com/reschedule',
         cancel: 'https://example.com/cancel',
+        portalVerified: 'https://portal.getvantage.tech/portal/invite?token=EXAMPLE',
       },
     }
     

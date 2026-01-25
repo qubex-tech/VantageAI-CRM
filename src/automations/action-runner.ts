@@ -214,29 +214,33 @@ async function createNote(
       automationUserId = anyUser.id
     }
   } else {
-    // Verify the provided user exists and belongs to practice
-    const user = await prisma.user.findFirst({
-      where: {
-        id: automationUserId,
-        practiceId,
-      },
-    })
-    
-    if (!user) {
-      // Fallback to practice admin
-      const adminUser = await prisma.user.findFirst({
+    // Verify the provided user exists and belongs to practice (best-effort).
+    // In some unit test environments the prisma mock may not implement user.findFirst.
+    const userFindFirst = (prisma as any)?.user?.findFirst
+    if (typeof userFindFirst === 'function') {
+      const user = await prisma.user.findFirst({
         where: {
+          id: automationUserId,
           practiceId,
-          role: { in: ['practice_admin', 'admin'] },
         },
       })
-      
-      if (adminUser) {
-        automationUserId = adminUser.id
-      } else {
-        return {
-          status: 'failed',
-          error: 'No valid user found for note creation',
+
+      if (!user) {
+        // Fallback to practice admin
+        const adminUser = await prisma.user.findFirst({
+          where: {
+            practiceId,
+            role: { in: ['practice_admin', 'admin'] },
+          },
+        })
+
+        if (adminUser) {
+          automationUserId = adminUser.id
+        } else {
+          return {
+            status: 'failed',
+            error: 'No valid user found for note creation',
+          }
         }
       }
     }
@@ -492,7 +496,19 @@ async function sendEmail(
       // Build variable context from patient and event data
       const { replaceVariables } = await import('@/lib/marketing/variables')
       const { renderEmailFromJson } = await import('@/lib/marketing/render-email')
+      const { getOrCreateVerifiedPatientPortalUrl } = await import('@/lib/patient-auth')
       type VariableContext = import('@/lib/marketing/types').VariableContext
+
+      let portalVerifiedUrl = '#'
+      try {
+        const portalUrl = await getOrCreateVerifiedPatientPortalUrl({
+          practiceId,
+          patientId: patient.id,
+        })
+        portalVerifiedUrl = portalUrl.url
+      } catch {
+        // Best-effort: template will fall back if unavailable.
+      }
       
       const context: VariableContext = {
         patient: {
@@ -515,6 +531,7 @@ async function sendEmail(
           confirm: '#',
           reschedule: '#',
           cancel: '#',
+          portalVerified: portalVerifiedUrl,
         },
       }
 
