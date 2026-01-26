@@ -175,9 +175,10 @@ export async function POST(req: NextRequest) {
         if (summary.notes) {
           contextParts.push(`- Notes: ${summary.notes}`)
         }
-        if (summary.appointments && summary.appointments.length > 0) {
-          contextParts.push(`- Recent Appointments: ${summary.appointments.length} found`)
-          summary.appointments.slice(0, 3).forEach((apt: any) => {
+        const recentAppointments = summary.recentAppointments || summary.appointments
+        if (recentAppointments && recentAppointments.length > 0) {
+          contextParts.push(`- Recent Appointments: ${recentAppointments.length} found`)
+          recentAppointments.slice(0, 3).forEach((apt: any) => {
             const formattedStart = formatDateTime(apt.startTime, { timeZone, locale })
             contextParts.push(`  • ${formattedStart} - ${apt.visitType} (${apt.status})`)
           })
@@ -262,9 +263,19 @@ export async function POST(req: NextRequest) {
         }
         if (dashboard.recentAppointments && dashboard.recentAppointments.length > 0) {
           contextParts.push(`- Recent appointments: ${dashboard.recentAppointments.length}`)
+          dashboard.recentAppointments.slice(0, 5).forEach((apt: { patientName?: string; startTime?: string; status?: string; visitType?: string | null }) => {
+            if (!apt.startTime) return
+            const formattedStart = formatDateTime(apt.startTime, { timeZone, locale })
+            contextParts.push(`  • ${apt.patientName || 'Patient'} — ${formattedStart}${apt.visitType ? ` (${apt.visitType})` : ''}${apt.status ? ` [${apt.status}]` : ''}`)
+          })
         }
         if (dashboard.upcomingAppointments && dashboard.upcomingAppointments.length > 0) {
           contextParts.push(`- Upcoming appointments: ${dashboard.upcomingAppointments.length}`)
+          dashboard.upcomingAppointments.slice(0, 5).forEach((apt: { patientName?: string; startTime?: string; status?: string; visitType?: string | null }) => {
+            if (!apt.startTime) return
+            const formattedStart = formatDateTime(apt.startTime, { timeZone, locale })
+            contextParts.push(`  • ${apt.patientName || 'Patient'} — ${formattedStart}${apt.visitType ? ` (${apt.visitType})` : ''}${apt.status ? ` [${apt.status}]` : ''}`)
+          })
         }
         if (dashboard.recentNotes && dashboard.recentNotes.length > 0) {
           contextParts.push(`- Recent notes: ${dashboard.recentNotes.length}`)
