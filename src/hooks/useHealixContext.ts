@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
+import { getClientLocale, getClientTimeZone } from '@/lib/timezone'
 
 export interface HealixContextPayload {
   route: string
@@ -10,6 +11,8 @@ export interface HealixContextPayload {
   appointmentId?: string
   invoiceId?: string
   visibleFields?: Record<string, any>
+  timeZone?: string
+  locale?: string
   dashboardContext?: {
     windowStart?: string
     windowEnd?: string
@@ -85,6 +88,8 @@ export function useHealixContext(options: UseHealixContextOptions = {}) {
   const [timelineEvents, setTimelineEvents] = useState<any[]>([])
   const [patientSummary, setPatientSummary] = useState<any>(null)
   const [appointmentSummary, setAppointmentSummary] = useState<any>(null)
+  const [timeZone, setTimeZone] = useState<string | undefined>(undefined)
+  const [locale, setLocale] = useState<string | undefined>(undefined)
 
   // Fetch timeline events if patientId is provided
   useEffect(() => {
@@ -123,6 +128,11 @@ export function useHealixContext(options: UseHealixContextOptions = {}) {
     }
   }, [options.appointmentId])
 
+  useEffect(() => {
+    setTimeZone(getClientTimeZone())
+    setLocale(getClientLocale())
+  }, [])
+
   const getContext = useCallback((): HealixContextPayload => {
     return {
       route: pathname,
@@ -131,11 +141,13 @@ export function useHealixContext(options: UseHealixContextOptions = {}) {
       appointmentId: options.appointmentId,
       invoiceId: options.invoiceId,
       visibleFields: options.visibleFields,
+      timeZone,
+      locale,
       timelineEvents: timelineEvents.slice(0, 20), // Limit to last 20 events
       patientSummary: patientSummary, // Include pre-fetched summary
       appointmentSummary: appointmentSummary, // Include pre-fetched summary
     }
-  }, [pathname, options, timelineEvents, patientSummary, appointmentSummary])
+  }, [pathname, options, timelineEvents, patientSummary, appointmentSummary, timeZone, locale])
 
   return {
     context: getContext(),

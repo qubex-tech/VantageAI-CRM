@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { requireAuth } from '@/lib/middleware'
 import { prisma } from '@/lib/db'
 import { executeTool, validateToolName } from '@/lib/healix-tools'
+import { formatDateOnly, formatDateTime, resolveLocale, resolveTimeZone } from '@/lib/timezone'
 import OpenAI from 'openai'
 
 // Lazy initialization to avoid build-time errors
@@ -74,6 +75,8 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json()
     const { conversationId, userMessage, contextPayload } = body
+    const timeZone = await resolveTimeZone(req.headers, contextPayload?.timeZone)
+    const locale = resolveLocale(req.headers, contextPayload?.locale)
 
     if (!userMessage || typeof userMessage !== 'string') {
       return new Response(
@@ -157,6 +160,9 @@ export async function POST(req: NextRequest) {
       if (contextPayload.invoiceId) {
         contextParts.push(`Viewing invoice ID: ${contextPayload.invoiceId}`)
       }
+      if (timeZone) {
+        contextParts.push(`User time zone: ${timeZone}`)
+      }
       
       // Include pre-fetched patient summary if available
       if (contextPayload.patientSummary) {
@@ -172,7 +178,8 @@ export async function POST(req: NextRequest) {
         if (summary.appointments && summary.appointments.length > 0) {
           contextParts.push(`- Recent Appointments: ${summary.appointments.length} found`)
           summary.appointments.slice(0, 3).forEach((apt: any) => {
-            contextParts.push(`  • ${new Date(apt.startTime).toLocaleDateString()} - ${apt.visitType} (${apt.status})`)
+            const formattedStart = formatDateTime(apt.startTime, { timeZone, locale })
+            contextParts.push(`  • ${formattedStart} - ${apt.visitType} (${apt.status})`)
           })
         }
         if (summary.timelineEntries && summary.timelineEntries.length > 0) {
@@ -192,7 +199,7 @@ export async function POST(req: NextRequest) {
         const apt = contextPayload.appointmentSummary
         contextParts.push(`\nAppointment Summary (pre-loaded):`)
         contextParts.push(`- Status: ${apt.status || 'N/A'}`)
-        contextParts.push(`- Start Time: ${new Date(apt.startTime).toLocaleString()}`)
+        contextParts.push(`- Start Time: ${formatDateTime(apt.startTime, { timeZone, locale })}`)
         contextParts.push(`- Visit Type: ${apt.visitType || 'N/A'}`)
         if (apt.patient) {
           contextParts.push(`- Patient: ${apt.patient.name || 'N/A'} (${apt.patient.phone || 'N/A'})`)
@@ -218,7 +225,7 @@ export async function POST(req: NextRequest) {
         }
         contextParts.push(`\nDashboard Context (Rolling 14 Days):`)
         if (dashboard.windowStart && dashboard.windowEnd) {
-          contextParts.push(`- Window: ${new Date(dashboard.windowStart).toLocaleDateString()} to ${new Date(dashboard.windowEnd).toLocaleDateString()}`)
+          contextParts.push(`- Window: ${formatDateOnly(dashboard.windowStart, { timeZone, locale })} to ${formatDateOnly(dashboard.windowEnd, { timeZone, locale })}`)
         }
         const formatAge = (dob?: string) => {
           if (!dob) return null
@@ -237,14 +244,20 @@ export async function POST(req: NextRequest) {
           contextParts.push(`- Recent patients (last 7 days): ${dashboard.recentPatients.length}`)
           dashboard.recentPatients.slice(0, 5).forEach((patient: { name: string; lastSeenAt?: string; dateOfBirth?: string }) => {
             const age = formatAge(patient.dateOfBirth)
-            contextParts.push(`  • ${patient.name}${typeof age === 'number' ? ` (age ${age})` : ''}${patient.lastSeenAt ? ` (last seen ${new Date(patient.lastSeenAt).toLocaleDateString()})` : ''}`)
+            const lastSeen = patient.lastSeenAt
+              ? formatDateOnly(patient.lastSeenAt, { timeZone, locale })
+              : null
+            contextParts.push(`  • ${patient.name}${typeof age === 'number' ? ` (age ${age})` : ''}${lastSeen ? ` (last seen ${lastSeen})` : ''}`)
           })
         }
         if (dashboard.upcomingPatients && dashboard.upcomingPatients.length > 0) {
           contextParts.push(`- Upcoming patients (next 7 days): ${dashboard.upcomingPatients.length}`)
           dashboard.upcomingPatients.slice(0, 5).forEach((patient: { name: string; nextVisitAt?: string; dateOfBirth?: string }) => {
             const age = formatAge(patient.dateOfBirth)
-            contextParts.push(`  • ${patient.name}${typeof age === 'number' ? ` (age ${age})` : ''}${patient.nextVisitAt ? ` (next visit ${new Date(patient.nextVisitAt).toLocaleDateString()})` : ''}`)
+            const nextVisit = patient.nextVisitAt
+              ? formatDateOnly(patient.nextVisitAt, { timeZone, locale })
+              : null
+            contextParts.push(`  • ${patient.name}${typeof age === 'number' ? ` (age ${age})` : ''}${nextVisit ? ` (next visit ${nextVisit})` : ''}`)
           })
         }
         if (dashboard.recentAppointments && dashboard.recentAppointments.length > 0) {

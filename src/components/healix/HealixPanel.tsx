@@ -99,9 +99,17 @@ export function HealixPanel({
     setSuggestedActions([])
 
     try {
+      const headers: HeadersInit = { 'Content-Type': 'application/json' }
+      if (context.timeZone) {
+        headers['x-user-timezone'] = context.timeZone
+      }
+      if (context.locale) {
+        headers['x-user-locale'] = context.locale
+      }
+
       const response = await fetch('/api/healix/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           conversationId,
           userMessage: messageText,

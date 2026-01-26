@@ -10,6 +10,7 @@ import { tenantScope } from './db'
 import { canAccessPractice } from './permissions'
 import { logCustomActivity } from './patient-activity'
 import { createAuditLog } from './audit'
+import { formatDateTime } from './timezone'
 
 export interface HealixToolResult {
   success: boolean
@@ -23,6 +24,8 @@ export interface CreateTaskParams {
   appointmentId?: string
   title: string
   dueAt?: Date | string
+  timeZone?: string
+  locale?: string
   priority?: 'low' | 'medium' | 'high'
 }
 
@@ -154,11 +157,15 @@ export async function createTask(
       }
 
       // Create timeline entry for the task
+      const dueLabel = params.dueAt
+        ? formatDateTime(params.dueAt, { timeZone: params.timeZone, locale: params.locale })
+        : 'No due date'
+
       await logCustomActivity({
         patientId: params.patientId,
         type: 'task',
         title: params.title,
-        description: `Due: ${params.dueAt ? new Date(params.dueAt).toLocaleString() : 'No due date'} | Priority: ${params.priority || 'medium'}`,
+        description: `Due: ${dueLabel} | Priority: ${params.priority || 'medium'}`,
         metadata: {
           dueAt: params.dueAt,
           priority: params.priority || 'medium',

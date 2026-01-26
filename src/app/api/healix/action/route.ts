@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/middleware'
 import { prisma } from '@/lib/db'
 import { executeTool, validateToolName } from '@/lib/healix-tools'
+import { resolveLocale, resolveTimeZone } from '@/lib/timezone'
 import OpenAI from 'openai'
 
 // Lazy initialization to avoid build-time errors
@@ -28,6 +29,8 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json()
     const { conversationId, actionId, tool, args } = body
+    const timeZone = await resolveTimeZone(req.headers, args?.timeZone)
+    const locale = resolveLocale(req.headers, args?.locale)
 
     if (!tool || !args) {
       // Try to get from conversation if actionId provided
@@ -56,7 +59,12 @@ export async function POST(req: NextRequest) {
             if (action) {
               // Use action's tool and args
               const toolToExecute = action.tool
-              const argsToExecute = { ...action.args, clinicId: user.practiceId }
+              const argsToExecute = {
+                ...action.args,
+                clinicId: user.practiceId,
+                timeZone: action.args?.timeZone || timeZone,
+                locale: action.args?.locale || locale,
+              }
 
               // Validate tool name
               if (!validateToolName(toolToExecute)) {
@@ -153,7 +161,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Ensure clinicId is set
-    const argsWithClinicId = { ...args, clinicId: args.clinicId || user.practiceId }
+    const argsWithClinicId = {
+      ...args,
+      clinicId: args.clinicId || user.practiceId,
+      timeZone: args.timeZone || timeZone,
+      locale: args.locale || locale,
+    }
 
     // Execute tool
     const result = await executeTool(tool, argsWithClinicId, user.id)
