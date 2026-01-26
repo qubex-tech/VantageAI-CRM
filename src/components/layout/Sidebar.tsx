@@ -15,7 +15,8 @@ import {
   Workflow,
   Zap,
   Megaphone,
-  CheckSquare
+  CheckSquare,
+  BarChart3
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useEffect } from 'react'
@@ -24,6 +25,7 @@ import { useSidebar } from './SidebarProvider'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: Home },
+  { href: '/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/patients', label: 'Patients', icon: Users },
   { href: '/appointments', label: 'Appointments', icon: Calendar },
   { href: '/tasks', label: 'Tasks', icon: CheckSquare },
