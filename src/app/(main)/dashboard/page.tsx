@@ -195,6 +195,30 @@ export default async function DashboardPage() {
     take: 10,
   })
 
+  const recentTimelineEntries = await prisma.patientTimelineEntry.findMany({
+    where: {
+      createdAt: {
+        gte: windowStart,
+        lt: today,
+      },
+      patient: {
+        practiceId: practiceId,
+      },
+    },
+    include: {
+      patient: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+    take: 20,
+  })
+
   // Get users for task assignment dropdown
   const users = await prisma.user.findMany({
     where: {
@@ -341,6 +365,15 @@ export default async function DashboardPage() {
       type: note.type,
       createdAt: note.createdAt.toISOString(),
       contentPreview: note.content.substring(0, 120),
+    })),
+    recentTimeline: recentTimelineEntries.map((entry) => ({
+      id: entry.id,
+      patientId: entry.patientId,
+      patientName: entry.patient?.name || 'Unknown',
+      type: entry.type,
+      title: entry.title,
+      description: entry.description || undefined,
+      createdAt: entry.createdAt.toISOString(),
     })),
   }
 

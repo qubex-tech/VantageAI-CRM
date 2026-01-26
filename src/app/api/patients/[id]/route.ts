@@ -38,6 +38,10 @@ export async function GET(
           orderBy: { startTime: 'desc' },
           take: 10,
         },
+        patientNotes: {
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+        },
         timelineEntries: {
           orderBy: { createdAt: 'desc' },
           take: 50,

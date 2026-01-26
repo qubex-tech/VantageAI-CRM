@@ -52,6 +52,15 @@ export interface HealixContextPayload {
       createdAt: string
       contentPreview?: string
     }>
+    recentTimeline?: Array<{
+      id: string
+      patientId: string
+      patientName: string
+      type: string
+      title: string
+      description?: string
+      createdAt: string
+    }>
   }
   timelineEvents?: Array<{
     type: string

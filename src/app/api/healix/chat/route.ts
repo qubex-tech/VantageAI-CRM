@@ -145,6 +145,18 @@ export async function POST(req: NextRequest) {
     let contextString = ''
     if (contextPayload) {
       const contextParts: string[] = []
+      const formatAge = (dob?: string) => {
+        if (!dob) return null
+        const birthDate = new Date(dob)
+        if (Number.isNaN(birthDate.getTime())) return null
+        const now = new Date()
+        let age = now.getFullYear() - birthDate.getFullYear()
+        const monthDiff = now.getMonth() - birthDate.getMonth()
+        if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birthDate.getDate())) {
+          age -= 1
+        }
+        return age
+      }
       if (contextPayload.route) {
         contextParts.push(`Current page: ${contextPayload.route}`)
       }
@@ -169,9 +181,45 @@ export async function POST(req: NextRequest) {
         const summary = contextPayload.patientSummary
         contextParts.push(`\nPatient Summary (pre-loaded):`)
         contextParts.push(`- Name: ${summary.name || 'N/A'}`)
+        if (summary.dateOfBirth) {
+          const age = formatAge(summary.dateOfBirth)
+          const dobLabel = formatDateOnly(summary.dateOfBirth, { timeZone, locale })
+          contextParts.push(`- DOB: ${dobLabel}${typeof age === 'number' ? ` (age ${age})` : ''}`)
+        }
+        if (summary.gender) {
+          contextParts.push(`- Gender: ${summary.gender}`)
+        }
+        if (summary.pronouns) {
+          contextParts.push(`- Pronouns: ${summary.pronouns}`)
+        }
+        if (summary.primaryLanguage) {
+          contextParts.push(`- Language: ${summary.primaryLanguage}`)
+        }
         contextParts.push(`- Phone: ${summary.phone || 'N/A'}`)
         contextParts.push(`- Email: ${summary.email || 'N/A'}`)
         contextParts.push(`- Preferred Contact: ${summary.preferredContactMethod || 'N/A'}`)
+        if (summary.preferredChannel) {
+          contextParts.push(`- Preferred Channel: ${summary.preferredChannel}`)
+        }
+        if (summary.doNotContact !== undefined) {
+          contextParts.push(`- Do Not Contact: ${summary.doNotContact ? 'Yes' : 'No'}`)
+        }
+        if (summary.smsOptIn !== undefined || summary.emailOptIn !== undefined || summary.voiceOptIn !== undefined) {
+          contextParts.push(`- Consent: SMS ${summary.smsOptIn ? 'opted in' : 'no'} / Email ${summary.emailOptIn ? 'opted in' : 'no'} / Voice ${summary.voiceOptIn ? 'opted in' : 'no'}`)
+        }
+        if (summary.addressLine1 || summary.city || summary.state || summary.postalCode) {
+          const address = [summary.addressLine1, summary.addressLine2, summary.city, summary.state, summary.postalCode]
+            .filter(Boolean)
+            .join(', ')
+          contextParts.push(`- Address: ${address}`)
+        }
+        if (summary.insuranceStatus) {
+          contextParts.push(`- Insurance Status: ${summary.insuranceStatus}`)
+        }
+        if (summary.lastInsuranceVerifiedAt) {
+          const verifiedAt = formatDateOnly(summary.lastInsuranceVerifiedAt, { timeZone, locale })
+          contextParts.push(`- Insurance Verified: ${verifiedAt}`)
+        }
         if (summary.notes) {
           contextParts.push(`- Notes: ${summary.notes}`)
         }
@@ -183,10 +231,19 @@ export async function POST(req: NextRequest) {
             contextParts.push(`  • ${formattedStart} - ${apt.visitType} (${apt.status})`)
           })
         }
+        if (summary.patientNotes && summary.patientNotes.length > 0) {
+          contextParts.push(`- Recent Patient Notes: ${summary.patientNotes.length} found`)
+          summary.patientNotes.slice(0, 5).forEach((note: any) => {
+            const notedAt = note.createdAt ? formatDateOnly(note.createdAt, { timeZone, locale }) : 'Unknown date'
+            contextParts.push(`  • ${notedAt} [${note.type || 'note'}] ${note.content?.substring(0, 80) || ''}`)
+          })
+        }
         if (summary.timelineEntries && summary.timelineEntries.length > 0) {
           contextParts.push(`- Recent Timeline: ${summary.timelineEntries.length} entries`)
           summary.timelineEntries.slice(0, 5).forEach((entry: any) => {
-            contextParts.push(`  • ${entry.title}${entry.description ? ': ' + entry.description.substring(0, 50) : ''}`)
+            const entryDate = entry.createdAt ? formatDateOnly(entry.createdAt, { timeZone, locale }) : null
+            const label = entryDate ? `${entryDate} — ${entry.title}` : entry.title
+            contextParts.push(`  • ${label}${entry.description ? ': ' + entry.description.substring(0, 50) : ''}`)
           })
         }
         if (summary._count) {
@@ -223,22 +280,11 @@ export async function POST(req: NextRequest) {
           recentAppointments?: Array<{ id: string; patientName?: string; startTime?: string; status?: string; visitType?: string | null }>
           upcomingAppointments?: Array<{ id: string; patientName?: string; startTime?: string; status?: string; visitType?: string | null }>
           recentNotes?: Array<{ patientName: string; type: string }>
+          recentTimeline?: Array<{ patientName?: string; type: string; title: string; createdAt?: string }>
         }
         contextParts.push(`\nDashboard Context (Rolling 14 Days):`)
         if (dashboard.windowStart && dashboard.windowEnd) {
           contextParts.push(`- Window: ${formatDateOnly(dashboard.windowStart, { timeZone, locale })} to ${formatDateOnly(dashboard.windowEnd, { timeZone, locale })}`)
-        }
-        const formatAge = (dob?: string) => {
-          if (!dob) return null
-          const birthDate = new Date(dob)
-          if (Number.isNaN(birthDate.getTime())) return null
-          const now = new Date()
-          let age = now.getFullYear() - birthDate.getFullYear()
-          const monthDiff = now.getMonth() - birthDate.getMonth()
-          if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birthDate.getDate())) {
-            age -= 1
-          }
-          return age
         }
 
         if (dashboard.recentPatients && dashboard.recentPatients.length > 0) {
@@ -282,6 +328,16 @@ export async function POST(req: NextRequest) {
           dashboard.recentNotes.slice(0, 3).forEach((note: { patientName: string; type: string }) => {
             contextParts.push(`  • ${note.patientName} (${note.type})`)
           })
+        }
+        if (dashboard.recentTimeline && dashboard.recentTimeline.length > 0) {
+          contextParts.push(`- Recent communications: ${dashboard.recentTimeline.length}`)
+          dashboard.recentTimeline
+            .filter((entry: { type: string }) => ['email', 'sms', 'call', 'voice', 'reminder'].includes(entry.type))
+            .slice(0, 5)
+            .forEach((entry: { patientName?: string; type: string; title: string; createdAt?: string }) => {
+              const entryDate = entry.createdAt ? formatDateOnly(entry.createdAt, { timeZone, locale }) : 'Unknown date'
+              contextParts.push(`  • ${entryDate} — ${entry.patientName || 'Patient'} (${entry.type}): ${entry.title}`)
+            })
         }
       }
       
