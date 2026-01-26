@@ -157,6 +157,60 @@ export async function POST(req: NextRequest) {
         }
         return age
       }
+
+      const patientQuery = extractPatientQuery(userMessage)
+      if (patientQuery) {
+        const searchResult = await executeTool(
+          'searchPatients',
+          { clinicId: user.practiceId, query: patientQuery },
+          user.id
+        )
+        if (searchResult.success && Array.isArray(searchResult.data?.patients)) {
+          const candidates = searchResult.data.patients.slice(0, 5)
+          if (candidates.length > 0) {
+            contextParts.push(`\nPatient lookup results for "${patientQuery}":`)
+            candidates.forEach((patient: any) => {
+              contextParts.push(`- ${patient.name} (${patient.id})`)
+            })
+          }
+          if (candidates.length === 1) {
+            const candidate = candidates[0]
+            const summaryResult = await executeTool(
+              'getPatientSummary',
+              { clinicId: user.practiceId, patientId: candidate.id },
+              user.id
+            )
+            if (summaryResult.success && summaryResult.data) {
+              const summary = summaryResult.data
+              contextParts.push(`\nPatient Summary (lookup):`)
+              contextParts.push(`- Name: ${summary.name || 'N/A'}`)
+              if (summary.dateOfBirth) {
+                const age = formatAge(summary.dateOfBirth)
+                const dobLabel = formatDateOnly(summary.dateOfBirth, { timeZone, locale })
+                contextParts.push(`- DOB: ${dobLabel}${typeof age === 'number' ? ` (age ${age})` : ''}`)
+              }
+              contextParts.push(`- Phone: ${summary.phone || 'N/A'}`)
+              contextParts.push(`- Email: ${summary.email || 'N/A'}`)
+              contextParts.push(`- Preferred Contact: ${summary.preferredContactMethod || 'N/A'}`)
+              if (summary.recentAppointments && summary.recentAppointments.length > 0) {
+                contextParts.push(`- Recent Appointments: ${summary.recentAppointments.length} found`)
+                summary.recentAppointments.slice(0, 3).forEach((apt: any) => {
+                  const formattedStart = formatDateTime(apt.startTime, { timeZone, locale })
+                  contextParts.push(`  • ${formattedStart} - ${apt.visitType} (${apt.status})`)
+                })
+              }
+              if (summary.recentTimelineEntries && summary.recentTimelineEntries.length > 0) {
+                contextParts.push(`- Recent Timeline: ${summary.recentTimelineEntries.length} entries`)
+                summary.recentTimelineEntries.slice(0, 5).forEach((entry: any) => {
+                  const entryDate = entry.createdAt ? formatDateOnly(entry.createdAt, { timeZone, locale }) : null
+                  const label = entryDate ? `${entryDate} — ${entry.title}` : entry.title
+                  contextParts.push(`  • ${label}${entry.description ? ': ' + entry.description.substring(0, 50) : ''}`)
+                })
+              }
+            }
+          }
+        }
+      }
       if (contextPayload.route) {
         contextParts.push(`Current page: ${contextPayload.route}`)
       }
@@ -544,5 +598,27 @@ export async function POST(req: NextRequest) {
       }
     )
   }
+}
+
+function extractPatientQuery(message: string): string | null {
+  if (!message) return null
+  const normalized = message.trim()
+  const patterns = [
+    /tell me more about\s+(.+)$/i,
+    /who is\s+(.+)$/i,
+    /details on\s+(.+)$/i,
+    /info(?:rmation)? on\s+(.+)$/i,
+    /summary of\s+(.+)$/i,
+    /customer\s+(.+)$/i,
+    /patient\s+(.+)$/i,
+  ]
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern)
+    if (match && match[1]) {
+      const query = match[1].replace(/[?.!]+$/, '').trim()
+      if (query.length >= 2) return query
+    }
+  }
+  return null
 }
 
