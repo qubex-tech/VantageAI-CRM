@@ -2,11 +2,10 @@ import { redirect } from 'next/navigation'
 import { getSupabaseSession } from '@/lib/auth-supabase'
 import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
 import { prisma } from '@/lib/db'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { format } from 'date-fns'
-import Link from 'next/link'
 import { getCalClient } from '@/lib/cal'
 import { syncBookingToPatient } from '@/lib/sync-booking-to-patient'
+import { AppointmentsView } from '@/components/appointments/AppointmentsView'
 
 export const dynamic = 'force-dynamic'
 
@@ -247,47 +246,33 @@ export default async function AppointmentsPage({
   
   const appointments = allAppointments
 
+  // Transform appointments to match component interface
+  const transformedAppointments = appointments.map((apt: any) => ({
+    id: apt.id,
+    patient: {
+      id: apt.patient?.id || null,
+      name: apt.patient?.name || 'Unknown',
+      phone: apt.patient?.phone || null,
+      primaryPhone: apt.patient?.primaryPhone || null,
+    },
+    startTime: apt.startTime instanceof Date ? apt.startTime : new Date(apt.startTime),
+    endTime: apt.endTime ? (apt.endTime instanceof Date ? apt.endTime : new Date(apt.endTime)) : null,
+    visitType: apt.visitType || null,
+    status: apt.status || 'scheduled',
+    reason: apt.reason || null,
+    isCalBooking: apt.isCalBooking || false,
+  }))
+
   return (
     <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-gray-900 mb-1">Appointments</h1>
         <p className="text-sm text-gray-500">
-          {date ? format(date, 'MMMM d, yyyy') : 'Upcoming appointments'}
+          {date ? format(date, 'MMMM d, yyyy') : 'Manage and view all appointments'}
         </p>
       </div>
 
-      {appointments.length === 0 ? (
-        <Card className="border border-gray-200">
-          <CardContent className="py-12 text-center">
-            <p className="text-sm text-gray-500">No appointments scheduled</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {appointments.map((apt: any) => (
-            <Link key={apt.id} href={`/appointments/${apt.id}`}>
-              <Card className="border border-gray-200 shadow-sm hover:shadow-md hover:border-gray-300 transition-all cursor-pointer">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base font-semibold text-gray-900">{apt.patient.name}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <p className="text-sm text-gray-600">
-                      {format(apt.startTime, 'h:mm a')} • {apt.visitType}
-                    </p>
-                    {apt.reason && (
-                      <p className="text-sm text-gray-700">{apt.reason}</p>
-                    )}
-                    <span className="inline-block text-xs px-2 py-1 rounded-md bg-gray-100 text-gray-700 font-medium">
-                      {apt.status}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
-      )}
+      <AppointmentsView initialAppointments={transformedAppointments} />
     </div>
   )
 }
