@@ -6,6 +6,7 @@ import { format } from 'date-fns'
 import { getCalClient } from '@/lib/cal'
 import { syncBookingToPatient } from '@/lib/sync-booking-to-patient'
 import { AppointmentsView } from '@/components/appointments/AppointmentsView'
+import { Card, CardContent } from '@/components/ui/card'
 
 export const dynamic = 'force-dynamic'
 
