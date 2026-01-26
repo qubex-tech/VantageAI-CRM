@@ -220,8 +220,8 @@ export async function POST(req: NextRequest) {
           windowEnd?: string
           recentPatients?: Array<{ name: string; lastSeenAt?: string; dateOfBirth?: string }>
           upcomingPatients?: Array<{ name: string; nextVisitAt?: string; dateOfBirth?: string }>
-          recentAppointments?: Array<{ id: string }>
-          upcomingAppointments?: Array<{ id: string }>
+          recentAppointments?: Array<{ id: string; patientName?: string; startTime?: string; status?: string; visitType?: string | null }>
+          upcomingAppointments?: Array<{ id: string; patientName?: string; startTime?: string; status?: string; visitType?: string | null }>
           recentNotes?: Array<{ patientName: string; type: string }>
         }
         contextParts.push(`\nDashboard Context (Rolling 14 Days):`)
