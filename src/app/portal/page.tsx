@@ -1,6 +1,9 @@
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
 import { getPatientSession } from '@/lib/portal-session'
 import { prisma } from '@/lib/db'
+import { formatAppointmentDate, formatAppointmentTime } from '@/lib/portal-date-utils'
+import { resolveTimeZone } from '@/lib/timezone'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,6 +17,10 @@ export default async function PortalHomePage() {
   if (!session) {
     redirect('/portal/auth')
   }
+  
+  // Detect user's timezone from IP address
+  const headersList = await headers()
+  const userTimezone = await resolveTimeZone(headersList) || 'UTC'
   
   // Get patient info
   const patient = await prisma.patient.findUnique({
@@ -81,18 +88,10 @@ export default async function PortalHomePage() {
                         <div className="flex-1">
                           <p className="font-medium text-gray-900">{apt.visitType}</p>
                           <p className="text-sm text-gray-600 mt-1">
-                            {new Date(apt.startTime).toLocaleDateString('en-US', {
-                              weekday: 'short',
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric',
-                            })}
+                            {formatAppointmentDate(apt.startTime, userTimezone)}
                           </p>
                           <p className="text-sm text-gray-600">
-                            {new Date(apt.startTime).toLocaleTimeString('en-US', {
-                              hour: 'numeric',
-                              minute: '2-digit',
-                            })}
+                            {formatAppointmentTime(apt.startTime, userTimezone)}
                           </p>
                         </div>
                         <span className={`text-xs px-2 py-1 rounded-full ${

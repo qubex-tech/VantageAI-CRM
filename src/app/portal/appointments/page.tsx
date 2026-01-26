@@ -1,10 +1,13 @@
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
 import { getPatientSession } from '@/lib/portal-session'
 import { prisma } from '@/lib/db'
 import { format } from 'date-fns'
 import Link from 'next/link'
 import { ConfirmButton, CancelButton } from './appointment-actions'
 import { BackButton } from '@/components/portal/BackButton'
+import { formatAppointmentDate, formatAppointmentTimeRange } from '@/lib/portal-date-utils'
+import { resolveTimeZone } from '@/lib/timezone'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +28,10 @@ export default async function PortalAppointmentsPage({
   
   const params = await searchParams
   const { patientId, practiceId } = session
+  
+  // Detect user's timezone from IP address
+  const headersList = await headers()
+  const userTimezone = await resolveTimeZone(headersList) || 'UTC'
   
   const date = params.date ? new Date(params.date) : null
   const status = params.status
@@ -58,6 +65,31 @@ export default async function PortalAppointmentsPage({
     orderBy: { startTime: 'desc' },
     take: 100,
   })
+
+  // Mark past appointments as completed (if not already cancelled or completed)
+  const now = new Date()
+  const pastAppointments = appointments.filter(
+    apt => new Date(apt.startTime) < now && 
+           apt.status !== 'completed' && 
+           apt.status !== 'cancelled' &&
+           apt.status !== 'no_show'
+  )
+
+  if (pastAppointments.length > 0) {
+    await prisma.appointment.updateMany({
+      where: {
+        id: { in: pastAppointments.map(a => a.id) },
+      },
+      data: {
+        status: 'completed',
+      },
+    })
+
+    // Update local array for display
+    pastAppointments.forEach(apt => {
+      apt.status = 'completed'
+    })
+  }
   
   // Get patient info for display
   const patient = await prisma.patient.findUnique({
@@ -143,11 +175,11 @@ export default async function PortalAppointmentsPage({
                     <div className="space-y-1 text-sm text-gray-600">
                       <p>
                         <span className="font-medium">Date:</span>{' '}
-                        {format(new Date(apt.startTime), 'EEEE, MMMM d, yyyy')}
+                        {formatAppointmentDate(apt.startTime, userTimezone)}
                       </p>
                       <p>
                         <span className="font-medium">Time:</span>{' '}
-                        {format(new Date(apt.startTime), 'h:mm a')} - {format(new Date(apt.endTime), 'h:mm a')}
+                        {formatAppointmentTimeRange(apt.startTime, apt.endTime, userTimezone)}
                       </p>
                       {apt.reason && (
                         <p>

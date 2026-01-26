@@ -1,8 +1,11 @@
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
 import { getPatientSession } from '@/lib/portal-session'
 import { prisma } from '@/lib/db'
 import { format } from 'date-fns'
 import { BackButton } from '@/components/portal/BackButton'
+import { formatAppointmentDate, formatAppointmentTime } from '@/lib/portal-date-utils'
+import { resolveTimeZone } from '@/lib/timezone'
 
 /**
  * Portal Activity Page
@@ -14,6 +17,10 @@ export default async function PortalActivityPage() {
   if (!session) {
     redirect('/portal/auth')
   }
+  
+  // Detect user's timezone from IP address
+  const headersList = await headers()
+  const userTimezone = await resolveTimeZone(headersList) || 'UTC'
   
   // Get timeline entries (similar to CRM) - exclude notes
   const timelineEntries = await prisma.patientTimelineEntry.findMany({
@@ -137,7 +144,7 @@ export default async function PortalActivityPage() {
       case 'timeline':
         return event.data.description
       case 'appointment':
-        return `Scheduled for ${format(new Date(event.data.startTime), 'MMM d, yyyy h:mm a')}`
+        return `Scheduled for ${formatAppointmentDate(event.data.startTime, userTimezone)} at ${formatAppointmentTime(event.data.startTime, userTimezone)}`
       case 'message':
         return event.data.body?.substring(0, 100) + (event.data.body?.length > 100 ? '...' : '')
       case 'task':
