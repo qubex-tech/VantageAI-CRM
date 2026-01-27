@@ -74,6 +74,7 @@ function getVariableFallback(varKey: string): string {
     'links.reschedule': '#',
     'links.cancel': '#',
     'links.portalVerified': '#',
+    'links.formRequest': '#',
   }
   
   // Check if we have a specific fallback

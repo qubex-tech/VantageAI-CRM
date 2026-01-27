@@ -196,6 +196,11 @@ export interface VariableContext {
      * Example: https://{practiceSlug}.portal.getvantage.tech/portal/invite?token=...
      */
     portalVerified?: string
+    /**
+     * Verified portal link that opens a specific form request.
+     * Example: https://{practiceSlug}.portal.getvantage.tech/portal/invite?token=...&redirect=/portal/forms/{id}
+     */
+    formRequest?: string
   }
 }
 

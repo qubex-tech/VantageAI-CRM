@@ -15,6 +15,7 @@ import {
   Workflow,
   Zap,
   Megaphone,
+  FileText,
   CheckSquare,
   BarChart3
 } from 'lucide-react'
@@ -29,6 +30,7 @@ const navItems = [
   { href: '/patients', label: 'Patients', icon: Users },
   { href: '/appointments', label: 'Appointments', icon: Calendar },
   { href: '/tasks', label: 'Tasks', icon: CheckSquare },
+  { href: '/forms', label: 'Forms', icon: FileText },
   { href: '/marketing', label: 'Marketing', icon: Megaphone },
   { href: '/calls', label: 'Calls', icon: Phone },
   { href: '/workflows/automations', label: 'Workflow Automations', icon: Zap },

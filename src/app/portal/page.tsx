@@ -121,12 +121,23 @@ export default async function PortalHomePage() {
               <p className="text-gray-500">No pending tasks</p>
             ) : (
               <ul className="space-y-2">
-                {patient.portalTasks.map((task) => (
-                  <li key={task.id} className="border-b pb-2">
-                    <p className="font-medium">{task.title}</p>
-                    <p className="text-sm text-gray-600">{task.description}</p>
-                  </li>
-                ))}
+                {patient.portalTasks.map((task) => {
+                  const formRequestId = (task.metadata as any)?.formRequestId
+                  return (
+                    <li key={task.id} className="border-b pb-2">
+                      <p className="font-medium">{task.title}</p>
+                      <p className="text-sm text-gray-600">{task.description}</p>
+                      {formRequestId && (
+                        <a
+                          href={`/portal/forms/${formRequestId}`}
+                          className="mt-2 inline-flex text-sm text-blue-600 hover:text-blue-800"
+                        >
+                          Complete form →
+                        </a>
+                      )}
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </div>

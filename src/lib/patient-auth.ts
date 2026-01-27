@@ -3,7 +3,7 @@ import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import { getSendgridClient } from './sendgrid'
 import { getTwilioClient } from './twilio'
-import { buildVerifiedPatientPortalUrl } from './portal-invite'
+import { buildFormRequestPortalUrl, buildVerifiedPatientPortalUrl } from './portal-invite'
 
 /**
  * Generate a 6-digit OTP code
@@ -360,4 +360,31 @@ export async function getOrCreateVerifiedPatientPortalUrl(params: {
   })
 
   return { url, inviteToken: inviteToken!, expiresAt: expiresAt as Date }
+}
+
+/**
+ * Get a verified portal URL for a specific form request.
+ */
+export async function getVerifiedFormRequestPortalUrl(params: {
+  practiceId: string
+  patientId: string
+  formRequestId: string
+}): Promise<{ url: string }> {
+  const { inviteToken } = await getOrCreateVerifiedPatientPortalUrl({
+    practiceId: params.practiceId,
+    patientId: params.patientId,
+  })
+
+  const practice = await prisma.practice.findUnique({
+    where: { id: params.practiceId },
+    select: { slug: true },
+  })
+
+  const url = buildFormRequestPortalUrl({
+    practice: practice ? { slug: practice.slug } : null,
+    inviteToken,
+    formRequestId: params.formRequestId,
+  })
+
+  return { url }
 }

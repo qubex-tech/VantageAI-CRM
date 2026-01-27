@@ -36,3 +36,33 @@ export function buildVerifiedPatientPortalUrl(params: {
   return `${origin}/portal/invite?token=${encodeURIComponent(params.inviteToken)}`
 }
 
+/**
+ * Build a portal invite URL that redirects to a specific portal path after login.
+ */
+export function buildPortalRedirectUrl(params: {
+  practice?: Pick<Practice, 'slug'> | null
+  inviteToken: string
+  redirectPath: string
+}): string {
+  const origin = getPortalOriginForPractice(params.practice)
+  const normalizedPath = params.redirectPath.startsWith('/')
+    ? params.redirectPath
+    : `/${params.redirectPath}`
+  return `${origin}/portal/invite?token=${encodeURIComponent(params.inviteToken)}&redirect=${encodeURIComponent(normalizedPath)}`
+}
+
+/**
+ * Build a portal invite URL that directs to a specific form request.
+ */
+export function buildFormRequestPortalUrl(params: {
+  practice?: Pick<Practice, 'slug'> | null
+  inviteToken: string
+  formRequestId: string
+}): string {
+  return buildPortalRedirectUrl({
+    practice: params.practice,
+    inviteToken: params.inviteToken,
+    redirectPath: `/portal/forms/${encodeURIComponent(params.formRequestId)}`,
+  })
+}
+

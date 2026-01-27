@@ -179,6 +179,13 @@ const EVENT_FIELDS: Record<string, Array<{ value: string; label: string; type: '
     { value: 'conversation.outcome', label: 'Outcome', type: 'string' },
     ...PATIENT_FIELDS,
   ],
+  'crm/form_request.created': [
+    { value: 'formRequest.id', label: 'Form Request ID', type: 'string' },
+    { value: 'formRequest.status', label: 'Form Request Status', type: 'string' },
+    { value: 'formRequest.dueDate', label: 'Form Request Due Date', type: 'date' },
+    { value: 'formRequest.templateId', label: 'Form Template ID', type: 'string' },
+    ...PATIENT_FIELDS,
+  ],
 }
 
 // Status options for appointment status field
@@ -377,6 +384,7 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                 <SelectItem value="crm/message.drafted">Message Drafted</SelectItem>
                 <SelectItem value="crm/voice_conversation.started">Voice Call Started</SelectItem>
                 <SelectItem value="crm/voice_conversation.ended">Voice Call Ended</SelectItem>
+                <SelectItem value="crm/form_request.created">Form Request Created</SelectItem>
               </SelectContent>
             </Select>
           </div>

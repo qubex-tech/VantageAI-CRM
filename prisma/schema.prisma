@@ -52,6 +52,8 @@ model Practice {
   conversationThreads      ConversationThread[]
   portalMessages           PortalMessage[]
   portalTasks              PatientTask[]
+  formTemplates            FormTemplate[]
+  formRequests             FormRequest[]
   formSubmissions          FormSubmission[]
   documentUploads          DocumentUpload[]
   reviewRequests           ReviewRequest[]
@@ -93,6 +95,8 @@ model User {
   marketingAuditLogs               MarketingAuditLog[]        @relation("MarketingAuditLogActor")
   assignedTasks                    Task[]                     @relation("AssignedTasks")
   createdTasks                     Task[]                     @relation("CreatedTasks")
+  formTemplatesCreated             FormTemplate[]             @relation("FormTemplateCreator")
+  formRequestsCreated              FormRequest[]              @relation("FormRequestCreator")
   taskComments                     TaskComment[]
 
   @@index([practiceId])
@@ -164,6 +168,7 @@ model Patient {
   conversationThreads      ConversationThread[]
   portalMessages           PortalMessage[]
   portalTasks              PatientTask[]
+  formRequests             FormRequest[]
   tasks                    Task[]
   formSubmissions          FormSubmission[]
   documentUploads          DocumentUpload[]
@@ -921,10 +926,64 @@ model PatientTask {
   @@map("patient_tasks")
 }
 
+model FormTemplate {
+  id              String   @id @default(uuid())
+  practiceId      String
+  name            String
+  description     String?
+  category        String // 'intake', 'consent', 'medical_history', 'custom'
+  status          String   @default("published") // 'draft', 'published', 'archived'
+  schema          Json // Field definitions
+  isSystem        Boolean  @default(false)
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  practice   Practice        @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  createdBy  User            @relation("FormTemplateCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  requests   FormRequest[]
+  submissions FormSubmission[]
+
+  @@index([practiceId])
+  @@index([practiceId, status])
+  @@index([practiceId, category])
+  @@index([isSystem])
+  @@map("form_templates")
+}
+
+model FormRequest {
+  id              String    @id @default(uuid())
+  practiceId      String
+  patientId       String
+  formTemplateId  String
+  status          String    @default("pending") // 'pending', 'in_progress', 'submitted', 'expired', 'cancelled'
+  dueDate         DateTime?
+  sentAt          DateTime  @default(now())
+  completedAt     DateTime?
+  metadata        Json?
+  createdByUserId String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  practice    Practice     @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  template    FormTemplate @relation(fields: [formTemplateId], references: [id], onDelete: Cascade)
+  createdBy   User         @relation("FormRequestCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  submission  FormSubmission?
+
+  @@index([practiceId])
+  @@index([practiceId, patientId])
+  @@index([practiceId, status])
+  @@index([formTemplateId])
+  @@map("form_requests")
+}
+
 model FormSubmission {
   id          String    @id @default(uuid())
   practiceId  String
   patientId   String
+  formTemplateId String?
+  formRequestId  String?
   formType    String // 'intake', 'consent', 'registration', 'other'
   formData    Json // Structured form response
   status      String    @default("submitted") // 'submitted', 'reviewed', 'approved'
@@ -933,12 +992,17 @@ model FormSubmission {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
-  patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  practice Practice      @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient  Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  template FormTemplate? @relation(fields: [formTemplateId], references: [id], onDelete: SetNull)
+  request  FormRequest?  @relation(fields: [formRequestId], references: [id], onDelete: SetNull)
 
   @@index([practiceId, patientId])
   @@index([practiceId, submittedAt])
   @@index([formType])
+  @@index([formTemplateId])
+  @@index([formRequestId])
+  @@unique([formRequestId])
   @@map("form_submissions")
 }
 

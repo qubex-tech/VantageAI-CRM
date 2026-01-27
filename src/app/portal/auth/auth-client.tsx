@@ -22,6 +22,8 @@ export default function PortalAuthClient() {
   const [error, setError] = useState('')
 
   const inviteError = searchParams.get('error')
+  const redirectPath = searchParams.get('redirect')
+  const safeRedirect = redirectPath && redirectPath.startsWith('/portal') ? redirectPath : '/portal'
 
   const handleRequestOTP = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -74,7 +76,7 @@ export default function PortalAuthClient() {
         throw new Error(data.error || 'Invalid code')
       }
 
-      window.location.replace('/portal')
+      window.location.replace(safeRedirect)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid code')
     } finally {

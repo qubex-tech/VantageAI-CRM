@@ -54,7 +54,8 @@ const createNoteSchema = z.object({
 
 const sendSmsSchema = z.object({
   patientId: z.string(),
-  message: z.string(),
+  message: z.string().optional(),
+  templateId: z.string().optional(),
   phoneNumber: z.string().optional(), // If not provided, use patient's phone
 })
 
@@ -330,6 +331,110 @@ async function sendSms(
     }
   }
 
+  const { replaceVariables } = await import('@/lib/marketing/variables')
+  const { getOrCreateVerifiedPatientPortalUrl, getVerifiedFormRequestPortalUrl } = await import('@/lib/patient-auth')
+  type VariableContext = import('@/lib/marketing/types').VariableContext
+
+  const brandProfile = await prisma.brandProfile.findUnique({
+    where: { tenantId: practiceId },
+  })
+
+  let portalVerifiedUrl = '#'
+  try {
+    const portalUrl = await getOrCreateVerifiedPatientPortalUrl({
+      practiceId,
+      patientId: patient.id,
+    })
+    portalVerifiedUrl = portalUrl.url
+  } catch {
+    // Best-effort: template will fall back if unavailable.
+  }
+
+  let formRequestUrl = eventData?.links?.formRequest || '#'
+  if ((!formRequestUrl || formRequestUrl === '#') && eventData?.formRequest?.id) {
+    try {
+      const formUrl = await getVerifiedFormRequestPortalUrl({
+        practiceId,
+        patientId: patient.id,
+        formRequestId: eventData.formRequest.id,
+      })
+      formRequestUrl = formUrl.url
+    } catch {
+      // Best-effort: template will fall back if unavailable.
+    }
+  }
+
+  const context: VariableContext = {
+    patient: {
+      firstName: patient.firstName || patient.name?.split(' ')[0] || '',
+      lastName: patient.lastName || patient.name?.split(' ').slice(1).join(' ') || '',
+      preferredName: patient.preferredName || patient.firstName || patient.name?.split(' ')[0] || '',
+    },
+    practice: {
+      name: brandProfile?.practiceName || '',
+      phone: brandProfile?.defaultFromEmail || '',
+      address: '',
+    },
+    appointment: eventData.appointment ? {
+      date: eventData.appointment.startTime ? new Date(eventData.appointment.startTime).toLocaleDateString() : '',
+      time: eventData.appointment.startTime ? new Date(eventData.appointment.startTime).toLocaleTimeString() : '',
+      location: '',
+      providerName: '',
+    } : undefined,
+    links: {
+      confirm: '#',
+      reschedule: '#',
+      cancel: '#',
+      portalVerified: portalVerifiedUrl,
+      formRequest: formRequestUrl,
+      ...(eventData.links || {}),
+    },
+  }
+
+  let messageBody = args.message || ''
+
+  if (args.templateId) {
+    const template = await prisma.marketingTemplate.findFirst({
+      where: {
+        id: args.templateId,
+        tenantId: practiceId,
+        channel: 'sms',
+      },
+    })
+
+    if (!template) {
+      return {
+        status: 'failed',
+        error: `Template ${args.templateId} not found`,
+      }
+    }
+
+    if (template.status !== 'published') {
+      console.warn(`[AUTOMATION] Using SMS template that is not published:`, {
+        templateId: template.id,
+        status: template.status,
+      })
+    }
+
+    if (!template.bodyText) {
+      return {
+        status: 'failed',
+        error: 'Template has no SMS content to render',
+      }
+    }
+
+    messageBody = template.bodyText
+  }
+
+  if (!messageBody) {
+    return {
+      status: 'failed',
+      error: 'Message is required when no template is provided',
+    }
+  }
+
+  messageBody = replaceVariables(messageBody, context)
+
   console.log(`[AUTOMATION SMS] Sending via Twilio:`, {
     practiceId,
     patientId: args.patientId,
@@ -343,7 +448,7 @@ async function sendSms(
     const twilioClient = await getTwilioClient(practiceId)
     smsResult = await twilioClient.sendSms({
       to: phoneNumber,
-      body: args.message,
+      body: messageBody,
     })
   } catch (error: any) {
     return {
@@ -381,7 +486,7 @@ async function sendSms(
           practiceId,
           userId: automationUserId,
           type: 'contact',
-          content: `[Automation SMS] Sent to ${phoneNumber}${messageSuffix}: ${args.message}`,
+          content: `[Automation SMS] Sent to ${phoneNumber}${messageSuffix}: ${messageBody}`,
         },
       })
     }
@@ -395,7 +500,7 @@ async function sendSms(
       patientId: args.patientId,
       type: 'call',
       title: 'SMS sent via automation',
-      description: `Sent to ${phoneNumber}: ${args.message.substring(0, 100)}${args.message.length > 100 ? '...' : ''}`,
+      description: `Sent to ${phoneNumber}: ${messageBody.substring(0, 100)}${messageBody.length > 100 ? '...' : ''}`,
       metadata: {
         phoneNumber,
         messageId: smsResult.messageId,
@@ -412,8 +517,9 @@ async function sendSms(
       action: 'send_sms',
       patientId: args.patientId,
       phoneNumber,
-      message: args.message,
+      message: messageBody,
       messageId: smsResult.messageId,
+      templateId: args.templateId,
     },
   }
 }
@@ -464,6 +570,67 @@ async function sendEmail(
     let emailBodyHtml = args.body || ''
     let emailBodyText = args.body || ''
 
+    const brandProfile = await prisma.brandProfile.findUnique({
+      where: { tenantId: practiceId },
+    })
+
+    const { replaceVariables } = await import('@/lib/marketing/variables')
+    const { renderEmailFromJson } = await import('@/lib/marketing/render-email')
+    const { getOrCreateVerifiedPatientPortalUrl, getVerifiedFormRequestPortalUrl } = await import('@/lib/patient-auth')
+    type VariableContext = import('@/lib/marketing/types').VariableContext
+
+    let portalVerifiedUrl = '#'
+    try {
+      const portalUrl = await getOrCreateVerifiedPatientPortalUrl({
+        practiceId,
+        patientId: patient.id,
+      })
+      portalVerifiedUrl = portalUrl.url
+    } catch {
+      // Best-effort: template will fall back if unavailable.
+    }
+
+    let formRequestUrl = eventData?.links?.formRequest || '#'
+    if ((!formRequestUrl || formRequestUrl === '#') && eventData?.formRequest?.id) {
+      try {
+        const formUrl = await getVerifiedFormRequestPortalUrl({
+          practiceId,
+          patientId: patient.id,
+          formRequestId: eventData.formRequest.id,
+        })
+        formRequestUrl = formUrl.url
+      } catch {
+        // Best-effort: template will fall back if unavailable.
+      }
+    }
+
+    const context: VariableContext = {
+      patient: {
+        firstName: patient.firstName || patient.name?.split(' ')[0] || '',
+        lastName: patient.lastName || patient.name?.split(' ').slice(1).join(' ') || '',
+        preferredName: patient.preferredName || patient.firstName || patient.name?.split(' ')[0] || '',
+      },
+      practice: {
+        name: brandProfile?.practiceName || '',
+        phone: brandProfile?.defaultFromEmail || '',
+        address: '',
+      },
+      appointment: eventData.appointment ? {
+        date: eventData.appointment.startTime ? new Date(eventData.appointment.startTime).toLocaleDateString() : '',
+        time: eventData.appointment.startTime ? new Date(eventData.appointment.startTime).toLocaleTimeString() : '',
+        location: '',
+        providerName: '',
+      } : undefined,
+      links: {
+        confirm: '#',
+        reschedule: '#',
+        cancel: '#',
+        portalVerified: portalVerifiedUrl,
+        formRequest: formRequestUrl,
+        ...(eventData.links || {}),
+      },
+    }
+
     // If templateId is provided, fetch and render template
     if (args.templateId) {
       const template = await prisma.marketingTemplate.findFirst({
@@ -486,53 +653,6 @@ async function sendEmail(
           templateId: template.id,
           status: template.status,
         })
-      }
-
-      // Get brand profile for rendering
-      const brandProfile = await prisma.brandProfile.findUnique({
-        where: { tenantId: practiceId },
-      })
-
-      // Build variable context from patient and event data
-      const { replaceVariables } = await import('@/lib/marketing/variables')
-      const { renderEmailFromJson } = await import('@/lib/marketing/render-email')
-      const { getOrCreateVerifiedPatientPortalUrl } = await import('@/lib/patient-auth')
-      type VariableContext = import('@/lib/marketing/types').VariableContext
-
-      let portalVerifiedUrl = '#'
-      try {
-        const portalUrl = await getOrCreateVerifiedPatientPortalUrl({
-          practiceId,
-          patientId: patient.id,
-        })
-        portalVerifiedUrl = portalUrl.url
-      } catch {
-        // Best-effort: template will fall back if unavailable.
-      }
-      
-      const context: VariableContext = {
-        patient: {
-          firstName: patient.firstName || patient.name?.split(' ')[0] || '',
-          lastName: patient.lastName || patient.name?.split(' ').slice(1).join(' ') || '',
-          preferredName: patient.preferredName || patient.firstName || patient.name?.split(' ')[0] || '',
-        },
-        practice: {
-          name: brandProfile?.practiceName || '',
-          phone: brandProfile?.defaultFromEmail || '',
-          address: '',
-        },
-        appointment: eventData.appointment ? {
-          date: eventData.appointment.startTime ? new Date(eventData.appointment.startTime).toLocaleDateString() : '',
-          time: eventData.appointment.startTime ? new Date(eventData.appointment.startTime).toLocaleTimeString() : '',
-          location: '',
-          providerName: '',
-        } : undefined,
-        links: {
-          confirm: '#',
-          reschedule: '#',
-          cancel: '#',
-          portalVerified: portalVerifiedUrl,
-        },
       }
 
       // Use template subject if provided, otherwise use args.subject
@@ -602,6 +722,10 @@ async function sendEmail(
         emailBodyHtml = emailBodyHtml.replace(/\n/g, '<br>')
         emailBodyText = emailBodyHtml.replace(/<[^>]+>/g, '').replace(/\n/g, ' ')
       }
+
+      emailSubject = replaceVariables(emailSubject, context)
+      emailBodyHtml = replaceVariables(emailBodyHtml, context)
+      emailBodyText = replaceVariables(emailBodyText, context)
     }
 
     const { getSendgridClient } = await import('@/lib/sendgrid')

@@ -16,6 +16,7 @@ function extractInviteToken(raw: string): string | null {
  */
 export async function GET(req: NextRequest) {
   const tokenParam = req.nextUrl.searchParams.get('token')
+  const redirectParam = req.nextUrl.searchParams.get('redirect')
 
   if (!tokenParam) {
     return NextResponse.redirect(new URL('/portal/auth?error=invite_required', req.url))
@@ -35,7 +36,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL('/portal/auth?error=invalid_invite', req.url))
   }
 
-  const res = NextResponse.redirect(new URL('/portal/auth', req.url))
+  const safeRedirect = redirectParam && redirectParam.startsWith('/portal')
+    ? redirectParam
+    : null
+  const authUrl = new URL('/portal/auth', req.url)
+  if (safeRedirect) {
+    authUrl.searchParams.set('redirect', safeRedirect)
+  }
+
+  const res = NextResponse.redirect(authUrl)
   res.cookies.set('portal_invite', normalizedToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
