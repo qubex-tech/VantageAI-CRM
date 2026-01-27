@@ -103,7 +103,7 @@ export async function seedDefaultFormTemplates(practiceId: string, userId: strin
       description: template.description,
       category: template.category,
       status: 'published',
-      schema: template.schema as Prisma.InputJsonValue,
+      schema: template.schema as unknown as Prisma.InputJsonValue,
       isSystem: true,
       createdByUserId: userId,
     })),
