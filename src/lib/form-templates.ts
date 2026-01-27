@@ -1,3 +1,5 @@
+import type { Prisma } from '@prisma/client'
+
 export type FormFieldType = 'text' | 'textarea' | 'number' | 'date' | 'select' | 'checkbox'
 
 export interface FormFieldDefinition {
@@ -101,7 +103,7 @@ export async function seedDefaultFormTemplates(practiceId: string, userId: strin
       description: template.description,
       category: template.category,
       status: 'published',
-      schema: template.schema,
+      schema: template.schema as Prisma.InputJsonValue,
       isSystem: true,
       createdByUserId: userId,
     })),
