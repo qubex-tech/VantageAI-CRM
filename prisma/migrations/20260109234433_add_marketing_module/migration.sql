@@ -1,0 +1,2 @@
+-- Migration file restored to satisfy Prisma migrate deploy.
+-- The marketing module changes were applied previously.

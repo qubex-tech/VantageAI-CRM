@@ -1,0 +1,2 @@
+-- Migration file restored to satisfy Prisma migrate deploy.
+-- Content blocks changes were applied previously.
