@@ -24,8 +24,9 @@ export default async function PortalTasksPage() {
     ],
   })
 
-  const pendingTasks = tasks.filter((task) => task.status !== 'completed')
-  const completedTasks = tasks.filter((task) => task.status === 'completed')
+  const linkedTasks = tasks.filter((task) => task.patientId === session.patientId)
+  const pendingTasks = linkedTasks.filter((task) => task.status !== 'completed')
+  const completedTasks = linkedTasks.filter((task) => task.status === 'completed')
 
   const formatDate = (value?: Date | null) =>
     value ? new Date(value).toLocaleDateString() : null
