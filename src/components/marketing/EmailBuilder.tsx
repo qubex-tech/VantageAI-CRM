@@ -725,6 +725,7 @@ const EmailBuilder = forwardRef<EmailBuilderRef, EmailBuilderProps>(function Ema
                 const rect = panel.getBoundingClientRect()
                 setVariablePickerPosition({ x: rect.left - 400, y: rect.top })
               }
+              setShowVariablePicker(true)
             }}
             onSavedBlocksUpdate={async () => {
               try {
