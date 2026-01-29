@@ -1,24 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { requirePracticeContext } from '@/lib/tenant'
+import { requirePatientSession } from '@/lib/portal-session'
 
 export async function GET(req: NextRequest, context: { params: { id: string } }) {
   try {
-    const practiceContext = await requirePracticeContext(req)
-    const patientId = req.headers.get('x-patient-id')
-
-    if (!patientId) {
-      return NextResponse.json(
-        { error: 'Patient ID required' },
-        { status: 401 }
-      )
-    }
+    const session = await requirePatientSession(req)
 
     const request = await prisma.formRequest.findFirst({
       where: {
         id: context.params.id,
-        practiceId: practiceContext.practiceId,
-        patientId,
+        practiceId: session.practiceId,
+        patientId: session.patientId,
       },
       include: {
         template: true,
@@ -41,15 +33,7 @@ export async function GET(req: NextRequest, context: { params: { id: string } })
 
 export async function POST(req: NextRequest, context: { params: { id: string } }) {
   try {
-    const practiceContext = await requirePracticeContext(req)
-    const patientId = req.headers.get('x-patient-id')
-
-    if (!patientId) {
-      return NextResponse.json(
-        { error: 'Patient ID required' },
-        { status: 401 }
-      )
-    }
+    const session = await requirePatientSession(req)
 
     const body = await req.json()
     const { formData } = body
@@ -61,8 +45,8 @@ export async function POST(req: NextRequest, context: { params: { id: string } }
     const request = await prisma.formRequest.findFirst({
       where: {
         id: context.params.id,
-        practiceId: practiceContext.practiceId,
-        patientId,
+        practiceId: session.practiceId,
+        patientId: session.patientId,
       },
       include: {
         template: true,
@@ -80,8 +64,8 @@ export async function POST(req: NextRequest, context: { params: { id: string } }
 
     const submission = await prisma.formSubmission.create({
       data: {
-        practiceId: practiceContext.practiceId,
-        patientId,
+        practiceId: session.practiceId,
+        patientId: session.patientId,
         formTemplateId: request.formTemplateId,
         formRequestId: request.id,
         formType: request.template.category || 'custom',
@@ -100,8 +84,8 @@ export async function POST(req: NextRequest, context: { params: { id: string } }
 
     await prisma.patientTask.updateMany({
       where: {
-        practiceId: practiceContext.practiceId,
-        patientId,
+        practiceId: session.practiceId,
+        patientId: session.patientId,
         metadata: {
           path: ['formRequestId'],
           equals: request.id,
@@ -115,8 +99,8 @@ export async function POST(req: NextRequest, context: { params: { id: string } }
 
     await prisma.portalAuditLog.create({
       data: {
-        practiceId: practiceContext.practiceId,
-        patientId,
+        practiceId: session.practiceId,
+        patientId: session.patientId,
         action: 'form_submitted',
         resourceType: 'form_request',
         resourceId: request.id,
