@@ -29,7 +29,7 @@ export default async function NewFormRequestPage() {
 
   await seedDefaultFormTemplates(user.practiceId, user.id)
 
-  const [templates, patients] = await Promise.all([
+  const [templates, patients, emailTemplates, smsTemplates] = await Promise.all([
     prisma.formTemplate.findMany({
       where: { practiceId: user.practiceId },
       orderBy: [{ isSystem: 'desc' }, { updatedAt: 'desc' }],
@@ -41,6 +41,24 @@ export default async function NewFormRequestPage() {
       select: { id: true, name: true, firstName: true, lastName: true, email: true },
       take: 200,
     }),
+    prisma.marketingTemplate.findMany({
+      where: {
+        tenantId: user.practiceId,
+        channel: 'email',
+        status: 'published',
+      },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true, name: true, category: true },
+    }),
+    prisma.marketingTemplate.findMany({
+      where: {
+        tenantId: user.practiceId,
+        channel: 'sms',
+        status: 'published',
+      },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true, name: true, category: true },
+    }),
   ])
 
   return (
@@ -50,7 +68,12 @@ export default async function NewFormRequestPage() {
         <p className="text-sm text-gray-500">Select a patient and choose a form template</p>
       </div>
 
-      <FormRequestForm templates={templates} patients={patients} />
+      <FormRequestForm
+        templates={templates}
+        emailTemplates={emailTemplates}
+        smsTemplates={smsTemplates}
+        patients={patients}
+      />
     </div>
   )
 }
