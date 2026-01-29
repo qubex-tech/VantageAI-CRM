@@ -58,6 +58,14 @@ export default async function PatientDetailPage({
         orderBy: { createdAt: 'desc' },
         take: 50,
       },
+      formSubmissions: {
+        orderBy: { submittedAt: 'desc' },
+        take: 50,
+        include: {
+          template: true,
+          request: true,
+        },
+      },
     },
   })
 

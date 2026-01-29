@@ -116,6 +116,15 @@ interface PatientDetailViewProps {
       createdAt: Date
       metadata: any
     }>
+    formSubmissions?: Array<{
+      id: string
+      formType: string
+      status: string
+      submittedAt: Date
+      formData: any
+      template?: { id: string; name: string; category: string } | null
+      request?: { id: string } | null
+    }>
   }
   users?: Array<{ id: string; name: string; email: string }>
   currentUserId?: string
@@ -169,6 +178,7 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
     communication: false,
     insurance: false,
     tasks: false,
+    formSubmissions: true,
     notes: true, // Expand notes section by default
   })
   
@@ -271,6 +281,7 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
   
   // Ensure appointments is always an array
   const appointments = Array.isArray(patient.appointments) ? patient.appointments : []
+  const formSubmissions = Array.isArray(patient.formSubmissions) ? patient.formSubmissions : []
   const upcomingAppointments = appointments.filter(apt => {
     try {
       const aptDate = new Date(apt.startTime)
@@ -317,7 +328,15 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
             <Button variant="ghost" size="icon">
               <Clipboard className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="icon">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                setSidebarTab('details')
+                setExpandedSections((prev) => ({ ...prev, formSubmissions: true }))
+              }}
+              aria-label="Form submissions"
+            >
               <FileText className="h-4 w-4" />
             </Button>
             <Button variant="ghost" size="icon">
@@ -1134,6 +1153,55 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                     users={users}
                     currentUserId={currentUserId}
                   />
+                )}
+              </div>
+
+              {/* Form Submissions Section */}
+              <div className="min-w-0 border-b border-gray-200 pb-4">
+                <button
+                  onClick={() => toggleSection('formSubmissions')}
+                  className="flex items-center justify-between w-full mb-3"
+                >
+                  <h3 className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Form Submissions
+                  </h3>
+                  {expandedSections.formSubmissions ? (
+                    <ChevronUp className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  )}
+                </button>
+
+                {expandedSections.formSubmissions && (
+                  <div className="space-y-3 min-w-0">
+                    {formSubmissions.length === 0 ? (
+                      <div className="text-sm text-gray-500 italic py-2">
+                        No form submissions yet.
+                      </div>
+                    ) : (
+                      formSubmissions.map((submission) => (
+                        <div
+                          key={submission.id}
+                          className="border border-gray-200 rounded-md p-3 bg-gray-50 min-w-0"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="text-sm font-medium text-gray-900 break-words">
+                                {submission.template?.name || submission.formType.replace(/_/g, ' ')}
+                              </div>
+                              <div className="text-xs text-gray-500 mt-1">
+                                Submitted {format(new Date(submission.submittedAt), 'MMM d, yyyy')}
+                              </div>
+                            </div>
+                            <span className="text-xs text-gray-600 capitalize">
+                              {submission.status.replace(/_/g, ' ')}
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 )}
               </div>
 
