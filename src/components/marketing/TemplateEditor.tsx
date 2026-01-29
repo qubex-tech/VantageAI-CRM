@@ -260,6 +260,42 @@ export default function TemplateEditor({ template: initialTemplate, brandProfile
       setSaving(false)
     }
   }
+
+  const handleSaveDragdrop = async () => {
+    if (!emailBuilderRef.current) return
+    const doc = emailBuilderRef.current.getDoc()
+    setError('')
+    setSaving(true)
+    try {
+      const response = await fetch(`/api/marketing/templates/${template.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          subject,
+          preheader,
+          editorType: 'dragdrop',
+          bodyJson: doc,
+          bodyHtml: null,
+          bodyText: null,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to save template')
+      }
+
+      const { template: updated } = await response.json()
+      setTemplate(updated)
+      setLastSaved(new Date())
+      router.refresh()
+    } catch (err: any) {
+      setError(err.message || 'Failed to save template')
+    } finally {
+      setSaving(false)
+    }
+  }
   
   // Auto-save template details (name, subject, preheader) when they change
   useEffect(() => {
@@ -505,6 +541,12 @@ export default function TemplateEditor({ template: initialTemplate, brandProfile
           <div className="flex items-center gap-2">
             {template.channel === 'email' && (
               <>
+                {editorType === 'dragdrop' && (
+                  <Button variant="outline" size="sm" onClick={handleSaveDragdrop} disabled={saving}>
+                    <Save className="h-4 w-4 mr-2" />
+                    {saving ? 'Saving...' : 'Save'}
+                  </Button>
+                )}
                 <Button variant="outline" size="sm" onClick={() => {
                   handlePreview()
                   setShowPreview(true)

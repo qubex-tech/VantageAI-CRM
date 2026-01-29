@@ -85,6 +85,7 @@ export interface EmailBuilderRef {
   redo: () => void
   canUndo: boolean
   canRedo: boolean
+  getDoc: () => EmailDoc
 }
 
 const EmailBuilder = forwardRef<EmailBuilderRef, EmailBuilderProps>(function EmailBuilder({
@@ -597,6 +598,7 @@ const EmailBuilder = forwardRef<EmailBuilderRef, EmailBuilderProps>(function Ema
     redo: handleRedo,
     canUndo: historyIndex > 0,
     canRedo: historyIndex < history.length - 1,
+    getDoc: () => doc,
   }), [historyIndex, history.length, history, handleUndo, handleRedo])
 
   const selectedBlockData = selectedBlock
