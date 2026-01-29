@@ -117,6 +117,12 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       )
     }
+    if (error instanceof Error && error.message.includes('Contact information is already linked')) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 409 }
+      )
+    }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to send OTP' },
       { status: 500 }

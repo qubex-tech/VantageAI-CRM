@@ -764,8 +764,8 @@ model PatientAccount {
   id                   String    @id @default(uuid())
   practiceId           String
   patientId            String    @unique
-  email                String?   @unique
-  phone                String?   @unique
+  email                String?
+  phone                String?
   emailVerified        Boolean   @default(false)
   phoneVerified        Boolean   @default(false)
   otpCode              String?

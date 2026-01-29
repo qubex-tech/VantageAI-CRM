@@ -147,26 +147,32 @@ export async function createPatientOTP(
   const code = generateOTP()
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
 
-  // Update or create patient account
-  const account = await prisma.patientAccount.upsert({
-    where: {
-      patientId,
-    },
-    create: {
-      practiceId,
-      patientId,
-      [channel === 'email' ? 'email' : 'phone']: recipient,
-      otpCode: await hashOTP(code),
-      otpExpiresAt: expiresAt,
-      otpAttempts: 0,
-    },
-    update: {
-      [channel === 'email' ? 'email' : 'phone']: recipient,
-      otpCode: await hashOTP(code),
-      otpExpiresAt: expiresAt,
-      otpAttempts: 0,
-    },
-  })
+  try {
+    await prisma.patientAccount.upsert({
+      where: {
+        patientId,
+      },
+      create: {
+        practiceId,
+        patientId,
+        [channel === 'email' ? 'email' : 'phone']: recipient,
+        otpCode: await hashOTP(code),
+        otpExpiresAt: expiresAt,
+        otpAttempts: 0,
+      },
+      update: {
+        [channel === 'email' ? 'email' : 'phone']: recipient,
+        otpCode: await hashOTP(code),
+        otpExpiresAt: expiresAt,
+        otpAttempts: 0,
+      },
+    })
+  } catch (error: any) {
+    if (error?.code === 'P2002') {
+      throw new Error('Contact information is already linked to another portal account.')
+    }
+    throw error
+  }
 
   // Send OTP
   await sendOTP(practiceId, channel, recipient, code)
