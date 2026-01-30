@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db'
 import { getSupabaseSession } from '@/lib/auth-supabase'
 import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
+import { canConfigureAPIs } from '@/lib/permissions'
 
 export type SmartFhirSettings = {
   enabled: boolean
@@ -25,6 +26,35 @@ export async function requireSmartUser() {
     user,
     practiceId: user.practiceId,
   }
+}
+
+export async function resolveSmartPractice(practiceIdOverride?: string) {
+  const session = await getSupabaseSession()
+  if (!session?.user) {
+    throw new Error('Not authenticated')
+  }
+  const user = await syncSupabaseUserToPrisma(session.user)
+  if (!user) {
+    throw new Error('User not found')
+  }
+
+  if (practiceIdOverride) {
+    if (!canConfigureAPIs({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      practiceId: user.practiceId,
+      role: user.role,
+    })) {
+      throw new Error('Permission denied')
+    }
+    return { user, practiceId: practiceIdOverride }
+  }
+
+  if (!user.practiceId) {
+    throw new Error('User is missing practice context')
+  }
+  return { user, practiceId: user.practiceId }
 }
 
 export async function getSmartSettings(practiceId: string): Promise<SmartFhirSettings | null> {

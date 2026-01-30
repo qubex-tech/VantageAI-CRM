@@ -29,7 +29,7 @@ type StatusResponse = {
   capabilitiesSummary?: any
 }
 
-export function SmartFhirSettings() {
+export function SmartFhirSettings({ practiceId }: { practiceId?: string }) {
   const [settings, setSettings] = useState<SmartFhirSettings>({
     enabled: false,
     issuer: '',
@@ -52,7 +52,8 @@ export function SmartFhirSettings() {
   const [origin, setOrigin] = useState('')
 
   const fetchSettings = async () => {
-    const response = await fetch('/api/integrations/smart/config')
+    const params = practiceId ? `?practiceId=${encodeURIComponent(practiceId)}` : ''
+    const response = await fetch(`/api/integrations/smart/config${params}`)
     if (response.ok) {
       const data = await response.json()
       if (data.settings) {
@@ -70,7 +71,12 @@ export function SmartFhirSettings() {
   }
 
   const fetchStatus = async () => {
-    const response = await fetch('/api/integrations/smart/status?includeCapabilities=1')
+    const params = new URLSearchParams()
+    params.set('includeCapabilities', '1')
+    if (practiceId) {
+      params.set('practiceId', practiceId)
+    }
+    const response = await fetch(`/api/integrations/smart/status?${params.toString()}`)
     if (response.ok) {
       const data = await response.json()
       setStatus(data)
@@ -104,7 +110,10 @@ export function SmartFhirSettings() {
       const response = await fetch('/api/integrations/smart/config', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(settings),
+        body: JSON.stringify({
+          ...settings,
+          practiceId,
+        }),
       })
       if (!response.ok) {
         const data = await response.json()
@@ -138,7 +147,7 @@ export function SmartFhirSettings() {
     const response = await fetch('/api/integrations/smart/disconnect', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ issuer: status?.issuer }),
+      body: JSON.stringify({ issuer: status?.issuer, practiceId }),
     })
     if (response.ok) {
       await fetchStatus()
@@ -154,9 +163,12 @@ export function SmartFhirSettings() {
       setTestResult('Patient ID is required')
       return
     }
-    const response = await fetch(
-      `/api/integrations/smart/test/patient?patientId=${encodeURIComponent(patientId)}`
-    )
+    const params = new URLSearchParams()
+    params.set('patientId', patientId)
+    if (practiceId) {
+      params.set('practiceId', practiceId)
+    }
+    const response = await fetch(`/api/integrations/smart/test/patient?${params.toString()}`)
     const data = await response.json()
     if (!response.ok) {
       setTestResult(data.error || 'Failed to fetch patient')
@@ -178,6 +190,7 @@ export function SmartFhirSettings() {
         patientId: notePatientId,
         noteText,
         requireBinary,
+        practiceId,
       }),
     })
     const data = await response.json()

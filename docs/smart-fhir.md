@@ -29,6 +29,16 @@ SMART_ISSUER_ALLOWLIST=https://fhir.example.com,https://ehr.example.org
 LOG_REDACTION_ENABLED=true
 ```
 
+### Vercel production setup
+
+In Vercel, configure the same variables for the Production environment:
+
+- `INTEGRATIONS_TOKEN_ENC_KEY`
+- `APP_BASE_URL` (your production URL)
+- `SMART_ENABLE_WRITE` (keep `false` until validated)
+- `SMART_DEFAULT_SCOPES` (optional)
+- `SMART_ISSUER_ALLOWLIST` (optional)
+
 ### Generating `INTEGRATIONS_TOKEN_ENC_KEY`
 
 Use a 32-byte base64 key:

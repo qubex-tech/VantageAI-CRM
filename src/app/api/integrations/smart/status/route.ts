@@ -2,18 +2,19 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db'
 import { decryptString, encryptString } from '@/lib/integrations/smart/crypto'
-import { requireSmartUser } from '@/lib/integrations/smart/server'
+import { resolveSmartPractice } from '@/lib/integrations/smart/server'
 import { FhirClient } from '@/lib/integrations/fhir/fhirClient'
 import { summarizeCapabilities } from '@/lib/integrations/fhir/capabilities'
 
 const querySchema = z.object({
   issuer: z.string().url().optional(),
   includeCapabilities: z.string().optional(),
+  practiceId: z.string().optional(),
 })
 
 export async function GET(req: NextRequest) {
   try {
-    const { practiceId, user } = await requireSmartUser()
+    const { practiceId, user } = await resolveSmartPractice(parsed.data.practiceId)
     const parsed = querySchema.safeParse(Object.fromEntries(req.nextUrl.searchParams))
     if (!parsed.success) {
       return NextResponse.json({ error: 'Invalid query parameters' }, { status: 400 })

@@ -3,15 +3,16 @@ import { z } from 'zod'
 import { prisma } from '@/lib/db'
 import { decryptString } from '@/lib/integrations/smart/crypto'
 import { revokeToken } from '@/lib/integrations/smart/smartClient'
-import { requireSmartUser } from '@/lib/integrations/smart/server'
+import { resolveSmartPractice } from '@/lib/integrations/smart/server'
 
 const bodySchema = z.object({
   issuer: z.string().url().optional(),
+  practiceId: z.string().optional(),
 })
 
 export async function POST(req: NextRequest) {
   try {
-    const { practiceId, user } = await requireSmartUser()
+    const { practiceId, user } = await resolveSmartPractice(parsed.data.practiceId)
     const parsed = bodySchema.safeParse(await req.json().catch(() => ({})))
     if (!parsed.success) {
       return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })

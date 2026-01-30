@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { getSmartSettings, upsertSmartSettings, requireSmartUser } from '@/lib/integrations/smart/server'
+import { getSmartSettings, upsertSmartSettings, resolveSmartPractice } from '@/lib/integrations/smart/server'
 
 const settingsSchema = z.object({
   enabled: z.boolean(),
@@ -12,9 +12,10 @@ const settingsSchema = z.object({
   enableNoteCreate: z.boolean().optional(),
 })
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const { practiceId } = await requireSmartUser()
+    const practiceIdOverride = req.nextUrl.searchParams.get('practiceId') || undefined
+    const { practiceId } = await resolveSmartPractice(practiceIdOverride)
     const settings = await getSmartSettings(practiceId)
     return NextResponse.json({ settings })
   } catch (error) {
@@ -25,8 +26,11 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { practiceId } = await requireSmartUser()
-    const parsed = settingsSchema.safeParse(await req.json().catch(() => ({})))
+    const parsedBody = await req.json().catch(() => ({}))
+    const practiceIdOverride =
+      typeof parsedBody.practiceId === 'string' ? parsedBody.practiceId : undefined
+    const { practiceId } = await resolveSmartPractice(practiceIdOverride)
+    const parsed = settingsSchema.safeParse(parsedBody)
     if (!parsed.success) {
       return NextResponse.json({ error: 'Invalid settings' }, { status: 400 })
     }

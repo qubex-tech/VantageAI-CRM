@@ -14,6 +14,7 @@ import { CalSettings } from './CalSettings'
 import { RetellSettings } from './RetellSettings'
 import { SendgridSettings } from './SendgridSettings'
 import { TwilioSettings } from './TwilioSettings'
+import { SmartFhirSettings } from './SmartFhirSettings'
 
 interface Practice {
   id: string
@@ -189,6 +190,7 @@ export function PracticeAPIConfiguration() {
                 practiceId={selectedPracticeId}
                 initialIntegration={twilioIntegration}
               />
+              <SmartFhirSettings practiceId={selectedPracticeId} />
             </>
           )}
         </div>

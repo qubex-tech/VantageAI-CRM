@@ -3,18 +3,19 @@ import { z } from 'zod'
 import { prisma } from '@/lib/db'
 import { decryptString, encryptString } from '@/lib/integrations/smart/crypto'
 import { FhirClient, WriteNotSupportedError } from '@/lib/integrations/fhir/fhirClient'
-import { requireSmartUser, getSmartSettings, shouldEnableWrite } from '@/lib/integrations/smart/server'
+import { resolveSmartPractice, getSmartSettings, shouldEnableWrite } from '@/lib/integrations/smart/server'
 
 const bodySchema = z.object({
   patientId: z.string().min(1),
   noteText: z.string().min(1),
   issuer: z.string().url().optional(),
   requireBinary: z.boolean().optional(),
+  practiceId: z.string().optional(),
 })
 
 export async function POST(req: NextRequest) {
   try {
-    const { practiceId, user } = await requireSmartUser()
+    const { practiceId, user } = await resolveSmartPractice(parsed.data.practiceId)
     const parsed = bodySchema.safeParse(await req.json().catch(() => ({})))
     if (!parsed.success) {
       return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
