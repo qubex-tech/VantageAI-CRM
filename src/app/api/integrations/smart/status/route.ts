@@ -14,11 +14,11 @@ const querySchema = z.object({
 
 export async function GET(req: NextRequest) {
   try {
-    const { practiceId, user } = await resolveSmartPractice(parsed.data.practiceId)
     const parsed = querySchema.safeParse(Object.fromEntries(req.nextUrl.searchParams))
     if (!parsed.success) {
       return NextResponse.json({ error: 'Invalid query parameters' }, { status: 400 })
     }
+    const { practiceId, user } = await resolveSmartPractice(parsed.data.practiceId)
 
     const connection = await prisma.smartFhirConnection.findFirst({
       where: {
