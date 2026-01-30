@@ -8,6 +8,7 @@ import {
   SmartLaunchContext,
 } from '@/lib/integrations/smart/smartClient'
 import { prisma } from '@/lib/db'
+import { Prisma } from '@prisma/client'
 import { requireSmartUser } from '@/lib/integrations/smart/server'
 
 const querySchema = z.object({
@@ -106,8 +107,8 @@ export async function GET(req: NextRequest) {
         idTokenEnc: encryptedIdToken,
         tokenType: tokenResponse.token_type,
         expiresAt,
-        patientContext: patientId || encounterId ? { patientId, encounterId } : null,
-        userContext: fhirUser ? { fhirUser } : null,
+        patientContext: patientId || encounterId ? { patientId, encounterId } : Prisma.JsonNull,
+        userContext: fhirUser ? { fhirUser } : Prisma.JsonNull,
         authorizationEndpoint: context.authorizationEndpoint,
         tokenEndpoint: context.tokenEndpoint,
         revocationEndpoint: context.revocationEndpoint,
@@ -125,8 +126,8 @@ export async function GET(req: NextRequest) {
         idTokenEnc: encryptedIdToken,
         tokenType: tokenResponse.token_type,
         expiresAt,
-        patientContext: patientId || encounterId ? { patientId, encounterId } : null,
-        userContext: fhirUser ? { fhirUser } : null,
+        patientContext: patientId || encounterId ? { patientId, encounterId } : Prisma.JsonNull,
+        userContext: fhirUser ? { fhirUser } : Prisma.JsonNull,
         authorizationEndpoint: context.authorizationEndpoint,
         tokenEndpoint: context.tokenEndpoint,
         revocationEndpoint: context.revocationEndpoint,
