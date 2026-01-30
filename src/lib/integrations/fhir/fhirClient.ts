@@ -1,5 +1,5 @@
 import { refreshAccessToken, TokenResponse } from '@/lib/integrations/smart/smartClient'
-import { supportsResourceInteraction, ResourceInteraction } from './capabilities'
+import { supportsResourceInteraction, ResourceInteraction, CapabilityStatement } from './capabilities'
 
 export class WriteNotSupportedError extends Error {
   code = 'WRITE_NOT_SUPPORTED'
@@ -170,7 +170,7 @@ export class FhirClient {
     return (await response.json()) as T
   }
 
-  async getCapabilityStatement() {
+  async getCapabilityStatement(): Promise<CapabilityStatement> {
     return this.request('/metadata')
   }
 

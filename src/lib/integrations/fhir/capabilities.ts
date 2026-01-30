@@ -6,7 +6,7 @@ export type ResourceInteraction =
   | 'patch'
   | 'delete'
 
-type CapabilityStatement = {
+export type CapabilityStatement = {
   rest?: Array<{
     resource?: Array<{
       type?: string
