@@ -12,11 +12,11 @@ const bodySchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
-    const { practiceId, user } = await resolveSmartPractice(parsed.data.practiceId)
     const parsed = bodySchema.safeParse(await req.json().catch(() => ({})))
     if (!parsed.success) {
       return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
     }
+    const { practiceId, user } = await resolveSmartPractice(parsed.data.practiceId)
 
     const connection = await prisma.smartFhirConnection.findFirst({
       where: {
