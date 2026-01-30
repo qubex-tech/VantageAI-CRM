@@ -30,6 +30,9 @@ model Practice {
   retellIntegrations       RetellIntegration[]
   sendgridIntegrations     SendgridIntegration[]
   twilioIntegrations       TwilioIntegration[]
+  smartFhirConnections     SmartFhirConnection[]
+  practiceSettings         PracticeSettings?
+  integrationAuditLogs     IntegrationAuditLog[]
   voiceConversations       VoiceConversation[]
   workflows                Workflow[]
   auditLogs                AuditLog[]
@@ -98,6 +101,7 @@ model User {
   formTemplatesCreated             FormTemplate[]             @relation("FormTemplateCreator")
   formRequestsCreated              FormRequest[]              @relation("FormRequestCreator")
   taskComments                     TaskComment[]
+  integrationAuditLogs             IntegrationAuditLog[]
 
   @@index([practiceId])
   @@index([email])
@@ -372,6 +376,68 @@ model TwilioIntegration {
 
   @@index([practiceId])
   @@map("twilio_integrations")
+}
+
+model PracticeSettings {
+  id         String   @id @default(uuid())
+  practiceId String   @unique
+  smartFhir  Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId])
+  @@map("practice_settings")
+}
+
+model SmartFhirConnection {
+  id                    String   @id @default(uuid())
+  practiceId            String
+  issuer                String
+  fhirBaseUrl           String
+  clientId              String
+  scopes                String
+  accessTokenEnc        String?
+  refreshTokenEnc       String?
+  idTokenEnc            String?
+  tokenType             String?
+  expiresAt             DateTime?
+  patientContext        Json?
+  userContext           Json?
+  authorizationEndpoint String?
+  tokenEndpoint         String?
+  revocationEndpoint    String?
+  status                String   @default("connected")
+  lastConnectedAt       DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@unique([practiceId, issuer])
+  @@index([practiceId])
+  @@index([status])
+  @@map("smart_fhir_connections")
+}
+
+model IntegrationAuditLog {
+  id          String   @id @default(uuid())
+  tenantId    String
+  actorUserId String?
+  action      String
+  entity      String
+  entityId    String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  practice Practice @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actor    User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([tenantId, entity, entityId])
+  @@index([createdAt])
+  @@map("integration_audit_logs")
 }
 
 model VoiceConversation {
