@@ -42,6 +42,30 @@ type StatusResponse = {
   capabilitiesSummary?: any
 }
 
+const fallbackProviders: Provider[] = [
+  {
+    id: 'ecw',
+    displayName: 'eClinicalWorks (eCW)',
+    uiFields: [
+      { id: 'issuer', label: 'Issuer URL', type: 'url', required: true },
+      { id: 'fhirBaseUrl', label: 'FHIR Base URL (optional override)', type: 'url' },
+      { id: 'clientId', label: 'Client ID', type: 'text', required: true },
+      { id: 'clientSecret', label: 'Client Secret (optional)', type: 'password' },
+    ],
+  },
+  {
+    id: 'pcc',
+    displayName: 'PointClickCare (PCC)',
+    uiFields: [
+      { id: 'issuer', label: 'Issuer URL', type: 'url', required: true },
+      { id: 'fhirBaseUrl', label: 'FHIR Base URL (optional override)', type: 'url' },
+      { id: 'clientId', label: 'Client ID', type: 'text', required: true },
+      { id: 'clientSecret', label: 'Client Secret (optional)', type: 'password' },
+      { id: 'pccTenantId', label: 'PCC Tenant ID', type: 'text', required: true },
+    ],
+  },
+]
+
 export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string }) {
   const [providers, setProviders] = useState<Provider[]>([])
   const [settings, setSettings] = useState<EhrSettings>({
@@ -68,9 +92,10 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
   const [practices, setPractices] = useState<Array<{ id: string; name: string }>>([])
   const [selectedPracticeId, setSelectedPracticeId] = useState<string>('')
 
+  const resolvedProviders = providers.length > 0 ? providers : fallbackProviders
   const selectedProvider = useMemo(
-    () => providers.find((provider) => provider.id === selectedProviderId),
-    [providers, selectedProviderId]
+    () => resolvedProviders.find((provider) => provider.id === selectedProviderId),
+    [resolvedProviders, selectedProviderId]
   )
 
   const activePracticeId = practiceId || selectedPracticeId
@@ -130,6 +155,9 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
           }
         }
         await fetchSettings()
+        if (resolvedProviders.length > 0 && !selectedProviderId) {
+          setSelectedProviderId(resolvedProviders[0].id)
+        }
         await fetchStatus()
       } catch (err) {
         setError('Failed to load EHR integration settings')
@@ -152,6 +180,12 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
       fetchStatus()
     }
   }, [selectedProviderId, activePracticeId])
+
+  useEffect(() => {
+    if (!selectedProviderId && resolvedProviders.length > 0) {
+      setSelectedProviderId(resolvedProviders[0].id)
+    }
+  }, [resolvedProviders, selectedProviderId])
 
   const updateProviderConfig = (fieldId: string, value: string) => {
     setSettings((prev) => ({
@@ -321,7 +355,7 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
               value={selectedProviderId}
               onChange={(event) => setSelectedProviderId(event.target.value)}
             >
-              {providers.map((provider) => (
+              {resolvedProviders.map((provider) => (
                 <option key={provider.id} value={provider.id}>
                   {provider.displayName}
                 </option>
@@ -338,6 +372,7 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
                 <Switch
                   checked={settings.enabledProviders.includes(selectedProviderId)}
                   onCheckedChange={toggleProviderEnabled}
+                className="shrink-0"
                 />
               </div>
               <div className="grid gap-3">
@@ -369,6 +404,7 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
                 onCheckedChange={(checked) =>
                   setSettings((prev) => ({ ...prev, enableWrite: checked }))
                 }
+                className="shrink-0"
               />
             </div>
             <div className="flex items-center justify-between rounded border border-gray-200 p-3">
@@ -381,6 +417,7 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
                 onCheckedChange={(checked) =>
                   setSettings((prev) => ({ ...prev, enablePatientCreate: checked }))
                 }
+                className="shrink-0"
               />
             </div>
             <div className="flex items-center justify-between rounded border border-gray-200 p-3">
@@ -393,6 +430,7 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
                 onCheckedChange={(checked) =>
                   setSettings((prev) => ({ ...prev, enableNoteCreate: checked }))
                 }
+                className="shrink-0"
               />
             </div>
             <div className="flex items-center justify-between rounded border border-gray-200 p-3">
@@ -405,6 +443,7 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
                 onCheckedChange={(checked) =>
                   setSettings((prev) => ({ ...prev, enableBulkExport: checked }))
                 }
+                className="shrink-0"
               />
             </div>
           </div>
