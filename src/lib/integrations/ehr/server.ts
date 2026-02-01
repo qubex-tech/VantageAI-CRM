@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db'
+import { Prisma } from '@prisma/client'
 import { getSupabaseSession } from '@/lib/auth-supabase'
 import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
 import { canConfigureAPIs } from '@/lib/permissions'
@@ -44,12 +45,15 @@ export async function getEhrSettings(practiceId: string): Promise<EhrSettings | 
 }
 
 export async function upsertEhrSettings(practiceId: string, ehrIntegrations: EhrSettings) {
+  const settingsJson = Object.keys(ehrIntegrations).length
+    ? (ehrIntegrations as Prisma.InputJsonValue)
+    : Prisma.JsonNull
   return prisma.practiceSettings.upsert({
     where: { practiceId },
-    update: { ehrIntegrations },
+    update: { ehrIntegrations: settingsJson },
     create: {
       practiceId,
-      ehrIntegrations,
+      ehrIntegrations: settingsJson,
     },
   })
 }
