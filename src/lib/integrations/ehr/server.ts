@@ -35,27 +35,43 @@ export async function resolveEhrPractice(practiceIdOverride?: string) {
 }
 
 export async function getEhrSettings(practiceId: string): Promise<EhrSettings | null> {
-  const settings = await prisma.practiceSettings.findUnique({
-    where: { practiceId },
-  })
-  if (!settings?.ehrIntegrations) {
-    return null
+  try {
+    const settings = await prisma.practiceSettings.findUnique({
+      where: { practiceId },
+    })
+    if (!settings?.ehrIntegrations) {
+      return null
+    }
+    return settings.ehrIntegrations as EhrSettings
+  } catch (error) {
+    const message = error instanceof Error ? error.message : ''
+    if (message.includes('practice_settings') || message.includes('does not exist')) {
+      throw new Error('EHR settings table is missing. Run database migrations.')
+    }
+    throw error
   }
-  return settings.ehrIntegrations as EhrSettings
 }
 
 export async function upsertEhrSettings(practiceId: string, ehrIntegrations: EhrSettings) {
   const settingsJson = Object.keys(ehrIntegrations).length
     ? (ehrIntegrations as Prisma.InputJsonValue)
     : Prisma.JsonNull
-  return prisma.practiceSettings.upsert({
-    where: { practiceId },
-    update: { ehrIntegrations: settingsJson },
-    create: {
-      practiceId,
-      ehrIntegrations: settingsJson,
-    },
-  })
+  try {
+    return prisma.practiceSettings.upsert({
+      where: { practiceId },
+      update: { ehrIntegrations: settingsJson },
+      create: {
+        practiceId,
+        ehrIntegrations: settingsJson,
+      },
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : ''
+    if (message.includes('practice_settings') || message.includes('does not exist')) {
+      throw new Error('EHR settings table is missing. Run database migrations.')
+    }
+    throw error
+  }
 }
 
 export function getIssuerAllowlist(): string[] {
