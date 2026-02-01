@@ -314,16 +314,19 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
               </select>
             </div>
           )}
-          <div className="flex flex-wrap gap-2">
-            {providers.map((provider) => (
-              <Button
-                key={provider.id}
-                variant={provider.id === selectedProviderId ? 'default' : 'outline'}
-                onClick={() => setSelectedProviderId(provider.id)}
-              >
-                {provider.displayName}
-              </Button>
-            ))}
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-gray-700">Select EHR</label>
+            <select
+              className="w-full rounded border border-gray-200 p-2 text-sm"
+              value={selectedProviderId}
+              onChange={(event) => setSelectedProviderId(event.target.value)}
+            >
+              {providers.map((provider) => (
+                <option key={provider.id} value={provider.id}>
+                  {provider.displayName}
+                </option>
+              ))}
+            </select>
           </div>
           {selectedProvider && (
             <>
