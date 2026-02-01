@@ -30,7 +30,7 @@ model Practice {
   retellIntegrations       RetellIntegration[]
   sendgridIntegrations     SendgridIntegration[]
   twilioIntegrations       TwilioIntegration[]
-  smartFhirConnections     SmartFhirConnection[]
+  ehrConnections           EhrConnection[]
   practiceSettings         PracticeSettings?
   integrationAuditLogs     IntegrationAuditLog[]
   voiceConversations       VoiceConversation[]
@@ -382,6 +382,7 @@ model PracticeSettings {
   id         String   @id @default(uuid())
   practiceId String   @unique
   smartFhir  Json?
+  ehrIntegrations Json?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -391,34 +392,52 @@ model PracticeSettings {
   @@map("practice_settings")
 }
 
-model SmartFhirConnection {
+model EhrConnection {
   id                    String   @id @default(uuid())
-  practiceId            String
+  tenantId              String
+  providerId            String
+  status                String   @default("connected")
   issuer                String
   fhirBaseUrl           String
-  clientId              String
-  scopes                String
-  accessTokenEnc        String?
-  refreshTokenEnc       String?
-  idTokenEnc            String?
-  tokenType             String?
-  expiresAt             DateTime?
-  patientContext        Json?
-  userContext           Json?
   authorizationEndpoint String?
   tokenEndpoint         String?
   revocationEndpoint    String?
-  status                String   @default("connected")
-  lastConnectedAt       DateTime?
+  clientId              String
+  clientSecretEnc       String?
+  scopesRequested       String?
+  scopesGranted         String?
+  accessTokenEnc        String?
+  refreshTokenEnc       String?
+  expiresAt             DateTime?
+  idTokenClaimsSummary  Json?
+  vendorConfig          Json?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
-  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  practice Practice @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  facilityMaps EhrFacilityMap[]
 
-  @@unique([practiceId, issuer])
-  @@index([practiceId])
+  @@unique([tenantId, providerId, issuer])
+  @@index([tenantId])
+  @@index([providerId])
   @@index([status])
-  @@map("smart_fhir_connections")
+  @@map("ehr_connections")
+}
+
+model EhrFacilityMap {
+  id               String   @id @default(uuid())
+  connectionId     String
+  externalFacilityId String
+  name             String?
+  status           String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  connection EhrConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@index([connectionId])
+  @@index([externalFacilityId])
+  @@map("ehr_facility_maps")
 }
 
 model IntegrationAuditLog {

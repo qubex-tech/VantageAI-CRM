@@ -1,4 +1,4 @@
-import { refreshAccessToken, TokenResponse } from '@/lib/integrations/smart/smartClient'
+import { refreshAccessToken, TokenResponse } from '@/lib/integrations/ehr/smartEngine'
 import { supportsResourceInteraction, ResourceInteraction, CapabilityStatement } from './capabilities'
 
 export class WriteNotSupportedError extends Error {
@@ -22,6 +22,7 @@ type FhirClientOptions = {
   baseUrl: string
   tokenEndpoint?: string
   clientId?: string
+  clientSecret?: string
   tokenState: TokenState
   onTokenRefresh?: (tokenResponse: TokenResponse) => Promise<void> | void
   timeoutMs?: number
@@ -50,6 +51,7 @@ export class FhirClient {
   private baseUrl: string
   private tokenEndpoint?: string
   private clientId?: string
+  private clientSecret?: string
   private tokenState: TokenState
   private onTokenRefresh?: (tokenResponse: TokenResponse) => Promise<void> | void
   private timeoutMs: number
@@ -58,9 +60,14 @@ export class FhirClient {
     this.baseUrl = options.baseUrl.replace(/\/+$/g, '')
     this.tokenEndpoint = options.tokenEndpoint
     this.clientId = options.clientId
+    this.clientSecret = options.clientSecret
     this.tokenState = options.tokenState
     this.onTokenRefresh = options.onTokenRefresh
     this.timeoutMs = options.timeoutMs ?? 10000
+  }
+
+  getBaseUrl() {
+    return this.baseUrl
   }
 
   private async fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit) {
@@ -91,6 +98,7 @@ export class FhirClient {
     const tokenResponse = await refreshAccessToken({
       tokenEndpoint: this.tokenEndpoint,
       clientId: this.clientId,
+      clientSecret: this.clientSecret,
       refreshToken: this.tokenState.refreshToken,
       scopes: this.tokenState.scopes,
     })
@@ -105,6 +113,7 @@ export class FhirClient {
     const tokenResponse = await refreshAccessToken({
       tokenEndpoint: this.tokenEndpoint,
       clientId: this.clientId,
+      clientSecret: this.clientSecret,
       refreshToken: this.tokenState.refreshToken,
       scopes: this.tokenState.scopes,
     })
