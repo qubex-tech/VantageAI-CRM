@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { resolveEhrPractice, getEhrSettings, upsertEhrSettings } from '@/lib/integrations/ehr/server'
 import { listProviders, getProvider } from '@/lib/integrations/ehr/providers'
-import { EhrSettings } from '@/lib/integrations/ehr/types'
+import { EhrProviderConfig, EhrSettings } from '@/lib/integrations/ehr/types'
 
 const settingsSchema = z.object({
   enabledProviders: z.array(z.string()).default([]),
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid settings' }, { status: 400 })
     }
 
-    const providerConfigs: Record<string, unknown> = {}
+    const providerConfigs: Record<string, EhrProviderConfig> = {}
     for (const [providerId, config] of Object.entries(parsed.data.providerConfigs || {})) {
       const provider = getProvider(providerId as any)
       const result = provider.configSchema.safeParse(config || {})
