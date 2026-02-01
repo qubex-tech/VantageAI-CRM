@@ -104,8 +104,11 @@ export async function GET(req: NextRequest) {
       ? encryptString(String((config as any).clientSecret))
       : null
 
-    const vendorConfig = { ...config }
+    const vendorConfig = { ...config } as Record<string, unknown>
     delete (vendorConfig as any).clientSecret
+    const vendorConfigJson = Object.keys(vendorConfig).length
+      ? (vendorConfig as Prisma.InputJsonValue)
+      : Prisma.JsonNull
 
     const connection = await prisma.ehrConnection.upsert({
       where: {
@@ -131,7 +134,7 @@ export async function GET(req: NextRequest) {
           patientId || encounterId || fhirUser
             ? { patientId, encounterId, fhirUser }
             : Prisma.JsonNull,
-        vendorConfig,
+        vendorConfig: vendorConfigJson,
         status: 'connected',
       },
       create: {
@@ -153,7 +156,7 @@ export async function GET(req: NextRequest) {
           patientId || encounterId || fhirUser
             ? { patientId, encounterId, fhirUser }
             : Prisma.JsonNull,
-        vendorConfig,
+        vendorConfig: vendorConfigJson,
         status: 'connected',
       },
     })
