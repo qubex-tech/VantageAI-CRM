@@ -238,6 +238,16 @@ export function HealixPanel({
 
   const executeAction = useCallback(async (action: SuggestedAction) => {
     try {
+      const argsWithContext = { ...action.args }
+      const needsPatientId = ['sendSms', 'draftMessage', 'createNote', 'createTask', 'requestFormCompletion', 'sendPortalInvite', 'updatePatientFields']
+      if (
+        context.patientId &&
+        needsPatientId.includes(action.tool) &&
+        (!argsWithContext.patientId || argsWithContext.patientId === '')
+      ) {
+        argsWithContext.patientId = context.patientId
+      }
+
       const response = await fetch('/api/healix/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -245,7 +255,7 @@ export function HealixPanel({
           conversationId,
           actionId: action.id,
           tool: action.tool,
-          args: { ...action.args, clinicId: context.patientId ? undefined : undefined },
+          args: argsWithContext,
         }),
       })
 
