@@ -30,7 +30,7 @@ export const HEALIX_ACTION_CATALOG: HealixActionCatalogEntry[] = [
   {
     id: 'draft-message',
     label: 'Draft patient message',
-    description: 'Draft an email or SMS for a patient.',
+    description: 'Draft an email or SMS for a patient (use only when the user asks for a draft).',
     toolName: 'draftMessage',
     requiredArgs: ['patientId', 'channel', 'content'],
     example: 'Draft an SMS confirming next appointment.',
@@ -75,9 +75,9 @@ export const HEALIX_ACTION_CATALOG: HealixActionCatalogEntry[] = [
   {
     id: 'send-sms',
     label: 'Send SMS',
-    description: 'Send a direct SMS to a patient (requires Twilio).',
+    description: 'Send a direct SMS to a patient (use when the user asks to send; requires Twilio).',
     toolName: 'sendSms',
-    requiredArgs: ['patientId', 'message'],
+    requiredArgs: ['patientId|patientName', 'message'],
     example: 'Text the patient to confirm we received their documents.',
     executable: true,
   },

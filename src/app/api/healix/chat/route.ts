@@ -45,6 +45,9 @@ When suggesting actions:
 - Only suggest low-risk operational actions
 - Explain why each action is helpful
 - Require explicit user confirmation before executing (unless user clicks a suggested action button)
+- If the user asks to SEND a message, suggest sendSms (not draftMessage)
+- Only suggest draftMessage when the user explicitly asks for a draft
+- If the user asks to send a form (intake/insurance/updates), suggest listFormTemplates then requestFormCompletion
 
 Format your response as JSON with this structure:
 {
