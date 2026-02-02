@@ -88,7 +88,8 @@ export interface SendPortalInviteParams {
 
 export interface SendSmsParams {
   clinicId: string
-  patientId: string
+  patientId?: string
+  patientName?: string
   message: string
 }
 
@@ -1098,9 +1099,51 @@ export async function sendSms(
       }
     }
 
+    let patientId = params.patientId
+    if (!patientId) {
+      const query = params.patientName?.trim()
+      if (!query) {
+        return {
+          success: false,
+          message: 'patientId or patientName is required to send an SMS',
+        }
+      }
+
+      const matches = await prisma.patient.findMany({
+        where: {
+          practiceId: params.clinicId,
+          deletedAt: null,
+          name: { contains: query, mode: 'insensitive' },
+        },
+        select: {
+          id: true,
+          name: true,
+        },
+        take: 5,
+        orderBy: { createdAt: 'desc' },
+      })
+
+      if (matches.length === 0) {
+        return {
+          success: false,
+          message: `No patient found matching "${query}"`,
+        }
+      }
+
+      if (matches.length > 1) {
+        return {
+          success: false,
+          message: `Multiple patients match "${query}". Please specify the patient.`,
+          data: { candidates: matches },
+        }
+      }
+
+      patientId = matches[0].id
+    }
+
     const patient = await prisma.patient.findFirst({
       where: {
-        id: params.patientId,
+        id: patientId,
         practiceId: params.clinicId,
         deletedAt: null,
       },
