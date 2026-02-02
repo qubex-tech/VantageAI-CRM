@@ -263,6 +263,32 @@ export function HealixPanel({
       }
       setMessages((prev) => [...prev, toolMessage])
       setSuggestedActions((prev) => prev.filter((a) => a.id !== action.id))
+
+      const candidates = result?.result?.candidates || result?.candidates
+      if (Array.isArray(candidates) && candidates.length > 0) {
+        const clarificationMessage: HealixMessage = {
+          id: (Date.now() + 2).toString(),
+          role: 'assistant',
+          content: `I found multiple patients with that name. Which one should I use?`,
+          timestamp: new Date(),
+        }
+        setMessages((prev) => [...prev, clarificationMessage])
+
+        if (action.tool === 'sendSms') {
+          const nextActions = candidates.map((candidate: { id: string; name: string }) => ({
+            id: `sendSms-${candidate.id}-${Date.now()}`,
+            label: `Send SMS to ${candidate.name}`,
+            risk: 'low' as const,
+            tool: 'sendSms',
+            args: {
+              patientId: candidate.id,
+              message: action.args?.message,
+            },
+            why: 'Select the correct patient to send the SMS.',
+          }))
+          setSuggestedActions((prev) => [...nextActions, ...prev])
+        }
+      }
     } catch (error) {
       console.error('Error executing action:', error)
       const errorMessage: HealixMessage = {
