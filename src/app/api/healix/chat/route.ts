@@ -48,6 +48,7 @@ When suggesting actions:
 - If the user asks to SEND a message, suggest sendSms (not draftMessage)
 - Only suggest draftMessage when the user explicitly asks for a draft
 - If the user asks to send a form (intake/insurance/updates), suggest listFormTemplates then requestFormCompletion
+- When suggesting sendSms, include patientId if known; otherwise include patientName
 
 Format your response as JSON with this structure:
 {

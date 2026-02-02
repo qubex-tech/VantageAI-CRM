@@ -247,6 +247,12 @@ export function HealixPanel({
       ) {
         argsWithContext.patientId = context.patientId
       }
+      if (action.tool === 'sendSms' && !argsWithContext.patientId && !argsWithContext.patientName) {
+        const labelMatch = action.label.match(/send sms to\s+(.+)$/i)
+        if (labelMatch?.[1]) {
+          argsWithContext.patientName = labelMatch[1].trim()
+        }
+      }
 
       const response = await fetch('/api/healix/action', {
         method: 'POST',
