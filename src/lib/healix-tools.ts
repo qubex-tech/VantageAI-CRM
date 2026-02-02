@@ -8,9 +8,16 @@
 import { prisma } from './db'
 import { tenantScope } from './db'
 import { canAccessPractice } from './permissions'
-import { logCustomActivity } from './patient-activity'
+import { logCustomActivity, logEmailActivity, logPatientActivity } from './patient-activity'
 import { createAuditLog } from './audit'
 import { formatDateTime } from './timezone'
+import { getOrCreateVerifiedPatientPortalUrl, getVerifiedFormRequestPortalUrl } from './patient-auth'
+import { getSendgridClient } from './sendgrid'
+import { getTwilioClient } from './twilio'
+import { renderEmailFromJson } from './marketing/render-email'
+import { replaceVariables } from './marketing/variables'
+import type { VariableContext } from './marketing/types'
+import { emitEvent } from './outbox'
 
 export interface HealixToolResult {
   success: boolean
@@ -59,6 +66,32 @@ export interface SearchPatientsParams {
   query: string
 }
 
+export interface ListFormTemplatesParams {
+  clinicId: string
+}
+
+export interface RequestFormCompletionParams {
+  clinicId: string
+  patientId: string
+  formTemplateId: string
+  dueDate?: string
+  message?: string
+  notifyChannel?: 'email' | 'sms' | 'none'
+  notificationTemplateId?: string
+}
+
+export interface SendPortalInviteParams {
+  clinicId: string
+  patientId: string
+  channel?: 'email' | 'sms' | 'auto'
+}
+
+export interface SendSmsParams {
+  clinicId: string
+  patientId: string
+  message: string
+}
+
 export interface GetPatientSummaryParams {
   clinicId: string
   patientId: string
@@ -78,6 +111,10 @@ export const ALLOWED_TOOLS = [
   'draftMessage',
   'updatePatientFields',
   'searchPatients',
+  'listFormTemplates',
+  'requestFormCompletion',
+  'sendPortalInvite',
+  'sendSms',
   'getPatientSummary',
   'getAppointmentSummary',
 ] as const
@@ -517,6 +554,625 @@ export async function searchPatients(
 }
 
 /**
+ * List form templates for the practice
+ */
+export async function listFormTemplates(
+  params: ListFormTemplatesParams,
+  userId: string
+): Promise<HealixToolResult> {
+  try {
+    const { hasAccess } = await validateClinicAccess(userId, params.clinicId)
+    if (!hasAccess) {
+      return {
+        success: false,
+        message: 'Access denied: You do not have permission to view form templates in this clinic',
+      }
+    }
+
+    const templates = await prisma.formTemplate.findMany({
+      where: {
+        practiceId: params.clinicId,
+        status: 'published',
+      },
+      orderBy: [{ isSystem: 'desc' }, { updatedAt: 'desc' }],
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        category: true,
+        isSystem: true,
+        updatedAt: true,
+      },
+    })
+
+    return {
+      success: true,
+      message: `Found ${templates.length} form template(s)`,
+      data: { templates },
+    }
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to list form templates',
+    }
+  }
+}
+
+/**
+ * Request patient form completion and optionally notify
+ */
+export async function requestFormCompletion(
+  params: RequestFormCompletionParams,
+  userId: string
+): Promise<HealixToolResult> {
+  try {
+    const { hasAccess, user } = await validateClinicAccess(userId, params.clinicId)
+    if (!hasAccess || !user) {
+      return {
+        success: false,
+        message: 'Access denied: You do not have permission to request forms in this clinic',
+      }
+    }
+
+    const patient = await prisma.patient.findFirst({
+      where: {
+        id: params.patientId,
+        practiceId: params.clinicId,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        name: true,
+        firstName: true,
+        lastName: true,
+        preferredName: true,
+        email: true,
+        phone: true,
+        primaryPhone: true,
+        secondaryPhone: true,
+      },
+    })
+
+    if (!patient) {
+      return {
+        success: false,
+        message: 'Patient not found or does not belong to this clinic',
+      }
+    }
+
+    const template = await prisma.formTemplate.findFirst({
+      where: {
+        id: params.formTemplateId,
+        practiceId: params.clinicId,
+        status: 'published',
+      },
+    })
+
+    if (!template) {
+      return {
+        success: false,
+        message: 'Form template not found or not published',
+      }
+    }
+
+    const request = await prisma.formRequest.create({
+      data: {
+        practiceId: params.clinicId,
+        patientId: params.patientId,
+        formTemplateId: params.formTemplateId,
+        dueDate: params.dueDate ? new Date(params.dueDate) : null,
+        metadata: params.message ? { message: params.message } : undefined,
+        createdByUserId: userId,
+      },
+    })
+
+    await prisma.patientTask.create({
+      data: {
+        practiceId: params.clinicId,
+        patientId: params.patientId,
+        type: 'form_completion',
+        title: `Complete ${template.name}`,
+        description: params.message || 'Please complete this form at your earliest convenience.',
+        status: 'pending',
+        dueDate: params.dueDate ? new Date(params.dueDate) : null,
+        metadata: {
+          formRequestId: request.id,
+          formTemplateId: request.formTemplateId,
+        },
+      },
+    })
+
+    const portalLink = await getVerifiedFormRequestPortalUrl({
+      practiceId: params.clinicId,
+      patientId: params.patientId,
+      formRequestId: request.id,
+    })
+
+    const notifyChannel = params.notifyChannel || 'none'
+    let notificationStatus: { status: 'sent' | 'failed' | 'skipped'; error?: string } = { status: 'skipped' }
+
+    if (notifyChannel !== 'none') {
+      if (!params.notificationTemplateId) {
+        return {
+          success: false,
+          message: 'Notification template is required to send a form request message.',
+        }
+      }
+
+      const brandProfile = await prisma.brandProfile.findUnique({
+        where: { tenantId: params.clinicId },
+      })
+
+      let portalVerifiedUrl = '#'
+      try {
+        const portalVerified = await getOrCreateVerifiedPatientPortalUrl({
+          practiceId: params.clinicId,
+          patientId: params.patientId,
+        })
+        portalVerifiedUrl = portalVerified.url
+      } catch {
+        // Best-effort fallback
+      }
+
+      const context: VariableContext = {
+        patient: {
+          firstName: patient.firstName || patient.name?.split(' ')[0] || '',
+          lastName: patient.lastName || patient.name?.split(' ').slice(1).join(' ') || '',
+          preferredName: patient.preferredName || patient.firstName || patient.name?.split(' ')[0] || '',
+        },
+        practice: {
+          name: brandProfile?.practiceName || '',
+          phone: brandProfile?.defaultFromEmail || '',
+          address: '',
+        },
+        links: {
+          portalVerified: portalVerifiedUrl,
+          formRequest: portalLink.url,
+        },
+      }
+
+      const notificationTemplate = await prisma.marketingTemplate.findFirst({
+        where: {
+          id: params.notificationTemplateId,
+          tenantId: params.clinicId,
+          channel: notifyChannel,
+        },
+      })
+
+      if (!notificationTemplate) {
+        return {
+          success: false,
+          message: 'Notification template not found for the selected channel.',
+        }
+      }
+
+      try {
+        if (notifyChannel === 'email') {
+          if (!patient.email) {
+            throw new Error('Patient has no email address on file')
+          }
+
+          const sendgridClient = await getSendgridClient(params.clinicId)
+          const sendgridIntegration = await prisma.sendgridIntegration.findFirst({
+            where: {
+              practiceId: params.clinicId,
+              isActive: true,
+            },
+          })
+
+          if (!sendgridIntegration) {
+            throw new Error('SendGrid integration is not configured')
+          }
+
+          let html = notificationTemplate.bodyHtml || ''
+          let text = notificationTemplate.bodyText || ''
+
+          if (notificationTemplate.editorType === 'dragdrop' && notificationTemplate.bodyJson) {
+            let bodyJson: any = notificationTemplate.bodyJson
+            if (typeof bodyJson === 'string') {
+              try {
+                bodyJson = JSON.parse(bodyJson)
+              } catch {
+                bodyJson = null
+              }
+            }
+
+            if (bodyJson && bodyJson.rows) {
+              const rendered = renderEmailFromJson(bodyJson, brandProfile, context)
+              html = rendered.html
+              text = rendered.text
+            }
+          } else if (notificationTemplate.editorType === 'html' && notificationTemplate.bodyHtml) {
+            html = notificationTemplate.bodyHtml
+            text = notificationTemplate.bodyHtml.replace(/<[^>]+>/g, '').replace(/\n/g, ' ')
+          }
+
+          if (!html && !text) {
+            throw new Error('Email template has no content')
+          }
+
+          const subject = notificationTemplate.subject
+            ? replaceVariables(notificationTemplate.subject, context)
+            : 'Please complete your form'
+
+          const htmlWithVars = replaceVariables(html || '', context)
+          const textWithVars = replaceVariables(text || '', context)
+
+          const result = await sendgridClient.sendEmail({
+            to: patient.email,
+            toName: patient.name || undefined,
+            subject,
+            htmlContent: htmlWithVars || undefined,
+            textContent: textWithVars || undefined,
+            fromName: sendgridIntegration.fromName || brandProfile?.defaultFromName || undefined,
+            replyTo: brandProfile?.defaultReplyToEmail || undefined,
+          })
+
+          if (!result.success) {
+            throw new Error(result.error || 'Failed to send email')
+          }
+
+          await logEmailActivity({
+            patientId: patient.id,
+            to: patient.email,
+            subject,
+            messageId: result.messageId,
+            userId,
+          })
+
+          notificationStatus = { status: 'sent' }
+        }
+
+        if (notifyChannel === 'sms') {
+          const phoneNumber = patient.primaryPhone || patient.phone
+          if (!phoneNumber) {
+            throw new Error('Patient has no phone number on file')
+          }
+
+          if (!notificationTemplate.bodyText) {
+            throw new Error('SMS template has no message body')
+          }
+
+          const messageBody = replaceVariables(notificationTemplate.bodyText, context)
+          const twilioClient = await getTwilioClient(params.clinicId)
+          const result = await twilioClient.sendSms({
+            to: phoneNumber,
+            body: messageBody,
+          })
+
+          if (!result.success) {
+            throw new Error(result.error || 'Failed to send SMS')
+          }
+
+          await logPatientActivity({
+            patientId: patient.id,
+            type: 'call',
+            title: `Form request sent via SMS`,
+            description: messageBody.slice(0, 160),
+            metadata: {
+              to: phoneNumber,
+              messageId: result.messageId,
+              userId,
+              formRequestId: request.id,
+            },
+          })
+
+          notificationStatus = { status: 'sent' }
+        }
+      } catch (notificationError) {
+        notificationStatus = {
+          status: 'failed',
+          error: notificationError instanceof Error ? notificationError.message : 'Failed to send notification',
+        }
+      }
+    }
+
+    await emitEvent({
+      practiceId: params.clinicId,
+      eventName: 'crm/form_request.created',
+      entityType: 'form_request',
+      entityId: request.id,
+      data: {
+        patientId: patient.id,
+        formRequest: {
+          id: request.id,
+          status: request.status,
+          dueDate: request.dueDate,
+          templateId: request.formTemplateId,
+        },
+        links: {
+          formRequest: portalLink.url,
+        },
+      },
+    })
+
+    await createAuditLog({
+      practiceId: params.clinicId,
+      userId,
+      action: 'create',
+      resourceType: 'patient',
+      resourceId: patient.id,
+      changes: { after: { formRequestId: request.id, formTemplateId: request.formTemplateId } },
+    })
+
+    return {
+      success: true,
+      message: 'Form request created successfully',
+      data: {
+        requestId: request.id,
+        status: request.status,
+        formRequestUrl: portalLink.url,
+        notification: notificationStatus,
+      },
+    }
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to request form completion',
+    }
+  }
+}
+
+/**
+ * Send a patient portal invite
+ */
+export async function sendPortalInvite(
+  params: SendPortalInviteParams,
+  userId: string
+): Promise<HealixToolResult> {
+  try {
+    const { hasAccess } = await validateClinicAccess(userId, params.clinicId)
+    if (!hasAccess) {
+      return {
+        success: false,
+        message: 'Access denied: You do not have permission to send portal invites in this clinic',
+      }
+    }
+
+    const patient = await prisma.patient.findFirst({
+      where: {
+        id: params.patientId,
+        practiceId: params.clinicId,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        primaryPhone: true,
+        secondaryPhone: true,
+      },
+    })
+
+    if (!patient) {
+      return {
+        success: false,
+        message: 'Patient not found or does not belong to this clinic',
+      }
+    }
+
+    const urlResult = await getOrCreateVerifiedPatientPortalUrl({
+      practiceId: params.clinicId,
+      patientId: patient.id,
+    })
+
+    const email = patient.email?.trim() || null
+    const phone = (patient.primaryPhone || patient.phone || patient.secondaryPhone || '').trim()
+    const hasPhone = Boolean(phone.replace(/[^\d]/g, ''))
+
+    const channel = params.channel || 'auto'
+    const chosenChannel =
+      channel === 'auto'
+        ? email
+          ? 'email'
+          : hasPhone
+            ? 'sms'
+            : null
+        : channel
+
+    if (!chosenChannel) {
+      return {
+        success: false,
+        message: 'Patient does not have an email or phone number on file.',
+      }
+    }
+
+    if (chosenChannel === 'email') {
+      if (!email) {
+        return { success: false, message: 'Patient email is missing.' }
+      }
+
+      const sendgridClient = await getSendgridClient(params.clinicId)
+      const subject = 'Your secure link to the Patient Portal'
+      const htmlContent = `
+        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111827;">
+          <p>Hello ${patient.name || 'there'},</p>
+          <p>Use the secure link below to access your Patient Portal:</p>
+          <p style="margin: 16px 0;">
+            <a href="${urlResult.url}" style="display:inline-block; padding: 10px 14px; background:#111827; color:#ffffff; border-radius:8px; text-decoration:none;">
+              Open Patient Portal
+            </a>
+          </p>
+          <p style="font-size: 12px; color: #6b7280;">
+            This link expires on ${urlResult.expiresAt.toLocaleDateString()}.
+          </p>
+          <p style="font-size: 12px; color: #6b7280;">
+            If you did not expect this message, you can ignore it.
+          </p>
+          <hr style="border:none; border-top:1px solid #e5e7eb; margin: 16px 0;" />
+          <p style="font-size: 12px; color: #6b7280;">Secure link: ${urlResult.url}</p>
+        </div>
+      `.trim()
+      const textContent = `
+Hello ${patient.name || 'there'},
+
+Use the secure link below to access your Patient Portal:
+${urlResult.url}
+
+This link expires on ${urlResult.expiresAt.toLocaleDateString()}.
+If you did not expect this message, you can ignore it.
+      `.trim()
+
+      const result = await sendgridClient.sendEmail({
+        to: email,
+        toName: patient.name || undefined,
+        subject,
+        htmlContent,
+        textContent,
+      })
+
+      if (!result.success) {
+        return { success: false, message: result.error || 'Failed to send email' }
+      }
+
+      await logEmailActivity({
+        patientId: patient.id,
+        to: email,
+        subject,
+        messageId: result.messageId,
+        userId,
+      })
+
+      return {
+        success: true,
+        message: `Portal invite sent via email to ${email}`,
+        data: { channel: 'email', sentTo: email, url: urlResult.url },
+      }
+    }
+
+    if (!hasPhone) {
+      return { success: false, message: 'Patient phone number is missing.' }
+    }
+
+    const twilioClient = await getTwilioClient(params.clinicId)
+    const message = `Secure Patient Portal link:\n${urlResult.url}\nExpires ${urlResult.expiresAt.toLocaleDateString()}.`
+    const result = await twilioClient.sendSms({
+      to: phone,
+      body: message,
+    })
+
+    if (!result.success) {
+      return { success: false, message: result.error || 'Failed to send SMS' }
+    }
+
+    await logPatientActivity({
+      patientId: patient.id,
+      type: 'call',
+      title: `Portal invite sent via SMS`,
+      description: `Sent to ${phone}`,
+      metadata: {
+        to: phone,
+        messageId: result.messageId,
+        userId,
+        inviteExpiresAt: urlResult.expiresAt,
+      },
+    })
+
+    return {
+      success: true,
+      message: `Portal invite sent via SMS to ${phone}`,
+      data: { channel: 'sms', sentTo: phone, url: urlResult.url },
+    }
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to send portal invite',
+    }
+  }
+}
+
+/**
+ * Send an SMS to a patient
+ */
+export async function sendSms(
+  params: SendSmsParams,
+  userId: string
+): Promise<HealixToolResult> {
+  try {
+    const { hasAccess } = await validateClinicAccess(userId, params.clinicId)
+    if (!hasAccess) {
+      return {
+        success: false,
+        message: 'Access denied: You do not have permission to send SMS in this clinic',
+      }
+    }
+
+    const patient = await prisma.patient.findFirst({
+      where: {
+        id: params.patientId,
+        practiceId: params.clinicId,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        primaryPhone: true,
+        secondaryPhone: true,
+      },
+    })
+
+    if (!patient) {
+      return {
+        success: false,
+        message: 'Patient not found or does not belong to this clinic',
+      }
+    }
+
+    const phone = (patient.primaryPhone || patient.phone || patient.secondaryPhone || '').trim()
+    if (!phone) {
+      return {
+        success: false,
+        message: 'Patient has no phone number on file',
+      }
+    }
+
+    const twilioClient = await getTwilioClient(params.clinicId)
+    const result = await twilioClient.sendSms({
+      to: phone,
+      body: params.message,
+    })
+
+    if (!result.success) {
+      return { success: false, message: result.error || 'Failed to send SMS' }
+    }
+
+    await logPatientActivity({
+      patientId: patient.id,
+      type: 'call',
+      title: `SMS sent to ${phone}`,
+      description: params.message.length > 160 ? `${params.message.slice(0, 160)}...` : params.message,
+      metadata: {
+        to: phone,
+        messageId: result.messageId,
+        userId,
+      },
+    })
+
+    await createAuditLog({
+      practiceId: params.clinicId,
+      userId,
+      action: 'create',
+      resourceType: 'patient',
+      resourceId: patient.id,
+      changes: { after: { message: params.message } },
+    })
+
+    return {
+      success: true,
+      message: `SMS sent to ${patient.name || phone}`,
+      data: { messageId: result.messageId },
+    }
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to send SMS',
+    }
+  }
+}
+
+/**
  * Get patient summary
  */
 export async function getPatientSummary(
@@ -715,6 +1371,14 @@ export async function executeTool(
       return updatePatientFields(args as UpdatePatientFieldsParams, userId)
     case 'searchPatients':
       return searchPatients(args as SearchPatientsParams, userId)
+    case 'listFormTemplates':
+      return listFormTemplates(args as ListFormTemplatesParams, userId)
+    case 'requestFormCompletion':
+      return requestFormCompletion(args as RequestFormCompletionParams, userId)
+    case 'sendPortalInvite':
+      return sendPortalInvite(args as SendPortalInviteParams, userId)
+    case 'sendSms':
+      return sendSms(args as SendSmsParams, userId)
     case 'getPatientSummary':
       return getPatientSummary(args as GetPatientSummaryParams, userId)
     case 'getAppointmentSummary':

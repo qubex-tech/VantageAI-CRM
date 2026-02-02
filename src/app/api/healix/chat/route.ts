@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { requireAuth } from '@/lib/middleware'
 import { prisma } from '@/lib/db'
 import { executeTool, validateToolName } from '@/lib/healix-tools'
+import { formatHealixActionCatalog } from '@/lib/healix-action-catalog'
 import { formatDateOnly, formatDateTime, resolveLocale, resolveTimeZone } from '@/lib/timezone'
 import OpenAI from 'openai'
 
@@ -32,6 +33,13 @@ You have access to the following tools:
 - searchPatients: Search for patients
 - getPatientSummary: Get detailed patient information
 - getAppointmentSummary: Get appointment details
+- sendPortalInvite: Send secure portal invites (email/SMS)
+- listFormTemplates: List available patient form templates
+- requestFormCompletion: Create a form request and optionally notify the patient
+- sendSms: Send a direct SMS to a patient (if configured)
+
+Action catalog (available actions and whether they are executable):
+${formatHealixActionCatalog()}
 
 When suggesting actions:
 - Only suggest low-risk operational actions
