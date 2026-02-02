@@ -1118,6 +1118,10 @@ export async function sendSms(
         select: {
           id: true,
           name: true,
+          email: true,
+          phone: true,
+          primaryPhone: true,
+          dateOfBirth: true,
         },
         take: 5,
         orderBy: { createdAt: 'desc' },

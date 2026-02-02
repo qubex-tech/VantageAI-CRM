@@ -291,9 +291,14 @@ export function HealixPanel({
         setMessages((prev) => [...prev, clarificationMessage])
 
         if (action.tool === 'sendSms') {
-          const nextActions = candidates.map((candidate: { id: string; name: string }) => ({
+          const nextActions = candidates.map((candidate: { id: string; name: string; email?: string | null; phone?: string | null; primaryPhone?: string | null; dateOfBirth?: string | null }) => {
+            const phone = candidate.primaryPhone || candidate.phone
+            const phoneLabel = phone ? ` • ${phone}` : ''
+            const emailLabel = candidate.email ? ` • ${candidate.email}` : ''
+            const dobLabel = candidate.dateOfBirth ? ` • DOB ${new Date(candidate.dateOfBirth).toLocaleDateString()}` : ''
+            return ({
             id: `sendSms-${candidate.id}-${Date.now()}`,
-            label: `Send SMS to ${candidate.name}`,
+            label: `Send SMS to ${candidate.name}${phoneLabel}${emailLabel}${dobLabel}`,
             risk: 'low' as const,
             tool: 'sendSms',
             args: {
@@ -301,7 +306,8 @@ export function HealixPanel({
               message: action.args?.message,
             },
             why: 'Select the correct patient to send the SMS.',
-          }))
+          })
+        })
           setSuggestedActions((prev) => [...nextActions, ...prev])
         }
       }
