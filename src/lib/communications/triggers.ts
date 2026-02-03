@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db'
+import { Prisma } from '@prisma/client'
 import { getChannelAdapter } from './adapters'
 import { recordCommunicationAudit } from './audit'
 import type { CommunicationEventPayload, TriggerAction } from './types'
@@ -158,7 +159,9 @@ async function executeTriggerAction(action: TriggerAction, event: CommunicationE
           body,
           channel,
           deliveryStatus: result.status,
-          metadata: result.metadata,
+          metadata: result.metadata
+            ? (result.metadata as Prisma.InputJsonValue)
+            : undefined,
         },
       })
       if (event.actorUserId) {
