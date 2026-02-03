@@ -247,6 +247,12 @@ export function HealixPanel({
       ) {
         argsWithContext.patientId = context.patientId
       }
+      if (needsPatientId.includes(action.tool) && !argsWithContext.patientId && !argsWithContext.patientName) {
+        const labelMatch = action.label.match(/\b(?:to|for)\s+(.+)$/i)
+        if (labelMatch?.[1]) {
+          argsWithContext.patientName = labelMatch[1].split('•')[0].trim()
+        }
+      }
       if (action.tool === 'sendSms' && !argsWithContext.patientId && !argsWithContext.patientName) {
         const labelMatch = action.label.match(/send sms to\s+(.+)$/i)
         if (labelMatch?.[1]) {
@@ -290,26 +296,63 @@ export function HealixPanel({
         }
         setMessages((prev) => [...prev, clarificationMessage])
 
-        if (action.tool === 'sendSms') {
-          const nextActions = candidates.map((candidate: { id: string; name: string; email?: string | null; phone?: string | null; primaryPhone?: string | null; dateOfBirth?: string | null }) => {
-            const phone = candidate.primaryPhone || candidate.phone
-            const phoneLabel = phone ? ` • ${phone}` : ''
-            const emailLabel = candidate.email ? ` • ${candidate.email}` : ''
-            const dobLabel = candidate.dateOfBirth ? ` • DOB ${new Date(candidate.dateOfBirth).toLocaleDateString()}` : ''
-            return ({
-            id: `sendSms-${candidate.id}-${Date.now()}`,
-            label: `Send SMS to ${candidate.name}${phoneLabel}${emailLabel}${dobLabel}`,
+        const nextActions = candidates.map((candidate: { id: string; name: string; email?: string | null; phone?: string | null; primaryPhone?: string | null; dateOfBirth?: string | null }) => {
+          const phone = candidate.primaryPhone || candidate.phone
+          const phoneLabel = phone ? ` • ${phone}` : ''
+          const emailLabel = candidate.email ? ` • ${candidate.email}` : ''
+          const dobLabel = candidate.dateOfBirth ? ` • DOB ${new Date(candidate.dateOfBirth).toLocaleDateString()}` : ''
+          const baseLabel = action.tool === 'sendSms'
+            ? `Send SMS to ${candidate.name}`
+            : action.tool === 'bookAppointment'
+              ? `Book appointment for ${candidate.name}`
+              : `Use ${candidate.name}`
+          return ({
+            id: `${action.tool}-${candidate.id}-${Date.now()}`,
+            label: `${baseLabel}${phoneLabel}${emailLabel}${dobLabel}`,
             risk: 'low' as const,
-            tool: 'sendSms',
+            tool: action.tool,
             args: {
+              ...action.args,
               patientId: candidate.id,
-              message: action.args?.message,
+              patientName: undefined,
             },
-            why: 'Select the correct patient to send the SMS.',
+            why: 'Select the correct patient to proceed.',
           })
         })
-          setSuggestedActions((prev) => [...nextActions, ...prev])
+        setSuggestedActions((prev) => [...nextActions, ...prev])
+      }
+
+      const slots = result?.result?.slots || result?.slots
+      if (Array.isArray(slots) && slots.length > 0) {
+        const slotMessage: HealixMessage = {
+          id: (Date.now() + 3).toString(),
+          role: 'assistant',
+          content: 'Here are available time slots. Pick one to book:',
+          timestamp: new Date(),
         }
+        setMessages((prev) => [...prev, slotMessage])
+
+        const eventTypeId = result?.result?.eventTypeId || action.args?.eventTypeId
+        const timezone = result?.result?.timezone || action.args?.timezone
+        const patientId = action.args?.patientId || context.patientId
+        const patientName = action.args?.patientName
+
+        const slotActions = slots.slice(0, 12).map((slot: { time: string }) => ({
+          id: `book-${slot.time}-${Date.now()}`,
+          label: `Book ${new Date(slot.time).toLocaleString()}`,
+          risk: 'low' as const,
+          tool: 'bookAppointment',
+          args: {
+            eventTypeId,
+            startTime: slot.time,
+            timezone,
+            patientId,
+            patientName,
+          },
+          why: 'Select this slot to book the appointment.',
+        }))
+
+        setSuggestedActions((prev) => [...slotActions, ...prev])
       }
     } catch (error) {
       console.error('Error executing action:', error)

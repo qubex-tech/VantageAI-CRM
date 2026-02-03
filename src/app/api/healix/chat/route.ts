@@ -37,6 +37,9 @@ You have access to the following tools:
 - listFormTemplates: List available patient form templates
 - requestFormCompletion: Create a form request and optionally notify the patient
 - sendSms: Send a direct SMS to a patient (if configured)
+- listAppointmentTypes: List available appointment types
+- getAppointmentSlots: Get available appointment slots for a date range
+- bookAppointment: Book an appointment for a selected slot
 
 Action catalog (available actions and whether they are executable):
 ${formatHealixActionCatalog()}
@@ -49,6 +52,8 @@ When suggesting actions:
 - Only suggest draftMessage when the user explicitly asks for a draft
 - If the user asks to send a form (intake/insurance/updates), suggest listFormTemplates then requestFormCompletion
 - When suggesting sendSms, include patientId if known; otherwise include patientName
+- For scheduling: ask for preferred date range + visit type, then call getAppointmentSlots and present slot options; after selection, call bookAppointment
+- For any patient-related action, include patientId when known; otherwise include patientName for resolution
 
 Format your response as JSON with this structure:
 {

@@ -18,6 +18,8 @@ import { renderEmailFromJson } from './marketing/render-email'
 import { replaceVariables } from './marketing/variables'
 import type { VariableContext } from './marketing/types'
 import { emitEvent } from './outbox'
+import { getCalClient } from './cal'
+import { bookAppointment as bookCalAppointment } from './agentActions'
 
 export interface HealixToolResult {
   success: boolean
@@ -28,6 +30,7 @@ export interface HealixToolResult {
 export interface CreateTaskParams {
   clinicId: string
   patientId?: string
+  patientName?: string
   appointmentId?: string
   title: string
   dueAt?: Date | string
@@ -39,20 +42,23 @@ export interface CreateTaskParams {
 export interface CreateNoteParams {
   clinicId: string
   patientId?: string
+  patientName?: string
   appointmentId?: string
   content: string
 }
 
 export interface DraftMessageParams {
   clinicId: string
-  patientId: string
+  patientId?: string
+  patientName?: string
   channel: 'sms' | 'email'
   content: string
 }
 
 export interface UpdatePatientFieldsParams {
   clinicId: string
-  patientId: string
+  patientId?: string
+  patientName?: string
   patch: {
     preferredName?: string
     contactPreferences?: string
@@ -72,7 +78,8 @@ export interface ListFormTemplatesParams {
 
 export interface RequestFormCompletionParams {
   clinicId: string
-  patientId: string
+  patientId?: string
+  patientName?: string
   formTemplateId: string
   dueDate?: string
   message?: string
@@ -82,7 +89,8 @@ export interface RequestFormCompletionParams {
 
 export interface SendPortalInviteParams {
   clinicId: string
-  patientId: string
+  patientId?: string
+  patientName?: string
   channel?: 'email' | 'sms' | 'auto'
 }
 
@@ -91,6 +99,30 @@ export interface SendSmsParams {
   patientId?: string
   patientName?: string
   message: string
+}
+
+export interface ListAppointmentTypesParams {
+  clinicId: string
+}
+
+export interface GetAppointmentSlotsParams {
+  clinicId: string
+  eventTypeId?: string
+  visitTypeName?: string
+  dateFrom: string
+  dateTo: string
+  timezone?: string
+}
+
+export interface BookAppointmentParams {
+  clinicId: string
+  patientId?: string
+  patientName?: string
+  eventTypeId?: string
+  visitTypeName?: string
+  startTime: string
+  timezone?: string
+  reason?: string
 }
 
 export interface GetPatientSummaryParams {
@@ -116,6 +148,9 @@ export const ALLOWED_TOOLS = [
   'requestFormCompletion',
   'sendPortalInvite',
   'sendSms',
+  'listAppointmentTypes',
+  'getAppointmentSlots',
+  'bookAppointment',
   'getPatientSummary',
   'getAppointmentSummary',
 ] as const
@@ -154,6 +189,94 @@ async function validateClinicAccess(
   return { hasAccess, user }
 }
 
+type PatientCandidate = {
+  id: string
+  name: string
+  email?: string | null
+  phone?: string | null
+  primaryPhone?: string | null
+  dateOfBirth?: Date | null
+}
+
+async function resolvePatientId(
+  clinicId: string,
+  patientId?: string,
+  patientName?: string
+): Promise<{ patientId?: string; candidates?: PatientCandidate[]; error?: string }> {
+  if (patientId) {
+    const existing = await prisma.patient.findFirst({
+      where: {
+        id: patientId,
+        practiceId: clinicId,
+        deletedAt: null,
+      },
+      select: { id: true },
+    })
+    if (existing) {
+      return { patientId: existing.id }
+    }
+  }
+
+  const query = patientName?.trim()
+  if (!query) {
+    return { error: 'patientId or patientName is required' }
+  }
+
+  const matches = await prisma.patient.findMany({
+    where: {
+      practiceId: clinicId,
+      deletedAt: null,
+      name: { contains: query, mode: 'insensitive' },
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      phone: true,
+      primaryPhone: true,
+      dateOfBirth: true,
+    },
+    take: 5,
+    orderBy: { createdAt: 'desc' },
+  })
+
+  if (matches.length === 0) {
+    return { error: `No patient found matching "${query}"` }
+  }
+  if (matches.length > 1) {
+    return { candidates: matches }
+  }
+
+  return { patientId: matches[0].id }
+}
+
+async function resolveEventTypeId(
+  clinicId: string,
+  eventTypeId?: string,
+  visitTypeName?: string
+): Promise<{ eventTypeId?: string; error?: string }> {
+  if (eventTypeId) {
+    return { eventTypeId }
+  }
+  const name = visitTypeName?.trim()
+  if (!name) {
+    return { error: 'eventTypeId or visitTypeName is required' }
+  }
+  const mapping = await prisma.calEventTypeMapping.findFirst({
+    where: {
+      practiceId: clinicId,
+      visitTypeName: {
+        equals: name,
+        mode: 'insensitive',
+      },
+    },
+  })
+  if (!mapping) {
+    return { error: `No Cal.com event type mapping found for "${name}"` }
+  }
+  return { eventTypeId: mapping.calEventTypeId }
+}
+
 /**
  * Create a task (stored as a timeline entry)
  */
@@ -170,11 +293,29 @@ export async function createTask(
       }
     }
 
-    if (!params.patientId && !params.appointmentId) {
+    if (!params.patientId && !params.appointmentId && !params.patientName) {
       return {
         success: false,
-        message: 'Either patientId or appointmentId must be provided',
+        message: 'Either patientId, patientName, or appointmentId must be provided',
       }
+    }
+
+    if (!params.patientId && !params.appointmentId && params.patientName) {
+      const resolved = await resolvePatientId(params.clinicId, params.patientId, params.patientName)
+      if (resolved.candidates) {
+        return {
+          success: false,
+          message: `Multiple patients match "${params.patientName}". Please specify the patient.`,
+          data: { candidates: resolved.candidates },
+        }
+      }
+      if (!resolved.patientId) {
+        return {
+          success: false,
+          message: resolved.error || 'Patient not found',
+        }
+      }
+      params.patientId = resolved.patientId
     }
 
     // If patientId provided, verify it belongs to the clinic
@@ -259,11 +400,29 @@ export async function createNote(
       }
     }
 
-    if (!params.patientId && !params.appointmentId) {
+    if (!params.patientId && !params.appointmentId && !params.patientName) {
       return {
         success: false,
-        message: 'Either patientId or appointmentId must be provided',
+        message: 'Either patientId, patientName, or appointmentId must be provided',
       }
+    }
+
+    if (!params.patientId && !params.appointmentId && params.patientName) {
+      const resolved = await resolvePatientId(params.clinicId, params.patientId, params.patientName)
+      if (resolved.candidates) {
+        return {
+          success: false,
+          message: `Multiple patients match "${params.patientName}". Please specify the patient.`,
+          data: { candidates: resolved.candidates },
+        }
+      }
+      if (!resolved.patientId) {
+        return {
+          success: false,
+          message: resolved.error || 'Patient not found',
+        }
+      }
+      params.patientId = resolved.patientId
     }
 
     // If patientId provided, create timeline entry
@@ -338,6 +497,22 @@ export async function draftMessage(
         message: 'Access denied: You do not have permission to draft messages in this clinic',
       }
     }
+
+    const resolved = await resolvePatientId(params.clinicId, params.patientId, params.patientName)
+    if (resolved.candidates) {
+      return {
+        success: false,
+        message: `Multiple patients match "${params.patientName}". Please specify the patient.`,
+        data: { candidates: resolved.candidates },
+      }
+    }
+    if (!resolved.patientId) {
+      return {
+        success: false,
+        message: resolved.error || 'Patient not found',
+      }
+    }
+    params.patientId = resolved.patientId
 
     const patient = await prisma.patient.findFirst({
       where: {
@@ -427,6 +602,22 @@ export async function updatePatientFields(
         message: 'Access denied: You do not have permission to update patients in this clinic',
       }
     }
+
+    const resolved = await resolvePatientId(params.clinicId, params.patientId, params.patientName)
+    if (resolved.candidates) {
+      return {
+        success: false,
+        message: `Multiple patients match "${params.patientName}". Please specify the patient.`,
+        data: { candidates: resolved.candidates },
+      }
+    }
+    if (!resolved.patientId) {
+      return {
+        success: false,
+        message: resolved.error || 'Patient not found',
+      }
+    }
+    params.patientId = resolved.patientId
 
     const patient = await prisma.patient.findFirst({
       where: {
@@ -614,6 +805,22 @@ export async function requestFormCompletion(
         message: 'Access denied: You do not have permission to request forms in this clinic',
       }
     }
+
+    const resolved = await resolvePatientId(params.clinicId, params.patientId, params.patientName)
+    if (resolved.candidates) {
+      return {
+        success: false,
+        message: `Multiple patients match "${params.patientName}". Please specify the patient.`,
+        data: { candidates: resolved.candidates },
+      }
+    }
+    if (!resolved.patientId) {
+      return {
+        success: false,
+        message: resolved.error || 'Patient not found',
+      }
+    }
+    params.patientId = resolved.patientId
 
     const patient = await prisma.patient.findFirst({
       where: {
@@ -930,6 +1137,22 @@ export async function sendPortalInvite(
       }
     }
 
+    const resolved = await resolvePatientId(params.clinicId, params.patientId, params.patientName)
+    if (resolved.candidates) {
+      return {
+        success: false,
+        message: `Multiple patients match "${params.patientName}". Please specify the patient.`,
+        data: { candidates: resolved.candidates },
+      }
+    }
+    if (!resolved.patientId) {
+      return {
+        success: false,
+        message: resolved.error || 'Patient not found',
+      }
+    }
+    params.patientId = resolved.patientId
+
     const patient = await prisma.patient.findFirst({
       where: {
         id: params.patientId,
@@ -1099,51 +1322,21 @@ export async function sendSms(
       }
     }
 
-    let patientId = params.patientId
-    if (!patientId) {
-      const query = params.patientName?.trim()
-      if (!query) {
-        return {
-          success: false,
-          message: 'patientId or patientName is required to send an SMS',
-        }
+    const resolved = await resolvePatientId(params.clinicId, params.patientId, params.patientName)
+    if (resolved.candidates) {
+      return {
+        success: false,
+        message: `Multiple patients match "${params.patientName}". Please specify the patient.`,
+        data: { candidates: resolved.candidates },
       }
-
-      const matches = await prisma.patient.findMany({
-        where: {
-          practiceId: params.clinicId,
-          deletedAt: null,
-          name: { contains: query, mode: 'insensitive' },
-        },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          phone: true,
-          primaryPhone: true,
-          dateOfBirth: true,
-        },
-        take: 5,
-        orderBy: { createdAt: 'desc' },
-      })
-
-      if (matches.length === 0) {
-        return {
-          success: false,
-          message: `No patient found matching "${query}"`,
-        }
-      }
-
-      if (matches.length > 1) {
-        return {
-          success: false,
-          message: `Multiple patients match "${query}". Please specify the patient.`,
-          data: { candidates: matches },
-        }
-      }
-
-      patientId = matches[0].id
     }
+    if (!resolved.patientId) {
+      return {
+        success: false,
+        message: resolved.error || 'Patient not found',
+      }
+    }
+    const patientId = resolved.patientId
 
     const patient = await prisma.patient.findFirst({
       where: {
@@ -1215,6 +1408,173 @@ export async function sendSms(
     return {
       success: false,
       message: error instanceof Error ? error.message : 'Failed to send SMS',
+    }
+  }
+}
+
+/**
+ * List available appointment types (Cal.com mappings)
+ */
+export async function listAppointmentTypes(
+  params: ListAppointmentTypesParams,
+  userId: string
+): Promise<HealixToolResult> {
+  try {
+    const { hasAccess } = await validateClinicAccess(userId, params.clinicId)
+    if (!hasAccess) {
+      return {
+        success: false,
+        message: 'Access denied: You do not have permission to view appointment types in this clinic',
+      }
+    }
+
+    const mappings = await prisma.calEventTypeMapping.findMany({
+      where: { practiceId: params.clinicId },
+      select: {
+        visitTypeName: true,
+        calEventTypeId: true,
+      },
+      orderBy: { visitTypeName: 'asc' },
+    })
+
+    return {
+      success: true,
+      message: `Found ${mappings.length} appointment type(s)`,
+      data: { types: mappings },
+    }
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to list appointment types',
+    }
+  }
+}
+
+/**
+ * Get available appointment slots
+ */
+export async function getAppointmentSlots(
+  params: GetAppointmentSlotsParams,
+  userId: string
+): Promise<HealixToolResult> {
+  try {
+    const { hasAccess } = await validateClinicAccess(userId, params.clinicId)
+    if (!hasAccess) {
+      return {
+        success: false,
+        message: 'Access denied: You do not have permission to view appointment slots in this clinic',
+      }
+    }
+
+    const resolvedEvent = await resolveEventTypeId(
+      params.clinicId,
+      params.eventTypeId,
+      params.visitTypeName
+    )
+    if (!resolvedEvent.eventTypeId) {
+      return {
+        success: false,
+        message: resolvedEvent.error || 'Event type not found',
+      }
+    }
+
+    const timezone = params.timezone || 'America/New_York'
+    const calClient = await getCalClient(params.clinicId)
+    const slots = await calClient.getAvailableSlots(
+      resolvedEvent.eventTypeId,
+      params.dateFrom,
+      params.dateTo,
+      timezone
+    )
+
+    return {
+      success: true,
+      message: `Found ${slots.length} available slot(s)`,
+      data: {
+        slots,
+        eventTypeId: resolvedEvent.eventTypeId,
+        timezone,
+      },
+    }
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to fetch appointment slots',
+    }
+  }
+}
+
+/**
+ * Book an appointment
+ */
+export async function bookAppointment(
+  params: BookAppointmentParams,
+  userId: string
+): Promise<HealixToolResult> {
+  try {
+    const { hasAccess } = await validateClinicAccess(userId, params.clinicId)
+    if (!hasAccess) {
+      return {
+        success: false,
+        message: 'Access denied: You do not have permission to book appointments in this clinic',
+      }
+    }
+
+    const resolvedPatient = await resolvePatientId(params.clinicId, params.patientId, params.patientName)
+    if (resolvedPatient.candidates) {
+      return {
+        success: false,
+        message: `Multiple patients match "${params.patientName}". Please specify the patient.`,
+        data: { candidates: resolvedPatient.candidates },
+      }
+    }
+    if (!resolvedPatient.patientId) {
+      return {
+        success: false,
+        message: resolvedPatient.error || 'Patient not found',
+      }
+    }
+
+    const resolvedEvent = await resolveEventTypeId(
+      params.clinicId,
+      params.eventTypeId,
+      params.visitTypeName
+    )
+    if (!resolvedEvent.eventTypeId) {
+      return {
+        success: false,
+        message: resolvedEvent.error || 'Event type not found',
+      }
+    }
+
+    const timezone = params.timezone || 'America/New_York'
+    const booking = await bookCalAppointment(
+      params.clinicId,
+      resolvedPatient.patientId,
+      resolvedEvent.eventTypeId,
+      params.startTime,
+      timezone,
+      params.reason
+    )
+
+    await createAuditLog({
+      practiceId: params.clinicId,
+      userId,
+      action: 'create',
+      resourceType: 'appointment',
+      resourceId: booking.appointmentId,
+      changes: { after: booking },
+    })
+
+    return {
+      success: true,
+      message: booking.confirmationMessage || 'Appointment booked successfully',
+      data: booking,
+    }
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to book appointment',
     }
   }
 }
@@ -1426,6 +1786,12 @@ export async function executeTool(
       return sendPortalInvite(args as SendPortalInviteParams, userId)
     case 'sendSms':
       return sendSms(args as SendSmsParams, userId)
+    case 'listAppointmentTypes':
+      return listAppointmentTypes(args as ListAppointmentTypesParams, userId)
+    case 'getAppointmentSlots':
+      return getAppointmentSlots(args as GetAppointmentSlotsParams, userId)
+    case 'bookAppointment':
+      return bookAppointment(args as BookAppointmentParams, userId)
     case 'getPatientSummary':
       return getPatientSummary(args as GetPatientSummaryParams, userId)
     case 'getAppointmentSummary':
