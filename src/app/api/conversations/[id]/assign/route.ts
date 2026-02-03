@@ -14,6 +14,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (!user.practiceId) {
       return NextResponse.json({ error: 'Practice ID is required for this operation' }, { status: 400 })
     }
+    const practiceId = user.practiceId
 
     if (!rateLimit(`${user.id}:conversations:assign`, 80, 60000)) {
       return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 })
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const conversation = await prisma.communicationConversation.findFirst({
       where: {
         id: params.id,
-        practiceId: user.practiceId,
+        practiceId,
       },
       select: { id: true, patientId: true, status: true },
     })
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     if (validated.assigneeType === 'user') {
       const assignee = await prisma.user.findFirst({
-        where: { id: validated.assigneeId, practiceId: user.practiceId },
+        where: { id: validated.assigneeId, practiceId },
         select: { id: true },
       })
       if (!assignee) {
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     if (validated.assigneeType === 'team') {
       const team = await prisma.team.findFirst({
-        where: { id: validated.assigneeId, practiceId: user.practiceId },
+        where: { id: validated.assigneeId, practiceId },
         select: { id: true },
       })
       if (!team) {
@@ -57,7 +58,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const assignment = await prisma.$transaction(async (tx) => {
       await tx.communicationAssignment.updateMany({
         where: {
-          practiceId: user.practiceId,
+          practiceId,
           conversationId: conversation.id,
           status: 'active',
         },
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
       const created = await tx.communicationAssignment.create({
         data: {
-          practiceId: user.practiceId,
+          practiceId,
           conversationId: conversation.id,
           assignedUserId: validated.assigneeType === 'user' ? validated.assigneeId : undefined,
           assignedTeamId: validated.assigneeType === 'team' ? validated.assigneeId : undefined,
@@ -86,7 +87,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
       await tx.auditLog.create({
         data: {
-          practiceId: user.practiceId,
+          practiceId,
           userId: user.id,
           action: 'assign',
           resourceType: 'conversation',
@@ -105,7 +106,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     ensureCommunicationRuntime()
     await emitCommunicationEvent({
       type: 'conversation.assigned',
-      practiceId: user.practiceId,
+      practiceId,
       conversationId: conversation.id,
       patientId: conversation.patientId,
       assignmentId: assignment.id,
