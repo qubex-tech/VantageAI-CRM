@@ -7,7 +7,7 @@ function getVar(path: string, data: Record<string, any>) {
   return path.split('.').reduce((acc, key) => (acc ? acc[key] : undefined), data)
 }
 
-export function evaluateJsonLogic(rule: any, data: Record<string, any>): boolean {
+export function evaluateJsonLogic(rule: any, data: Record<string, any>): any {
   if (rule === null || rule === undefined) {
     return false
   }
@@ -21,7 +21,7 @@ export function evaluateJsonLogic(rule: any, data: Record<string, any>): boolean
   switch (operator) {
     case 'var': {
       if (typeof values === 'string') {
-        return Boolean(getVar(values, data))
+        return getVar(values, data)
       }
       if (Array.isArray(values)) {
         const [path, fallback] = values
