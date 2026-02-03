@@ -14,6 +14,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (!user.practiceId) {
       return NextResponse.json({ error: 'Practice ID is required for this operation' }, { status: 400 })
     }
+    const practiceId = user.practiceId
 
     if (!rateLimit(`${user.id}:conversations:note`, 80, 60000)) {
       return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 })
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const conversation = await prisma.communicationConversation.findFirst({
       where: {
         id: params.id,
-        practiceId: user.practiceId,
+        practiceId,
       },
       select: { id: true, patientId: true, channel: true },
     })
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const message = await prisma.$transaction(async (tx) => {
       const created = await tx.communicationMessage.create({
         data: {
-          practiceId: user.practiceId,
+          practiceId,
           conversationId: conversation.id,
           patientId: conversation.patientId,
           authorUserId: user.id,
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
       await tx.auditLog.create({
         data: {
-          practiceId: user.practiceId,
+          practiceId,
           userId: user.id,
           action: 'note',
           resourceType: 'conversation',
@@ -76,7 +77,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     ensureCommunicationRuntime()
     await emitCommunicationEvent({
       type: 'message.sent',
-      practiceId: user.practiceId,
+      practiceId,
       conversationId: conversation.id,
       patientId: conversation.patientId,
       messageId: message.id,
