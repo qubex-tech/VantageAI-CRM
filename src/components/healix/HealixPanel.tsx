@@ -46,6 +46,7 @@ export function HealixPanel({
   const [currentResponse, setCurrentResponse] = useState('')
   const [suggestedActions, setSuggestedActions] = useState<SuggestedAction[]>([])
   const [conversationId, setConversationId] = useState<string | null>(null)
+  const [lastUserMessage, setLastUserMessage] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -93,6 +94,7 @@ export function HealixPanel({
     }
 
     setMessages((prev) => [...prev, userMessage])
+    setLastUserMessage(messageText)
     setInput('')
     setIsLoading(true)
     setCurrentResponse('')
@@ -378,7 +380,18 @@ export function HealixPanel({
         const eventTypeId = result?.result?.eventTypeId || action.args?.eventTypeId
         const timezone = result?.result?.timezone || action.args?.timezone
         const patientId = action.args?.patientId || context.patientId
-        const patientName = action.args?.patientName
+        const inferredName = extractPatientName(lastUserMessage)
+        const patientName = action.args?.patientName || inferredName
+
+        if (!patientId && !patientName) {
+          const missingMessage: HealixMessage = {
+            id: (Date.now() + 4).toString(),
+            role: 'assistant',
+            content: 'Which patient should I book this appointment for?',
+            timestamp: new Date(),
+          }
+          setMessages((prev) => [...prev, missingMessage])
+        }
 
         const slotActions = slots.slice(0, 12).map((slot: { time: string }) => ({
           id: `book-${slot.time}-${Date.now()}`,
@@ -618,5 +631,24 @@ export function HealixPanel({
       </form>
     </div>
   )
+}
+
+function extractPatientName(message?: string | null): string | undefined {
+  if (!message) return undefined
+  const normalized = message.trim()
+  const patterns = [
+    /schedule\s+(.+?)\s+for/i,
+    /schedule\s+(.+?)\s+an?\s+appointment/i,
+    /book\s+(.+?)\s+for/i,
+    /appointment\s+for\s+(.+)$/i,
+  ]
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern)
+    if (match && match[1]) {
+      const name = match[1].replace(/[?.!]+$/, '').trim()
+      if (name.length >= 2) return name
+    }
+  }
+  return undefined
 }
 
