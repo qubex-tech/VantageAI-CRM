@@ -233,7 +233,9 @@ export async function runCommunicationTriggers(event: CommunicationEventPayload)
     const shouldRun = evaluateJsonLogic(trigger.conditionsJson, data)
     if (!shouldRun) continue
 
-    const actions = Array.isArray(trigger.actionsJson) ? (trigger.actionsJson as TriggerAction[]) : []
+    const actions = Array.isArray(trigger.actionsJson)
+      ? (trigger.actionsJson as unknown as TriggerAction[])
+      : []
     for (const action of actions) {
       await executeTriggerAction(action, event)
     }
