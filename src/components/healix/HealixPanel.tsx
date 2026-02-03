@@ -651,4 +651,3 @@ function extractPatientName(message?: string | null): string | undefined {
   }
   return undefined
 }
-

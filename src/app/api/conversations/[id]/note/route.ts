@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireAuth, rateLimit } from '@/lib/middleware'
 import { communicationNoteSchema } from '@/lib/validations'
 import { emitCommunicationEvent } from '@/lib/communications/events'
+import type { CommunicationChannel } from '@/lib/communications/types'
 import { ensureCommunicationRuntime } from '@/lib/communications/runtime'
 
 export const dynamic = 'force-dynamic'
@@ -34,6 +35,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (!conversation) {
       return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
     }
+    const channel = conversation.channel as CommunicationChannel
 
     const message = await prisma.$transaction(async (tx) => {
       const created = await tx.communicationMessage.create({
@@ -45,7 +47,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           direction: 'internal',
           type: 'note',
           body: validated.body,
-          channel: conversation.channel,
+          channel,
           deliveryStatus: 'sent',
         },
       })
@@ -81,7 +83,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       conversationId: conversation.id,
       patientId: conversation.patientId,
       messageId: message.id,
-      channel: conversation.channel,
+      channel,
       actorUserId: user.id,
     })
 
