@@ -98,18 +98,21 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
         status: conversation.status,
         assignee: conversation.assignee?.name ?? null,
       })
-      const shapedMessages = messagesResponse.data.messages.map((message) => ({
-        id: message.id,
-        senderType:
+      const shapedMessages = messagesResponse.data.messages.map((message) => {
+        const senderType: Message['senderType'] =
           message.direction === 'outbound'
             ? 'staff'
             : message.direction === 'internal'
               ? 'system'
-              : 'patient',
-        body: message.body,
-        createdAt: message.createdAt,
-        isInternalNote: message.type === 'note' || message.direction === 'internal',
-      }))
+              : 'patient'
+        return {
+          id: message.id,
+          senderType,
+          body: message.body,
+          createdAt: message.createdAt,
+          isInternalNote: message.type === 'note' || message.direction === 'internal',
+        }
+      })
       setMessages(shapedMessages)
     } catch {
       setSelectedConversation(null)
