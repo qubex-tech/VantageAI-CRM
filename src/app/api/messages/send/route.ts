@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
     if (!user.practiceId) {
       return NextResponse.json({ error: 'Practice ID is required for this operation' }, { status: 400 })
     }
+    const practiceId = user.practiceId
 
     if (!rateLimit(`${user.id}:messages:send`, 60, 60000)) {
       return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 })
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
     const conversation = await prisma.communicationConversation.findFirst({
       where: {
         id: validated.conversationId,
-        practiceId: user.practiceId,
+        practiceId,
       },
       include: {
         patient: {
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest) {
     }
 
     const delivery = await adapter.sendMessage({
-      practiceId: user.practiceId,
+      practiceId,
       conversationId: conversation.id,
       patientId: conversation.patient.id,
       channel,
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest) {
     const message = await prisma.$transaction(async (tx) => {
       const created = await tx.communicationMessage.create({
         data: {
-          practiceId: user.practiceId,
+          practiceId,
           conversationId: conversation.id,
           patientId: conversation.patient.id,
           authorUserId: user.id,
@@ -84,7 +85,7 @@ export async function POST(req: NextRequest) {
       if (validated.attachments?.length) {
         await tx.communicationAttachment.createMany({
           data: validated.attachments.map((attachment) => ({
-            practiceId: user.practiceId,
+            practiceId,
             messageId: created.id,
             fileName: attachment.fileName,
             mimeType: attachment.mimeType || undefined,
@@ -105,7 +106,7 @@ export async function POST(req: NextRequest) {
 
       await tx.auditLog.create({
         data: {
-          practiceId: user.practiceId,
+          practiceId,
           userId: user.id,
           action: 'message_sent',
           resourceType: 'conversation',
@@ -123,7 +124,7 @@ export async function POST(req: NextRequest) {
     ensureCommunicationRuntime()
     await emitCommunicationEvent({
       type: 'message.sent',
-      practiceId: user.practiceId,
+      practiceId,
       conversationId: conversation.id,
       patientId: conversation.patient.id,
       messageId: message.id,
