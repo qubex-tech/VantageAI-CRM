@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { Prisma } from '@prisma/client'
 import { requireAuth, rateLimit } from '@/lib/middleware'
 import { communicationMessageSendSchema } from '@/lib/validations'
 import { getChannelAdapter } from '@/lib/communications/adapters'
@@ -78,7 +79,9 @@ export async function POST(req: NextRequest) {
           body: validated.body,
           channel,
           deliveryStatus: delivery.status,
-          metadata: delivery.metadata,
+          metadata: delivery.metadata
+            ? (delivery.metadata as Prisma.InputJsonValue)
+            : undefined,
         },
       })
 
