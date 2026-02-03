@@ -222,6 +222,32 @@ async function resolvePatientId(
     return { error: 'patientId or patientName is required' }
   }
 
+  const exactMatches = await prisma.patient.findMany({
+    where: {
+      practiceId: clinicId,
+      deletedAt: null,
+      name: { equals: query, mode: 'insensitive' },
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      phone: true,
+      primaryPhone: true,
+      dateOfBirth: true,
+    },
+    take: 5,
+    orderBy: { createdAt: 'desc' },
+  })
+
+  if (exactMatches.length === 1) {
+    return { patientId: exactMatches[0].id }
+  }
+
+  if (exactMatches.length > 1) {
+    return { candidates: exactMatches }
+  }
+
   const matches = await prisma.patient.findMany({
     where: {
       practiceId: clinicId,
