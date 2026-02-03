@@ -1,92 +1,86 @@
 "use client"
 
-import { formatDistanceToNow } from 'date-fns'
-import { MessageSquare, Lock, Phone, Video } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import type { ConversationListItem } from './InboxShell'
-
-const channelIcon = {
-  sms: MessageSquare,
-  secure: Lock,
-  voice: Phone,
-  video: Video,
-}
+import { useEffect, useRef } from 'react'
+import { ConversationRow } from './ConversationRow'
+import { EmptyState } from './EmptyState'
+import type { Conversation } from './types'
 
 export function ConversationList({
   conversations,
-  loading,
   selectedId,
+  loading,
   onSelect,
+  onLoadMore,
+  loadingMore,
 }: {
-  conversations: ConversationListItem[]
-  loading: boolean
+  conversations: Conversation[]
   selectedId: string | null
+  loading: boolean
   onSelect: (id: string) => void
+  onLoadMore: () => void
+  loadingMore: boolean
 }) {
-  return (
-    <section className="flex h-full w-[340px] flex-col border-r border-slate-200">
-      <div className="border-b border-slate-200 px-4 py-4">
-        <h3 className="text-sm font-medium text-slate-600">Conversations</h3>
-      </div>
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+  const lastLoadRef = useRef(0)
 
+  useEffect(() => {
+    if (loading) return
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        if (entry.isIntersecting) {
+          const now = Date.now()
+          if (now - lastLoadRef.current < 1200) {
+            return
+          }
+          lastLoadRef.current = now
+          onLoadMore()
+        }
+      },
+      { root: null, rootMargin: '200px', threshold: 0 }
+    )
+
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [loading, onLoadMore, conversations.length])
+
+  return (
+    <section className="flex h-full w-[360px] flex-col border-r border-slate-200">
+      <div className="px-6 py-4 text-sm font-medium text-slate-500">Conversations</div>
       <div className="flex-1 overflow-y-auto">
         {loading ? (
-          <div className="space-y-4 p-4">
+          <div className="space-y-4 px-6 py-4">
             {Array.from({ length: 6 }).map((_, index) => (
-              <div key={index} className="space-y-2 rounded-lg border border-slate-100 p-3">
-                <div className="h-3 w-24 rounded bg-slate-100 animate-pulse" />
+              <div key={index} className="space-y-2">
+                <div className="h-4 w-32 rounded bg-slate-100 animate-pulse" />
                 <div className="h-3 w-full rounded bg-slate-100 animate-pulse" />
               </div>
             ))}
           </div>
         ) : conversations.length === 0 ? (
-          <div className="p-6 text-sm text-slate-500">
-            No conversations in this view yet.
-          </div>
+          <EmptyState
+            title="Inbox Zero"
+            description="All clear. New messages will appear here."
+          />
         ) : (
-          <div className="divide-y divide-slate-100">
-            {conversations.map((conversation) => {
-              const Icon = channelIcon[conversation.channel]
-              return (
-                <button
-                  key={conversation.id}
-                  onClick={() => onSelect(conversation.id)}
-                  className={cn(
-                    'flex w-full flex-col gap-2 px-4 py-4 text-left transition',
-                    selectedId === conversation.id ? 'bg-slate-50' : 'hover:bg-slate-50'
-                  )}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Icon className="h-4 w-4 text-slate-500" />
-                      <span className="text-sm font-medium text-slate-900">
-                        {conversation.patient.name}
-                      </span>
-                    </div>
-                    <span className="text-xs text-slate-500">
-                      {conversation.lastMessageAt
-                        ? formatDistanceToNow(new Date(conversation.lastMessageAt), { addSuffix: true })
-                        : 'Just now'}
-                    </span>
-                  </div>
-                  <p className="line-clamp-2 text-xs text-slate-500">
-                    {conversation.lastMessagePreview || 'No messages yet.'}
-                  </p>
-                  <div className="flex items-center justify-between">
-                    {conversation.assignee ? (
-                      <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] text-slate-600">
-                        {conversation.assignee.name}
-                      </span>
-                    ) : (
-                      <span className="text-[11px] text-slate-400">Unassigned</span>
-                    )}
-                    {conversation.unread ? (
-                      <span className="h-2 w-2 rounded-full bg-blue-500" />
-                    ) : null}
-                  </div>
-                </button>
-              )
-            })}
+          <div className="space-y-1 px-3 pb-6">
+            {conversations.map((conversation) => (
+              <ConversationRow
+                key={conversation.id}
+                conversation={conversation}
+                selected={selectedId === conversation.id}
+                onClick={() => onSelect(conversation.id)}
+              />
+            ))}
+            <div ref={sentinelRef} className="h-6" />
+            {loadingMore ? (
+              <div className="px-3 py-3">
+                <div className="h-px w-full bg-slate-100" />
+              </div>
+            ) : null}
           </div>
         )}
       </div>
