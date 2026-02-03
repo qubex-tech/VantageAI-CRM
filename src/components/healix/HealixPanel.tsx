@@ -236,6 +236,17 @@ export function HealixPanel({
     }
   }
 
+  const handleQuickSchedule = () => {
+    executeAction({
+      id: `quick-schedule-${Date.now()}`,
+      label: 'List appointment types',
+      risk: 'low',
+      tool: 'listAppointmentTypes',
+      args: {},
+      why: 'Find appointment types to show next 7 days of slots.',
+    })
+  }
+
   const executeAction = useCallback(async (action: SuggestedAction) => {
     try {
       const argsWithContext = { ...action.args }
@@ -320,6 +331,38 @@ export function HealixPanel({
           })
         })
         setSuggestedActions((prev) => [...nextActions, ...prev])
+      }
+
+      const types = result?.result?.types || result?.types
+      if (Array.isArray(types) && types.length > 0) {
+        const start = new Date()
+        const end = new Date()
+        end.setDate(end.getDate() + 7)
+        const timezone = context.timeZone
+
+        const typeMessage: HealixMessage = {
+          id: (Date.now() + 4).toString(),
+          role: 'assistant',
+          content: 'Pick an appointment type to see next 7 days of availability:',
+          timestamp: new Date(),
+        }
+        setMessages((prev) => [...prev, typeMessage])
+
+        const typeActions = types.slice(0, 6).map((type: { visitTypeName: string; calEventTypeId: string }) => ({
+          id: `slots-${type.calEventTypeId}-${Date.now()}`,
+          label: `Show slots for ${type.visitTypeName}`,
+          risk: 'low' as const,
+          tool: 'getAppointmentSlots',
+          args: {
+            eventTypeId: type.calEventTypeId,
+            dateFrom: start.toISOString(),
+            dateTo: end.toISOString(),
+            timezone,
+          },
+          why: 'View available slots for this appointment type.',
+        }))
+
+        setSuggestedActions((prev) => [...typeActions, ...prev])
       }
 
       const slots = result?.result?.slots || result?.slots
@@ -558,6 +601,18 @@ export function HealixPanel({
           />
           <Button type="submit" disabled={isLoading || !input.trim()} size="icon" className="flex-shrink-0">
             <Send className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleQuickSchedule}
+            disabled={isLoading}
+            className="text-xs"
+          >
+            Quick schedule: next 7 days
           </Button>
         </div>
       </form>
