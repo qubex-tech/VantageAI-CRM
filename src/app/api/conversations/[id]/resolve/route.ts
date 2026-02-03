@@ -14,6 +14,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (!user.practiceId) {
       return NextResponse.json({ error: 'Practice ID is required for this operation' }, { status: 400 })
     }
+    const practiceId = user.practiceId
 
     if (!rateLimit(`${user.id}:conversations:resolve`, 80, 60000)) {
       return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 })
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const conversation = await prisma.communicationConversation.findFirst({
       where: {
         id: params.id,
-        practiceId: user.practiceId,
+        practiceId,
       },
       select: { id: true, patientId: true },
     })
@@ -42,7 +43,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
       await tx.communicationAssignment.updateMany({
         where: {
-          practiceId: user.practiceId,
+          practiceId,
           conversationId: conversation.id,
           status: 'active',
         },
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
       await tx.auditLog.create({
         data: {
-          practiceId: user.practiceId,
+          practiceId,
           userId: user.id,
           action: 'resolve',
           resourceType: 'conversation',
@@ -66,7 +67,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     ensureCommunicationRuntime()
     await emitCommunicationEvent({
       type: 'conversation.resolved',
-      practiceId: user.practiceId,
+      practiceId,
       conversationId: conversation.id,
       patientId: conversation.patientId,
       actorUserId: user.id,
