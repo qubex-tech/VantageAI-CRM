@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db'
+import { Prisma } from '@prisma/client'
 
 interface AuditInput {
   practiceId: string
@@ -24,7 +25,7 @@ export async function recordCommunicationAudit({
       action,
       resourceType,
       resourceId,
-      changes: metadata ?? undefined,
+      changes: metadata ? (metadata as Prisma.InputJsonValue) : undefined,
     },
   })
 }
