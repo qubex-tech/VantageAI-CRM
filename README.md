@@ -310,6 +310,22 @@ Test coverage includes:
 - [ ] Implement backup and disaster recovery
 - [ ] Add compliance reporting
 
+## Communications Module
+
+### Migrations
+Run Prisma migrations and seed demo conversations:
+
+```bash
+npm run db:migrate
+npm run db:seed
+```
+
+### Extension Points
+- Replace stub adapters in `src/lib/communications/adapters.ts` with real provider integrations.
+- Plug in a real agent in `src/lib/communications/agent.ts`.
+- Add a telephony provider via the `voice` channel adapter.
+- Add a video provider via the `video` channel adapter.
+
 ## Deployment
 
 ### Vercel (Recommended)

@@ -128,6 +128,29 @@ async function main() {
 
   console.log(`Created ${patients.length} patients`)
 
+  // Create additional demo patients for communications
+  const extraPatients: typeof patients = []
+  for (let i = 4; i <= 10; i += 1) {
+    const patient = await prisma.patient.upsert({
+      where: { id: `patient-${i}` },
+      update: {},
+      create: {
+        id: `patient-${i}`,
+        practiceId: practice.id,
+        name: `Demo Patient ${i}`,
+        dateOfBirth: new Date(`${1980 + i}-01-01`),
+        phone: `+1-555-10${i}0`,
+        email: `patient${i}@example.com`,
+        preferredContactMethod: i % 2 === 0 ? 'sms' : 'email',
+      },
+    })
+    extraPatients.push(patient)
+  }
+
+  patients.push(...extraPatients)
+
+  console.log(`Created ${extraPatients.length} additional patients`)
+
   // Create insurance policies
   await prisma.insurancePolicy.createMany({
     data: [
@@ -369,6 +392,132 @@ async function main() {
 
   console.log('Created marketing templates (2 email, 3 SMS)')
 
+  // Communications module demo data
+  const team = await prisma.team.upsert({
+    where: { id: 'team-front-desk' },
+    update: {},
+    create: {
+      id: 'team-front-desk',
+      practiceId: practice.id,
+      name: 'Front Desk',
+      description: 'Primary triage and scheduling team',
+    },
+  })
+
+  await prisma.teamMember.upsert({
+    where: {
+      teamId_userId: {
+        teamId: team.id,
+        userId: admin.id,
+      },
+    },
+    update: {},
+    create: {
+      teamId: team.id,
+      userId: admin.id,
+      role: 'lead',
+    },
+  })
+
+  const channels = ['sms', 'secure', 'voice', 'video'] as const
+  const statuses = ['open', 'pending', 'resolved'] as const
+
+  for (let i = 0; i < 20; i += 1) {
+    const patient = patients[i % patients.length]
+    const channel = channels[i % channels.length]
+    const status = statuses[i % statuses.length]
+    const createdAt = new Date(Date.now() - i * 3600 * 1000)
+
+    const conversation = await prisma.communicationConversation.create({
+      data: {
+        practiceId: practice.id,
+        patientId: patient.id,
+        channel,
+        status,
+        subject: `Conversation ${i + 1}`,
+        createdAt,
+        updatedAt: createdAt,
+      },
+    })
+
+    const messageCount = 2 + (i % 3)
+    let lastMessageAt = createdAt
+    let lastPreview = ''
+
+    for (let j = 0; j < messageCount; j += 1) {
+      const direction = j % 2 === 0 ? 'inbound' : 'outbound'
+      const body =
+        direction === 'inbound'
+          ? `Patient message ${j + 1} about scheduling.`
+          : `Staff reply ${j + 1} with next steps.`
+      const messageTime = new Date(createdAt.getTime() + j * 15 * 60000)
+
+      const message = await prisma.communicationMessage.create({
+        data: {
+          practiceId: practice.id,
+          conversationId: conversation.id,
+          patientId: patient.id,
+          authorUserId: direction === 'outbound' ? admin.id : undefined,
+          direction,
+          type: 'message',
+          body,
+          channel,
+          deliveryStatus: 'sent',
+          createdAt: messageTime,
+        },
+      })
+
+      if (j === messageCount - 1 && i % 4 === 0) {
+        await prisma.communicationAttachment.create({
+          data: {
+            practiceId: practice.id,
+            messageId: message.id,
+            fileName: 'intake-form.pdf',
+            mimeType: 'application/pdf',
+            fileSize: 245678,
+            storageKey: `demo/${conversation.id}/intake-form.pdf`,
+            url: 'https://example.com/demo/intake-form.pdf',
+          },
+        })
+      }
+
+      lastMessageAt = messageTime
+      lastPreview = body.slice(0, 140)
+    }
+
+    await prisma.communicationConversation.update({
+      where: { id: conversation.id },
+      data: {
+        lastMessageAt,
+        lastMessagePreview: lastPreview,
+      },
+    })
+
+    if (i % 2 === 0) {
+      await prisma.communicationAssignment.create({
+        data: {
+          practiceId: practice.id,
+          conversationId: conversation.id,
+          assignedUserId: admin.id,
+          status: 'active',
+          assignedByUserId: admin.id,
+        },
+      })
+    } else if (i % 3 === 0) {
+      await prisma.communicationAssignment.create({
+        data: {
+          practiceId: practice.id,
+          conversationId: conversation.id,
+          assignedTeamId: team.id,
+          status: 'active',
+          assignedByUserId: admin.id,
+        },
+      })
+    }
+  }
+
+  console.log('Created communications demo data')
+
   console.log('✅ Seeding completed!')
   console.log('\nLogin credentials:')
   console.log('Email: admin@demopractice.com')
@@ -377,6 +526,7 @@ async function main() {
   console.log('- Brand profile created')
   console.log('- 2 email templates (1 published, 1 draft)')
   console.log('- 3 SMS templates (2 published, 1 draft)')
+  console.log('- 20 communications conversations')
 }
 
 main()

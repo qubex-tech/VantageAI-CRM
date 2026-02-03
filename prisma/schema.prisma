@@ -70,6 +70,12 @@ model Practice {
   guardianRelationships    GuardianRelationship[]
   tasks                    Task[]
   taskComments             TaskComment[]
+  teams                    Team[]
+  communicationConversations CommunicationConversation[]
+  communicationMessages      CommunicationMessage[]
+  communicationAssignments   CommunicationAssignment[]
+  communicationAttachments   CommunicationAttachment[]
+  communicationTriggers      CommunicationTrigger[]
 
   @@index([slug])
   @@index([portalDomain])
@@ -102,6 +108,10 @@ model User {
   formRequestsCreated              FormRequest[]              @relation("FormRequestCreator")
   taskComments                     TaskComment[]
   integrationAuditLogs             IntegrationAuditLog[]
+  teamMemberships                  TeamMember[]
+  communicationMessages            CommunicationMessage[]
+  communicationAssignments         CommunicationAssignment[] @relation("CommunicationAssignmentUser")
+  communicationAssignmentActions   CommunicationAssignment[] @relation("CommunicationAssignmentActor")
 
   @@index([practiceId])
   @@index([email])
@@ -174,6 +184,8 @@ model Patient {
   portalTasks              PatientTask[]
   formRequests             FormRequest[]
   tasks                    Task[]
+  communicationConversations CommunicationConversation[]
+  communicationMessages      CommunicationMessage[]
   formSubmissions          FormSubmission[]
   documentUploads          DocumentUpload[]
   reviewRequests           ReviewRequest[]
@@ -960,6 +972,163 @@ model ConversationThread {
   @@index([practiceId, lastMessageAt])
   @@index([status])
   @@map("conversation_threads")
+}
+
+// ========================================
+// COMMUNICATIONS MODULE MODELS
+// ========================================
+
+model Team {
+  id          String   @id @default(uuid())
+  practiceId  String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  practice    Practice       @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  members     TeamMember[]
+  assignments CommunicationAssignment[]
+
+  @@unique([practiceId, name])
+  @@index([practiceId])
+  @@map("teams")
+}
+
+model TeamMember {
+  id        String   @id @default(uuid())
+  teamId    String
+  userId    String
+  role      String?
+  createdAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([teamId])
+  @@index([userId])
+  @@map("team_members")
+}
+
+model CommunicationConversation {
+  id                 String   @id @default(uuid())
+  practiceId         String
+  patientId          String
+  channel            String // 'sms', 'secure', 'voice', 'video'
+  status             String   @default("open") // 'open', 'pending', 'resolved'
+  subject            String?
+  lastMessageAt      DateTime?
+  lastMessagePreview String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  practice   Practice                     @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient    Patient                      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  messages   CommunicationMessage[]
+  assignments CommunicationAssignment[]
+
+  @@index([practiceId])
+  @@index([practiceId, status])
+  @@index([practiceId, channel])
+  @@index([practiceId, lastMessageAt])
+  @@index([patientId])
+  @@map("communication_conversations")
+}
+
+model CommunicationMessage {
+  id               String    @id @default(uuid())
+  practiceId       String
+  conversationId   String
+  patientId        String
+  authorUserId     String?
+  direction        String // 'inbound', 'outbound', 'internal'
+  type             String // 'message', 'note', 'system'
+  body             String
+  channel          String // 'sms', 'secure', 'voice', 'video'
+  deliveryStatus   String   @default("queued") // 'queued', 'sent', 'delivered', 'failed'
+  metadata         Json?
+  intent           String?
+  intentConfidence Float?
+  readAt           DateTime?
+  createdAt        DateTime @default(now())
+
+  practice     Practice                  @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  conversation CommunicationConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  patient      Patient                   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  author       User?                     @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
+  attachments  CommunicationAttachment[]
+
+  @@index([practiceId])
+  @@index([conversationId])
+  @@index([patientId])
+  @@index([authorUserId])
+  @@index([createdAt])
+  @@index([deliveryStatus])
+  @@map("communication_messages")
+}
+
+model CommunicationAssignment {
+  id               String   @id @default(uuid())
+  practiceId       String
+  conversationId   String
+  assignedUserId   String?
+  assignedTeamId   String?
+  status           String   @default("active") // 'active', 'pending', 'resolved'
+  assignedByUserId String?
+  assignedAt       DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  practice     Practice                  @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  conversation CommunicationConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  assignedUser User?                     @relation("CommunicationAssignmentUser", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  assignedTeam Team?                     @relation(fields: [assignedTeamId], references: [id], onDelete: SetNull)
+  assignedBy   User?                     @relation("CommunicationAssignmentActor", fields: [assignedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([practiceId])
+  @@index([conversationId])
+  @@index([assignedUserId])
+  @@index([assignedTeamId])
+  @@index([status])
+  @@map("communication_assignments")
+}
+
+model CommunicationAttachment {
+  id         String   @id @default(uuid())
+  practiceId String
+  messageId  String
+  fileName   String
+  mimeType   String?
+  fileSize   Int?
+  storageKey String
+  url        String?
+  createdAt  DateTime @default(now())
+
+  practice Practice             @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  message  CommunicationMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId])
+  @@index([messageId])
+  @@map("communication_attachments")
+}
+
+model CommunicationTrigger {
+  id             String   @id @default(uuid())
+  practiceId     String
+  name           String
+  eventType      String
+  conditionsJson Json
+  actionsJson    Json
+  enabled        Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId])
+  @@index([practiceId, eventType])
+  @@index([enabled])
+  @@map("communication_triggers")
 }
 
 model PortalMessage {

@@ -298,3 +298,33 @@ export const taskSchema = z.object({
 export const taskCommentSchema = z.object({
   content: z.string().min(1, 'Comment cannot be empty').max(2000, 'Comment must be less than 2000 characters'),
 })
+
+// Communications schemas
+export const communicationMessageSendSchema = z.object({
+  conversationId: z.string().uuid(),
+  body: z.string().min(1),
+  channel: z.enum(['sms', 'secure', 'voice', 'video']).optional(),
+  attachments: z.array(
+    z.object({
+      fileName: z.string().min(1),
+      mimeType: z.string().optional().nullable(),
+      fileSize: z.number().int().positive().optional().nullable(),
+      storageKey: z.string().min(1),
+      url: z.string().optional().nullable(),
+    })
+  ).optional(),
+})
+
+export const communicationAssignmentSchema = z.object({
+  assigneeType: z.enum(['user', 'team']),
+  assigneeId: z.string().uuid(),
+  status: z.enum(['active', 'pending', 'resolved']).optional(),
+})
+
+export const communicationResolveSchema = z.object({
+  status: z.enum(['resolved']).default('resolved'),
+})
+
+export const communicationNoteSchema = z.object({
+  body: z.string().min(1),
+})
