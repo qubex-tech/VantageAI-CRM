@@ -64,7 +64,8 @@ export function NewMessagePanel({
   }, [selectedPatient])
 
   return (
-    <div className="w-full max-w-md space-y-4">
+    <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="space-y-4">
       <div>
         <div className="text-base font-semibold text-slate-900">New message</div>
         <p className="text-sm text-slate-500">
@@ -144,9 +145,11 @@ export function NewMessagePanel({
         }}
         disabled={!canSend || loading}
         size="sm"
+        className="w-full"
       >
         Start conversation
       </Button>
+      </div>
     </div>
   )
 }

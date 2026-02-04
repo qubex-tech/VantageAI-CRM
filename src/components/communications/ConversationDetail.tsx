@@ -25,7 +25,7 @@ export function ConversationDetail({
 }) {
   if (!conversation && !loading) {
     return (
-      <section className="flex flex-1 items-center justify-center">
+      <section className="flex flex-1 items-center justify-center px-6 py-8">
         <NewMessagePanel onStart={onStartConversation} loading={sending} />
       </section>
     )
