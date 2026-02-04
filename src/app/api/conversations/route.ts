@@ -4,6 +4,8 @@ import { prisma } from '@/lib/db'
 import { requireAuth, rateLimit } from '@/lib/middleware'
 import { communicationStartSchema } from '@/lib/validations'
 import { getChannelAdapter } from '@/lib/communications/adapters'
+import { getTwilioClient } from '@/lib/twilio'
+import { getSendgridClient } from '@/lib/sendgrid'
 
 export const dynamic = 'force-dynamic'
 
@@ -68,12 +70,23 @@ export async function GET(req: NextRequest) {
     }
 
     if (assignee === 'me') {
-      where.assignments = {
-        some: {
-          status: 'active',
-          assignedUserId: user.id,
+      where.OR = [
+        {
+          assignments: {
+            some: {
+              status: 'active',
+              assignedUserId: user.id,
+            },
+          },
         },
-      }
+        {
+          messages: {
+            some: {
+              authorUserId: user.id,
+            },
+          },
+        },
+      ]
     } else if (assignee === 'team') {
       const teamMemberships = await prisma.teamMember.findMany({
         where: {
@@ -86,12 +99,7 @@ export async function GET(req: NextRequest) {
       if (teamIds.length === 0) {
         return NextResponse.json({ data: { conversations: [] } })
       }
-      where.assignments = {
-        some: {
-          status: 'active',
-          assignedTeamId: { in: teamIds },
-        },
-      }
+      // Team view shows all practice conversations.
     }
 
     const conversations = await prisma.communicationConversation.findMany({
@@ -203,24 +211,69 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Patient not found' }, { status: 404 })
     }
 
-    const adapter = getChannelAdapter(validated.channel)
     const recipient = {
       phone: patient.primaryPhone || patient.phone,
       email: patient.email,
     }
 
-    if (!adapter.validateRecipient(recipient)) {
-      return NextResponse.json({ error: 'Invalid recipient for channel' }, { status: 400 })
+    let delivery = { status: 'sent' as const, metadata: undefined as Record<string, unknown> | undefined }
+    if (validated.channel === 'sms') {
+      if (!recipient.phone) {
+        return NextResponse.json({ error: 'Patient phone is required for SMS' }, { status: 400 })
+      }
+      const twilioClient = await getTwilioClient(practiceId)
+      const result = await twilioClient.sendSms({
+        to: recipient.phone,
+        body: validated.body,
+      })
+      if (!result.success) {
+        return NextResponse.json(
+          { error: result.error || 'Failed to send SMS via Twilio' },
+          { status: 500 }
+        )
+      }
+      delivery = {
+        status: 'sent',
+        metadata: { providerMessageId: result.messageId },
+      }
+    } else if (validated.channel === 'email') {
+      if (!recipient.email) {
+        return NextResponse.json({ error: 'Patient email is required for email' }, { status: 400 })
+      }
+      const sendgridClient = await getSendgridClient(practiceId)
+      const result = await sendgridClient.sendEmail({
+        to: recipient.email,
+        subject: validated.subject || 'Message from your care team',
+        textContent: validated.body,
+      })
+      if (!result.success) {
+        return NextResponse.json(
+          { error: result.error || 'Failed to send email via SendGrid' },
+          { status: 500 }
+        )
+      }
+      delivery = {
+        status: 'sent',
+        metadata: { providerMessageId: result.messageId },
+      }
+    } else {
+      const adapter = getChannelAdapter(validated.channel)
+      if (!adapter.validateRecipient(recipient)) {
+        return NextResponse.json({ error: 'Invalid recipient for channel' }, { status: 400 })
+      }
+      const result = await adapter.sendMessage({
+        practiceId,
+        conversationId: '',
+        patientId: patient.id,
+        channel: validated.channel,
+        body: validated.body,
+        recipient,
+      })
+      delivery = {
+        status: result.status,
+        metadata: result.metadata,
+      }
     }
-
-    const delivery = await adapter.sendMessage({
-      practiceId,
-      conversationId: '',
-      patientId: patient.id,
-      channel: validated.channel,
-      body: validated.body,
-      recipient,
-    })
 
     const { conversationId, messageId } = await prisma.$transaction(async (tx) => {
       const existing = await tx.communicationConversation.findFirst({
@@ -265,6 +318,7 @@ export async function POST(req: NextRequest) {
           lastMessageAt: new Date(),
           lastMessagePreview: validated.body.slice(0, 140),
           subject: validated.subject || conversation.subject || undefined,
+          channel: validated.channel,
         },
       })
 

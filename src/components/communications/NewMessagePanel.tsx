@@ -31,6 +31,7 @@ export function NewMessagePanel({
   const [patients, setPatients] = useState<PatientOption[]>([])
   const [selectedPatient, setSelectedPatient] = useState<PatientOption | null>(null)
   const [channel, setChannel] = useState('sms')
+  const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [searching, setSearching] = useState(false)
 
@@ -126,6 +127,15 @@ export function NewMessagePanel({
         ))}
       </div>
 
+      {channel === 'email' && (
+        <Input
+          value={subject}
+          onChange={(event) => setSubject(event.target.value)}
+          placeholder="Subject"
+          className="h-9 text-sm"
+        />
+      )}
+
       <Textarea
         value={body}
         onChange={(event) => setBody(event.target.value)}
@@ -140,8 +150,10 @@ export function NewMessagePanel({
             patientId: selectedPatient.id,
             channel,
             body: body.trim(),
+            subject: channel === 'email' ? subject.trim() : undefined,
           })
           setBody('')
+          setSubject('')
         }}
         disabled={!canSend || loading}
         size="sm"

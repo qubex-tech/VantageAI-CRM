@@ -11,7 +11,7 @@ const viewToFilters: Record<ConversationView, { status?: string; assignee?: stri
   Pending: { status: 'pending' },
   Resolved: { status: 'resolved' },
   Mine: { assignee: 'me' },
-  Team: { assignee: 'all' },
+  Team: { assignee: 'team' },
 }
 
 async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
@@ -182,7 +182,7 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
   }
 
   const handleSendMessage = useCallback(
-    async (body: string) => {
+    async (payload: { body: string; channel: string; subject?: string }) => {
       if (!selectedId) return
       const tempId = `temp-${Date.now()}`
       pendingMessageIds.current.add(tempId)
@@ -191,10 +191,10 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
         {
           id: tempId,
           senderType: 'staff',
-          body,
+          body: payload.body,
           createdAt: new Date().toISOString(),
           isInternalNote: false,
-          channel: selectedConversation?.channel || 'sms',
+          channel: payload.channel || selectedConversation?.channel || 'sms',
         },
       ])
       setSending(true)
@@ -205,7 +205,9 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             conversationId: selectedId,
-            body,
+            body: payload.body,
+            channel: payload.channel,
+            subject: payload.subject,
           }),
         })
         await loadConversationDetail(selectedId)
@@ -217,11 +219,11 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
         setSending(false)
       }
     },
-    [selectedId, loadConversationDetail, loadConversations]
+    [selectedId, loadConversationDetail, loadConversations, selectedConversation]
   )
 
   const handleStartConversation = useCallback(
-    async (payload: { patientId: string; channel: string; body: string }) => {
+    async (payload: { patientId: string; channel: string; body: string; subject?: string }) => {
       setSending(true)
       try {
         const data = await fetchJson<{ data: { conversationId: string } }>(`/api/conversations`, {
@@ -254,6 +256,11 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
         onSelect={handleSelectConversation}
         onLoadMore={() => setLimit((prev) => prev + 30)}
         loadingMore={loadingMore}
+        onNewConversation={() => {
+          setSelectedId(null)
+          setSelectedConversation(null)
+          setMessages([])
+        }}
       />
       <ConversationDetail
         conversation={selectedConversation}

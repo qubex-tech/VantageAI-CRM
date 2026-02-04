@@ -4,6 +4,8 @@ import { Prisma } from '@prisma/client'
 import { requireAuth, rateLimit } from '@/lib/middleware'
 import { communicationMessageSendSchema } from '@/lib/validations'
 import { getChannelAdapter } from '@/lib/communications/adapters'
+import { getTwilioClient } from '@/lib/twilio'
+import { getSendgridClient } from '@/lib/sendgrid'
 import { emitCommunicationEvent } from '@/lib/communications/events'
 import { ensureCommunicationRuntime } from '@/lib/communications/runtime'
 
@@ -47,25 +49,70 @@ export async function POST(req: NextRequest) {
     }
 
     const channel = validated.channel || (conversation.channel as any)
-    const adapter = getChannelAdapter(channel)
     const recipient = {
       phone: conversation.patient.primaryPhone || conversation.patient.phone,
       email: conversation.patient.email,
     }
 
-    if (!adapter.validateRecipient(recipient)) {
-      return NextResponse.json({ error: 'Invalid recipient for channel' }, { status: 400 })
+    let delivery = { status: 'sent' as const, metadata: undefined as Record<string, unknown> | undefined }
+    if (channel === 'sms') {
+      if (!recipient.phone) {
+        return NextResponse.json({ error: 'Patient phone is required for SMS' }, { status: 400 })
+      }
+      const twilioClient = await getTwilioClient(practiceId)
+      const result = await twilioClient.sendSms({
+        to: recipient.phone,
+        body: validated.body,
+      })
+      if (!result.success) {
+        return NextResponse.json(
+          { error: result.error || 'Failed to send SMS via Twilio' },
+          { status: 500 }
+        )
+      }
+      delivery = {
+        status: 'sent',
+        metadata: { providerMessageId: result.messageId },
+      }
+    } else if (channel === 'email') {
+      if (!recipient.email) {
+        return NextResponse.json({ error: 'Patient email is required for email' }, { status: 400 })
+      }
+      const sendgridClient = await getSendgridClient(practiceId)
+      const result = await sendgridClient.sendEmail({
+        to: recipient.email,
+        subject: validated.subject || 'Message from your care team',
+        textContent: validated.body,
+      })
+      if (!result.success) {
+        return NextResponse.json(
+          { error: result.error || 'Failed to send email via SendGrid' },
+          { status: 500 }
+        )
+      }
+      delivery = {
+        status: 'sent',
+        metadata: { providerMessageId: result.messageId },
+      }
+    } else {
+      const adapter = getChannelAdapter(channel)
+      if (!adapter.validateRecipient(recipient)) {
+        return NextResponse.json({ error: 'Invalid recipient for channel' }, { status: 400 })
+      }
+      const result = await adapter.sendMessage({
+        practiceId,
+        conversationId: conversation.id,
+        patientId: conversation.patient.id,
+        channel,
+        body: validated.body,
+        recipient,
+        attachments: validated.attachments,
+      })
+      delivery = {
+        status: result.status,
+        metadata: result.metadata,
+      }
     }
-
-    const delivery = await adapter.sendMessage({
-      practiceId,
-      conversationId: conversation.id,
-      patientId: conversation.patient.id,
-      channel,
-      body: validated.body,
-      recipient,
-      attachments: validated.attachments,
-    })
 
     const message = await prisma.$transaction(async (tx) => {
       const created = await tx.communicationMessage.create({
@@ -104,6 +151,8 @@ export async function POST(req: NextRequest) {
         data: {
           lastMessageAt: new Date(),
           lastMessagePreview: validated.body.slice(0, 140),
+          channel,
+          subject: validated.subject || conversation.subject || undefined,
         },
       })
 

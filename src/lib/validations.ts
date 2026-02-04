@@ -304,6 +304,7 @@ export const communicationMessageSendSchema = z.object({
   conversationId: z.string().uuid(),
   body: z.string().min(1),
   channel: z.enum(['sms', 'email', 'secure', 'voice', 'video']).optional(),
+  subject: z.string().optional().nullable(),
   attachments: z.array(
     z.object({
       fileName: z.string().min(1),

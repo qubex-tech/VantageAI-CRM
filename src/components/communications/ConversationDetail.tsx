@@ -18,9 +18,9 @@ export function ConversationDetail({
   conversation: Conversation | null
   messages: Message[]
   loading: boolean
-  onSendMessage: (body: string) => void
+  onSendMessage: (payload: { body: string; channel: string; subject?: string }) => void
   onAssignClick: () => void
-  onStartConversation: (payload: { patientId: string; channel: string; body: string }) => Promise<void>
+  onStartConversation: (payload: { patientId: string; channel: string; body: string; subject?: string }) => Promise<void>
   sending: boolean
 }) {
   if (!conversation && !loading) {
@@ -67,7 +67,7 @@ export function ConversationDetail({
       </div>
 
       <div className="border-t border-slate-200 px-8 py-4">
-        <Composer onSend={onSendMessage} disabled={sending} />
+        <Composer onSend={onSendMessage} disabled={sending} defaultChannel={conversation?.channel} />
       </div>
     </section>
   )

@@ -12,6 +12,7 @@ export function ConversationList({
   onSelect,
   onLoadMore,
   loadingMore,
+  onNewConversation,
 }: {
   conversations: Conversation[]
   selectedId: string | null
@@ -19,6 +20,7 @@ export function ConversationList({
   onSelect: (id: string) => void
   onLoadMore: () => void
   loadingMore: boolean
+  onNewConversation: () => void
 }) {
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   const lastLoadRef = useRef(0)
@@ -49,7 +51,15 @@ export function ConversationList({
 
   return (
     <section className="flex h-full w-[360px] flex-col border-r border-slate-200">
-      <div className="px-6 py-4 text-sm font-medium text-slate-500">Conversations</div>
+      <div className="flex items-center justify-between px-6 py-4 text-sm font-medium text-slate-500">
+        <span>Conversations</span>
+        <button
+          onClick={onNewConversation}
+          className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:text-slate-800"
+        >
+          New
+        </button>
+      </div>
       <div className="flex-1 overflow-y-auto">
         {loading ? (
           <div className="space-y-4 px-6 py-4">
