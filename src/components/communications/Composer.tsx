@@ -91,7 +91,7 @@ export function Composer({
           Attach
         </button>
         <input ref={fileInputRef} type="file" className="hidden" />
-        <Button size="sm" disabled={disabled || !value.trim() || isSending}>
+        <Button size="sm" onClick={handleSend} disabled={disabled || !value.trim() || isSending}>
           {isSending ? (
             <span className="flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
