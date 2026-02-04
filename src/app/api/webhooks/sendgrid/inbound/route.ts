@@ -5,7 +5,11 @@ import { logInboundCommunication } from '@/lib/communications/logging'
 function extractEmail(value?: string | null) {
   if (!value) return null
   const match = value.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)
-  return match ? match[0].toLowerCase() : null
+  return match ? match[0].toLowerCase().trim() : null
+}
+
+function normalizeEmail(email: string) {
+  return email.toLowerCase().trim()
 }
 
 function stripHtml(html?: string | null) {
@@ -35,10 +39,15 @@ export async function POST(req: NextRequest) {
     if (!fromEmail || !toEmail) {
       return NextResponse.json({ success: true })
     }
+    const normalizedFrom = normalizeEmail(fromEmail)
+    const normalizedTo = normalizeEmail(toEmail)
 
     const integration = await prisma.sendgridIntegration.findFirst({
       where: {
-        fromEmail: toEmail,
+        fromEmail: {
+          equals: normalizedTo,
+          mode: 'insensitive',
+        },
         isActive: true,
       },
       select: { practiceId: true },
@@ -52,7 +61,10 @@ export async function POST(req: NextRequest) {
       where: {
         practiceId: integration.practiceId,
         deletedAt: null,
-        email: fromEmail,
+        email: {
+          equals: normalizedFrom,
+          mode: 'insensitive',
+        },
       },
       select: { id: true },
     })
@@ -69,8 +81,8 @@ export async function POST(req: NextRequest) {
       body,
       subject: subject || undefined,
       metadata: {
-        from: fromRaw,
-        to: toRaw,
+        from: normalizedFrom,
+        to: normalizedTo,
         providerMessageId: messageId,
       },
     })
