@@ -69,6 +69,9 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
       const shaped = items.map((item) => ({
         id: item.id,
         patientName: item.patient?.name ?? 'Unknown',
+        patientEmail: item.patient?.email ?? null,
+        patientPhone: item.patient?.primaryPhone ?? null,
+        lastMessageAt: item.lastMessageAt || item.updatedAt,
         lastMessageSnippet: item.lastMessagePreview ?? '',
         channel: item.channel,
         unread: Boolean(item.unread),
