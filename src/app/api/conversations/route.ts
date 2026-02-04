@@ -273,7 +273,6 @@ export async function POST(req: NextRequest) {
         where: {
           practiceId,
           patientId: patient.id,
-          channel: validated.channel,
           status: { in: ['open', 'pending'] },
         },
         orderBy: { updatedAt: 'desc' },

@@ -35,7 +35,6 @@ export async function logOutboundCommunication({
       where: {
         practiceId,
         patientId,
-        channel,
         status: { in: ['open', 'pending'] },
       },
       orderBy: { updatedAt: 'desc' },
@@ -74,6 +73,7 @@ export async function logOutboundCommunication({
         lastMessageAt: new Date(),
         lastMessagePreview: body.slice(0, 140),
         subject: subject || conversation.subject || undefined,
+        channel,
       },
     })
 
@@ -108,7 +108,6 @@ export async function logInboundCommunication({
       where: {
         practiceId,
         patientId,
-        channel,
         status: { in: ['open', 'pending'] },
       },
       orderBy: { updatedAt: 'desc' },
@@ -147,6 +146,7 @@ export async function logInboundCommunication({
         lastMessagePreview: body.slice(0, 140),
         subject: subject || conversation.subject || undefined,
         status: 'open',
+        channel,
       },
     })
 
