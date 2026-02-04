@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/middleware'
 import { getTwilioClient } from '@/lib/twilio'
 import { prisma } from '@/lib/db'
 import { logPatientActivity } from '@/lib/patient-activity'
+import { logOutboundCommunication } from '@/lib/communications/logging'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest) {
       ? `${String(message).trim().slice(0, 160)}...`
       : String(message).trim()
 
+    let resolvedPatientId: string | null = null
     try {
       if (patientId && typeof patientId === 'string' && patientId.trim() !== '') {
         await logPatientActivity({
@@ -73,6 +75,7 @@ export async function POST(req: NextRequest) {
             userId: user.id,
           },
         })
+        resolvedPatientId = patientId.trim()
       } else {
         const patient = await prisma.patient.findFirst({
           where: {
@@ -99,10 +102,29 @@ export async function POST(req: NextRequest) {
               userId: user.id,
             },
           })
+          resolvedPatientId = patient.id
         }
       }
     } catch (error) {
       console.error('[SMS SEND] Error logging SMS activity:', error)
+    }
+
+    if (resolvedPatientId) {
+      try {
+        await logOutboundCommunication({
+          practiceId,
+          patientId: resolvedPatientId,
+          channel: 'sms',
+          body: String(message).trim(),
+          userId: user.id,
+          metadata: {
+            to,
+            providerMessageId: result.messageId,
+          },
+        })
+      } catch (error) {
+        console.error('[SMS SEND] Error logging inbox message:', error)
+      }
     }
 
     return NextResponse.json({

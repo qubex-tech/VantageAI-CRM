@@ -6,6 +6,7 @@ import type { Conversation } from './types'
 
 const channelLabel: Record<string, string> = {
   sms: 'SMS',
+  email: 'Email',
   secure: 'Secure',
   voice: 'Voice',
   video: 'Video',

@@ -11,7 +11,7 @@ const viewToFilters: Record<ConversationView, { status?: string; assignee?: stri
   Pending: { status: 'pending' },
   Resolved: { status: 'resolved' },
   Mine: { assignee: 'me' },
-  Team: { assignee: 'team' },
+  Team: { assignee: 'all' },
 }
 
 async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
@@ -111,6 +111,7 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
           body: message.body,
           createdAt: message.createdAt,
           isInternalNote: message.type === 'note' || message.direction === 'internal',
+          channel: message.channel,
         }
       })
       setMessages(shapedMessages)
@@ -193,6 +194,7 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
           body,
           createdAt: new Date().toISOString(),
           isInternalNote: false,
+          channel: selectedConversation?.channel || 'sms',
         },
       ])
       setSending(true)
@@ -218,6 +220,26 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
     [selectedId, loadConversationDetail, loadConversations]
   )
 
+  const handleStartConversation = useCallback(
+    async (payload: { patientId: string; channel: string; body: string }) => {
+      setSending(true)
+      try {
+        const data = await fetchJson<{ data: { conversationId: string } }>(`/api/conversations`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+        const conversationId = data.data.conversationId
+        setSelectedId(conversationId)
+        await loadConversations()
+        await loadConversationDetail(conversationId)
+      } finally {
+        setSending(false)
+      }
+    },
+    [loadConversations, loadConversationDetail]
+  )
+
   const handleAssignClick = useCallback(() => {
     // Placeholder for assignee selector; future hook into assignment UI.
   }, [])
@@ -239,6 +261,7 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
         loading={loadingMessages}
         onSendMessage={handleSendMessage}
         onAssignClick={handleAssignClick}
+        onStartConversation={handleStartConversation}
         sending={sending}
       />
     </div>

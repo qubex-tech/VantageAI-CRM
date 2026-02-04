@@ -26,6 +26,19 @@ export class SmsAdapter implements ChannelAdapter {
   }
 }
 
+export class EmailAdapter implements ChannelAdapter {
+  channel: CommunicationChannel = 'email'
+  supportsAttachments = true
+
+  validateRecipient(recipient: AdapterSendInput['recipient']) {
+    return hasEmail(recipient)
+  }
+
+  async sendMessage(_input: AdapterSendInput) {
+    return simulateDelivery()
+  }
+}
+
 export class SecureMessageAdapter implements ChannelAdapter {
   channel: CommunicationChannel = 'secure'
   supportsAttachments = true
@@ -67,6 +80,7 @@ export class VideoAdapter implements ChannelAdapter {
 
 const adapters: Record<CommunicationChannel, ChannelAdapter> = {
   sms: new SmsAdapter(),
+  email: new EmailAdapter(),
   secure: new SecureMessageAdapter(),
   voice: new VoiceAdapter(),
   video: new VideoAdapter(),

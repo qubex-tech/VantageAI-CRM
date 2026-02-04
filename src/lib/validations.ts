@@ -303,7 +303,7 @@ export const taskCommentSchema = z.object({
 export const communicationMessageSendSchema = z.object({
   conversationId: z.string().uuid(),
   body: z.string().min(1),
-  channel: z.enum(['sms', 'secure', 'voice', 'video']).optional(),
+  channel: z.enum(['sms', 'email', 'secure', 'voice', 'video']).optional(),
   attachments: z.array(
     z.object({
       fileName: z.string().min(1),
@@ -313,6 +313,13 @@ export const communicationMessageSendSchema = z.object({
       url: z.string().optional().nullable(),
     })
   ).optional(),
+})
+
+export const communicationStartSchema = z.object({
+  patientId: z.string().uuid(),
+  body: z.string().min(1),
+  channel: z.enum(['sms', 'email', 'secure', 'voice', 'video']),
+  subject: z.string().optional().nullable(),
 })
 
 export const communicationAssignmentSchema = z.object({

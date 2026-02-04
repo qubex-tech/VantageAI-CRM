@@ -1,4 +1,4 @@
-export type CommunicationChannel = 'sms' | 'secure' | 'voice' | 'video'
+export type CommunicationChannel = 'sms' | 'email' | 'secure' | 'voice' | 'video'
 export type ConversationStatus = 'open' | 'pending' | 'resolved'
 export type MessageType = 'message' | 'note' | 'system'
 export type MessageDirection = 'inbound' | 'outbound' | 'internal'

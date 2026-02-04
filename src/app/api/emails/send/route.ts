@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/middleware'
 import { getSendgridClient } from '@/lib/sendgrid'
 import { prisma } from '@/lib/db'
 import { logEmailActivity } from '@/lib/patient-activity'
+import { logOutboundCommunication } from '@/lib/communications/logging'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +16,9 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
 
     const { to, toName, subject, htmlContent, textContent, patientId } = body
+    const bodyText =
+      textContent ||
+      (htmlContent ? String(htmlContent).replace(/<[^>]*>/g, '') : '')
 
     console.log('[EMAIL SEND] Received request body:', { to, subject, hasPatientId: !!patientId, patientId })
 
@@ -66,6 +70,7 @@ export async function POST(req: NextRequest) {
 
     // Log email activity if patientId is provided, or find patient by email
     // IMPORTANT: Do this BEFORE returning the response to ensure it completes
+    let resolvedPatientId: string | null = null
     try {
       if (patientId && typeof patientId === 'string' && patientId.trim() !== '') {
         // Direct patient ID provided
@@ -78,6 +83,7 @@ export async function POST(req: NextRequest) {
           userId: user.id,
         })
         console.log('[EMAIL SEND] Successfully logged email activity for patientId:', patientId)
+        resolvedPatientId = patientId.trim()
       } else if (to) {
         // Try to find patient by email address
         console.log('[EMAIL SEND] Looking up patient by email:', to)
@@ -100,6 +106,7 @@ export async function POST(req: NextRequest) {
             userId: user.id,
           })
           console.log('[EMAIL SEND] Successfully logged email activity')
+          resolvedPatientId = patient.id
         } else {
           console.log('[EMAIL SEND] No patient found with email:', to)
         }
@@ -107,6 +114,26 @@ export async function POST(req: NextRequest) {
     } catch (error) {
       // Don't fail the request if activity logging fails, but log the error
       console.error('[EMAIL SEND] Error logging email activity:', error)
+    }
+
+    if (resolvedPatientId) {
+      try {
+        await logOutboundCommunication({
+          practiceId,
+          patientId: resolvedPatientId,
+          channel: 'email',
+          body: bodyText || String(subject || ''),
+          userId: user.id,
+          subject: subject || undefined,
+          metadata: {
+            to,
+            providerMessageId: result.messageId,
+            subject,
+          },
+        })
+      } catch (error) {
+        console.error('[EMAIL SEND] Error logging inbox message:', error)
+      }
     }
 
     return NextResponse.json({

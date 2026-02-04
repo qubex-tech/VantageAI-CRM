@@ -1,0 +1,87 @@
+import { Prisma } from '@prisma/client'
+import { prisma } from '@/lib/db'
+import type { CommunicationChannel } from './types'
+
+interface LogOutboundInput {
+  practiceId: string
+  patientId: string
+  channel: CommunicationChannel
+  body: string
+  userId: string
+  subject?: string | null
+  metadata?: Record<string, unknown>
+}
+
+export async function logOutboundCommunication({
+  practiceId,
+  patientId,
+  channel,
+  body,
+  userId,
+  subject,
+  metadata,
+}: LogOutboundInput) {
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.communicationConversation.findFirst({
+      where: {
+        practiceId,
+        patientId,
+        channel,
+        status: { in: ['open', 'pending'] },
+      },
+      orderBy: { updatedAt: 'desc' },
+    })
+
+    const conversation =
+      existing ||
+      (await tx.communicationConversation.create({
+        data: {
+          practiceId,
+          patientId,
+          channel,
+          status: 'open',
+          subject: subject || undefined,
+        },
+      }))
+
+    const message = await tx.communicationMessage.create({
+      data: {
+        practiceId,
+        conversationId: conversation.id,
+        patientId,
+        authorUserId: userId,
+        direction: 'outbound',
+        type: 'message',
+        body,
+        channel,
+        deliveryStatus: 'sent',
+        metadata: metadata ? (metadata as Prisma.InputJsonValue) : undefined,
+      },
+    })
+
+    await tx.communicationConversation.update({
+      where: { id: conversation.id },
+      data: {
+        lastMessageAt: new Date(),
+        lastMessagePreview: body.slice(0, 140),
+        subject: subject || conversation.subject || undefined,
+      },
+    })
+
+    await tx.auditLog.create({
+      data: {
+        practiceId,
+        userId,
+        action: 'message_sent',
+        resourceType: 'conversation',
+        resourceId: conversation.id,
+        changes: {
+          messageId: message.id,
+          channel,
+        } as Prisma.InputJsonValue,
+      },
+    })
+
+    return { conversationId: conversation.id, messageId: message.id }
+  })
+}

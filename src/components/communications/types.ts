@@ -17,4 +17,5 @@ export interface Message {
   body: string
   createdAt: string
   isInternalNote: boolean
+  channel: 'sms' | 'email' | 'secure' | 'voice' | 'video' | string
 }

@@ -2,7 +2,7 @@
 
 import { MessageTimeline } from './MessageTimeline'
 import { Composer } from './Composer'
-import { EmptyState } from './EmptyState'
+import { NewMessagePanel } from './NewMessagePanel'
 import { Button } from '@/components/ui/button'
 import type { Conversation, Message } from './types'
 
@@ -12,6 +12,7 @@ export function ConversationDetail({
   loading,
   onSendMessage,
   onAssignClick,
+  onStartConversation,
   sending,
 }: {
   conversation: Conversation | null
@@ -19,15 +20,13 @@ export function ConversationDetail({
   loading: boolean
   onSendMessage: (body: string) => void
   onAssignClick: () => void
+  onStartConversation: (payload: { patientId: string; channel: string; body: string }) => Promise<void>
   sending: boolean
 }) {
   if (!conversation && !loading) {
     return (
       <section className="flex flex-1 items-center justify-center">
-        <EmptyState
-          title="Select a conversation"
-          description="Choose a message thread to see the details."
-        />
+        <NewMessagePanel onStart={onStartConversation} loading={sending} />
       </section>
     )
   }
