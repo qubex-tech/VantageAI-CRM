@@ -35,6 +35,7 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [sending, setSending] = useState(false)
   const pendingMessageIds = useRef(new Set<string>())
+  const lastNotifiedAtRef = useRef<string | null>(null)
 
   const selectedIndex = useMemo(() => {
     if (!selectedId) return -1
@@ -76,6 +77,17 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
         assignee: item.assignee?.name ?? null,
       }))
       setConversations(shaped)
+      const newestUnread = shaped.find((item) => item.unread && item.lastMessageAt)
+      if (newestUnread?.lastMessageAt) {
+        if (lastNotifiedAtRef.current !== newestUnread.lastMessageAt) {
+          if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+            new Notification(`New message from ${newestUnread.patientName}`, {
+              body: newestUnread.lastMessageSnippet || 'New message received',
+            })
+          }
+          lastNotifiedAtRef.current = newestUnread.lastMessageAt
+        }
+      }
       if (!selectedId && shaped.length > 0) {
         setSelectedId(shaped[0].id)
       }
@@ -168,6 +180,14 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
     }, 15000)
     return () => clearInterval(interval)
   }, [loadConversations])
+
+  useEffect(() => {
+    if (!selectedId) return
+    const interval = setInterval(() => {
+      loadConversationDetail(selectedId)
+    }, 8000)
+    return () => clearInterval(interval)
+  }, [selectedId, loadConversationDetail])
 
   useEffect(() => {
     setLimit(30)
