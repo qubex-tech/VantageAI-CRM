@@ -89,17 +89,6 @@ export async function GET(req: NextRequest) {
         },
       ]
     } else if (assignee === 'team') {
-      const teamMemberships = await prisma.teamMember.findMany({
-        where: {
-          userId: user.id,
-          team: { practiceId },
-        },
-        select: { teamId: true },
-      })
-      const teamIds = teamMemberships.map((membership) => membership.teamId)
-      if (teamIds.length === 0) {
-        return NextResponse.json({ data: { conversations: [] } })
-      }
       // Team view shows all practice conversations.
     }
 

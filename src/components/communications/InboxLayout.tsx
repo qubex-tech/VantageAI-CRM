@@ -95,7 +95,7 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
         setSelectedId(shaped[0].id)
       }
     } catch {
-      setConversations([])
+      // Keep previous list if fetch fails to avoid empty flashes.
     } finally {
       setLoadingConversations(false)
       setLoadingMore(false)
