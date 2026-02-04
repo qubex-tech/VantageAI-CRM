@@ -49,6 +49,16 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
 
   const lastUnreadCountRef = useRef(0)
 
+  const fetchUnreadCount = useCallback(async () => {
+    try {
+      const data = await fetchJson<{ data: { unreadCount: number } }>(`/api/conversations/unread-count`)
+      const count = Number(data?.data?.unreadCount ?? 0)
+      return Number.isFinite(count) ? count : 0
+    } catch {
+      return null
+    }
+  }, [])
+
   const loadConversations = useCallback(async () => {
     if (limit > 30) {
       setLoadingMore(true)
@@ -184,19 +194,48 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
   }, [unreadCount])
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      loadConversations()
-    }, 15000)
-    return () => clearInterval(interval)
-  }, [loadConversations])
+    let interval: ReturnType<typeof setInterval> | null = null
 
-  useEffect(() => {
-    if (!selectedId) return
-    const interval = setInterval(() => {
-      loadConversationDetail(selectedId)
-    }, 8000)
-    return () => clearInterval(interval)
-  }, [selectedId, loadConversationDetail])
+    const startPolling = () => {
+      if (interval) return
+      interval = setInterval(async () => {
+        const nextUnread = await fetchUnreadCount()
+        if (nextUnread === null) return
+        if (nextUnread !== lastUnreadCountRef.current) {
+          lastUnreadCountRef.current = nextUnread
+          await loadConversations()
+          if (selectedId) {
+            await loadConversationDetail(selectedId)
+          }
+        }
+      }, 15000)
+    }
+
+    const stopPolling = () => {
+      if (!interval) return
+      clearInterval(interval)
+      interval = null
+    }
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        startPolling()
+      } else {
+        stopPolling()
+        loadConversations()
+        if (selectedId) {
+          loadConversationDetail(selectedId)
+        }
+      }
+    }
+
+    handleVisibility()
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      stopPolling()
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [fetchUnreadCount, loadConversations, loadConversationDetail, selectedId])
 
   useEffect(() => {
     setLimit(30)
