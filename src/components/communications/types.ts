@@ -5,6 +5,7 @@ export interface Conversation {
   patientName: string
   patientEmail?: string | null
   patientPhone?: string | null
+  lastMessageAt?: string | null
   lastMessageSnippet: string
   channel: string
   unread: boolean
