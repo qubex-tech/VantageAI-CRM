@@ -19,6 +19,11 @@ function stripPlusTag(email: string) {
   return `${cleanLocal}@${domain}`
 }
 
+function extractDomain(email: string) {
+  const [, domain] = email.split('@')
+  return domain ? domain.toLowerCase().trim() : null
+}
+
 function stripHtml(html?: string | null) {
   if (!html) return ''
   return html.replace(/<[^>]*>/g, '').trim()
@@ -69,13 +74,29 @@ export async function POST(req: NextRequest) {
       new Set(allFrom.flatMap((email) => [email, stripPlusTag(email)]))
     )
 
-    const integration = await prisma.sendgridIntegration.findFirst({
+    let integration = await prisma.sendgridIntegration.findFirst({
       where: {
         fromEmail: { in: normalizedToCandidates },
         isActive: true,
       },
       select: { practiceId: true },
     })
+
+    if (!integration) {
+      const domain = extractDomain(normalizedToCandidates[0] || '')
+      if (domain) {
+        integration = await prisma.sendgridIntegration.findFirst({
+          where: {
+            isActive: true,
+            fromEmail: {
+              endsWith: `@${domain}`,
+              mode: 'insensitive',
+            },
+          },
+          select: { practiceId: true },
+        })
+      }
+    }
 
     if (!integration?.practiceId) {
       return NextResponse.json({ success: true })
@@ -85,7 +106,11 @@ export async function POST(req: NextRequest) {
       where: {
         practiceId: integration.practiceId,
         deletedAt: null,
-        email: { in: normalizedFromCandidates },
+        email: {
+          in: normalizedFromCandidates.concat(
+            normalizedFromCandidates.map((email) => stripPlusTag(email))
+          ),
+        },
       },
       select: { id: true },
     })
