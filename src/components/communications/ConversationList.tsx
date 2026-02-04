@@ -50,7 +50,7 @@ export function ConversationList({
   }, [loading, onLoadMore, conversations.length])
 
   return (
-    <section className="flex h-full w-[360px] flex-col border-r border-slate-200">
+    <section className="flex h-full w-[300px] flex-col border-r border-slate-200">
       <div className="flex items-center justify-between px-6 py-4 text-sm font-medium text-slate-500">
         <span>Conversations</span>
         <button

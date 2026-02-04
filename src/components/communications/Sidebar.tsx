@@ -13,7 +13,7 @@ export function Sidebar({
   onChangeView: (view: ConversationView) => void
 }) {
   return (
-    <aside className="flex h-full w-56 flex-col border-r border-slate-200 px-6 py-6">
+    <aside className="flex h-full w-48 flex-col border-r border-slate-200 px-5 py-6">
       <div className="text-lg font-semibold text-slate-900">Inbox</div>
       <div className="mt-6 space-y-1">
         {views.map((view) => (

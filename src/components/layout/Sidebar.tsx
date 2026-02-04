@@ -48,6 +48,15 @@ export function Sidebar() {
     setIsOpen(false)
   }, [pathname])
 
+  // Auto-collapse on Inbox for more space
+  useEffect(() => {
+    if (pathname.startsWith('/communications')) {
+      setIsCollapsed(true)
+    } else {
+      setIsCollapsed(false)
+    }
+  }, [pathname, setIsCollapsed])
+
   // Prevent body scroll when mobile menu is open
   useEffect(() => {
     if (isOpen) {
