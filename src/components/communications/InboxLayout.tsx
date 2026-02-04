@@ -49,16 +49,6 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
 
   const lastUnreadCountRef = useRef(0)
 
-  const fetchUnreadCount = useCallback(async () => {
-    try {
-      const data = await fetchJson<{ data: { unreadCount: number } }>(`/api/conversations/unread-count`)
-      const count = Number(data?.data?.unreadCount ?? 0)
-      return Number.isFinite(count) ? count : 0
-    } catch {
-      return null
-    }
-  }, [])
-
   const loadConversations = useCallback(async () => {
     if (limit > 30) {
       setLoadingMore(true)
@@ -90,17 +80,6 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
         assignee: item.assignee?.name ?? null,
       }))
       setConversations(shaped)
-      const newestUnread = shaped.find((item) => item.unread && item.lastMessageAt)
-      if (newestUnread?.lastMessageAt) {
-        if (lastNotifiedAtRef.current !== newestUnread.lastMessageAt) {
-          if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-            new Notification(`New message from ${newestUnread.patientName}`, {
-              body: newestUnread.lastMessageSnippet || 'New message received',
-            })
-          }
-          lastNotifiedAtRef.current = newestUnread.lastMessageAt
-        }
-      }
       if (!selectedId && shaped.length > 0) {
         setSelectedId(shaped[0].id)
       }
@@ -171,57 +150,27 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
   }, [])
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !('Notification' in window)) {
-      return
-    }
-    const nextUnread = unreadCount
-    const prevUnread = lastUnreadCountRef.current
-    if (nextUnread > prevUnread && Notification.permission === 'granted') {
-      const newest = conversations.find((conversation) => conversation.unread)
-      if (newest) {
-        new Notification(`New message from ${newest.patientName}`, {
-          body: newest.lastMessageSnippet || 'New message received',
-        })
-      }
-    }
-    lastUnreadCountRef.current = nextUnread
-  }, [unreadCount, conversations])
+    lastUnreadCountRef.current = unreadCount
+  }, [unreadCount])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
     window.localStorage.setItem('inboxUnreadCount', String(unreadCount))
-    window.dispatchEvent(new Event('inbox-unread-updated'))
+    window.dispatchEvent(new CustomEvent('inbox-unread-updated', { detail: { source: 'inbox' } }))
   }, [unreadCount])
 
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | null = null
+    if (typeof window === 'undefined') return
 
-    const startPolling = () => {
-      if (interval) return
-      interval = setInterval(async () => {
-        const nextUnread = await fetchUnreadCount()
-        if (nextUnread === null) return
-        if (nextUnread !== lastUnreadCountRef.current) {
-          lastUnreadCountRef.current = nextUnread
-          await loadConversations()
-          if (selectedId) {
-            await loadConversationDetail(selectedId)
-          }
-        }
-      }, 15000)
-    }
-
-    const stopPolling = () => {
-      if (!interval) return
-      clearInterval(interval)
-      interval = null
-    }
-
-    const handleVisibility = () => {
-      if (document.hidden) {
-        startPolling()
-      } else {
-        stopPolling()
+    const handleUnreadUpdate = (event: Event) => {
+      const customEvent = event as CustomEvent | null
+      const source = customEvent?.detail?.source
+      if (source === 'inbox') return
+      const raw = window.localStorage.getItem('inboxUnreadCount')
+      const nextUnread = raw ? Number(raw) : 0
+      if (!Number.isFinite(nextUnread)) return
+      if (nextUnread !== lastUnreadCountRef.current) {
+        lastUnreadCountRef.current = nextUnread
         loadConversations()
         if (selectedId) {
           loadConversationDetail(selectedId)
@@ -229,13 +178,9 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
       }
     }
 
-    handleVisibility()
-    document.addEventListener('visibilitychange', handleVisibility)
-    return () => {
-      stopPolling()
-      document.removeEventListener('visibilitychange', handleVisibility)
-    }
-  }, [fetchUnreadCount, loadConversations, loadConversationDetail, selectedId])
+    window.addEventListener('inbox-unread-updated', handleUnreadUpdate)
+    return () => window.removeEventListener('inbox-unread-updated', handleUnreadUpdate)
+  }, [loadConversations, loadConversationDetail, selectedId])
 
   useEffect(() => {
     setLimit(30)

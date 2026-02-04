@@ -21,7 +21,7 @@ import {
   Inbox
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { LogoutButton } from './LogoutButton'
 import { useSidebar } from './SidebarProvider'
 
@@ -43,6 +43,7 @@ export function Sidebar() {
   const pathname = usePathname()
   const { isOpen, setIsOpen, isCollapsed, setIsCollapsed } = useSidebar()
   const [inboxUnread, setInboxUnread] = useState(0)
+  const lastUnreadRef = useRef(0)
 
   // Close mobile menu when route changes
   useEffect(() => {
@@ -89,53 +90,53 @@ export function Sidebar() {
   }, [])
 
   useEffect(() => {
-    let isMounted = true
-    let interval: ReturnType<typeof setInterval> | null = null
+    if (typeof window === 'undefined' || !('EventSource' in window)) {
+      return
+    }
 
-    const fetchUnread = async () => {
+    const source = new EventSource('/api/notifications/inbox')
+
+    const handleUnread = (event: MessageEvent) => {
       try {
-        const res = await fetch('/api/conversations/unread-count')
-        if (!res.ok) return
-        const data = await res.json()
-        const nextValue = Number(data?.data?.unreadCount ?? 0)
-        if (!isMounted || !Number.isFinite(nextValue)) return
+        const payload = JSON.parse(event.data ?? '{}') as {
+          unreadCount?: number
+          latest?: { patientName?: string; lastMessageSnippet?: string }
+        }
+        const nextValue = Number(payload.unreadCount ?? 0)
+        if (!Number.isFinite(nextValue)) return
         setInboxUnread(nextValue)
         if (typeof window !== 'undefined') {
           window.localStorage.setItem('inboxUnreadCount', String(nextValue))
-          window.dispatchEvent(new Event('inbox-unread-updated'))
+          window.dispatchEvent(
+            new CustomEvent('inbox-unread-updated', { detail: { source: 'sse' } })
+          )
         }
+        if (
+          nextValue > lastUnreadRef.current &&
+          typeof window !== 'undefined' &&
+          'Notification' in window &&
+          Notification.permission === 'granted'
+        ) {
+          new Notification(
+            payload.latest?.patientName
+              ? `New message from ${payload.latest.patientName}`
+              : 'New message received',
+            {
+              body: payload.latest?.lastMessageSnippet || 'New message received',
+            }
+          )
+        }
+        lastUnreadRef.current = nextValue
       } catch {
-        // Silent failure; keep last known count.
+        // Ignore malformed payloads.
       }
     }
 
-    const startPolling = () => {
-      if (interval) return
-      interval = setInterval(fetchUnread, 20000)
-    }
+    source.addEventListener('unread', handleUnread)
 
-    const stopPolling = () => {
-      if (!interval) return
-      clearInterval(interval)
-      interval = null
-    }
-
-    const handleVisibility = () => {
-      if (document.hidden) {
-        startPolling()
-        fetchUnread()
-      } else {
-        stopPolling()
-        fetchUnread()
-      }
-    }
-
-    handleVisibility()
-    document.addEventListener('visibilitychange', handleVisibility)
     return () => {
-      isMounted = false
-      stopPolling()
-      document.removeEventListener('visibilitychange', handleVisibility)
+      source.removeEventListener('unread', handleUnread)
+      source.close()
     }
   }, [])
 
