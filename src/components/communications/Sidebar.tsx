@@ -8,13 +8,22 @@ const views: ConversationView[] = ['Open', 'Pending', 'Resolved', 'Mine', 'Team'
 export function Sidebar({
   activeView,
   onChangeView,
+  unreadCount,
 }: {
   activeView: ConversationView
   onChangeView: (view: ConversationView) => void
+  unreadCount: number
 }) {
   return (
     <aside className="flex h-full w-48 flex-col border-r border-slate-200 px-5 py-6">
-      <div className="text-lg font-semibold text-slate-900">Inbox</div>
+      <div className="flex items-center justify-between">
+        <div className="text-lg font-semibold text-slate-900">Inbox</div>
+        {unreadCount > 0 && (
+          <span className="rounded-full bg-slate-900 px-2 py-0.5 text-xs text-white">
+            {unreadCount}
+          </span>
+        )}
+      </div>
       <div className="mt-6 space-y-1">
         {views.map((view) => (
           <button

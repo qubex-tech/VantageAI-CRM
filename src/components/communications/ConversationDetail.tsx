@@ -48,6 +48,11 @@ export function ConversationDetail({
               <div className="text-xs text-slate-500">
                 {conversation.status} · {conversation.channel.toUpperCase()}
               </div>
+              {(conversation.patientEmail || conversation.patientPhone) && (
+                <div className="mt-1 text-xs text-slate-400">
+                  {conversation.patientEmail || 'No email'} · {conversation.patientPhone || 'No phone'}
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-3">
               <button

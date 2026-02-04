@@ -41,6 +41,13 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
     return conversations.findIndex((conversation) => conversation.id === selectedId)
   }, [conversations, selectedId])
 
+  const unreadCount = useMemo(
+    () => conversations.filter((conversation) => conversation.unread).length,
+    [conversations]
+  )
+
+  const lastUnreadCountRef = useRef(0)
+
   const loadConversations = useCallback(async () => {
     if (limit > 30) {
       setLoadingMore(true)
@@ -91,6 +98,8 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
       setSelectedConversation({
         id: conversation.id,
         patientName: conversation.patient?.name ?? 'Unknown',
+        patientEmail: conversation.patient?.email ?? null,
+        patientPhone: conversation.patient?.primaryPhone ?? null,
         lastMessageSnippet: conversation.lastMessagePreview ?? '',
         channel: conversation.channel,
         unread: false,
@@ -125,6 +134,39 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
 
   useEffect(() => {
     loadConversations()
+  }, [loadConversations])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      return
+    }
+    if (Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => null)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      return
+    }
+    const nextUnread = unreadCount
+    const prevUnread = lastUnreadCountRef.current
+    if (nextUnread > prevUnread && Notification.permission === 'granted') {
+      const newest = conversations.find((conversation) => conversation.unread)
+      if (newest) {
+        new Notification(`New message from ${newest.patientName}`, {
+          body: newest.lastMessageSnippet || 'New message received',
+        })
+      }
+    }
+    lastUnreadCountRef.current = nextUnread
+  }, [unreadCount, conversations])
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadConversations()
+    }, 15000)
+    return () => clearInterval(interval)
   }, [loadConversations])
 
   useEffect(() => {
@@ -250,7 +292,7 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
 
   return (
     <div className="flex h-[calc(100vh-4.5rem)] w-full overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <Sidebar activeView={view} onChangeView={setView} />
+      <Sidebar activeView={view} onChangeView={setView} unreadCount={unreadCount} />
       <ConversationList
         conversations={conversations}
         loading={loadingConversations}

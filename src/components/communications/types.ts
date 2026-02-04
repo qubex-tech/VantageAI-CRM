@@ -3,6 +3,8 @@ export type ConversationView = 'Open' | 'Pending' | 'Resolved' | 'Mine' | 'Team'
 export interface Conversation {
   id: string
   patientName: string
+  patientEmail?: string | null
+  patientPhone?: string | null
   lastMessageSnippet: string
   channel: string
   unread: boolean
