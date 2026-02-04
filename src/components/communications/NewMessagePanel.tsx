@@ -24,7 +24,7 @@ export function NewMessagePanel({
   onStart,
   loading,
 }: {
-  onStart: (payload: { patientId: string; channel: string; body: string }) => Promise<void>
+  onStart: (payload: { patientId: string; channel: string; body: string; subject?: string }) => Promise<void>
   loading: boolean
 }) {
   const [query, setQuery] = useState('')
