@@ -20,6 +20,8 @@ export async function POST(req: NextRequest) {
     // Normalize phone number (remove + and keep digits)
     const normalizedFrom = from?.replace(/[^\d]/g, '') || ''
     const normalizedTo = to?.replace(/[^\d]/g, '') || ''
+    const fromLast10 = normalizedFrom.slice(-10)
+    const toLast10 = normalizedTo.slice(-10)
 
     // Handle STOP keyword (case-insensitive)
     if (bodyText && bodyText.trim().toUpperCase() === 'STOP') {
@@ -111,18 +113,21 @@ export async function POST(req: NextRequest) {
         select: { practiceId: true },
       })
 
-      if (!integration?.practiceId && normalizedTo) {
-        integration = await prisma.twilioIntegration.findFirst({
-          where: {
-            isActive: true,
-            fromNumber: { contains: normalizedTo },
-          },
-          select: { practiceId: true },
+      if (!integration?.practiceId) {
+        const integrations = await prisma.twilioIntegration.findMany({
+          where: { isActive: true },
+          select: { practiceId: true, fromNumber: true },
         })
+        const matched = integrations.find((entry) => {
+          if (!entry.fromNumber) return false
+          const normalized = entry.fromNumber.replace(/[^\d]/g, '')
+          return normalized.endsWith(toLast10) || normalized.includes(normalizedTo)
+        })
+        integration = matched ? { practiceId: matched.practiceId } : null
       }
 
       if (integration?.practiceId) {
-        const patient = await prisma.patient.findFirst({
+        let patient = await prisma.patient.findFirst({
           where: {
             practiceId: integration.practiceId,
             deletedAt: null,
@@ -132,8 +137,25 @@ export async function POST(req: NextRequest) {
               { secondaryPhone: { contains: normalizedFrom } },
             ],
           },
-          select: { id: true },
+          select: { id: true, phone: true, primaryPhone: true, secondaryPhone: true },
         })
+
+        if (!patient) {
+          const candidates = await prisma.patient.findMany({
+            where: {
+              practiceId: integration.practiceId,
+              deletedAt: null,
+            },
+            select: { id: true, phone: true, primaryPhone: true, secondaryPhone: true },
+            take: 500,
+          })
+          patient = candidates.find((candidate) => {
+            const numbers = [candidate.phone, candidate.primaryPhone, candidate.secondaryPhone]
+              .filter(Boolean)
+              .map((num) => String(num).replace(/[^\d]/g, '').slice(-10))
+            return numbers.includes(fromLast10)
+          }) || null
+        }
 
         if (patient) {
           await logInboundCommunication({

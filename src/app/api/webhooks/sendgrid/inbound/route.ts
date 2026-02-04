@@ -2,14 +2,21 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { logInboundCommunication } from '@/lib/communications/logging'
 
-function extractEmail(value?: string | null) {
-  if (!value) return null
-  const match = value.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)
-  return match ? match[0].toLowerCase().trim() : null
+function extractEmails(value?: string | null) {
+  if (!value) return []
+  const matches = value.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)
+  return matches ? matches.map((email) => email.toLowerCase().trim()) : []
 }
 
 function normalizeEmail(email: string) {
   return email.toLowerCase().trim()
+}
+
+function stripPlusTag(email: string) {
+  const [local, domain] = email.split('@')
+  if (!domain) return email
+  const cleanLocal = local.split('+')[0]
+  return `${cleanLocal}@${domain}`
 }
 
 function stripHtml(html?: string | null) {
@@ -33,21 +40,38 @@ export async function POST(req: NextRequest) {
       (form.get('message-id') as string) ||
       (form.get('Message-Id') as string) ||
       undefined
+    const envelopeRaw = (form.get('envelope') as string) || ''
 
-    const fromEmail = extractEmail(fromRaw)
-    const toEmail = extractEmail(toRaw)
-    if (!fromEmail || !toEmail) {
+    const fromEmails = extractEmails(fromRaw)
+    const toEmails = extractEmails(toRaw)
+    let envelopeTo: string[] = []
+    let envelopeFrom: string[] = []
+    try {
+      if (envelopeRaw) {
+        const parsed = JSON.parse(envelopeRaw)
+        envelopeTo = extractEmails(parsed?.to?.join?.(',') || parsed?.to)
+        envelopeFrom = extractEmails(parsed?.from)
+      }
+    } catch {
+      // ignore envelope parse errors
+    }
+
+    const allTo = Array.from(new Set([...toEmails, ...envelopeTo].map(normalizeEmail)))
+    const allFrom = Array.from(new Set([...fromEmails, ...envelopeFrom].map(normalizeEmail)))
+
+    if (allTo.length === 0 || allFrom.length === 0) {
       return NextResponse.json({ success: true })
     }
-    const normalizedFrom = normalizeEmail(fromEmail)
-    const normalizedTo = normalizeEmail(toEmail)
+    const normalizedToCandidates = Array.from(
+      new Set(allTo.flatMap((email) => [email, stripPlusTag(email)]))
+    )
+    const normalizedFromCandidates = Array.from(
+      new Set(allFrom.flatMap((email) => [email, stripPlusTag(email)]))
+    )
 
     const integration = await prisma.sendgridIntegration.findFirst({
       where: {
-        fromEmail: {
-          equals: normalizedTo,
-          mode: 'insensitive',
-        },
+        fromEmail: { in: normalizedToCandidates },
         isActive: true,
       },
       select: { practiceId: true },
@@ -61,10 +85,7 @@ export async function POST(req: NextRequest) {
       where: {
         practiceId: integration.practiceId,
         deletedAt: null,
-        email: {
-          equals: normalizedFrom,
-          mode: 'insensitive',
-        },
+        email: { in: normalizedFromCandidates },
       },
       select: { id: true },
     })
@@ -81,8 +102,8 @@ export async function POST(req: NextRequest) {
       body,
       subject: subject || undefined,
       metadata: {
-        from: normalizedFrom,
-        to: normalizedTo,
+        from: normalizedFromCandidates[0],
+        to: normalizedToCandidates[0],
         providerMessageId: messageId,
       },
     })
