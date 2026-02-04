@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { parse } from 'url'
+import { logInboundCommunication } from '@/lib/communications/logging'
 
 /**
  * POST /api/webhooks/twilio
@@ -91,6 +91,52 @@ export async function POST(req: NextRequest) {
             headers: { 'Content-Type': 'text/xml' },
           }
         )
+      }
+    }
+
+    // Handle inbound SMS (received)
+    const isInbound =
+      bodyText &&
+      bodyText.trim().length > 0 &&
+      (!messageStatus || messageStatus === 'received')
+
+    if (isInbound) {
+      const integration = await prisma.twilioIntegration.findFirst({
+        where: {
+          accountSid,
+          isActive: true,
+        },
+        select: { practiceId: true },
+      })
+
+      if (integration?.practiceId) {
+        const patient = await prisma.patient.findFirst({
+          where: {
+            practiceId: integration.practiceId,
+            deletedAt: null,
+            OR: [
+              { phone: { contains: normalizedFrom } },
+              { primaryPhone: { contains: normalizedFrom } },
+              { secondaryPhone: { contains: normalizedFrom } },
+            ],
+          },
+          select: { id: true },
+        })
+
+        if (patient) {
+          await logInboundCommunication({
+            practiceId: integration.practiceId,
+            patientId: patient.id,
+            channel: 'sms',
+            body: bodyText.trim(),
+            metadata: {
+              from,
+              to,
+              providerMessageId: messageSid,
+              status: messageStatus,
+            },
+          })
+        }
       }
     }
 

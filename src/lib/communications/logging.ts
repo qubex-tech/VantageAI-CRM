@@ -12,6 +12,15 @@ interface LogOutboundInput {
   metadata?: Record<string, unknown>
 }
 
+interface LogInboundInput {
+  practiceId: string
+  patientId: string
+  channel: CommunicationChannel
+  body: string
+  subject?: string | null
+  metadata?: Record<string, unknown>
+}
+
 export async function logOutboundCommunication({
   practiceId,
   patientId,
@@ -81,6 +90,92 @@ export async function logOutboundCommunication({
         } as Prisma.InputJsonValue,
       },
     })
+
+    return { conversationId: conversation.id, messageId: message.id }
+  })
+}
+
+export async function logInboundCommunication({
+  practiceId,
+  patientId,
+  channel,
+  body,
+  subject,
+  metadata,
+}: LogInboundInput) {
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.communicationConversation.findFirst({
+      where: {
+        practiceId,
+        patientId,
+        channel,
+        status: { in: ['open', 'pending'] },
+      },
+      orderBy: { updatedAt: 'desc' },
+    })
+
+    const conversation =
+      existing ||
+      (await tx.communicationConversation.create({
+        data: {
+          practiceId,
+          patientId,
+          channel,
+          status: 'open',
+          subject: subject || undefined,
+        },
+      }))
+
+    const message = await tx.communicationMessage.create({
+      data: {
+        practiceId,
+        conversationId: conversation.id,
+        patientId,
+        direction: 'inbound',
+        type: 'message',
+        body,
+        channel,
+        deliveryStatus: 'delivered',
+        metadata: metadata ? (metadata as Prisma.InputJsonValue) : undefined,
+      },
+    })
+
+    await tx.communicationConversation.update({
+      where: { id: conversation.id },
+      data: {
+        lastMessageAt: new Date(),
+        lastMessagePreview: body.slice(0, 140),
+        subject: subject || conversation.subject || undefined,
+        status: 'open',
+      },
+    })
+
+    const assignment = await tx.communicationAssignment.findFirst({
+      where: {
+        practiceId,
+        conversationId: conversation.id,
+        status: 'active',
+        assignedUserId: { not: null },
+      },
+      orderBy: { assignedAt: 'desc' },
+      select: { assignedUserId: true },
+    })
+
+    if (assignment?.assignedUserId) {
+      await tx.auditLog.create({
+        data: {
+          practiceId,
+          userId: assignment.assignedUserId,
+          action: 'message_received',
+          resourceType: 'conversation',
+          resourceId: conversation.id,
+          changes: {
+            messageId: message.id,
+            channel,
+          } as Prisma.InputJsonValue,
+        },
+      })
+    }
 
     return { conversationId: conversation.id, messageId: message.id }
   })
