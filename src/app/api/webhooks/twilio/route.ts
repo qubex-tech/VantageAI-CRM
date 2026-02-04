@@ -14,6 +14,7 @@ export async function POST(req: NextRequest) {
     const to = body.get('To') as string
     const bodyText = body.get('Body') as string
     const messageStatus = body.get('MessageStatus') as string
+    const smsStatus = body.get('SmsStatus') as string
     const accountSid = body.get('AccountSid') as string
 
     // Normalize phone number (remove + and keep digits)
@@ -95,19 +96,30 @@ export async function POST(req: NextRequest) {
     }
 
     // Handle inbound SMS (received)
+    const inboundStatus = messageStatus || smsStatus
     const isInbound =
       bodyText &&
       bodyText.trim().length > 0 &&
-      (!messageStatus || messageStatus === 'received')
+      (!inboundStatus || inboundStatus === 'received' || inboundStatus === 'inbound')
 
     if (isInbound) {
-      const integration = await prisma.twilioIntegration.findFirst({
+      let integration = await prisma.twilioIntegration.findFirst({
         where: {
           accountSid,
           isActive: true,
         },
         select: { practiceId: true },
       })
+
+      if (!integration?.practiceId && normalizedTo) {
+        integration = await prisma.twilioIntegration.findFirst({
+          where: {
+            isActive: true,
+            fromNumber: { contains: normalizedTo },
+          },
+          select: { practiceId: true },
+        })
+      }
 
       if (integration?.practiceId) {
         const patient = await prisma.patient.findFirst({
@@ -133,7 +145,7 @@ export async function POST(req: NextRequest) {
               from,
               to,
               providerMessageId: messageSid,
-              status: messageStatus,
+              status: inboundStatus,
             },
           })
         }
