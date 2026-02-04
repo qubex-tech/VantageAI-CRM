@@ -17,7 +17,8 @@ import {
   Megaphone,
   FileText,
   CheckSquare,
-  BarChart3
+  BarChart3,
+  Inbox
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useEffect } from 'react'
@@ -30,6 +31,7 @@ const navItems = [
   { href: '/patients', label: 'Patients', icon: Users },
   { href: '/appointments', label: 'Appointments', icon: Calendar },
   { href: '/tasks', label: 'Tasks', icon: CheckSquare },
+  { href: '/communications', label: 'Inbox', icon: Inbox },
   { href: '/forms', label: 'Forms', icon: FileText },
   { href: '/marketing', label: 'Marketing', icon: Megaphone },
   { href: '/calls', label: 'Calls', icon: Phone },
