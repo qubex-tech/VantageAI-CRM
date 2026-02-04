@@ -21,7 +21,7 @@ import {
   Inbox
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { LogoutButton } from './LogoutButton'
 import { useSidebar } from './SidebarProvider'
 
@@ -42,6 +42,7 @@ const navItems = [
 export function Sidebar() {
   const pathname = usePathname()
   const { isOpen, setIsOpen, isCollapsed, setIsCollapsed } = useSidebar()
+  const [inboxUnread, setInboxUnread] = useState(0)
 
   // Close mobile menu when route changes
   useEffect(() => {
@@ -68,6 +69,74 @@ export function Sidebar() {
       document.body.style.overflow = 'unset'
     }
   }, [isOpen])
+
+  useEffect(() => {
+    const readUnread = () => {
+      if (typeof window === 'undefined') return
+      const raw = window.localStorage.getItem('inboxUnreadCount')
+      const nextValue = raw ? Number(raw) : 0
+      setInboxUnread(Number.isFinite(nextValue) ? nextValue : 0)
+    }
+
+    readUnread()
+    const handleUpdate = () => readUnread()
+    window.addEventListener('storage', handleUpdate)
+    window.addEventListener('inbox-unread-updated', handleUpdate)
+    return () => {
+      window.removeEventListener('storage', handleUpdate)
+      window.removeEventListener('inbox-unread-updated', handleUpdate)
+    }
+  }, [])
+
+  useEffect(() => {
+    let isMounted = true
+    let interval: ReturnType<typeof setInterval> | null = null
+
+    const fetchUnread = async () => {
+      try {
+        const res = await fetch('/api/conversations/unread-count')
+        if (!res.ok) return
+        const data = await res.json()
+        const nextValue = Number(data?.data?.unreadCount ?? 0)
+        if (!isMounted || !Number.isFinite(nextValue)) return
+        setInboxUnread(nextValue)
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('inboxUnreadCount', String(nextValue))
+          window.dispatchEvent(new Event('inbox-unread-updated'))
+        }
+      } catch {
+        // Silent failure; keep last known count.
+      }
+    }
+
+    const startPolling = () => {
+      if (interval) return
+      interval = setInterval(fetchUnread, 20000)
+    }
+
+    const stopPolling = () => {
+      if (!interval) return
+      clearInterval(interval)
+      interval = null
+    }
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        startPolling()
+        fetchUnread()
+      } else {
+        stopPolling()
+      }
+    }
+
+    handleVisibility()
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      isMounted = false
+      stopPolling()
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [])
 
   return (
     <>
@@ -151,7 +220,7 @@ export function Sidebar() {
                   href={item.href}
                   onClick={() => setIsOpen(false)}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                    "relative flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
                     "hover:bg-gray-100",
                     isActive
                       ? "bg-gray-100 text-gray-900"
@@ -163,6 +232,17 @@ export function Sidebar() {
                   {!isCollapsed && <span>{item.label}</span>}
                   {isCollapsed && (
                     <span className="sr-only">{item.label}</span>
+                  )}
+                  {item.href === '/communications' && inboxUnread > 0 && (
+                    <span
+                      className={cn(
+                        "ml-auto inline-flex min-w-[20px] items-center justify-center rounded-full bg-slate-900 px-2 py-0.5 text-[11px] font-semibold text-white",
+                        isCollapsed &&
+                          "absolute -top-1 -right-1 ml-0 min-w-0 px-1.5 py-1 text-[10px] shadow"
+                      )}
+                    >
+                      {inboxUnread > 99 ? '99+' : inboxUnread}
+                    </span>
                   )}
                 </Link>
               )

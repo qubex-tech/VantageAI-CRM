@@ -178,6 +178,12 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
   }, [unreadCount, conversations])
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem('inboxUnreadCount', String(unreadCount))
+    window.dispatchEvent(new Event('inbox-unread-updated'))
+  }, [unreadCount])
+
+  useEffect(() => {
     const interval = setInterval(() => {
       loadConversations()
     }, 15000)
