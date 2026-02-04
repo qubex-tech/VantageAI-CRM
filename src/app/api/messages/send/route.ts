@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client'
 import { requireAuth, rateLimit } from '@/lib/middleware'
 import { communicationMessageSendSchema } from '@/lib/validations'
 import { getChannelAdapter } from '@/lib/communications/adapters'
+import type { DeliveryStatus } from '@/lib/communications/types'
 import { getTwilioClient } from '@/lib/twilio'
 import { getSendgridClient } from '@/lib/sendgrid'
 import { emitCommunicationEvent } from '@/lib/communications/events'
@@ -54,7 +55,10 @@ export async function POST(req: NextRequest) {
       email: conversation.patient.email,
     }
 
-    let delivery = { status: 'sent' as const, metadata: undefined as Record<string, unknown> | undefined }
+    let delivery: { status: DeliveryStatus; metadata?: Record<string, unknown> } = {
+      status: 'sent',
+      metadata: undefined,
+    }
     if (channel === 'sms') {
       if (!recipient.phone) {
         return NextResponse.json({ error: 'Patient phone is required for SMS' }, { status: 400 })
