@@ -24,12 +24,12 @@ export function MessageBubble({ message }: { message: Message }) {
     <div className={cn('flex', isStaff ? 'justify-end' : 'justify-start')}>
       <div
         className={cn(
-          'group max-w-[70%] rounded-2xl px-4 py-3 text-sm leading-relaxed',
+          'group max-w-[72%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm',
           isInternal
             ? 'border border-slate-200 bg-slate-50 text-slate-600'
             : isStaff
-              ? 'bg-slate-900 text-white'
-              : 'bg-slate-100 text-slate-800'
+              ? 'bg-slate-900 text-white shadow-md'
+              : 'bg-white text-slate-900 border border-slate-200'
         )}
       >
         <div className="mb-2 flex items-center gap-2 text-[11px] text-slate-400">

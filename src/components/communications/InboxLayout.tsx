@@ -249,7 +249,7 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
   }, [])
 
   return (
-    <div className="flex h-[calc(100vh-4.5rem)] w-full overflow-hidden rounded-2xl border border-slate-200 bg-white">
+    <div className="flex h-[calc(100vh-4.5rem)] w-full overflow-hidden rounded-xl border border-slate-200 bg-white">
       <Sidebar activeView={view} onChangeView={setView} />
       <ConversationList
         conversations={conversations}
