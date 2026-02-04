@@ -126,6 +126,7 @@ export function Sidebar() {
         fetchUnread()
       } else {
         stopPolling()
+        fetchUnread()
       }
     }
 
