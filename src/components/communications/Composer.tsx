@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState } from 'react'
-import { Paperclip } from 'lucide-react'
+import { Check, Loader2, Paperclip } from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,24 +18,36 @@ export function Composer({
   disabled,
   defaultChannel = 'sms',
 }: {
-  onSend: (payload: { body: string; channel: string; subject?: string }) => void
+  onSend: (payload: { body: string; channel: string; subject?: string }) => Promise<boolean>
   disabled: boolean
   defaultChannel?: string
 }) {
   const [value, setValue] = useState('')
   const [channel, setChannel] = useState(defaultChannel)
   const [subject, setSubject] = useState('')
+  const [isSending, setIsSending] = useState(false)
+  const [sent, setSent] = useState(false)
+  const [error, setError] = useState('')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!value.trim()) return
-    onSend({
+    setIsSending(true)
+    setError('')
+    const success = await onSend({
       body: value.trim(),
       channel,
       subject: channel === 'email' ? subject.trim() : undefined,
     })
-    setValue('')
-    setSubject('')
+    setIsSending(false)
+    if (success) {
+      setSent(true)
+      setValue('')
+      setSubject('')
+      setTimeout(() => setSent(false), 1200)
+    } else {
+      setError('Message failed to send. Try again.')
+    }
   }
 
   return (
@@ -68,6 +80,7 @@ export function Composer({
         placeholder="Type a reply…"
         className="min-h-[96px] resize-none border-slate-200 text-sm"
       />
+      {error ? <div className="text-xs text-rose-500">{error}</div> : null}
       <div className="flex items-center justify-between">
         <button
           type="button"
@@ -78,8 +91,20 @@ export function Composer({
           Attach
         </button>
         <input ref={fileInputRef} type="file" className="hidden" />
-        <Button size="sm" disabled={disabled || !value.trim()}>
-          Send
+        <Button size="sm" disabled={disabled || !value.trim() || isSending}>
+          {isSending ? (
+            <span className="flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Sending
+            </span>
+          ) : sent ? (
+            <span className="flex items-center gap-2">
+              <Check className="h-4 w-4" />
+              Sent
+            </span>
+          ) : (
+            'Send'
+          )}
         </Button>
       </div>
     </div>

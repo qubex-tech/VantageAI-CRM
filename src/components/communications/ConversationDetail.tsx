@@ -18,7 +18,7 @@ export function ConversationDetail({
   conversation: Conversation | null
   messages: Message[]
   loading: boolean
-  onSendMessage: (payload: { body: string; channel: string; subject?: string }) => void
+  onSendMessage: (payload: { body: string; channel: string; subject?: string }) => Promise<boolean>
   onAssignClick: () => void
   onStartConversation: (payload: { patientId: string; channel: string; body: string; subject?: string }) => Promise<void>
   sending: boolean

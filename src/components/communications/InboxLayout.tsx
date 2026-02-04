@@ -183,7 +183,7 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
 
   const handleSendMessage = useCallback(
     async (payload: { body: string; channel: string; subject?: string }) => {
-      if (!selectedId) return
+      if (!selectedId) return false
       const tempId = `temp-${Date.now()}`
       pendingMessageIds.current.add(tempId)
       setMessages((prev) => [
@@ -212,8 +212,10 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
         })
         await loadConversationDetail(selectedId)
         await loadConversations()
+        return true
       } catch {
         setMessages((prev) => prev.filter((message) => message.id !== tempId))
+        return false
       } finally {
         pendingMessageIds.current.delete(tempId)
         setSending(false)
