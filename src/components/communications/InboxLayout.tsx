@@ -186,11 +186,31 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
     setLimit(30)
   }, [view])
 
+  const markConversationRead = useCallback(async (conversationId: string) => {
+    try {
+      await fetchJson(`/api/conversations/${conversationId}/read`, {
+        method: 'POST',
+      })
+    } catch {
+      // Best effort; keep UI state responsive.
+    }
+  }, [])
+
   useEffect(() => {
     if (selectedId) {
       loadConversationDetail(selectedId)
     }
   }, [selectedId, loadConversationDetail])
+
+  useEffect(() => {
+    if (!selectedId) return
+    setConversations((prev) =>
+      prev.map((conversation) =>
+        conversation.id === selectedId ? { ...conversation, unread: false } : conversation
+      )
+    )
+    markConversationRead(selectedId)
+  }, [selectedId, markConversationRead])
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
