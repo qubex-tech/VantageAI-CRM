@@ -1,4 +1,5 @@
 import type { KnowledgeBaseMatch } from './knowledgeBase'
+import { classifyIntent } from './classifyIntent'
 
 export type DraftConfidence = 'low' | 'medium' | 'high'
 
@@ -28,7 +29,12 @@ export interface DraftReplyResult {
   confidence: DraftConfidence
 }
 
-function buildDraftBody(context: DraftReplyContext) {
+async function detectProviderIntent(text: string) {
+  const intent = await classifyIntent(text)
+  return intent.label === 'practice_provider'
+}
+
+async function buildDraftBody(context: DraftReplyContext) {
   const latestAsk = context.summary?.latestPatientAsk
   const patientMessage = [...context.messages]
     .reverse()
@@ -50,9 +56,12 @@ function buildDraftBody(context: DraftReplyContext) {
     ? `Per ${kbTag}, we can help with the next steps and confirm details.`
     : 'We can help with the next steps and confirm details.'
 
+  const isProviderQuestion = patientMessage ? await detectProviderIntent(patientMessage) : false
   const thirdLine =
     appointmentLine ||
-    'Please let us know a preferred time or any constraints so we can assist.'
+    (isProviderQuestion
+      ? 'We can share our provider details—let us know if you are looking for a specific doctor.'
+      : 'Please let us know a preferred time or any constraints so we can assist.')
 
   return [askLine, secondLine, thirdLine].filter(Boolean).join(' ')
 }
@@ -64,7 +73,7 @@ export async function generateDraftReply(context: DraftReplyContext): Promise<Dr
     sourceId: article.id,
   }))
 
-  const draftText = buildDraftBody(context)
+  const draftText = await buildDraftBody(context)
   const confidence: DraftConfidence = context.kbArticles.length ? 'medium' : 'low'
 
   return {

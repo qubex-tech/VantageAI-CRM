@@ -569,65 +569,66 @@ export function HealixPanel({
         </Button>
       </div>
 
-      {/* Description */}
-      <div className="px-4 py-2 border-b border-gray-200 bg-gray-50">
-        <p className="text-xs text-gray-600">
-          Ask me anything about operations, or I can help with tasks and notes.
-        </p>
-      </div>
-
-      {/* Context Chips */}
-      {contextChips.length > 0 && (
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        {/* Description */}
         <div className="px-4 py-2 border-b border-gray-200 bg-gray-50">
-          <div className="flex flex-wrap gap-2">
-            {contextChips.map((chip, idx) => (
-              <div
-                key={idx}
-                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-white border border-gray-200 rounded-md"
-              >
-                <span className="text-gray-500">{chip.label}:</span>
-                <span className="text-gray-900">{chip.value}</span>
-              </div>
-            ))}
+          <p className="text-xs text-gray-600">
+            Ask me anything about operations, or I can help with tasks and notes.
+          </p>
+        </div>
+
+        {/* Context Chips */}
+        {contextChips.length > 0 && (
+          <div className="px-4 py-2 border-b border-gray-200 bg-gray-50">
+            <div className="flex flex-wrap gap-2">
+              {contextChips.map((chip, idx) => (
+                <div
+                  key={idx}
+                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-white border border-gray-200 rounded-md"
+                >
+                  <span className="text-gray-500">{chip.label}:</span>
+                  <span className="text-gray-900">{chip.value}</span>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {context.conversationId && (
-        <div className="px-4 py-3 border-b border-gray-200 bg-white">
-          <ConversationSummary
-            summary={summary}
-            loading={summaryLoading}
-            error={summaryError}
-            onRefresh={() => {
-              if (context.conversationId) {
-                refreshSummary(context.conversationId)
-              }
-            }}
-          />
-        </div>
-      )}
+        {context.conversationId && (
+          <div className="px-4 py-3 border-b border-gray-200 bg-white">
+            <ConversationSummary
+              summary={summary}
+              loading={summaryLoading}
+              error={summaryError}
+              onRefresh={() => {
+                if (context.conversationId) {
+                  refreshSummary(context.conversationId)
+                }
+              }}
+            />
+          </div>
+        )}
 
-      {context.conversationId && (
-        <div className="px-4 py-3 border-b border-gray-200 bg-white">
-          <DraftReplyComposer
-            conversationId={context.conversationId}
-            disabled={!open}
-            onApplyDraft={(value) => {
-              if (typeof window !== 'undefined') {
-                window.dispatchEvent(
-                  new CustomEvent('draft-reply-apply', {
-                    detail: { conversationId: context.conversationId, text: value },
-                  })
-                )
-              }
-            }}
-          />
-        </div>
-      )}
+        {context.conversationId && (
+          <div className="px-4 py-3 border-b border-gray-200 bg-white">
+            <DraftReplyComposer
+              conversationId={context.conversationId}
+              disabled={!open}
+              onApplyDraft={(value) => {
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(
+                    new CustomEvent('draft-reply-apply', {
+                      detail: { conversationId: context.conversationId, text: value },
+                    })
+                  )
+                }
+              }}
+            />
+          </div>
+        )}
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 bg-white">
+        {/* Messages */}
+        <div className="flex-1 px-4 py-4 space-y-4 bg-white">
         {messages.length === 0 && !isLoading && (
           <div className="text-center text-gray-500 text-sm py-8">
             <Sparkles className="h-8 w-8 mx-auto mb-2 text-gray-400" />
@@ -701,6 +702,7 @@ export function HealixPanel({
         )}
 
         <div ref={messagesEndRef} />
+        </div>
       </div>
 
       {/* Suggested Actions */}

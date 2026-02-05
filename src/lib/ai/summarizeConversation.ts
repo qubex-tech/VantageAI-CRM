@@ -1,3 +1,5 @@
+import { classifyIntent } from './classifyIntent'
+
 export type SummaryConfidence = 'low' | 'medium' | 'high'
 
 export type SummaryRole = 'patient' | 'staff' | 'agent' | 'system'
@@ -19,15 +21,6 @@ export interface SummaryResult {
 const fillerRegex =
   /^(hi|hello|hey|thanks|thank you|ok|okay|got it|great|sounds good|bye|goodbye|yes|no|yep|nope)$/i
 
-const topicRules: Array<{ pattern: RegExp; label: string }> = [
-  { pattern: /\b(reschedule|schedule|appointment|book|booking|visit)\b/i, label: 'appointment scheduling' },
-  { pattern: /\b(billing|bill|invoice|payment|charge|copay)\b/i, label: 'billing or payment' },
-  { pattern: /\b(insurance|coverage|benefit|plan)\b/i, label: 'insurance coverage' },
-  { pattern: /\b(refill|prescription|medication|pharmacy)\b/i, label: 'medication or refill' },
-  { pattern: /\b(results|lab|test|imaging|x-ray|mri)\b/i, label: 'test results' },
-  { pattern: /\b(symptom|pain|fever|cough|nausea|dizzy|headache)\b/i, label: 'symptoms' },
-]
-
 const actionRules: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /\b(sent|shared|provided|confirmed)\b/i, label: 'Shared information with the patient.' },
   { pattern: /\b(scheduled|booked|rescheduled)\b/i, label: 'Updated the appointment.' },
@@ -41,11 +34,29 @@ function isFiller(text: string) {
   return false
 }
 
-function detectTopic(text: string) {
-  for (const rule of topicRules) {
-    if (rule.pattern.test(text)) return rule.label
+async function detectTopic(text: string) {
+  const intent = await classifyIntent(text)
+  if (intent.label === 'unknown') return null
+  switch (intent.label) {
+    case 'appointment_scheduling':
+      return 'appointment scheduling'
+    case 'billing_payment':
+      return 'billing or payment'
+    case 'insurance_coverage':
+      return 'insurance coverage'
+    case 'practice_provider':
+      return 'the practice provider'
+    case 'medication_refill':
+      return 'medication or refill'
+    case 'test_results':
+      return 'test results'
+    case 'symptoms':
+      return 'symptoms'
+    case 'general_admin':
+      return 'administrative request'
+    default:
+      return null
   }
-  return null
 }
 
 function detectAction(text: string) {
@@ -55,17 +66,17 @@ function detectAction(text: string) {
   return null
 }
 
-function summarizeLatestAsk(messages: SummaryMessage[]) {
+async function summarizeLatestAsk(messages: SummaryMessage[]) {
   const latestPatient = [...messages]
     .reverse()
     .find((message) => message.role === 'patient' && !isFiller(message.body))
   if (!latestPatient) return 'No pending patient request'
-  const topic = detectTopic(latestPatient.body)
+  const topic = await detectTopic(latestPatient.body)
   if (topic) return `Patient is asking about ${topic}.`
   return 'Patient sent a message but no clear request is pending.'
 }
 
-function summarizeTimeline(messages: SummaryMessage[]) {
+async function summarizeTimeline(messages: SummaryMessage[]) {
   const timeline: string[] = []
   for (const message of messages) {
     if (timeline.length >= 3) break
@@ -77,7 +88,7 @@ function summarizeTimeline(messages: SummaryMessage[]) {
     }
 
     if (message.role === 'patient') {
-      const topic = detectTopic(message.body)
+      const topic = await detectTopic(message.body)
       timeline.push(topic ? `Patient asked about ${topic}.` : 'Patient shared an update.')
       continue
     }
@@ -120,8 +131,8 @@ function determineConfidence(messages: SummaryMessage[], latestAsk: string, acti
 // LLM abstraction placeholder - replace with provider implementation.
 export async function summarizeConversation(messages: SummaryMessage[]): Promise<SummaryResult> {
   const chronological = [...messages].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
-  const whatHappened = summarizeTimeline(chronological)
-  const latestPatientAsk = summarizeLatestAsk(chronological)
+  const whatHappened = await summarizeTimeline(chronological)
+  const latestPatientAsk = await summarizeLatestAsk(chronological)
   const actionsTaken = summarizeActions(chronological)
   const confidence = determineConfidence(chronological, latestPatientAsk, actionsTaken)
 
