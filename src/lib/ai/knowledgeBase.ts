@@ -11,15 +11,49 @@ export async function retrieveKnowledgeBaseMatches({
   practiceId,
   query,
   limit = 3,
+  fallbackToRecent = false,
 }: {
   practiceId: string
   query: string
   limit?: number
+  fallbackToRecent?: boolean
 }): Promise<KnowledgeBaseMatch[]> {
   const { prisma } = await import('@/lib/db')
-
   const normalizedQuery = query.trim()
-  if (!normalizedQuery) {
+  const stopwords = new Set([
+    'the',
+    'and',
+    'for',
+    'with',
+    'that',
+    'this',
+    'what',
+    'your',
+    'you',
+    'can',
+    'are',
+    'who',
+    'how',
+    'did',
+    'does',
+    'from',
+    'about',
+    'tell',
+    'me',
+  ])
+  const tokens = normalizedQuery
+    ? Array.from(
+        new Set(
+          normalizedQuery
+            .toLowerCase()
+            .replace(/[^a-z0-9\s]/g, ' ')
+            .split(/\s+/)
+            .filter((token) => token.length >= 3 && !stopwords.has(token))
+        )
+      ).slice(0, 6)
+    : []
+
+  const fetchRecentArticles = async () => {
     const recent = await prisma.knowledgeBaseArticle.findMany({
       where: { practiceId, isActive: true },
       select: { id: true, title: true, url: true, body: true, summary: true },
@@ -35,13 +69,36 @@ export async function retrieveKnowledgeBaseMatches({
     }))
   }
 
+  if (!normalizedQuery) {
+    return fetchRecentArticles()
+  }
+
+  const extractSnippet = (body: string) => {
+    if (!body) return ''
+    const lower = body.toLowerCase()
+    for (const token of tokens) {
+      const index = lower.indexOf(token)
+      if (index >= 0) {
+        const start = Math.max(0, index - 80)
+        const end = Math.min(body.length, index + 160)
+        return body.slice(start, end)
+      }
+    }
+    return body.slice(0, 200)
+  }
+
   const faqMatches = await prisma.knowledgeBaseFaq.findMany({
     where: {
       practiceId,
-      OR: [
-        { question: { contains: normalizedQuery, mode: 'insensitive' } },
-        { answer: { contains: normalizedQuery, mode: 'insensitive' } },
-      ],
+      OR: tokens.length
+        ? tokens.flatMap((token) => [
+            { question: { contains: token, mode: 'insensitive' } },
+            { answer: { contains: token, mode: 'insensitive' } },
+          ])
+        : [
+            { question: { contains: normalizedQuery, mode: 'insensitive' } },
+            { answer: { contains: normalizedQuery, mode: 'insensitive' } },
+          ],
     },
     include: {
       article: { select: { id: true, title: true, url: true } },
@@ -52,7 +109,9 @@ export async function retrieveKnowledgeBaseMatches({
   const chunkMatches = await prisma.knowledgeBaseChunk.findMany({
     where: {
       practiceId,
-      content: { contains: normalizedQuery, mode: 'insensitive' },
+      OR: tokens.length
+        ? tokens.map((token) => ({ content: { contains: token, mode: 'insensitive' } }))
+        : [{ content: { contains: normalizedQuery, mode: 'insensitive' } }],
     },
     include: {
       article: { select: { id: true, title: true, url: true } },
@@ -65,9 +124,16 @@ export async function retrieveKnowledgeBaseMatches({
       practiceId,
       isActive: true,
       OR: [
-        { title: { contains: normalizedQuery, mode: 'insensitive' } },
-        { body: { contains: normalizedQuery, mode: 'insensitive' } },
-        { tags: { hasSome: normalizedQuery.split(' ') } },
+        ...(tokens.length
+          ? tokens.flatMap((token) => [
+              { title: { contains: token, mode: 'insensitive' } },
+              { body: { contains: token, mode: 'insensitive' } },
+            ])
+          : [
+              { title: { contains: normalizedQuery, mode: 'insensitive' } },
+              { body: { contains: normalizedQuery, mode: 'insensitive' } },
+            ]),
+        { tags: { hasSome: tokens.length ? tokens : normalizedQuery.split(' ') } },
       ],
     },
     select: { id: true, title: true, url: true, body: true, summary: true },
@@ -77,13 +143,13 @@ export async function retrieveKnowledgeBaseMatches({
 
   const combined: KnowledgeBaseMatch[] = []
 
-  faqMatches.forEach((faq) => {
+  matches.forEach((item) => {
     combined.push({
-      id: faq.id,
-      title: `FAQ: ${faq.question}`,
-      url: faq.article.url || undefined,
-      snippet: faq.answer,
-      summary: faq.answer,
+      id: item.id,
+      title: item.title,
+      url: item.url || undefined,
+      snippet: item.summary || extractSnippet(item.body),
+      summary: item.summary || undefined,
     })
   })
 
@@ -97,15 +163,19 @@ export async function retrieveKnowledgeBaseMatches({
     })
   })
 
-  matches.forEach((item) => {
+  faqMatches.forEach((faq) => {
     combined.push({
-      id: item.id,
-      title: item.title,
-      url: item.url || undefined,
-      snippet: item.summary || item.body.slice(0, 140),
-      summary: item.summary || undefined,
+      id: faq.id,
+      title: `FAQ: ${faq.question}`,
+      url: faq.article.url || undefined,
+      snippet: faq.answer,
+      summary: faq.answer,
     })
   })
+
+  if (!combined.length && fallbackToRecent) {
+    return fetchRecentArticles()
+  }
 
   return combined.slice(0, limit)
 }

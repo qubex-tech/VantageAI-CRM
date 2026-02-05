@@ -9,6 +9,8 @@ export interface DraftReplyContext {
     whatHappened: string[]
     actionsTaken: string[]
   }
+  currentQuestion?: string
+  providerEducation?: string[]
   patient?: {
     name: string
     email?: string
@@ -38,6 +40,9 @@ Rules:
 - 2–4 sentences max. No clinical advice.
 - Use plain, empathetic, operational language.
 - Use ONLY provided context; do not invent facts.
+- Focus on answering the currentQuestion if provided; avoid re-answering items already handled.
+- If the question is about provider education/training, use any residency/fellowship/training facts from KB.
+- If knowledgeBase includes relevant facts, you MUST use them and include citations.
 - Include inline citations for KB sources you use, formatted like [KB: Title].
 - If no KB sources are applicable, return citations as an empty array and do NOT invent KB labels.
 - If the patient asks who the doctor/provider is, acknowledge and offer to share provider details or connect them.
@@ -48,6 +53,8 @@ Return JSON ONLY in this format:
 function buildContext(context: DraftReplyContext) {
   return {
     summary: context.summary,
+    currentQuestion: context.currentQuestion,
+    providerEducation: context.providerEducation,
     patient: context.patient,
     nextAppointment: context.nextAppointment
       ? {

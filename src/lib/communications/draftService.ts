@@ -39,6 +39,48 @@ function hasClinicalLanguage(messages: { body: string }[]) {
   return messages.some((message) => clinicalPatterns.some((pattern) => pattern.test(message.body)))
 }
 
+function findOutstandingInbound(messagesDesc: Array<{ id: string; direction: string; body: string }>) {
+  let seenOutbound = false
+  for (const message of messagesDesc) {
+    if (message.direction === 'outbound') {
+      seenOutbound = true
+      continue
+    }
+    if (message.direction === 'inbound' && !seenOutbound) {
+      return message
+    }
+  }
+  return messagesDesc.find((message) => message.direction === 'inbound')
+}
+
+function extractEducationFacts(matches: Array<{ snippet?: string; summary?: string }>) {
+  const keywords = [
+    'internship',
+    'residency',
+    'fellowship',
+    'board certified',
+    'mba',
+    'university',
+    'clinic',
+    'hospital',
+  ]
+  const facts = new Set<string>()
+  matches.forEach((match) => {
+    const source = match.summary || match.snippet || ''
+    source
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .forEach((line) => {
+        const lower = line.toLowerCase()
+        if (keywords.some((keyword) => lower.includes(keyword))) {
+          facts.add(line)
+        }
+      })
+  })
+  return Array.from(facts).slice(0, 6)
+}
+
 export async function buildDraftReply({
   practiceId,
   conversationId,
@@ -67,12 +109,14 @@ export async function buildDraftReply({
     where: { conversationId },
   })
 
+  const outstandingQuestion = findOutstandingInbound(messages)
   const lastPatientMessage = messages.find((message) => message.direction === 'inbound')
+  const focusMessage = outstandingQuestion || lastPatientMessage
   const intent = await import('@/lib/ai/classifyIntent').then(({ classifyIntent }) =>
-    classifyIntent(lastPatientMessage?.body || '')
+    classifyIntent(focusMessage?.body || '')
   )
-  const fallbackKbSignal = /medicare|medicaid|insurance|copay|billing|payment|coverage/i.test(
-    lastPatientMessage?.body || ''
+  const fallbackKbSignal = /medicare|medicaid|insurance|copay|billing|payment|coverage|doctor|provider|dr\.|education|training|fellowship|residency|board certified/i.test(
+    focusMessage?.body || ''
   )
 
   const conversation = await prisma.communicationConversation.findFirst({
@@ -119,12 +163,14 @@ export async function buildDraftReply({
     ? await retrieveKnowledgeBaseMatches({
         practiceId,
         query:
+          focusMessage?.body ||
           summary?.latestPatientAsk ||
-          lastPatientMessage?.body ||
           'patient request',
         limit: 3,
+        fallbackToRecent: true,
       })
     : []
+  const educationFacts = extractEducationFacts(kbMatches)
 
   const similarConversations = await prisma.communicationConversation.findMany({
     where: {
@@ -140,6 +186,12 @@ export async function buildDraftReply({
     take: 3,
   })
 
+  const messagesAsc = messages.slice().reverse()
+  const focusIndex = outstandingQuestion
+    ? messagesAsc.findIndex((message) => message.id === outstandingQuestion.id)
+    : -1
+  const focusedMessages = focusIndex >= 0 ? messagesAsc.slice(focusIndex) : messagesAsc
+
   const result = await generateDraftReply({
     summary: summary
       ? {
@@ -148,10 +200,9 @@ export async function buildDraftReply({
           actionsTaken: summary.actionsTaken.split('\n').filter(Boolean),
         }
       : undefined,
-    messages: messages
-      .slice()
-      .reverse()
-      .map((message) => ({
+    currentQuestion: focusMessage?.body || '',
+    providerEducation: educationFacts,
+    messages: focusedMessages.map((message) => ({
         role:
           message.direction === 'inbound'
             ? 'patient'

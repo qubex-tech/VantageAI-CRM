@@ -427,6 +427,7 @@ export async function POST(req: NextRequest) {
         practiceId: user.practiceId,
         query: userMessage,
         limit: 6,
+        fallbackToRecent: true,
       })
       if (kbMatches.length > 0) {
         contextParts.push(`\nKnowledge Base (relevant):`)
