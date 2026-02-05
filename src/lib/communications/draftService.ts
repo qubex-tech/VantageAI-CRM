@@ -71,6 +71,9 @@ export async function buildDraftReply({
   const intent = await import('@/lib/ai/classifyIntent').then(({ classifyIntent }) =>
     classifyIntent(lastPatientMessage?.body || '')
   )
+  const fallbackKbSignal = /medicare|medicaid|insurance|copay|billing|payment|coverage/i.test(
+    lastPatientMessage?.body || ''
+  )
 
   const conversation = await prisma.communicationConversation.findFirst({
     where: { id: conversationId, practiceId },
@@ -105,7 +108,8 @@ export async function buildDraftReply({
     intent.sources.includes('both') ||
     intent.label === 'insurance_coverage' ||
     intent.label === 'billing_payment' ||
-    intent.label === 'practice_provider'
+    intent.label === 'practice_provider' ||
+    fallbackKbSignal
   const needsPatient =
     intent.sources.includes('patient') ||
     intent.sources.includes('both') ||
