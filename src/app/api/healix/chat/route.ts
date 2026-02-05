@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { executeTool, validateToolName } from '@/lib/healix-tools'
 import { formatHealixActionCatalog } from '@/lib/healix-action-catalog'
 import { formatDateOnly, formatDateTime, resolveLocale, resolveTimeZone } from '@/lib/timezone'
+import { retrieveKnowledgeBaseMatches } from '@/lib/ai/knowledgeBase'
 import OpenAI from 'openai'
 
 // Lazy initialization to avoid build-time errors
@@ -421,6 +422,21 @@ export async function POST(req: NextRequest) {
           contextParts.push(`- ${event.title}${event.description ? ': ' + event.description.substring(0, 50) : ''}`)
         })
       }
+
+      const kbMatches = await retrieveKnowledgeBaseMatches({
+        practiceId: user.practiceId,
+        query: userMessage,
+        limit: 6,
+      })
+      if (kbMatches.length > 0) {
+        contextParts.push(`\nKnowledge Base (relevant):`)
+        kbMatches.forEach((item, index) => {
+          const label = item.title || `KB item ${index + 1}`
+          const snippet = item.summary || item.snippet
+          contextParts.push(`- ${label}${item.url ? ` (${item.url})` : ''}${snippet ? `: ${snippet}` : ''}`)
+        })
+      }
+
       contextString = contextParts.join('\n')
     }
 
