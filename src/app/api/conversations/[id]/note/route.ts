@@ -5,6 +5,7 @@ import { communicationNoteSchema } from '@/lib/validations'
 import { emitCommunicationEvent } from '@/lib/communications/events'
 import type { CommunicationChannel } from '@/lib/communications/types'
 import { ensureCommunicationRuntime } from '@/lib/communications/runtime'
+import { generateConversationSummary } from '@/lib/communications/summaryService'
 
 export const dynamic = 'force-dynamic'
 
@@ -84,6 +85,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       patientId: conversation.patientId,
       messageId: message.id,
       channel,
+      actorUserId: user.id,
+    })
+
+    void generateConversationSummary({
+      practiceId,
+      conversationId: conversation.id,
       actorUserId: user.id,
     })
 

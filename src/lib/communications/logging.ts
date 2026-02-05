@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import type { CommunicationChannel } from './types'
+import { generateConversationSummary } from './summaryService'
 
 interface LogOutboundInput {
   practiceId: string
@@ -30,7 +31,7 @@ export async function logOutboundCommunication({
   subject,
   metadata,
 }: LogOutboundInput) {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const existing = await tx.communicationConversation.findFirst({
       where: {
         practiceId,
@@ -93,6 +94,14 @@ export async function logOutboundCommunication({
 
     return { conversationId: conversation.id, messageId: message.id }
   })
+
+  void generateConversationSummary({
+    practiceId,
+    conversationId: result.conversationId,
+    actorUserId: userId,
+  })
+
+  return result
 }
 
 export async function logInboundCommunication({
@@ -103,7 +112,7 @@ export async function logInboundCommunication({
   subject,
   metadata,
 }: LogInboundInput) {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const existing = await tx.communicationConversation.findFirst({
       where: {
         practiceId,
@@ -179,4 +188,11 @@ export async function logInboundCommunication({
 
     return { conversationId: conversation.id, messageId: message.id }
   })
+
+  void generateConversationSummary({
+    practiceId,
+    conversationId: result.conversationId,
+  })
+
+  return result
 }

@@ -7,6 +7,7 @@ import { getChannelAdapter } from '@/lib/communications/adapters'
 import type { DeliveryStatus } from '@/lib/communications/types'
 import { getTwilioClient } from '@/lib/twilio'
 import { getSendgridClient } from '@/lib/sendgrid'
+import { generateConversationSummary } from '@/lib/communications/summaryService'
 
 export const dynamic = 'force-dynamic'
 
@@ -329,6 +330,12 @@ export async function POST(req: NextRequest) {
       })
 
       return { conversationId: conversation.id, messageId: message.id }
+    })
+
+    void generateConversationSummary({
+      practiceId,
+      conversationId,
+      actorUserId: user.id,
     })
 
     return NextResponse.json({ data: { conversationId, messageId } }, { status: 201 })

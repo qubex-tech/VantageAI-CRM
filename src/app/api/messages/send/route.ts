@@ -9,6 +9,7 @@ import { getTwilioClient } from '@/lib/twilio'
 import { getSendgridClient } from '@/lib/sendgrid'
 import { emitCommunicationEvent } from '@/lib/communications/events'
 import { ensureCommunicationRuntime } from '@/lib/communications/runtime'
+import { generateConversationSummary } from '@/lib/communications/summaryService'
 
 export const dynamic = 'force-dynamic'
 
@@ -185,6 +186,12 @@ export async function POST(req: NextRequest) {
       patientId: conversation.patient.id,
       messageId: message.id,
       channel,
+      actorUserId: user.id,
+    })
+
+    void generateConversationSummary({
+      practiceId,
+      conversationId: conversation.id,
       actorUserId: user.id,
     })
 

@@ -22,3 +22,14 @@ export interface Message {
   isInternalNote: boolean
   channel: 'sms' | 'email' | 'secure' | 'voice' | 'video' | string
 }
+
+export interface ConversationSummaryData {
+  id: string
+  conversationId: string
+  whatHappened: string[]
+  latestPatientAsk: string
+  actionsTaken: string[]
+  confidence: 'low' | 'medium' | 'high'
+  lastGeneratedAt: string
+  needsReview: boolean
+}

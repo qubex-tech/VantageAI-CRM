@@ -4,6 +4,7 @@ import { requireAuth, rateLimit } from '@/lib/middleware'
 import { communicationResolveSchema } from '@/lib/validations'
 import { emitCommunicationEvent } from '@/lib/communications/events'
 import { ensureCommunicationRuntime } from '@/lib/communications/runtime'
+import { generateConversationSummary } from '@/lib/communications/summaryService'
 
 export const dynamic = 'force-dynamic'
 
@@ -70,6 +71,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       practiceId,
       conversationId: conversation.id,
       patientId: conversation.patientId,
+      actorUserId: user.id,
+    })
+
+    void generateConversationSummary({
+      practiceId,
+      conversationId: conversation.id,
       actorUserId: user.id,
     })
 
