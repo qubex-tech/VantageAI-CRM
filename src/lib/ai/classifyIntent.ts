@@ -41,6 +41,13 @@ const ALLOWED_LABELS: IntentLabel[] = [
   'unknown',
 ]
 
+const ALLOWED_SOURCES = ['kb', 'patient', 'both', 'none'] as const
+type AllowedSource = (typeof ALLOWED_SOURCES)[number]
+
+function isAllowedSource(value: string): value is AllowedSource {
+  return ALLOWED_SOURCES.includes(value as AllowedSource)
+}
+
 // LLM abstraction placeholder - replace with provider implementation.
 export async function classifyIntent(message: string): Promise<IntentResult> {
   if (!process.env.OPENAI_API_KEY) {
@@ -65,8 +72,8 @@ export async function classifyIntent(message: string): Promise<IntentResult> {
     }
     const sources =
       Array.isArray(parsed.sources) && parsed.sources.length
-        ? parsed.sources.filter((item) => ['kb', 'patient', 'both', 'none'].includes(item))
-        : ['none']
+        ? parsed.sources.filter((item): item is AllowedSource => isAllowedSource(item))
+        : (['none'] as AllowedSource[])
     return {
       label: parsed.label,
       confidence: parsed.confidence || 'low',
