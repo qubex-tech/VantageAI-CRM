@@ -137,6 +137,11 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
             detail: { conversationId },
           })
         )
+        window.dispatchEvent(
+          new CustomEvent('draft-reply-refresh', {
+            detail: { conversationId },
+          })
+        )
       }
     } catch {
       setSelectedConversation(null)

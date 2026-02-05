@@ -1,64 +1,66 @@
+import OpenAI from 'openai'
 import type { DraftConfidence } from './generateDraftReply'
 
-export type RewriteMode = 'shorten' | 'empathetic' | 'direct' | 'spanish'
+export type RewriteMode = 'shorten' | 'empathetic' | 'direct' | 'spanish' | 'english'
 
 export interface RewriteResult {
   draftText: string
   confidence: DraftConfidence
 }
 
-const citationRegex = /(\[[^\]]+\])/g
-
-function splitWithCitations(text: string) {
-  return text.split(citationRegex).filter(Boolean)
+function getOpenAIClient() {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 }
 
-function joinWithCitations(parts: string[]) {
-  return parts.join('')
-}
-
-function shortenText(text: string) {
-  const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean)
-  return sentences.slice(0, 2).join(' ')
-}
-
-function makeEmpathetic(text: string) {
-  if (text.toLowerCase().startsWith('thanks')) return text
-  return `Thanks for reaching out. ${text}`
-}
-
-function makeDirect(text: string) {
-  return text.replace(/^Thanks for reaching out\.\s*/i, '').trim()
-}
-
-function toSpanish(text: string) {
-  return `Gracias por comunicarse. ${text}`.replace('Please let us know', 'Por favor indíquenos')
-}
+const SYSTEM_PROMPT = `You are rewriting a healthcare CRM draft reply.
+Rules:
+- Preserve meaning. No new information.
+- Keep any inline citations (e.g., [KB: Title]) exactly as-is.
+- No clinical advice.
+- Output JSON only: {"draft_text":"...", "confidence":"low|medium|high"}`
 
 // LLM abstraction placeholder - replace with provider implementation.
 export async function rewriteDraftReply(
   draftText: string,
-  mode: RewriteMode
+  mode?: RewriteMode,
+  prompt?: string
 ): Promise<RewriteResult> {
-  const parts = splitWithCitations(draftText)
-  const rewritten = parts.map((part) => {
-    if (citationRegex.test(part)) return part
-    switch (mode) {
-      case 'shorten':
-        return shortenText(part)
-      case 'empathetic':
-        return makeEmpathetic(part)
-      case 'direct':
-        return makeDirect(part)
-      case 'spanish':
-        return toSpanish(part)
-      default:
-        return part
-    }
+  if (!process.env.OPENAI_API_KEY) {
+    return { draftText, confidence: 'low' }
+  }
+
+  const instruction =
+    prompt ||
+    (mode === 'shorten'
+      ? 'Shorten the draft without losing meaning.'
+      : mode === 'empathetic'
+        ? 'Make the draft more empathetic.'
+        : mode === 'direct'
+          ? 'Make the draft more direct and concise.'
+          : mode === 'spanish'
+            ? 'Translate the draft to Spanish.'
+            : mode === 'english'
+              ? 'Translate the draft to English.'
+              : 'Rewrite the draft to improve clarity.')
+
+  const openai = getOpenAIClient()
+  const completion = await openai.chat.completions.create({
+    model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    temperature: 0.2,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: JSON.stringify({ instruction, draftText }) },
+    ],
   })
 
-  return {
-    draftText: joinWithCitations(rewritten),
-    confidence: 'medium',
+  const raw = completion.choices[0]?.message?.content?.trim() || ''
+  try {
+    const parsed = JSON.parse(raw) as { draft_text?: string; draftText?: string; confidence?: DraftConfidence }
+    return {
+      draftText: parsed.draftText ?? parsed.draft_text ?? draftText,
+      confidence: parsed.confidence || 'medium',
+    }
+  } catch {
+    return { draftText, confidence: 'low' }
   }
 }

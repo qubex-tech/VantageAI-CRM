@@ -1,10 +1,10 @@
 "use client"
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { cn } from '@/lib/utils'
 
 type DraftConfidence = 'low' | 'medium' | 'high'
-type RewriteMode = 'shorten' | 'empathetic' | 'direct' | 'spanish'
+type RewriteMode = 'shorten' | 'empathetic' | 'direct' | 'spanish' | 'english'
 
 interface DraftSource {
   kb: Array<{ id: string; title: string; url?: string }>
@@ -41,10 +41,11 @@ export function DraftReplyComposer({
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [sourcesOpen, setSourcesOpen] = useState(false)
   const [undoText, setUndoText] = useState<string | null>(null)
+  const [customPrompt, setCustomPrompt] = useState('')
 
   const canGenerate = useMemo(() => Boolean(conversationId) && !disabled, [conversationId, disabled])
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (applyToComposer = true) => {
     if (!conversationId || !canGenerate) return
     setLoading(true)
     setErrorMessage(null)
@@ -58,7 +59,9 @@ export function DraftReplyComposer({
         }),
       })
       setDraft(data.data)
-      onApplyDraft(data.data.draft_text)
+      if (applyToComposer) {
+        onApplyDraft(data.data.draft_text)
+      }
     } catch (error) {
       if (error instanceof Error) {
         setErrorMessage(error.message)
@@ -105,11 +108,51 @@ export function DraftReplyComposer({
     setUndoText(null)
   }
 
+  const handleCustomRewrite = async () => {
+    if (!conversationId || !draft || !customPrompt.trim()) return
+    setLoading(true)
+    setErrorMessage(null)
+    setUndoText(draft.draft_text)
+    try {
+      const data = await fetchJson<{ data: DraftResponse }>(`/api/ai/draft-reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversation_id: conversationId,
+          rewrite_prompt: customPrompt.trim(),
+        }),
+      })
+      setDraft(data.data)
+      onApplyDraft(data.data.draft_text)
+      setCustomPrompt('')
+    } catch (error) {
+      if (error instanceof Error) {
+        setErrorMessage(error.message)
+      } else {
+        setErrorMessage('Draft unavailable')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!conversationId) return
+    const handler = (event: Event) => {
+      const customEvent = event as CustomEvent | null
+      const eventConversationId = customEvent?.detail?.conversationId
+      if (eventConversationId && eventConversationId !== conversationId) return
+      handleGenerate(false)
+    }
+    window.addEventListener('draft-reply-refresh', handler)
+    return () => window.removeEventListener('draft-reply-refresh', handler)
+  }, [conversationId, canGenerate])
+
   return (
     <div className="space-y-2">
       <button
         type="button"
-        onClick={handleGenerate}
+        onClick={() => handleGenerate(true)}
         disabled={!canGenerate || loading}
         className={cn(
           'text-xs text-slate-500 hover:text-slate-700',
@@ -134,7 +177,7 @@ export function DraftReplyComposer({
           </div>
           <div className="mt-2 whitespace-pre-wrap text-sm text-indigo-900">{draft.draft_text}</div>
           <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
-            {(['shorten', 'empathetic', 'direct', 'spanish'] as RewriteMode[]).map((mode) => (
+            {(['shorten', 'empathetic', 'direct', 'spanish', 'english'] as RewriteMode[]).map((mode) => (
               <button
                 key={mode}
                 type="button"
@@ -148,7 +191,9 @@ export function DraftReplyComposer({
                     ? 'Empathetic'
                     : mode === 'direct'
                       ? 'Direct'
-                      : 'Spanish'}
+                      : mode === 'spanish'
+                        ? 'Spanish'
+                        : 'English'}
               </button>
             ))}
             {undoText && (
@@ -160,6 +205,22 @@ export function DraftReplyComposer({
                 Undo
               </button>
             )}
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            <input
+              value={customPrompt}
+              onChange={(event) => setCustomPrompt(event.target.value)}
+              placeholder="Ask Healix to modify the draft..."
+              className="flex-1 rounded-full border border-indigo-100 bg-white/80 px-3 py-2 text-xs text-indigo-900 placeholder:text-indigo-300"
+            />
+            <button
+              type="button"
+              onClick={handleCustomRewrite}
+              className="rounded-full border border-indigo-100 bg-white/70 px-3 py-2 text-xs text-indigo-600 hover:text-indigo-800"
+              disabled={loading || !customPrompt.trim()}
+            >
+              Apply
+            </button>
           </div>
           <div className="mt-3">
             <button

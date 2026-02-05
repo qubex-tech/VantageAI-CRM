@@ -241,11 +241,13 @@ export async function rewriteDraft({
   conversationId,
   actorUserId,
   mode,
+  prompt,
 }: {
   practiceId: string
   conversationId: string
   actorUserId: string
-  mode: RewriteMode
+  mode?: RewriteMode
+  prompt?: string
 }): Promise<DraftReplyResponse | null> {
   const existing = await prisma.communicationDraftReply.findFirst({
     where: {
@@ -262,7 +264,7 @@ export async function rewriteDraft({
     sources?: { kb?: Array<{ id: string; title: string; url?: string }>; similar?: Array<{ id: string; snippet: string }> }
   }
 
-  const rewritten = await rewriteDraftReply(existing.draftText, mode)
+  const rewritten = await rewriteDraftReply(existing.draftText, mode, prompt)
 
   const updated = await prisma.communicationDraftReply.update({
     where: { conversationId },
@@ -281,7 +283,8 @@ export async function rewriteDraft({
       resourceId: conversationId,
       changes: {
         draftId: updated.id,
-        mode,
+        mode: mode || 'custom',
+        prompt: prompt || undefined,
       } as Prisma.InputJsonValue,
     },
   })

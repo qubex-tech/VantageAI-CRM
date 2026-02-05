@@ -7,7 +7,8 @@ export const dynamic = 'force-dynamic'
 
 const schema = z.object({
   conversation_id: z.string().uuid(),
-  rewrite_mode: z.enum(['shorten', 'empathetic', 'direct', 'spanish']).optional(),
+  rewrite_mode: z.enum(['shorten', 'empathetic', 'direct', 'spanish', 'english']).optional(),
+  rewrite_prompt: z.string().min(3).optional(),
   message_limit: z.number().int().min(5).max(50).optional(),
 })
 
@@ -27,12 +28,13 @@ export async function POST(req: NextRequest) {
     const parsed = schema.parse(body)
     const practiceId = user.practiceId
 
-    if (parsed.rewrite_mode) {
+    if (parsed.rewrite_mode || parsed.rewrite_prompt) {
       const rewritten = await rewriteDraft({
         practiceId,
         conversationId: parsed.conversation_id,
         actorUserId: user.id,
         mode: parsed.rewrite_mode,
+        prompt: parsed.rewrite_prompt,
       })
 
       if (!rewritten) {
