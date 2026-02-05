@@ -8,6 +8,15 @@ export interface DraftReplyContext {
     whatHappened: string[]
     actionsTaken: string[]
   }
+  patient?: {
+    name: string
+    email?: string
+    phone?: string
+  }
+  nextAppointment?: {
+    startTime: Date
+    visitType?: string
+  }
   messages: Array<{ role: 'patient' | 'staff' | 'agent' | 'system'; body: string }>
   kbArticles: KnowledgeBaseMatch[]
   similarConversations: Array<{ id: string; snippet: string }>
@@ -25,18 +34,25 @@ function buildDraftBody(context: DraftReplyContext) {
     .reverse()
     .find((message) => message.role === 'patient')?.body
   const kbTag = context.kbArticles[0]?.title ? `[KB: ${context.kbArticles[0].title}]` : ''
+  const patientName = context.patient?.name || 'there'
+  const appointment = context.nextAppointment
+  const appointmentLine = appointment
+    ? `We have you scheduled for ${appointment.visitType ? `${appointment.visitType} ` : ''}on ${appointment.startTime.toLocaleDateString()}.`
+    : ''
 
   const askLine = latestAsk && latestAsk !== 'No pending patient request'
     ? latestAsk.replace(/^Patient is asking about/i, 'You asked about')
     : patientMessage
-      ? 'Thanks for the update on your request.'
-      : 'Thanks for reaching out.'
+      ? `Thanks ${patientName}—we’re looking into this.`
+      : `Thanks for reaching out, ${patientName}.`
 
   const secondLine = kbTag
     ? `Per ${kbTag}, we can help with the next steps and confirm details.`
     : 'We can help with the next steps and confirm details.'
 
-  const thirdLine = 'Please let us know a preferred time or any constraints so we can assist.'
+  const thirdLine =
+    appointmentLine ||
+    'Please let us know a preferred time or any constraints so we can assist.'
 
   return [askLine, secondLine, thirdLine].filter(Boolean).join(' ')
 }

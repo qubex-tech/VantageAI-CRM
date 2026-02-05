@@ -63,13 +63,6 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    if (response.error === 'no_kb') {
-      return NextResponse.json(
-        { error: 'No approved knowledge available for this reply', code: 'no_kb' },
-        { status: 422 }
-      )
-    }
-
     if (!response.result) {
       return NextResponse.json({ error: 'Draft unavailable' }, { status: 500 })
     }

@@ -49,7 +49,7 @@ export async function buildDraftReply({
   conversationId: string
   actorUserId: string
   messageLimit?: number
-}): Promise<{ result?: DraftReplyResponse; error?: 'clinical' | 'no_kb' }> {
+}): Promise<{ result?: DraftReplyResponse; error?: 'clinical' }> {
   const messages = await prisma.communicationMessage.findMany({
     where: {
       practiceId,
@@ -69,6 +69,7 @@ export async function buildDraftReply({
 
   const lastPatientMessage = messages.find((message) => message.direction === 'inbound')
   const kbMatches = await retrieveKnowledgeBaseMatches({
+    practiceId,
     query:
       summary?.latestPatientAsk ||
       lastPatientMessage?.body ||
@@ -76,9 +77,33 @@ export async function buildDraftReply({
     limit: 3,
   })
 
-  if (!kbMatches.length) {
-    return { error: 'no_kb' }
-  }
+  const conversation = await prisma.communicationConversation.findFirst({
+    where: { id: conversationId, practiceId },
+    select: {
+      id: true,
+      patient: {
+        select: {
+          id: true,
+          name: true,
+          preferredName: true,
+          primaryPhone: true,
+          phone: true,
+          email: true,
+        },
+      },
+    },
+  })
+
+  const nextAppointment = await prisma.appointment.findFirst({
+    where: {
+      practiceId,
+      patientId: conversation?.patient.id,
+      startTime: { gte: new Date() },
+      status: { in: ['scheduled', 'confirmed'] },
+    },
+    orderBy: { startTime: 'asc' },
+    select: { startTime: true, visitType: true },
+  })
 
   const similarConversations = await prisma.communicationConversation.findMany({
     where: {
@@ -114,6 +139,19 @@ export async function buildDraftReply({
               : 'system',
         body: message.body,
       })),
+    patient: conversation
+      ? {
+          name: conversation.patient.preferredName || conversation.patient.name,
+          email: conversation.patient.email || undefined,
+          phone: conversation.patient.primaryPhone || conversation.patient.phone || undefined,
+        }
+      : undefined,
+    nextAppointment: nextAppointment
+      ? {
+          startTime: nextAppointment.startTime,
+          visitType: nextAppointment.visitType || undefined,
+        }
+      : undefined,
     kbArticles: kbMatches,
     similarConversations: similarConversations.map((item) => ({
       id: item.id,

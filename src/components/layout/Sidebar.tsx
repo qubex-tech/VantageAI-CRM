@@ -18,7 +18,8 @@ import {
   FileText,
   CheckSquare,
   BarChart3,
-  Inbox
+  Inbox,
+  BookOpen
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useEffect, useRef, useState } from 'react'
@@ -32,6 +33,7 @@ const navItems = [
   { href: '/appointments', label: 'Appointments', icon: Calendar },
   { href: '/tasks', label: 'Tasks', icon: CheckSquare },
   { href: '/communications', label: 'Inbox', icon: Inbox },
+  { href: '/knowledge-base', label: 'Knowledge Base', icon: BookOpen },
   { href: '/forms', label: 'Forms', icon: FileText },
   { href: '/marketing', label: 'Marketing', icon: Megaphone },
   { href: '/calls', label: 'Calls', icon: Phone },

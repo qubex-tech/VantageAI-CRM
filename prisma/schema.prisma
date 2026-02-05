@@ -76,6 +76,7 @@ model Practice {
   communicationAssignments   CommunicationAssignment[]
   communicationAttachments   CommunicationAttachment[]
   communicationTriggers      CommunicationTrigger[]
+  knowledgeBaseArticles      KnowledgeBaseArticle[]
 
   @@index([slug])
   @@index([portalDomain])
@@ -1164,6 +1165,25 @@ model CommunicationTrigger {
   @@index([practiceId, eventType])
   @@index([enabled])
   @@map("communication_triggers")
+}
+
+model KnowledgeBaseArticle {
+  id         String   @id @default(uuid())
+  practiceId String
+  title      String
+  body       String
+  url        String?
+  tags       String[]
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId])
+  @@index([isActive])
+  @@index([updatedAt])
+  @@map("knowledge_base_articles")
 }
 
 model PortalMessage {
