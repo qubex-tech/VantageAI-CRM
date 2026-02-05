@@ -120,26 +120,26 @@ export function DraftReplyComposer({
       </button>
 
       {errorMessage && (
-        <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500">
+        <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 px-3 py-2 text-xs text-indigo-700">
           {errorMessage}
         </div>
       )}
 
       {draft && (
-        <div className="rounded-lg bg-slate-50 px-3 py-3 text-xs text-slate-600">
-          <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
-            <span className="uppercase tracking-wide text-slate-500">AI Draft</span>
+        <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 px-3 py-3 text-xs text-indigo-700">
+          <div className="flex flex-wrap items-center gap-3 text-[11px] text-indigo-600/80">
+            <span className="uppercase tracking-wide text-indigo-700">AI Draft</span>
             <span>{draft.confidence[0].toUpperCase() + draft.confidence.slice(1)} confidence</span>
             {loading && <span>Updating…</span>}
           </div>
-          <div className="mt-2 whitespace-pre-wrap text-sm text-slate-800">{draft.draft_text}</div>
+          <div className="mt-2 whitespace-pre-wrap text-sm text-indigo-900">{draft.draft_text}</div>
           <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
             {(['shorten', 'empathetic', 'direct', 'spanish'] as RewriteMode[]).map((mode) => (
               <button
                 key={mode}
                 type="button"
                 onClick={() => handleRewrite(mode)}
-                className="rounded-full border border-slate-200 px-2 py-1 text-slate-500 hover:text-slate-700"
+                className="rounded-full border border-indigo-100 bg-white/70 px-2 py-1 text-indigo-600 hover:text-indigo-800"
                 disabled={loading}
               >
                 {mode === 'shorten'
@@ -155,7 +155,7 @@ export function DraftReplyComposer({
               <button
                 type="button"
                 onClick={handleUndo}
-                className="rounded-full border border-slate-200 px-2 py-1 text-slate-500 hover:text-slate-700"
+                className="rounded-full border border-indigo-100 bg-white/70 px-2 py-1 text-indigo-600 hover:text-indigo-800"
               >
                 Undo
               </button>
@@ -165,14 +165,14 @@ export function DraftReplyComposer({
             <button
               type="button"
               onClick={() => setSourcesOpen((prev) => !prev)}
-              className="text-[11px] text-slate-400 hover:text-slate-600"
+              className="text-[11px] text-indigo-500/80 hover:text-indigo-700"
             >
               {sourcesOpen ? 'Hide sources' : 'Show sources'}
             </button>
             {sourcesOpen && (
-              <div className="mt-2 space-y-2 text-[11px] text-slate-500">
+              <div className="mt-2 space-y-2 text-[11px] text-indigo-700/80">
                 <div>
-                  <div className="font-semibold text-slate-500">KB Sources</div>
+                  <div className="font-semibold text-indigo-700">KB Sources</div>
                   {draft.sources.kb.length ? (
                     <ul className="mt-1 space-y-1">
                       {draft.sources.kb.map((source) => (
@@ -182,7 +182,7 @@ export function DraftReplyComposer({
                               href={source.url}
                               target="_blank"
                               rel="noreferrer"
-                              className="text-slate-500 hover:text-slate-700"
+                              className="text-indigo-700 hover:text-indigo-900"
                             >
                               {source.title}
                             </a>
@@ -193,11 +193,11 @@ export function DraftReplyComposer({
                       ))}
                     </ul>
                   ) : (
-                    <div className="text-slate-400">No KB sources available.</div>
+                    <div className="text-indigo-400">No KB sources available.</div>
                   )}
                 </div>
                 <div>
-                  <div className="font-semibold text-slate-500">Similar conversations</div>
+                  <div className="font-semibold text-indigo-700">Similar conversations</div>
                   {draft.sources.similar.length ? (
                     <ul className="mt-1 space-y-1">
                       {draft.sources.similar.map((source) => (
@@ -208,7 +208,7 @@ export function DraftReplyComposer({
                       ))}
                     </ul>
                   ) : (
-                    <div className="text-slate-400">No similar conversations.</div>
+                    <div className="text-indigo-400">No similar conversations.</div>
                   )}
                 </div>
               </div>

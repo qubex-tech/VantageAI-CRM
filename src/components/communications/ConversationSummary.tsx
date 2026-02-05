@@ -24,17 +24,17 @@ export function ConversationSummary({
 
   if (!summary && !loading && error) {
     return (
-      <div className="rounded-lg bg-slate-50 px-4 py-3 text-xs text-slate-500">
+      <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 px-4 py-3 text-xs text-indigo-700">
         Summary unavailable
       </div>
     )
   }
 
   return (
-    <div className="rounded-lg bg-slate-50 px-4 py-3 text-xs text-slate-600">
+    <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 px-4 py-3 text-xs text-indigo-700">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-indigo-700">
             AI Summary
           </div>
           {summary?.needsReview && (
@@ -43,20 +43,20 @@ export function ConversationSummary({
             </div>
           )}
         </div>
-        <div className="flex items-center gap-3 text-[11px] text-slate-400">
+        <div className="flex items-center gap-3 text-[11px] text-indigo-500/80">
           <span>{summary?.confidence ? `${summary.confidence[0].toUpperCase()}${summary.confidence.slice(1)} confidence` : 'Confidence pending'}</span>
           <span>{updatedLabel}</span>
           <button
             type="button"
             onClick={onRefresh}
-            className="text-slate-500 hover:text-slate-700"
+            className="text-indigo-600 hover:text-indigo-800"
           >
             Refresh summary
           </button>
           <button
             type="button"
             onClick={() => setExpanded((prev) => !prev)}
-            className="text-slate-500 hover:text-slate-700"
+            className="text-indigo-600 hover:text-indigo-800"
           >
             {expanded ? 'Collapse' : 'Expand'}
           </button>
@@ -66,10 +66,10 @@ export function ConversationSummary({
       {expanded && (
         <div className="mt-3 space-y-3">
           <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-indigo-700">
               What happened
             </div>
-            <ul className="mt-1 list-disc space-y-1 pl-4 text-xs text-slate-700">
+            <ul className="mt-1 list-disc space-y-1 pl-4 text-xs text-indigo-900">
               {(summary?.whatHappened ?? []).map((item) => (
                 <li key={item}>{item}</li>
               ))}
@@ -80,19 +80,19 @@ export function ConversationSummary({
           </div>
 
           <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-indigo-700">
               Latest ask
             </div>
-            <div className="mt-1 text-xs text-slate-700">
+            <div className="mt-1 text-xs text-indigo-900">
               {summary?.latestPatientAsk || (loading ? 'Generating summary…' : 'Summary unavailable')}
             </div>
           </div>
 
           <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-indigo-700">
               Actions taken
             </div>
-            <ul className="mt-1 list-disc space-y-1 pl-4 text-xs text-slate-700">
+            <ul className="mt-1 list-disc space-y-1 pl-4 text-xs text-indigo-900">
               {(summary?.actionsTaken ?? []).map((item) => (
                 <li key={item}>{item}</li>
               ))}
