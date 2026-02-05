@@ -8,6 +8,17 @@ import { X, Send, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { type HealixContextPayload } from '@/hooks/useHealixContext'
 import { parseHealixResponse, formatMarkdown } from '@/lib/healix-formatter'
+import { ConversationSummary } from '@/components/communications/ConversationSummary'
+import type { ConversationSummaryData } from '@/components/communications/types'
+
+async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
+  const res = await fetch(input, init)
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}))
+    throw new Error(error?.error || 'Request failed')
+  }
+  return res.json()
+}
 
 export interface HealixMessage {
   id: string
@@ -49,6 +60,10 @@ export function HealixPanel({
   const [lastUserMessage, setLastUserMessage] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const [summary, setSummary] = useState<ConversationSummaryData | null>(null)
+  const [summaryLoading, setSummaryLoading] = useState(false)
+  const [summaryError, setSummaryError] = useState(false)
+  const summaryDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -82,6 +97,94 @@ export function HealixPanel({
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [open, onOpenChange])
+
+  const loadSummary = useCallback(async (conversationId: string) => {
+    try {
+      const data = await fetchJson<{ data: { summary: ConversationSummaryData | null; needsReview: boolean } }>(
+        `/api/conversations/${conversationId}/summary`
+      )
+      const summaryData = data.data.summary
+      if (!summaryData) {
+        setSummary(null)
+        return false
+      }
+      setSummary({
+        ...summaryData,
+        needsReview: data.data.needsReview,
+      })
+      return true
+    } catch {
+      setSummaryError(true)
+      return false
+    }
+  }, [])
+
+  const refreshSummary = useCallback(async (conversationId: string) => {
+    setSummaryLoading(true)
+    setSummaryError(false)
+    try {
+      const data = await fetchJson<{
+        data: { summary: ConversationSummaryData | null; needsReview: boolean }
+      }>(`/api/conversations/${conversationId}/summarize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageLimit: 20 }),
+      })
+      if (data.data.summary) {
+        setSummary({ ...data.data.summary, needsReview: data.data.needsReview })
+      }
+    } catch {
+      setSummaryError(true)
+    } finally {
+      setSummaryLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    if (!context.conversationId) {
+      setSummary(null)
+      return
+    }
+    setSummary(null)
+    setSummaryError(false)
+    loadSummary(context.conversationId).then((hasSummary) => {
+      if (!hasSummary) {
+        refreshSummary(context.conversationId!)
+      }
+    })
+  }, [context.conversationId, loadSummary, open, refreshSummary])
+
+  useEffect(() => {
+    if (!open || !context.conversationId) return
+
+    const scheduleRefresh = () => {
+      if (summaryDebounceRef.current) {
+        clearTimeout(summaryDebounceRef.current)
+      }
+      summaryDebounceRef.current = setTimeout(() => {
+        refreshSummary(context.conversationId!)
+      }, 1200)
+    }
+
+    const handleSummaryRefresh = (event: Event) => {
+      const customEvent = event as CustomEvent | null
+      const eventConversationId = customEvent?.detail?.conversationId
+      if (eventConversationId && eventConversationId !== context.conversationId) return
+      scheduleRefresh()
+    }
+
+    const handleUnreadUpdate = () => {
+      scheduleRefresh()
+    }
+
+    window.addEventListener('conversation-summary-refresh', handleSummaryRefresh)
+    window.addEventListener('inbox-unread-updated', handleUnreadUpdate)
+    return () => {
+      window.removeEventListener('conversation-summary-refresh', handleSummaryRefresh)
+      window.removeEventListener('inbox-unread-updated', handleUnreadUpdate)
+    }
+  }, [context.conversationId, open, refreshSummary])
 
   const sendMessage = useCallback(async (messageText: string) => {
     if (!messageText.trim() || isLoading) return
@@ -486,6 +589,21 @@ export function HealixPanel({
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {context.conversationId && (
+        <div className="px-4 py-3 border-b border-gray-200 bg-white">
+          <ConversationSummary
+            summary={summary}
+            loading={summaryLoading}
+            error={summaryError}
+            onRefresh={() => {
+              if (context.conversationId) {
+                refreshSummary(context.conversationId)
+              }
+            }}
+          />
         </div>
       )}
 

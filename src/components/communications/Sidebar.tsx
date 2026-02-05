@@ -15,7 +15,7 @@ export function Sidebar({
   unreadCount: number
 }) {
   return (
-    <aside className="flex h-full w-48 flex-col border-r border-slate-200 px-5 py-6">
+    <aside className="flex h-full w-40 flex-col border-r border-slate-200 px-4 py-6">
       <div className="flex items-center justify-between">
         <div className="text-lg font-semibold text-slate-900">Inbox</div>
         {unreadCount > 0 && (

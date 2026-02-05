@@ -5,6 +5,7 @@ import { Sidebar } from './Sidebar'
 import { ConversationList } from './ConversationList'
 import { ConversationDetail } from './ConversationDetail'
 import type { Conversation, ConversationView, Message } from './types'
+import { setHealixContextOverride, setHealixPanelOpen } from '@/components/healix/HealixButton'
 
 const viewToFilters: Record<ConversationView, { status?: string; assignee?: string }> = {
   Open: { status: 'open' },
@@ -68,6 +69,7 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
       const items = data.data?.conversations ?? []
       const shaped = items.map((item) => ({
         id: item.id,
+        patientId: item.patient?.id ?? null,
         patientName: item.patient?.name ?? 'Unknown',
         patientEmail: item.patient?.email ?? null,
         patientPhone: item.patient?.primaryPhone ?? null,
@@ -101,6 +103,7 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
       const conversation = detail.data.conversation
       setSelectedConversation({
         id: conversation.id,
+        patientId: conversation.patient?.id ?? null,
         patientName: conversation.patient?.name ?? 'Unknown',
         patientEmail: conversation.patient?.email ?? null,
         patientPhone: conversation.patient?.primaryPhone ?? null,
@@ -128,6 +131,13 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
         }
       })
       setMessages(shapedMessages)
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('conversation-summary-refresh', {
+            detail: { conversationId },
+          })
+        )
+      }
     } catch {
       setSelectedConversation(null)
       setMessages([])
@@ -251,6 +261,34 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [conversations, selectedIndex])
+
+  useEffect(() => {
+    setHealixPanelOpen(true)
+    return () => {
+      setHealixPanelOpen(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!selectedConversation?.id) {
+      setHealixContextOverride(null)
+      return
+    }
+    setHealixContextOverride({
+      route: `/communications/${selectedConversation.id}`,
+      screenTitle: 'Communications / Inbox',
+      patientId: selectedConversation.patientId ?? undefined,
+      conversationId: selectedConversation.id,
+      visibleFields: {
+        patientName: selectedConversation.patientName,
+        patientEmail: selectedConversation.patientEmail,
+        patientPhone: selectedConversation.patientPhone,
+      },
+    })
+    return () => {
+      setHealixContextOverride(null)
+    }
+  }, [selectedConversation])
 
   const handleSelectConversation = (conversationId: string) => {
     setSelectedId(conversationId)

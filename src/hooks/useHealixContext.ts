@@ -7,6 +7,7 @@ import { getClientLocale, getClientTimeZone } from '@/lib/timezone'
 export interface HealixContextPayload {
   route: string
   screenTitle?: string
+  conversationId?: string
   patientId?: string
   appointmentId?: string
   invoiceId?: string
@@ -73,6 +74,7 @@ export interface HealixContextPayload {
 }
 
 export interface UseHealixContextOptions {
+  conversationId?: string
   patientId?: string
   appointmentId?: string
   invoiceId?: string
@@ -146,6 +148,7 @@ export function useHealixContext(options: UseHealixContextOptions = {}) {
     return {
       route: pathname,
       screenTitle: options.screenTitle,
+      conversationId: options.conversationId,
       patientId: options.patientId,
       appointmentId: options.appointmentId,
       invoiceId: options.invoiceId,

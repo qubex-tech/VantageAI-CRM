@@ -7,6 +7,7 @@ import { HealixPanel } from './HealixPanel'
 import { useHealixContext, type HealixContextPayload } from '@/hooks/useHealixContext'
 
 export interface HealixButtonProps {
+  conversationId?: string
   patientId?: string
   appointmentId?: string
   invoiceId?: string
@@ -107,6 +108,7 @@ export function useHealixContextOverride() {
 }
 
 export function HealixButton({
+  conversationId,
   patientId,
   appointmentId,
   invoiceId,
@@ -117,6 +119,7 @@ export function HealixButton({
   const contextOverride = useHealixContextOverride()
   const pendingPrompt = useHealixPendingPrompt()
   const { context } = useHealixContext({
+    conversationId,
     patientId,
     appointmentId,
     invoiceId,

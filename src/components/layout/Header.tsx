@@ -13,6 +13,7 @@ export function Header() {
   const patientIdMatch = pathname.match(/\/patients\/([^/]+)/)
   const appointmentIdMatch = pathname.match(/\/appointments\/([^/]+)/)
   const invoiceIdMatch = pathname.match(/\/invoices\/([^/]+)/)
+  const conversationIdMatch = pathname.match(/\/communications\/([^/]+)/)
 
   const screenTitle = pathname
     .split('/')
@@ -30,6 +31,7 @@ export function Header() {
     >
       <div className="flex items-center gap-2">
         <HealixButton
+          conversationId={conversationIdMatch?.[1]}
           patientId={patientIdMatch?.[1]}
           appointmentId={appointmentIdMatch?.[1]}
           invoiceId={invoiceIdMatch?.[1]}

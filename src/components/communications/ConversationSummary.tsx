@@ -35,7 +35,7 @@ export function ConversationSummary({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-            Auto Summary
+            AI Summary
           </div>
           {summary?.needsReview && (
             <div className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700">

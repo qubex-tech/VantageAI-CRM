@@ -2,6 +2,7 @@ export type ConversationView = 'Open' | 'Pending' | 'Resolved' | 'Mine' | 'Team'
 
 export interface Conversation {
   id: string
+  patientId?: string | null
   patientName: string
   patientEmail?: string | null
   patientPhone?: string | null
