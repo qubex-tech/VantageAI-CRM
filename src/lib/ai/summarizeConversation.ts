@@ -1,3 +1,4 @@
+import OpenAI from 'openai'
 import { classifyIntent } from './classifyIntent'
 
 export type SummaryConfidence = 'low' | 'medium' | 'high'
@@ -128,9 +129,59 @@ function determineConfidence(messages: SummaryMessage[], latestAsk: string, acti
   return 'low'
 }
 
+function getOpenAIClient() {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+}
+
+const SUMMARY_SYSTEM_PROMPT = `You are a healthcare CRM summarization engine.
+Produce a concise summary with three sections:
+1) what_happened: 1-3 bullet points
+2) latest_patient_ask: one sentence
+3) actions_taken: bullet list
+Rules:
+- Do NOT invent facts.
+- No clinical advice.
+- Ignore greetings/filler.
+Return JSON only:
+{"what_happened":["..."],"latest_patient_ask":"...","actions_taken":["..."],"confidence":"low|medium|high"}`
+
 // LLM abstraction placeholder - replace with provider implementation.
 export async function summarizeConversation(messages: SummaryMessage[]): Promise<SummaryResult> {
   const chronological = [...messages].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+  if (process.env.OPENAI_API_KEY) {
+    const openai = getOpenAIClient()
+    const completion = await openai.chat.completions.create({
+      model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+      temperature: 0.2,
+      messages: [
+        { role: 'system', content: SUMMARY_SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content: JSON.stringify(
+            chronological.map((message) => ({
+              role: message.role,
+              body: message.body,
+              internal: message.isInternal,
+            }))
+          ),
+        },
+      ],
+    })
+
+    const raw = completion.choices[0]?.message?.content?.trim() || ''
+    try {
+      const parsed = JSON.parse(raw) as SummaryResult
+      return {
+        whatHappened: parsed.whatHappened || [],
+        latestPatientAsk: parsed.latestPatientAsk || 'No pending patient request',
+        actionsTaken: parsed.actionsTaken || [],
+        confidence: parsed.confidence || 'low',
+      }
+    } catch {
+      // fall through to heuristic fallback
+    }
+  }
+
   const whatHappened = await summarizeTimeline(chronological)
   const latestPatientAsk = await summarizeLatestAsk(chronological)
   const actionsTaken = summarizeActions(chronological)

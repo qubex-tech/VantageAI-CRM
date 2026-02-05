@@ -1,5 +1,5 @@
+import OpenAI from 'openai'
 import type { KnowledgeBaseMatch } from './knowledgeBase'
-import { classifyIntent } from './classifyIntent'
 
 export type DraftConfidence = 'low' | 'medium' | 'high'
 
@@ -29,61 +29,76 @@ export interface DraftReplyResult {
   confidence: DraftConfidence
 }
 
-async function detectProviderIntent(text: string) {
-  const intent = await classifyIntent(text)
-  return intent.label === 'practice_provider'
+function getOpenAIClient() {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 }
 
-async function buildDraftBody(context: DraftReplyContext) {
-  const latestAsk = context.summary?.latestPatientAsk
-  const patientMessage = [...context.messages]
-    .reverse()
-    .find((message) => message.role === 'patient')?.body
-  const kbTag = context.kbArticles[0]?.title ? `[KB: ${context.kbArticles[0].title}]` : ''
-  const patientName = context.patient?.name || 'there'
-  const appointment = context.nextAppointment
-  const appointmentLine = appointment
-    ? `We have you scheduled for ${appointment.visitType ? `${appointment.visitType} ` : ''}on ${appointment.startTime.toLocaleDateString()}.`
-    : ''
+const SYSTEM_PROMPT = `You are a healthcare CRM drafting assistant. Generate a concise, non-clinical reply draft for front-desk staff.
+Rules:
+- 2–4 sentences max. No clinical advice.
+- Use plain, empathetic, operational language.
+- Use ONLY provided context; do not invent facts.
+- Include inline citations for KB sources you use, formatted like [KB: Title].
+- If no KB sources are applicable, return citations as an empty array and do NOT invent KB labels.
+- If the patient asks who the doctor/provider is, acknowledge and offer to share provider details or connect them.
+- If an appointment time is provided, confirm it.
+Return JSON ONLY in this format:
+{"draft_text":"...", "citations":[{"label":"[KB: ...]","sourceId":"..."}], "confidence":"low|medium|high"}`
 
-  const hasClearAsk =
-    Boolean(latestAsk) &&
-    latestAsk !== 'No pending patient request' &&
-    !/no clear request/i.test(latestAsk || '')
-
-  const askLine = hasClearAsk
-    ? (latestAsk ?? '').replace(/^Patient is asking about/i, 'You asked about')
-    : patientMessage
-      ? `Thanks ${patientName}—we’re looking into this.`
-      : `Thanks for reaching out, ${patientName}.`
-
-  const secondLine = kbTag
-    ? `Per ${kbTag}, we can help with the next steps and confirm details.`
-    : 'We can help with the next steps and confirm details.'
-
-  const isProviderQuestion = patientMessage ? await detectProviderIntent(patientMessage) : false
-  const thirdLine =
-    appointmentLine ||
-    (isProviderQuestion
-      ? 'We can share our provider details—let us know if you are looking for a specific doctor.'
-      : 'Please let us know a preferred time or any constraints so we can assist.')
-
-  return [askLine, secondLine, thirdLine].filter(Boolean).join(' ')
+function buildContext(context: DraftReplyContext) {
+  return {
+    summary: context.summary,
+    patient: context.patient,
+    nextAppointment: context.nextAppointment
+      ? {
+          startTime: context.nextAppointment.startTime.toISOString(),
+          visitType: context.nextAppointment.visitType,
+        }
+      : null,
+    messages: context.messages.slice(-10),
+    knowledgeBase: context.kbArticles.map((article) => ({
+      id: article.id,
+      title: article.title,
+      url: article.url,
+      snippet: article.snippet,
+    })),
+    similarConversations: context.similarConversations,
+  }
 }
 
 // LLM abstraction placeholder - replace with provider implementation.
 export async function generateDraftReply(context: DraftReplyContext): Promise<DraftReplyResult> {
-  const citations = context.kbArticles.map((article) => ({
-    label: `[KB: ${article.title}]`,
-    sourceId: article.id,
-  }))
+  if (!process.env.OPENAI_API_KEY) {
+    return {
+      draftText: 'Thanks for reaching out. We can help with the next steps and confirm details.',
+      citations: [],
+      confidence: 'low',
+    }
+  }
 
-  const draftText = await buildDraftBody(context)
-  const confidence: DraftConfidence = context.kbArticles.length ? 'medium' : 'low'
+  const openai = getOpenAIClient()
+  const completion = await openai.chat.completions.create({
+    model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    temperature: 0.2,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: JSON.stringify(buildContext(context)) },
+    ],
+  })
 
-  return {
-    draftText,
-    citations,
-    confidence,
+  const raw = completion.choices[0]?.message?.content?.trim() || ''
+  try {
+    const parsed = JSON.parse(raw) as DraftReplyResult
+    return {
+      draftText: parsed.draftText,
+      citations: Array.isArray(parsed.citations) ? parsed.citations : [],
+      confidence: parsed.confidence || 'low',
+    }
+  } catch {
+    return {
+      draftText: 'Thanks for reaching out. We can help with the next steps and confirm details.',
+      citations: [],
+      confidence: 'low',
+    }
   }
 }
