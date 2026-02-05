@@ -1028,6 +1028,7 @@ model CommunicationConversation {
   messages   CommunicationMessage[]
   assignments CommunicationAssignment[]
   summary    CommunicationConversationSummary?
+  draftReply CommunicationDraftReply?
 
   @@index([practiceId])
   @@index([practiceId, status])
@@ -1035,6 +1036,21 @@ model CommunicationConversation {
   @@index([practiceId, lastMessageAt])
   @@index([patientId])
   @@map("communication_conversations")
+}
+
+model CommunicationDraftReply {
+  id             String   @id @default(uuid())
+  conversationId String   @unique
+  draftText      String
+  citations      Json
+  confidence     String // 'low', 'medium', 'high'
+  createdAt      DateTime @default(now())
+  lastModifiedAt DateTime @updatedAt
+
+  conversation CommunicationConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@map("communication_draft_replies")
 }
 
 model CommunicationConversationSummary {

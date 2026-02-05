@@ -1,8 +1,10 @@
 "use client"
 
+import { useEffect, useState } from 'react'
 import { MessageTimeline } from './MessageTimeline'
 import { Composer } from './Composer'
 import { NewMessagePanel } from './NewMessagePanel'
+import { DraftReplyComposer } from './DraftReplyComposer'
 import { Button } from '@/components/ui/button'
 import type { Conversation, Message } from './types'
 
@@ -23,6 +25,12 @@ export function ConversationDetail({
   onStartConversation: (payload: { patientId: string; channel: string; body: string; subject?: string }) => Promise<void>
   sending: boolean
 }) {
+  const [composerValue, setComposerValue] = useState('')
+
+  useEffect(() => {
+    setComposerValue('')
+  }, [conversation?.id])
+
   if (!conversation && !loading) {
     return (
       <section className="flex flex-1 items-center justify-center px-6 py-8">
@@ -72,7 +80,20 @@ export function ConversationDetail({
       </div>
 
       <div className="border-t border-slate-200 px-8 py-4">
-        <Composer onSend={onSendMessage} disabled={sending} defaultChannel={conversation?.channel} />
+        <div className="mb-3">
+          <DraftReplyComposer
+            conversationId={conversation?.id ?? null}
+            disabled={sending}
+            onApplyDraft={(value) => setComposerValue(value)}
+          />
+        </div>
+        <Composer
+          onSend={onSendMessage}
+          disabled={sending}
+          defaultChannel={conversation?.channel}
+          value={composerValue}
+          onValueChange={setComposerValue}
+        />
       </div>
     </section>
   )

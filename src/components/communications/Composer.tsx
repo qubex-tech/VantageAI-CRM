@@ -17,12 +17,16 @@ export function Composer({
   onSend,
   disabled,
   defaultChannel = 'sms',
+  value,
+  onValueChange,
 }: {
   onSend: (payload: { body: string; channel: string; subject?: string }) => Promise<boolean>
   disabled: boolean
   defaultChannel?: string
+  value?: string
+  onValueChange?: (next: string) => void
 }) {
-  const [value, setValue] = useState('')
+  const [internalValue, setInternalValue] = useState('')
   const [channel, setChannel] = useState(defaultChannel)
   const [subject, setSubject] = useState('')
   const [isSending, setIsSending] = useState(false)
@@ -30,19 +34,22 @@ export function Composer({
   const [error, setError] = useState('')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
+  const currentValue = value ?? internalValue
+
   const handleSend = async () => {
-    if (!value.trim()) return
+    if (!currentValue.trim()) return
     setIsSending(true)
     setError('')
     const success = await onSend({
-      body: value.trim(),
+      body: currentValue.trim(),
       channel,
       subject: channel === 'email' ? subject.trim() : undefined,
     })
     setIsSending(false)
     if (success) {
       setSent(true)
-      setValue('')
+      setInternalValue('')
+      onValueChange?.('')
       setSubject('')
       setTimeout(() => setSent(false), 1200)
     } else {
@@ -75,8 +82,12 @@ export function Composer({
         />
       )}
       <Textarea
-        value={value}
-        onChange={(event) => setValue(event.target.value)}
+        value={currentValue}
+        onChange={(event) => {
+          const next = event.target.value
+          setInternalValue(next)
+          onValueChange?.(next)
+        }}
         placeholder="Type a reply…"
         className="min-h-[96px] resize-none border-slate-200 text-sm"
       />
@@ -91,7 +102,7 @@ export function Composer({
           Attach
         </button>
         <input ref={fileInputRef} type="file" className="hidden" />
-        <Button size="sm" onClick={handleSend} disabled={disabled || !value.trim() || isSending}>
+        <Button size="sm" onClick={handleSend} disabled={disabled || !currentValue.trim() || isSending}>
           {isSending ? (
             <span className="flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
