@@ -52,7 +52,7 @@ async function buildDraftBody(context: DraftReplyContext) {
     !/no clear request/i.test(latestAsk || '')
 
   const askLine = hasClearAsk
-    ? latestAsk.replace(/^Patient is asking about/i, 'You asked about')
+    ? (latestAsk ?? '').replace(/^Patient is asking about/i, 'You asked about')
     : patientMessage
       ? `Thanks ${patientName}—we’re looking into this.`
       : `Thanks for reaching out, ${patientName}.`
