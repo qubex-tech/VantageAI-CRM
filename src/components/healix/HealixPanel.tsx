@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { type HealixContextPayload } from '@/hooks/useHealixContext'
 import { parseHealixResponse, formatMarkdown } from '@/lib/healix-formatter'
 import { ConversationSummary } from '@/components/communications/ConversationSummary'
+import { DraftReplyComposer } from '@/components/communications/DraftReplyComposer'
 import type { ConversationSummaryData } from '@/components/communications/types'
 
 async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
@@ -601,6 +602,24 @@ export function HealixPanel({
             onRefresh={() => {
               if (context.conversationId) {
                 refreshSummary(context.conversationId)
+              }
+            }}
+          />
+        </div>
+      )}
+
+      {context.conversationId && (
+        <div className="px-4 py-3 border-b border-gray-200 bg-white">
+          <DraftReplyComposer
+            conversationId={context.conversationId}
+            disabled={!open}
+            onApplyDraft={(value) => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(
+                  new CustomEvent('draft-reply-apply', {
+                    detail: { conversationId: context.conversationId, text: value },
+                  })
+                )
               }
             }}
           />

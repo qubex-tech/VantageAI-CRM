@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import { MessageTimeline } from './MessageTimeline'
 import { Composer } from './Composer'
 import { NewMessagePanel } from './NewMessagePanel'
-import { DraftReplyComposer } from './DraftReplyComposer'
 import { Button } from '@/components/ui/button'
 import type { Conversation, Message } from './types'
 
@@ -29,6 +28,19 @@ export function ConversationDetail({
 
   useEffect(() => {
     setComposerValue('')
+  }, [conversation?.id])
+
+  useEffect(() => {
+    const handleDraftApply = (event: Event) => {
+      const customEvent = event as CustomEvent | null
+      const detail = customEvent?.detail as { conversationId?: string; text?: string } | undefined
+      if (!detail?.text) return
+      if (detail.conversationId && detail.conversationId !== conversation?.id) return
+      setComposerValue(detail.text)
+    }
+
+    window.addEventListener('draft-reply-apply', handleDraftApply)
+    return () => window.removeEventListener('draft-reply-apply', handleDraftApply)
   }, [conversation?.id])
 
   if (!conversation && !loading) {
@@ -80,13 +92,6 @@ export function ConversationDetail({
       </div>
 
       <div className="border-t border-slate-200 px-8 py-4">
-        <div className="mb-3">
-          <DraftReplyComposer
-            conversationId={conversation?.id ?? null}
-            disabled={sending}
-            onApplyDraft={(value) => setComposerValue(value)}
-          />
-        </div>
         <Composer
           onSend={onSendMessage}
           disabled={sending}
