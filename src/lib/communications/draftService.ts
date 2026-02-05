@@ -100,8 +100,16 @@ export async function buildDraftReply({
     select: { startTime: true, visitType: true },
   })
 
-  const needsKb = intent.sources.includes('kb') || intent.sources.includes('both')
-  const needsPatient = intent.sources.includes('patient') || intent.sources.includes('both')
+  const needsKb =
+    intent.sources.includes('kb') ||
+    intent.sources.includes('both') ||
+    intent.label === 'insurance_coverage' ||
+    intent.label === 'billing_payment' ||
+    intent.label === 'practice_provider'
+  const needsPatient =
+    intent.sources.includes('patient') ||
+    intent.sources.includes('both') ||
+    intent.label === 'appointment_scheduling'
 
   const kbMatches = needsKb
     ? await retrieveKnowledgeBaseMatches({

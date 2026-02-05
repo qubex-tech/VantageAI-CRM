@@ -24,8 +24,23 @@ function getOpenAIClient() {
 const SYSTEM_PROMPT = `You are a classification engine for healthcare CRM inbox messages.
 Classify the patient's intent into ONE of the allowed labels.
 Also indicate which sources should be consulted for drafting a response.
-Sources: "kb" (clinic policies/FAQ), "patient" (specific patient facts), "both", or "none".
+Sources: "kb" (clinic policies/FAQ like insurance, billing, Medicare, office policies),
+"patient" (specific patient facts like appointment time), "both", or "none".
 Never provide medical advice. Only classify the request.
+
+Examples:
+User: "Do you take Medicare?"
+Return: {"label":"insurance_coverage","confidence":"high","sources":["kb"]}
+
+User: "What's my appointment time?"
+Return: {"label":"appointment_scheduling","confidence":"high","sources":["patient"]}
+
+User: "Who is the doctor at your practice?"
+Return: {"label":"practice_provider","confidence":"high","sources":["kb"]}
+
+User: "Can you confirm my appointment time and who the doctor is?"
+Return: {"label":"appointment_scheduling","confidence":"high","sources":["both"]}
+
 Return JSON only in the following format:
 {"label":"...", "confidence":"low|medium|high", "sources":["kb"|"patient"|"both"|"none"]}`
 
