@@ -161,19 +161,20 @@ export function ConversationDetail({
         )}
       </header>
 
+      <div className="px-8 pt-4">
+        <ConversationSummary
+          summary={summary}
+          loading={summaryLoading}
+          error={summaryError}
+          onRefresh={() => {
+            if (conversation?.id) {
+              refreshSummary(conversation.id)
+            }
+          }}
+        />
+      </div>
+
       <div className="flex-1 overflow-y-auto px-8 py-6">
-        <div className="mb-4">
-          <ConversationSummary
-            summary={summary}
-            loading={summaryLoading}
-            error={summaryError}
-            onRefresh={() => {
-              if (conversation?.id) {
-                refreshSummary(conversation.id)
-              }
-            }}
-          />
-        </div>
         <MessageTimeline messages={messages} loading={loading} />
       </div>
 
