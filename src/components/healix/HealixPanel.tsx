@@ -547,7 +547,7 @@ export function HealixPanel({
     <div className={cn(
       "fixed inset-y-0 right-0 z-40 bg-white border-l border-gray-200 flex flex-col shadow-xl",
       // Mobile: full width, desktop: fixed width
-      "w-full sm:w-96 lg:w-[420px]",
+      "w-full sm:w-[340px] lg:w-[360px]",
       // Animation
       "transition-transform duration-300 ease-in-out",
       // Ensure panel doesn't cause overflow

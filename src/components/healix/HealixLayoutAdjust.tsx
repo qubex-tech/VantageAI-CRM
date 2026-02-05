@@ -18,11 +18,11 @@ export function HealixLayoutAdjust({ children }: HealixLayoutAdjustProps) {
 
   useEffect(() => {
     // Set CSS custom property based on Healix state
-    // Healix panel widths: 384px (sm/md) or 420px (lg)
+    // Healix panel widths: 340px (sm/md) or 360px (lg)
     const root = document.documentElement
     if (healixOpen) {
-      root.style.setProperty('--healix-panel-width', '384px') // Default for md
-      root.style.setProperty('--healix-panel-width-lg', '420px') // For lg screens
+      root.style.setProperty('--healix-panel-width', '340px') // Default for md
+      root.style.setProperty('--healix-panel-width-lg', '360px') // For lg screens
     } else {
       root.style.setProperty('--healix-panel-width', '0px')
       root.style.setProperty('--healix-panel-width-lg', '0px')
