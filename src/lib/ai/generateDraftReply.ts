@@ -46,7 +46,12 @@ async function buildDraftBody(context: DraftReplyContext) {
     ? `We have you scheduled for ${appointment.visitType ? `${appointment.visitType} ` : ''}on ${appointment.startTime.toLocaleDateString()}.`
     : ''
 
-  const askLine = latestAsk && latestAsk !== 'No pending patient request'
+  const hasClearAsk =
+    Boolean(latestAsk) &&
+    latestAsk !== 'No pending patient request' &&
+    !/no clear request/i.test(latestAsk || '')
+
+  const askLine = hasClearAsk
     ? latestAsk.replace(/^Patient is asking about/i, 'You asked about')
     : patientMessage
       ? `Thanks ${patientName}—we’re looking into this.`
