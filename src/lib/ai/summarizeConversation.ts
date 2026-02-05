@@ -170,11 +170,20 @@ export async function summarizeConversation(messages: SummaryMessage[]): Promise
 
     const raw = completion.choices[0]?.message?.content?.trim() || ''
     try {
-      const parsed = JSON.parse(raw) as SummaryResult
+      const parsed = JSON.parse(raw) as {
+        whatHappened?: string[]
+        what_happened?: string[]
+        latestPatientAsk?: string
+        latest_patient_ask?: string
+        actionsTaken?: string[]
+        actions_taken?: string[]
+        confidence?: SummaryConfidence
+      }
       return {
-        whatHappened: parsed.whatHappened || [],
-        latestPatientAsk: parsed.latestPatientAsk || 'No pending patient request',
-        actionsTaken: parsed.actionsTaken || [],
+        whatHappened: parsed.whatHappened ?? parsed.what_happened ?? [],
+        latestPatientAsk:
+          parsed.latestPatientAsk ?? parsed.latest_patient_ask ?? 'No pending patient request',
+        actionsTaken: parsed.actionsTaken ?? parsed.actions_taken ?? [],
         confidence: parsed.confidence || 'low',
       }
     } catch {

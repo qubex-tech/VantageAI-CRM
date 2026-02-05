@@ -88,9 +88,15 @@ export async function generateDraftReply(context: DraftReplyContext): Promise<Dr
 
   const raw = completion.choices[0]?.message?.content?.trim() || ''
   try {
-    const parsed = JSON.parse(raw) as DraftReplyResult
+    const parsed = JSON.parse(raw) as {
+      draftText?: string
+      draft_text?: string
+      citations?: Array<{ label: string; sourceId: string }>
+      confidence?: DraftConfidence
+    }
+    const draftText = parsed.draftText ?? parsed.draft_text ?? ''
     return {
-      draftText: parsed.draftText,
+      draftText: draftText || 'Thanks for reaching out. We can help with the next steps and confirm details.',
       citations: Array.isArray(parsed.citations) ? parsed.citations : [],
       confidence: parsed.confidence || 'low',
     }
