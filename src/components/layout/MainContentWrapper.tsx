@@ -14,6 +14,9 @@ export function MainContentWrapper({ children }: { children: ReactNode }) {
         // Responsive margin based on sidebar state
         isCollapsed ? "md:ml-16" : "md:ml-64"
       )}
+      style={{
+        ['--sidebar-width' as string]: isCollapsed ? '64px' : '256px',
+      }}
     >
       {children}
     </main>
