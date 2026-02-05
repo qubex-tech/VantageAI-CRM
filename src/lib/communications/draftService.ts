@@ -68,14 +68,9 @@ export async function buildDraftReply({
   })
 
   const lastPatientMessage = messages.find((message) => message.direction === 'inbound')
-  const kbMatches = await retrieveKnowledgeBaseMatches({
-    practiceId,
-    query:
-      summary?.latestPatientAsk ||
-      lastPatientMessage?.body ||
-      'patient request',
-    limit: 3,
-  })
+  const intent = await import('@/lib/ai/classifyIntent').then(({ classifyIntent }) =>
+    classifyIntent(lastPatientMessage?.body || '')
+  )
 
   const conversation = await prisma.communicationConversation.findFirst({
     where: { id: conversationId, practiceId },
@@ -104,6 +99,20 @@ export async function buildDraftReply({
     orderBy: { startTime: 'asc' },
     select: { startTime: true, visitType: true },
   })
+
+  const needsKb = intent.sources.includes('kb') || intent.sources.includes('both')
+  const needsPatient = intent.sources.includes('patient') || intent.sources.includes('both')
+
+  const kbMatches = needsKb
+    ? await retrieveKnowledgeBaseMatches({
+        practiceId,
+        query:
+          summary?.latestPatientAsk ||
+          lastPatientMessage?.body ||
+          'patient request',
+        limit: 3,
+      })
+    : []
 
   const similarConversations = await prisma.communicationConversation.findMany({
     where: {
@@ -139,14 +148,14 @@ export async function buildDraftReply({
               : 'system',
         body: message.body,
       })),
-    patient: conversation
+    patient: needsPatient && conversation
       ? {
           name: conversation.patient.preferredName || conversation.patient.name,
           email: conversation.patient.email || undefined,
           phone: conversation.patient.primaryPhone || conversation.patient.phone || undefined,
         }
       : undefined,
-    nextAppointment: nextAppointment
+    nextAppointment: needsPatient && nextAppointment
       ? {
           startTime: nextAppointment.startTime,
           visitType: nextAppointment.visitType || undefined,

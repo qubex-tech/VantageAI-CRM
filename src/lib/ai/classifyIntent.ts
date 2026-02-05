@@ -14,6 +14,7 @@ export type IntentLabel =
 export interface IntentResult {
   label: IntentLabel
   confidence: 'low' | 'medium' | 'high'
+  sources: Array<'kb' | 'patient' | 'both' | 'none'>
 }
 
 function getOpenAIClient() {
@@ -22,9 +23,11 @@ function getOpenAIClient() {
 
 const SYSTEM_PROMPT = `You are a classification engine for healthcare CRM inbox messages.
 Classify the patient's intent into ONE of the allowed labels.
+Also indicate which sources should be consulted for drafting a response.
+Sources: "kb" (clinic policies/FAQ), "patient" (specific patient facts), "both", or "none".
 Never provide medical advice. Only classify the request.
 Return JSON only in the following format:
-{"label":"...", "confidence":"low|medium|high"}`
+{"label":"...", "confidence":"low|medium|high", "sources":["kb"|"patient"|"both"|"none"]}`
 
 const ALLOWED_LABELS: IntentLabel[] = [
   'appointment_scheduling',
@@ -41,7 +44,7 @@ const ALLOWED_LABELS: IntentLabel[] = [
 // LLM abstraction placeholder - replace with provider implementation.
 export async function classifyIntent(message: string): Promise<IntentResult> {
   if (!process.env.OPENAI_API_KEY) {
-    return { label: 'unknown', confidence: 'low' }
+    return { label: 'unknown', confidence: 'low', sources: ['none'] }
   }
 
   const openai = getOpenAIClient()
@@ -58,10 +61,18 @@ export async function classifyIntent(message: string): Promise<IntentResult> {
   try {
     const parsed = JSON.parse(raw) as IntentResult
     if (!ALLOWED_LABELS.includes(parsed.label)) {
-      return { label: 'unknown', confidence: 'low' }
+      return { label: 'unknown', confidence: 'low', sources: ['none'] }
     }
-    return parsed
+    const sources =
+      Array.isArray(parsed.sources) && parsed.sources.length
+        ? parsed.sources.filter((item) => ['kb', 'patient', 'both', 'none'].includes(item))
+        : ['none']
+    return {
+      label: parsed.label,
+      confidence: parsed.confidence || 'low',
+      sources: sources.length ? sources : ['none'],
+    }
   } catch {
-    return { label: 'unknown', confidence: 'low' }
+    return { label: 'unknown', confidence: 'low', sources: ['none'] }
   }
 }
