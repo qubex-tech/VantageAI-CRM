@@ -60,7 +60,7 @@ function buildContext(context: DraftReplyContext) {
       id: article.id,
       title: article.title,
       url: article.url,
-      snippet: article.snippet,
+      snippet: article.summary || article.snippet,
     })),
     similarConversations: context.similarConversations,
   }

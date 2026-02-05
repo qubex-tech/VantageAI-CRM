@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db'
 import { requireAuth, rateLimit } from '@/lib/middleware'
+import { generateKnowledgeBaseSummary } from '@/lib/communications/kbSummaryService'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,9 +29,11 @@ export async function GET(req: NextRequest) {
       select: {
         id: true,
         title: true,
+        summary: true,
         url: true,
         tags: true,
         updatedAt: true,
+        lastSummarizedAt: true,
       },
     })
 
@@ -68,11 +71,15 @@ export async function POST(req: NextRequest) {
       select: {
         id: true,
         title: true,
+        summary: true,
         url: true,
         tags: true,
         updatedAt: true,
+        lastSummarizedAt: true,
       },
     })
+
+    void generateKnowledgeBaseSummary(article.id)
 
     return NextResponse.json({ data: { article } }, { status: 201 })
   } catch (error) {

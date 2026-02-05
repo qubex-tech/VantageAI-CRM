@@ -11,6 +11,8 @@ interface Article {
   url?: string | null
   tags: string[]
   updatedAt: string
+  summary?: string | null
+  lastSummarizedAt?: string | null
 }
 
 async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
@@ -133,6 +135,11 @@ export default function KnowledgeBasePage() {
           {articles.map((article) => (
             <div key={article.id} className="rounded-lg border border-slate-200 p-4">
               <div className="text-sm font-semibold text-slate-900">{article.title}</div>
+              {article.summary && (
+                <div className="mt-2 text-xs text-slate-600">
+                  {article.summary}
+                </div>
+              )}
               {article.url && (
                 <a href={article.url} className="text-xs text-slate-500 hover:text-slate-700">
                   {article.url}
@@ -152,6 +159,9 @@ export default function KnowledgeBasePage() {
               )}
               <div className="mt-2 text-xs text-slate-400">
                 Updated {new Date(article.updatedAt).toLocaleDateString()}
+                {article.lastSummarizedAt
+                  ? ` · Summarized ${new Date(article.lastSummarizedAt).toLocaleDateString()}`
+                  : ''}
               </div>
             </div>
           ))}
