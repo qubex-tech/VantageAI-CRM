@@ -1,3 +1,5 @@
+import { Prisma } from '@prisma/client'
+
 export interface KnowledgeBaseMatch {
   id: string
   title: string
@@ -92,12 +94,12 @@ export async function retrieveKnowledgeBaseMatches({
       practiceId,
       OR: tokens.length
         ? tokens.flatMap((token) => [
-            { question: { contains: token, mode: 'insensitive' } },
-            { answer: { contains: token, mode: 'insensitive' } },
+            { question: { contains: token, mode: Prisma.QueryMode.insensitive } },
+            { answer: { contains: token, mode: Prisma.QueryMode.insensitive } },
           ])
         : [
-            { question: { contains: normalizedQuery, mode: 'insensitive' } },
-            { answer: { contains: normalizedQuery, mode: 'insensitive' } },
+            { question: { contains: normalizedQuery, mode: Prisma.QueryMode.insensitive } },
+            { answer: { contains: normalizedQuery, mode: Prisma.QueryMode.insensitive } },
           ],
     },
     include: {
@@ -110,8 +112,8 @@ export async function retrieveKnowledgeBaseMatches({
     where: {
       practiceId,
       OR: tokens.length
-        ? tokens.map((token) => ({ content: { contains: token, mode: 'insensitive' } }))
-        : [{ content: { contains: normalizedQuery, mode: 'insensitive' } }],
+        ? tokens.map((token) => ({ content: { contains: token, mode: Prisma.QueryMode.insensitive } }))
+        : [{ content: { contains: normalizedQuery, mode: Prisma.QueryMode.insensitive } }],
     },
     include: {
       article: { select: { id: true, title: true, url: true } },
@@ -126,12 +128,12 @@ export async function retrieveKnowledgeBaseMatches({
       OR: [
         ...(tokens.length
           ? tokens.flatMap((token) => [
-              { title: { contains: token, mode: 'insensitive' } },
-              { body: { contains: token, mode: 'insensitive' } },
+              { title: { contains: token, mode: Prisma.QueryMode.insensitive } },
+              { body: { contains: token, mode: Prisma.QueryMode.insensitive } },
             ])
           : [
-              { title: { contains: normalizedQuery, mode: 'insensitive' } },
-              { body: { contains: normalizedQuery, mode: 'insensitive' } },
+              { title: { contains: normalizedQuery, mode: Prisma.QueryMode.insensitive } },
+              { body: { contains: normalizedQuery, mode: Prisma.QueryMode.insensitive } },
             ]),
         { tags: { hasSome: tokens.length ? tokens : normalizedQuery.split(' ') } },
       ],
