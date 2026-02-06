@@ -4,7 +4,6 @@
  * Processes webhook events from RetellAI voice agents
  */
 
-import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from './db'
 import { findOrCreatePatientByPhone, getAvailableSlots, bookAppointment, cancelAppointment } from './agentActions'
 import { redactPHI } from './phi'
@@ -89,14 +88,31 @@ export async function processRetellWebhook(
     return { tool_results: results }
   }
 
-  // Handle call end
-  if (eventType === 'call_ended' && conversation) {
-    await prisma.voiceConversation.update({
-      where: { id: conversation.id },
-      data: {
-        endedAt: new Date(),
-      },
-    })
+  // Handle call end - emit Inngest event for real-time post-call processing (no login required)
+  if (eventType === 'call_ended' && call?.call_id) {
+    if (conversation) {
+      await prisma.voiceConversation.update({
+        where: { id: conversation.id },
+        data: {
+          endedAt: new Date(),
+        },
+      })
+    }
+
+    // Emit Inngest event for full call data processing (fetch via RetellAPI, extract patient data)
+    try {
+      const { inngest } = await import('@/inngest/client')
+      await inngest.send({
+        name: 'retell/call.ended',
+        data: {
+          practiceId,
+          callId: call.call_id,
+        },
+      })
+    } catch (err) {
+      console.error('[RetellAI] Failed to emit call_ended Inngest event:', err)
+      // Don't fail the webhook - processing will happen when user visits Calls page
+    }
   }
 
   return { status: 'ok' }

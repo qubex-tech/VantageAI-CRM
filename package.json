@@ -16,6 +16,7 @@
     "db:studio": "prisma studio",
     "db:verify": "node scripts/verify-migrations.js",
     "simulate:retell": "tsx scripts/simulate-retell.ts",
+    "simulate:retell:call-ended": "tsx scripts/simulate-retell-call-ended.ts",
     "create:vantage-admin": "tsx scripts/create-vantage-admin.ts"
   },
   "dependencies": {

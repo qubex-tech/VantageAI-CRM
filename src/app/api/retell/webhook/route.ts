@@ -18,9 +18,10 @@ export async function POST(req: NextRequest) {
     const body = await req.text()
     const signature = req.headers.get('x-retell-signature') || ''
 
-    // Verify webhook signature
+    // Verify webhook signature (skip when RETELLAI_SKIP_SIGNATURE_VERIFICATION=1 for local testing)
+    const skipVerification = process.env.RETELLAI_SKIP_SIGNATURE_VERIFICATION === '1'
     const secret = process.env.RETELLAI_WEBHOOK_SECRET
-    if (secret && !verifyRetellSignature(body, signature, secret)) {
+    if (!skipVerification && secret && !verifyRetellSignature(body, signature, secret)) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
     }
 

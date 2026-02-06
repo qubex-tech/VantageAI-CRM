@@ -130,7 +130,7 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
 export async function processCallDataForPatient(
   practiceId: string,
   callData: ExtractedCallData,
-  userId: string,
+  userId: string | null,
   callId?: string
 ): Promise<{ patientId: string | null; isNew: boolean }> {
   // Need phone number or patient name to identify/create patient
@@ -243,21 +243,23 @@ export async function processCallDataForPatient(
       data: updateData,
     })
 
-    // Create audit log
-    await createAuditLog({
-      practiceId,
-      userId,
-      action: 'update',
-      resourceType: 'patient',
-      resourceId: patient.id,
-      changes: {
-        after: {
-          source: 'retell_call',
-          callId,
-          updatedFields: Object.keys(updateData),
+    // Create audit log (skip when userId is null - system-initiated actions)
+    if (userId) {
+      await createAuditLog({
+        practiceId,
+        userId,
+        action: 'update',
+        resourceType: 'patient',
+        resourceId: patient.id,
+        changes: {
+          after: {
+            source: 'retell_call',
+            callId,
+            updatedFields: Object.keys(updateData),
+          },
         },
-      },
-    })
+      })
+    }
 
     return { patientId: patient.id, isNew: false }
   } else {
@@ -281,20 +283,22 @@ export async function processCallDataForPatient(
       },
     })
 
-    // Create audit log
-    await createAuditLog({
-      practiceId,
-      userId,
-      action: 'create',
-      resourceType: 'patient',
-      resourceId: newPatient.id,
-      changes: {
-        after: {
-          source: 'retell_call',
-          callId,
+    // Create audit log (skip when userId is null - system-initiated actions)
+    if (userId) {
+      await createAuditLog({
+        practiceId,
+        userId,
+        action: 'create',
+        resourceType: 'patient',
+        resourceId: newPatient.id,
+        changes: {
+          after: {
+            source: 'retell_call',
+            callId,
+          },
         },
-      },
-    })
+      })
+    }
 
     return { patientId: newPatient.id, isNew: true }
   }
@@ -302,11 +306,12 @@ export async function processCallDataForPatient(
 
 /**
  * Process call data and link to patient
+ * @param userId - Optional; when null, audit logging is skipped (e.g. system-initiated via Inngest)
  */
 export async function processRetellCallData(
   practiceId: string,
   call: RetellCall,
-  userId: string
+  userId: string | null
 ): Promise<{ patientId: string | null; extractedData: ExtractedCallData }> {
   // Extract data from call
   const extractedData = extractCallData(call)
