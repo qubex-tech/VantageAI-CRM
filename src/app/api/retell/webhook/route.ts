@@ -27,13 +27,22 @@ export async function POST(req: NextRequest) {
 
     const event = JSON.parse(body)
 
-    // Extract practiceId from webhook metadata or use a default
-    // In production, you might want to route based on phone number or other identifier
-    // For now, we'll use a header or require it in the event
-    const practiceId = req.headers.get('x-practice-id') || event.practiceId
+    // Extract practiceId: query param (for RetellAI URL config), header, event payload, or env default
+    const url = new URL(req.url)
+    const practiceId =
+      url.searchParams.get('practiceId') ||
+      req.headers.get('x-practice-id') ||
+      event.practiceId ||
+      process.env.RETELLAI_DEFAULT_PRACTICE_ID
 
     if (!practiceId) {
-      return NextResponse.json({ error: 'Practice ID required' }, { status: 400 })
+      return NextResponse.json(
+        {
+          error:
+            'Practice ID required. Pass ?practiceId=xxx in the webhook URL, X-Practice-Id header, or set RETELLAI_DEFAULT_PRACTICE_ID.',
+        },
+        { status: 400 }
+      )
     }
 
     // Verify practice exists
