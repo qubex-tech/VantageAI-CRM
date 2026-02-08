@@ -5,7 +5,8 @@ import { processRetellWebhook } from '@/lib/retell'
 
 /**
  * RetellAI webhook endpoint
- * Processes voice agent events and tool calls
+ * Processes call events per https://docs.retellai.com/features/webhook-overview
+ * Events: call_started, call_ended, call_analyzed
  */
 export async function POST(req: NextRequest) {
   try {
@@ -32,12 +33,13 @@ export async function POST(req: NextRequest) {
 
     const event = JSON.parse(body)
 
-    // Debug log (no PHI): confirms payload is received - shows in Vercel logs
+    // Debug log (no PHI): confirms payload - per https://docs.retellai.com/features/webhook-overview
     console.log('[RetellAI webhook] Received', {
       eventType: event.event,
       callId: event.call?.call_id,
-      hasTranscript: !!event.transcript?.content,
+      hasTranscript: !!(event.call?.transcript ?? event.transcript?.content),
       hasToolCalls: !!(event.tool_calls?.length),
+      hasCallAnalysis: !!event.call?.call_analysis,
       bodyLength: body.length,
     })
 

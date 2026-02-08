@@ -9,20 +9,32 @@ import { findOrCreatePatientByPhone, getAvailableSlots, bookAppointment, cancelA
 import { redactPHI } from './phi'
 import { createAuditLog } from './audit'
 
+/**
+ * RetellAI webhook payload - matches https://docs.retellai.com/features/webhook-overview
+ * call_ended: call object excludes call_analysis
+ * call_analyzed: call object includes full call_analysis
+ */
 export interface RetellWebhookEvent {
   event: string
   call?: {
     call_id?: string
-    phone_number?: string
-    direction?: string
+    call_type?: string
+    from_number?: string
+    to_number?: string
+    direction?: 'inbound' | 'outbound'
+    transcript?: string
+    transcript_object?: any[]
+    transcript_with_tool_calls?: any[]
+    start_timestamp?: number
+    end_timestamp?: number
+    call_analysis?: any
+    metadata?: Record<string, any>
+    retell_llm_dynamic_variables?: Record<string, any>
+    [key: string]: any
   }
-  transcript?: {
-    content?: string
-  }
-  tool_calls?: Array<{
-    tool_name: string
-    parameters: any
-  }>
+  /** Legacy / alternate: some webhooks may send transcript at top level */
+  transcript?: { content?: string }
+  tool_calls?: Array<{ tool_name: string; parameters: any }>
 }
 
 /**
@@ -34,8 +46,12 @@ export async function processRetellWebhook(
 ): Promise<any> {
   const { event: eventType, call, transcript, tool_calls } = event
 
-  // Log the conversation
-  const callerPhone = call?.phone_number || 'unknown'
+  // Caller phone: RetellAI uses from_number (inbound) / to_number (outbound) per docs
+  const callerPhone =
+    call?.from_number || call?.to_number || call?.phone_number || 'unknown'
+
+  // Transcript: RetellAI puts it at call.transcript (string), not event.transcript.content
+  const transcriptText = call?.transcript ?? transcript?.content
 
   // Find or create conversation record
   let conversation = await prisma.voiceConversation.findFirst({
@@ -51,15 +67,16 @@ export async function processRetellWebhook(
         practiceId,
         callerPhone,
         retellCallId: call.call_id,
-        startedAt: new Date(),
-        transcript: transcript?.content ? redactPHI(transcript.content) : undefined,
+        startedAt: call?.start_timestamp ? new Date(call.start_timestamp) : new Date(),
+        transcript: transcriptText ? redactPHI(transcriptText) : undefined,
       },
     })
-  } else if (conversation && transcript?.content) {
+  } else if (conversation && transcriptText) {
     conversation = await prisma.voiceConversation.update({
       where: { id: conversation.id },
       data: {
-        transcript: redactPHI(transcript.content),
+        transcript: redactPHI(transcriptText),
+        endedAt: call?.end_timestamp ? new Date(call.end_timestamp) : undefined,
         updatedAt: new Date(),
       },
     })
@@ -88,18 +105,23 @@ export async function processRetellWebhook(
     return { tool_results: results }
   }
 
-  // Handle call end - emit Inngest event for real-time post-call processing (no login required)
-  if (eventType === 'call_ended' && call?.call_id) {
+  // Handle call end / call analyzed - emit Inngest for real-time post-call processing (no login required)
+  const shouldEmitInngest =
+    (eventType === 'call_ended' || eventType === 'call_analyzed') && call?.call_id
+
+  if (shouldEmitInngest) {
     if (conversation) {
       await prisma.voiceConversation.update({
         where: { id: conversation.id },
         data: {
-          endedAt: new Date(),
+          endedAt: call?.end_timestamp ? new Date(call.end_timestamp) : new Date(),
+          transcript: transcriptText ? redactPHI(transcriptText) : undefined,
         },
       })
     }
 
-    // Emit Inngest event for full call data processing (fetch via RetellAPI, extract patient data)
+    // call_analyzed has full call_analysis in payload - pass it to avoid API fetch
+    // call_ended does not have call_analysis - Inngest will fetch via API after delay
     try {
       const { inngest } = await import('@/inngest/client')
       await inngest.send({
@@ -107,11 +129,12 @@ export async function processRetellWebhook(
         data: {
           practiceId,
           callId: call.call_id,
+          eventType,
+          call: eventType === 'call_analyzed' ? call : undefined,
         },
       })
     } catch (err) {
-      console.error('[RetellAI] Failed to emit call_ended Inngest event:', err)
-      // Don't fail the webhook - processing will happen when user visits Calls page
+      console.error('[RetellAI] Failed to emit Inngest event:', err)
     }
   }
 
