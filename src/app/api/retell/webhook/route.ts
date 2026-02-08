@@ -18,6 +18,11 @@ export async function POST(req: NextRequest) {
     const body = await req.text()
     const signature = req.headers.get('x-retell-signature') || ''
 
+    if (!body?.trim()) {
+      console.warn('[RetellAI webhook] Empty request body received')
+      return NextResponse.json({ error: 'Empty request body' }, { status: 400 })
+    }
+
     // Verify webhook signature (skip when RETELLAI_SKIP_SIGNATURE_VERIFICATION=1 for local testing)
     const skipVerification = process.env.RETELLAI_SKIP_SIGNATURE_VERIFICATION === '1'
     const secret = process.env.RETELLAI_WEBHOOK_SECRET
@@ -26,6 +31,15 @@ export async function POST(req: NextRequest) {
     }
 
     const event = JSON.parse(body)
+
+    // Debug log (no PHI): confirms payload is received - shows in Vercel logs
+    console.log('[RetellAI webhook] Received', {
+      eventType: event.event,
+      callId: event.call?.call_id,
+      hasTranscript: !!event.transcript?.content,
+      hasToolCalls: !!(event.tool_calls?.length),
+      bodyLength: body.length,
+    })
 
     // Extract practiceId: query param (for RetellAI URL config), header, event payload, or env default
     const url = new URL(req.url)
