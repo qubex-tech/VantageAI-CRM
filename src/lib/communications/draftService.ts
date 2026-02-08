@@ -115,7 +115,7 @@ export async function buildDraftReply({
   const intent = await import('@/lib/ai/classifyIntent').then(({ classifyIntent }) =>
     classifyIntent(focusMessage?.body || '')
   )
-  const fallbackKbSignal = /medicare|medicaid|insurance|copay|billing|payment|coverage|doctor|provider|dr\.|education|training|fellowship|residency|board certified/i.test(
+  const fallbackKbSignal = /medicare|medicaid|insurance|copay|billing|payment|coverage|doctor|provider|dr\.|education|training|fellowship|residency|board certified|do you treat|treat(?:ment)?|conditions?|services?|offer/i.test(
     focusMessage?.body || ''
   )
 
