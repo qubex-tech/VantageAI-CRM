@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { ComposeEmail } from './ComposeEmail'
 import { ComposeSms } from './ComposeSms'
 import { PatientNotes } from './PatientNotes'
@@ -143,6 +143,73 @@ function calculateAge(dateOfBirth: Date): number {
   return age
 }
 
+/** Format primary location from address fields (addressLine1, city, state, postalCode) or legacy address */
+function formatPrimaryLocation(patient: {
+  address?: string | null
+  addressLine1?: string | null
+  addressLine2?: string | null
+  city?: string | null
+  state?: string | null
+  postalCode?: string | null
+}): string {
+  const parts = [
+    patient.addressLine1,
+    patient.addressLine2,
+    [patient.city, patient.state].filter(Boolean).join(', '),
+    patient.postalCode,
+  ].filter(Boolean) as string[]
+  if (parts.length > 0) return parts.join(', ')
+  return patient.address || ''
+}
+
+/** Click-to-copy value with brief "Copied!" feedback */
+function CopyableValue({
+  value,
+  displayValue,
+  className = '',
+  title = 'Click to copy',
+}: {
+  value: string
+  displayValue?: string
+  className?: string
+  title?: string
+}) {
+  const [copied, setCopied] = useState(false)
+  const text = value || '—'
+  const show = displayValue !== undefined ? displayValue : text
+  const isEmpty = !value || value.trim() === ''
+
+  const handleCopy = useCallback(() => {
+    if (isEmpty) return
+    navigator.clipboard.writeText(value).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }, [value, isEmpty])
+
+  if (isEmpty) {
+    return <span className={className}>{show}</span>
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      title={title}
+      className={cn(
+        'text-left cursor-pointer rounded px-0.5 -mx-0.5 hover:bg-gray-100 transition-colors inline-block max-w-full truncate',
+        className
+      )}
+    >
+      {copied ? (
+        <span className="text-green-600 text-sm font-medium">Copied!</span>
+      ) : (
+        show
+      )}
+    </button>
+  )
+}
+
 interface PatientNote {
   id: string
   type: string
@@ -252,6 +319,7 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
   }
   
   const age = patient.dateOfBirth ? calculateAge(patient.dateOfBirth) : 0
+  const primaryLocation = formatPrimaryLocation(patient)
   
   // Helper to get display name
   const getDisplayName = () => {
@@ -467,14 +535,25 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {/* Age */}
+                    {/* Age & Date of Birth */}
                     <div className="border border-gray-200 rounded-lg p-4 bg-white">
                       <div className="flex items-center justify-between">
-                        <div>
+                        <div className="min-w-0 flex-1">
                           <div className="text-xs text-gray-500 mb-1">Age</div>
                           <div className="text-sm font-medium text-gray-900">{age} years</div>
+                          {patient.dateOfBirth && (
+                            <>
+                              <div className="text-xs text-gray-500 mt-2 mb-0.5">Date of Birth</div>
+                              <CopyableValue
+                                value={format(new Date(patient.dateOfBirth), 'yyyy-MM-dd')}
+                                displayValue={format(new Date(patient.dateOfBirth), 'MMM d, yyyy')}
+                                className="text-sm font-medium text-gray-900"
+                                title="Click to copy date of birth"
+                              />
+                            </>
+                          )}
                         </div>
-                        <User className="h-5 w-5 text-gray-400" />
+                        <User className="h-5 w-5 text-gray-400 flex-shrink-0 ml-2" />
                       </div>
                     </div>
 
@@ -499,8 +578,13 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                       <div className="flex items-center justify-between">
                         <div className="flex-1 min-w-0">
                           <div className="text-xs text-gray-500 mb-1">Email addresses</div>
-                          <div className="text-sm font-medium text-gray-900 truncate">
-                            {patient.email || 'No email address'}
+                          <div className="text-sm font-medium text-gray-900 min-w-0">
+                            <CopyableValue
+                              value={patient.email || ''}
+                              displayValue={patient.email || 'No email address'}
+                              className="block truncate"
+                              title="Click to copy email"
+                            />
                           </div>
                         </div>
                         <AtSign className="h-5 w-5 text-gray-400 flex-shrink-0 ml-2" />
@@ -510,11 +594,18 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                     {/* Phone */}
                     <div className="border border-gray-200 rounded-lg p-4 bg-white">
                       <div className="flex items-center justify-between">
-                        <div>
+                        <div className="flex-1 min-w-0">
                           <div className="text-xs text-gray-500 mb-1">Phone numbers</div>
-                          <div className="text-sm font-medium text-gray-900">{patient.primaryPhone || patient.phone}</div>
+                          <div className="text-sm font-medium text-gray-900 min-w-0">
+                            <CopyableValue
+                              value={patient.primaryPhone || patient.phone || ''}
+                              displayValue={patient.primaryPhone || patient.phone || 'No phone number'}
+                              className="block truncate"
+                              title="Click to copy phone number"
+                            />
+                          </div>
                         </div>
-                        <PhoneIcon className="h-5 w-5 text-gray-400" />
+                        <PhoneIcon className="h-5 w-5 text-gray-400 flex-shrink-0 ml-2" />
                       </div>
                     </div>
 
@@ -523,8 +614,13 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                       <div className="flex items-center justify-between">
                         <div className="flex-1 min-w-0">
                           <div className="text-xs text-gray-500 mb-1">Primary location</div>
-                          <div className="text-sm font-medium text-gray-900 truncate">
-                            {patient.address || 'No address'}
+                          <div className="text-sm font-medium text-gray-900 min-w-0">
+                            <CopyableValue
+                              value={primaryLocation}
+                              displayValue={primaryLocation || 'No address'}
+                              className="block truncate"
+                              title="Click to copy address"
+                            />
                           </div>
                         </div>
                         <MapPin className="h-5 w-5 text-gray-400 flex-shrink-0 ml-2" />

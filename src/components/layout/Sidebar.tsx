@@ -46,6 +46,7 @@ export function Sidebar() {
   const { isOpen, setIsOpen, isCollapsed, setIsCollapsed } = useSidebar()
   const [inboxUnread, setInboxUnread] = useState(0)
   const lastUnreadRef = useRef(0)
+  const [practiceName, setPracticeName] = useState<string | null>(null)
 
   // Close mobile menu when route changes
   useEffect(() => {
@@ -88,6 +89,22 @@ export function Sidebar() {
     return () => {
       window.removeEventListener('storage', handleUpdate)
       window.removeEventListener('inbox-unread-updated', handleUpdate)
+    }
+  }, [])
+
+  // Fetch practice name for white-label sidebar
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/user/me')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.practiceName != null) {
+          setPracticeName(data.practiceName)
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
     }
   }, [])
 
@@ -180,14 +197,24 @@ export function Sidebar() {
       >
         <div className="flex flex-col h-full">
           {/* Logo/Header */}
-          <div className="flex items-center justify-between h-14 px-4 border-b border-gray-200">
+          <div className={cn(
+            "flex items-center justify-between border-b border-gray-200",
+            !isCollapsed && practiceName ? "h-auto min-h-14 py-3" : "h-14"
+          )}>
             {!isCollapsed && (
-              <Link 
-                href="/dashboard" 
-                className="text-lg font-semibold text-gray-900 tracking-tight"
+              <Link
+                href="/dashboard"
+                className="flex flex-col gap-0.5"
                 onClick={() => setIsOpen(false)}
               >
-                Vantage AI
+                <span className="text-lg font-semibold text-gray-900 tracking-tight">
+                  Vantage AI
+                </span>
+                {practiceName && (
+                  <span className="text-xs font-medium text-gray-500 truncate max-w-[180px]">
+                    {practiceName}
+                  </span>
+                )}
               </Link>
             )}
             {isCollapsed && (
