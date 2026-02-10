@@ -583,6 +583,25 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+// MCP server: audit every tool call (PHI access)
+model McpAccessAuditLog {
+  id                 String   @id @default(uuid())
+  requestId          String   // X-Request-Id
+  actorId            String
+  actorType          String   // 'agent' | 'user' | 'system'
+  purpose            String   // must be insurance_verification
+  patientId          String?
+  policyId           String?
+  toolName           String
+  fieldsReturnedJson Json?    // array of field paths, NOT values
+  createdAt          DateTime @default(now())
+
+  @@index([requestId])
+  @@index([actorId, createdAt])
+  @@index([patientId, createdAt])
+  @@map("mcp_access_audit_logs")
+}
+
 model HealixConversation {
   id         String   @id @default(uuid())
   practiceId String // Multi-tenant: scoped to practice

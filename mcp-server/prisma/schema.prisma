@@ -1,0 +1,97 @@
+// Minimal schema for MCP server: read-only access to Patient, InsurancePolicy, and MCP audit.
+// Keep in sync with root prisma/schema.prisma for these models.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Practice {
+  id String @id @default(uuid())
+  patients         Patient[]
+  insurancePolicies InsurancePolicy[]
+  @@map("practices")
+}
+
+model Patient {
+  id           String    @id @default(uuid())
+  practiceId   String
+  name         String
+  firstName    String?
+  lastName     String?
+  dateOfBirth  DateTime?
+  primaryPhone String?
+  phone        String
+  email        String?
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  state        String?
+  postalCode   String?
+  deletedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  practice         Practice          @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  insurancePolicies InsurancePolicy[]
+
+  @@index([practiceId])
+  @@index([deletedAt])
+  @@map("patients")
+}
+
+model InsurancePolicy {
+  id                    String    @id @default(uuid())
+  practiceId            String
+  patientId             String
+  payerNameRaw          String
+  memberId              String
+  groupNumber           String?
+  planName              String?
+  planType              String?
+  isPrimary             Boolean   @default(true)
+  subscriberIsPatient   Boolean   @default(true)
+  subscriberFirstName   String?
+  subscriberLastName   String?
+  subscriberDob        DateTime?
+  relationshipToPatient String?
+  bcbsAlphaPrefix       String?
+  bcbsStatePlan         String?
+  rxBin                 String?
+  rxPcn                 String?
+  rxGroup               String?
+  cardFrontRef          String?
+  cardBackRef           String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId])
+  @@index([patientId])
+  @@index([memberId])
+  @@map("insurance_policies")
+}
+
+model McpAccessAuditLog {
+  id                 String   @id @default(uuid())
+  requestId          String
+  actorId            String
+  actorType          String
+  purpose            String
+  patientId          String?
+  policyId           String?
+  toolName           String
+  fieldsReturnedJson Json?
+  createdAt          DateTime @default(now())
+
+  @@index([requestId])
+  @@index([actorId, createdAt])
+  @@index([patientId, createdAt])
+  @@map("mcp_access_audit_logs")
+}
