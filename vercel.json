@@ -6,6 +6,9 @@
   "rewrites": [
     {"source": "/mcp/health", "destination": "/api/mcp/health"},
     {"source": "/mcp/tools", "destination": "/api/mcp/tools"},
-    {"source": "/mcp/call", "destination": "/api/mcp/call"}
+    {"source": "/mcp/call", "destination": "/api/mcp/call"},
+    {"source": "/health", "destination": "/api/mcp/health"},
+    {"source": "/tools", "destination": "/api/mcp/tools"},
+    {"source": "/call", "destination": "/api/mcp/call"}
   ]
 }

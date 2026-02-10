@@ -78,6 +78,12 @@ export async function middleware(req: NextRequest) {
     const publicPaths = ['/login', '/signup', '/forgot-password', '/reset-password']
     const isPublicPath = publicPaths.some(path => pathname.startsWith(path))
     
+    // Allow MCP API (auth via X-API-Key header, not session)
+    if (pathname.startsWith('/mcp/') || pathname.startsWith('/api/mcp/') ||
+        pathname === '/mcp' || pathname === '/health' || pathname === '/tools' || pathname === '/call') {
+      return res
+    }
+    
     // Allow Inngest endpoint (required for Inngest to call back)
     if (isPublicPath || 
         pathname.startsWith('/api/cal/webhook') || 
