@@ -32,6 +32,7 @@ type Patient = {
   id: string
   firstName?: string | null
   lastName?: string | null
+  name?: string | null
   dateOfBirth?: Date | string | null
   addressLine1?: string | null
   city?: string | null

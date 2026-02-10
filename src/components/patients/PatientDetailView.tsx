@@ -935,6 +935,7 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                   id: patient.id,
                   firstName: patient.firstName,
                   lastName: patient.lastName,
+                  name: patient.name,
                   dateOfBirth: patient.dateOfBirth,
                   addressLine1: patient.addressLine1,
                   city: patient.city,

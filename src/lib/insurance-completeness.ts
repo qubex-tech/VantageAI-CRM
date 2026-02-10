@@ -25,11 +25,33 @@ type Policy = {
 type Patient = {
   firstName?: string | null
   lastName?: string | null
+  /** Legacy full name; used to derive first/last when those are missing */
+  name?: string | null
   dateOfBirth?: Date | string | null
   addressLine1?: string | null
   city?: string | null
   state?: string | null
   postalCode?: string | null
+}
+
+/** Use firstName/lastName when present; otherwise derive from legacy name. */
+function getPatientNameParts(patient: Patient): { firstName: string; lastName: string } | null {
+  const first = patient.firstName?.trim()
+  const last = patient.lastName?.trim()
+  const full = patient.name?.trim()
+  let fromName: { first: string; last: string } | null = null
+  if (full) {
+    const parts = full.split(/\s+/).filter(Boolean)
+    if (parts.length >= 1) {
+      fromName = parts.length === 1
+        ? { first: parts[0], last: parts[0] }
+        : { first: parts[0], last: parts.slice(1).join(' ') }
+    }
+  }
+  const firstName = first || fromName?.first || ''
+  const lastName = last || fromName?.last || ''
+  if (!firstName && !lastName) return null
+  return { firstName: firstName || lastName, lastName: lastName || firstName }
 }
 
 const ZIP_REGEX = /^\d{5}(-\d{4})?$/
@@ -70,9 +92,10 @@ export function computeInsuranceCompleteness(
     missingFields.push('Member ID')
   }
 
-  // Patient name/DOB (on profile) - required for verification
-  if (!patient.firstName?.trim()) missingFields.push('Patient first name')
-  if (!patient.lastName?.trim()) missingFields.push('Patient last name')
+  // Patient name/DOB (on profile) - use firstName/lastName or derive from legacy name
+  const nameParts = getPatientNameParts(patient)
+  if (!nameParts?.firstName?.trim()) missingFields.push('Patient first name')
+  if (!nameParts?.lastName?.trim()) missingFields.push('Patient last name')
   if (!patient.dateOfBirth) missingFields.push('Patient date of birth')
 
   // Subscriber: if not patient, require subscriber details + relationship
