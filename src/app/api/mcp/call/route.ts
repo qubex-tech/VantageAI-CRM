@@ -1,22 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpHeaders } from '@/lib/mcp/auth'
+import { applyCors, handleCorsPreflight } from '@/lib/mcp/cors'
 import { invokeTool } from '@/lib/mcp/registry'
 
 export const dynamic = 'force-dynamic'
 
+export async function OPTIONS(request: NextRequest) {
+  return handleCorsPreflight(request)
+}
+
 export async function POST(request: NextRequest) {
   const auth = validateMcpHeaders(request.headers)
   if (!auth.ok) {
-    return NextResponse.json(auth.error.body, { status: auth.error.status })
+    return applyCors(NextResponse.json(auth.error.body, { status: auth.error.status }), request)
   }
 
   let body: { tool?: string; input?: unknown }
   try {
     body = await request.json()
   } catch {
-    return NextResponse.json(
-      { output: {}, error: { code: 'BAD_REQUEST', message: 'Invalid JSON body' } },
-      { status: 400 }
+    return applyCors(
+      NextResponse.json(
+        { output: {}, error: { code: 'BAD_REQUEST', message: 'Invalid JSON body' } },
+        { status: 400 }
+      ),
+      request
     )
   }
 
@@ -24,9 +32,12 @@ export async function POST(request: NextRequest) {
   const input = body?.input ?? {}
 
   if (!toolName || typeof toolName !== 'string') {
-    return NextResponse.json(
-      { output: {}, error: { code: 'BAD_REQUEST', message: 'Missing or invalid "tool" in body' } },
-      { status: 400 }
+    return applyCors(
+      NextResponse.json(
+        { output: {}, error: { code: 'BAD_REQUEST', message: 'Missing or invalid "tool" in body' } },
+        { status: 400 }
+      ),
+      request
     )
   }
 
@@ -41,18 +52,24 @@ export async function POST(request: NextRequest) {
   const latency = Date.now() - start
 
   if (result.error) {
-    return NextResponse.json(
-      {
-        output: result.output,
-        error: result.error,
-        meta: { request_id: auth.ctx.requestId, latency_ms: latency },
-      },
-      { status: 400 }
+    return applyCors(
+      NextResponse.json(
+        {
+          output: result.output,
+          error: result.error,
+          meta: { request_id: auth.ctx.requestId, latency_ms: latency },
+        },
+        { status: 400 }
+      ),
+      request
     )
   }
 
-  return NextResponse.json({
-    output: result.output,
-    meta: { request_id: auth.ctx.requestId, latency_ms: latency },
-  })
+  return applyCors(
+    NextResponse.json({
+      output: result.output,
+      meta: { request_id: auth.ctx.requestId, latency_ms: latency },
+    }),
+    request
+  )
 }
