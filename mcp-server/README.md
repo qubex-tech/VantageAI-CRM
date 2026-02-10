@@ -111,9 +111,21 @@ curl -s -X POST http://localhost:4010/mcp/call \
 3. **Errors**: On validation or execution error, the response body includes `error: { code, message }`; do not log or expose the message to end users if it might contain PHI (current implementation avoids PHI in messages).
 4. **Unmasking**: For voice/clearinghouse flows where the agent must read member ID, use `X-Actor-Type: user` or `system` and `X-Allow-Unmasked: true` if your policy allows it; otherwise keep agents masked.
 
-## Run from repo root (optional)
+## Production on Vercel
 
-From the repo root you can run the server with tsx (if tsx is installed in root):
+The **same Next.js app** exposes MCP endpoints when deployed to Vercel. No separate MCP server deploy is needed.
+
+- **MCP URL:** Your Vercel app URL, e.g. `https://your-app.vercel.app`
+- **Endpoints:** `GET /mcp/health`, `GET /mcp/tools`, `POST /mcp/call` (rewrites forward to `/api/mcp/*`)
+- **Env (Vercel):** Set `MCP_API_KEYS` (comma-separated) and `DATABASE_URL` in the project’s Environment Variables.
+
+Use `https://your-app.vercel.app` as the MCP URL in Retell AI (or any tool-calling client).
+
+---
+
+## Run standalone (optional)
+
+From the repo root you can run the standalone server with tsx:
 
 ```bash
 npx tsx mcp-server/src/index.ts

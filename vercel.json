@@ -1,16 +1,11 @@
 {
   "buildCommand": "prisma generate && next build",
   "installCommand": "npm install",
-  "crons": [
-    {
-      "path": "/api/internal/outbox/publish",
-      "schedule": "0 2 * * *"
-    }
-  ],
-  "git": {
-    "deploymentEnabled": {
-      "main": true
-    }
-  }
+  "crons": [{"path": "/api/internal/outbox/publish", "schedule": "0 2 * * *"}],
+  "git": {"deploymentEnabled": {"main": true}},
+  "rewrites": [
+    {"source": "/mcp/health", "destination": "/api/mcp/health"},
+    {"source": "/mcp/tools", "destination": "/api/mcp/tools"},
+    {"source": "/mcp/call", "destination": "/api/mcp/call"}
+  ]
 }
-
