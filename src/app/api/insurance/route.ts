@@ -1,9 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
-import { insurancePolicySchema } from '@/lib/validations'
+import { insurancePolicyFormSchema } from '@/lib/validations'
 import { createAuditLog, createTimelineEntry } from '@/lib/audit'
 import { emitEvent } from '@/lib/outbox'
+
+function mapBodyToPolicyData(body: Record<string, unknown>, practiceId: string, patientId: string) {
+  const validated = insurancePolicyFormSchema.parse(body)
+  return {
+    practiceId,
+    patientId,
+    payerNameRaw: validated.payerNameRaw,
+    memberId: validated.memberId,
+    groupNumber: validated.groupNumber || null,
+    planName: validated.planName || null,
+    planType: validated.planType || null,
+    isPrimary: validated.isPrimary,
+    subscriberIsPatient: validated.subscriberIsPatient,
+    subscriberFirstName: validated.subscriberIsPatient ? null : (validated.subscriberFirstName || null),
+    subscriberLastName: validated.subscriberIsPatient ? null : (validated.subscriberLastName || null),
+    subscriberDob: validated.subscriberIsPatient ? null : (validated.subscriberDob || null),
+    relationshipToPatient: validated.subscriberIsPatient ? null : (validated.relationshipToPatient || null),
+    bcbsAlphaPrefix: validated.bcbsAlphaPrefix || null,
+    bcbsStatePlan: validated.bcbsStatePlan || null,
+    rxBin: validated.rxBin || null,
+    rxPcn: validated.rxPcn || null,
+    rxGroup: validated.rxGroup || null,
+    cardFrontRef: validated.cardFrontRef || null,
+    cardBackRef: validated.cardBackRef || null,
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,19 +43,16 @@ export async function POST(req: NextRequest) {
       )
     }
     const practiceId = user.practiceId
-
-    const validated = insurancePolicySchema.parse(body)
-    const { patientId } = body
+    const patientId = body.patientId as string
 
     if (!patientId) {
       return NextResponse.json({ error: 'patientId is required' }, { status: 400 })
     }
 
-    // Verify patient belongs to practice
     const patient = await prisma.patient.findFirst({
       where: {
         id: patientId,
-        practiceId: practiceId,
+        practiceId,
         deletedAt: null,
       },
     })
@@ -38,16 +61,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Patient not found' }, { status: 404 })
     }
 
-    const policy = await prisma.insurancePolicy.create({
-      data: {
-        ...validated,
-        practiceId: practiceId,
-        patientId,
-      },
-    })
+    const data = mapBodyToPolicyData(body, practiceId, patientId)
+    const policy = await prisma.insurancePolicy.create({ data })
 
     await createAuditLog({
-      practiceId: practiceId,
+      practiceId,
       userId: user.id,
       action: 'create',
       resourceType: 'insurance',
@@ -59,11 +77,10 @@ export async function POST(req: NextRequest) {
       patientId,
       type: 'insurance',
       title: 'Insurance policy added',
-      description: `${validated.providerName} - ${validated.memberId}`,
+      description: `${policy.payerNameRaw} – Member ****${policy.memberId.slice(-4)}`,
       metadata: { policyId: policy.id },
     })
 
-    // Emit event for automation
     await emitEvent({
       practiceId,
       eventName: 'crm/insurance.created',
@@ -73,10 +90,9 @@ export async function POST(req: NextRequest) {
         insurance: {
           id: policy.id,
           patientId: policy.patientId,
-          providerName: policy.providerName,
-          planName: policy.planName,
+          payerNameRaw: policy.payerNameRaw,
           memberId: policy.memberId,
-          eligibilityStatus: policy.eligibilityStatus,
+          isPrimary: policy.isPrimary,
         },
         userId: user.id,
       },
@@ -93,4 +109,3 @@ export async function POST(req: NextRequest) {
     )
   }
 }
-

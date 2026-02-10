@@ -254,8 +254,8 @@ export function FlowBuilderPage({ practiceId, userId, initialRules = [], initial
           }
           break
         case 'create_insurance_policy':
-          if (isMissingValue(args.providerName) || isMissingValue(args.memberId) || isMissingValue(args.policyHolderName)) {
-            errors.push(`Add provider name, member ID, and policy holder name for ${actionLabel}.`)
+          if (isMissingValue(args.payerNameRaw) || isMissingValue(args.memberId)) {
+            errors.push(`Add payer name and member ID for ${actionLabel}.`)
           }
           break
         default:

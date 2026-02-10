@@ -50,7 +50,9 @@ export default async function PatientDetailPage({
     },
     include: {
       tags: true,
-      insurancePolicies: true,
+      insurancePolicies: {
+        orderBy: [{ isPrimary: 'desc' }],
+      },
       appointments: {
         orderBy: { startTime: 'desc' },
       },

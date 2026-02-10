@@ -51,15 +51,81 @@ export const patientSchema = z.object({
   tags: z.array(z.string()).optional(),
 })
 
-export const insurancePolicySchema = z.object({
-  providerName: z.string().min(1, 'Provider name is required'),
-  planName: z.string().optional(),
+// Plan type for insurance add/edit form
+export const insurancePlanTypeEnum = z.enum([
+  'PPO', 'HMO', 'EPO', 'POS', 'Medicare', 'Medicaid', 'Other', 'Unknown',
+])
+
+export const insuranceRelationshipEnum = z.enum([
+  'Spouse', 'Child', 'Other',
+])
+
+// ZIP: 5-digit or ZIP+4
+const zipSchema = z.string().refine(
+  (v) => !v || /^\d{5}(-\d{4})?$/.test(v.trim()),
+  { message: 'ZIP must be 5 digits or ZIP+4 (e.g. 12345-6789)' }
+)
+
+const insurancePolicyFormSchemaBase = z.object({
+  // Section A — Payer & Policy
+  payerNameRaw: z.string().min(1, 'Payer name is required'),
   memberId: z.string().min(1, 'Member ID is required'),
-  groupId: z.string().optional(),
-  policyHolderName: z.string().min(1, 'Policy holder name is required'),
-  policyHolderPhone: z.string().optional(),
-  eligibilityStatus: z.enum(['active', 'inactive', 'pending', 'unknown']),
+  groupNumber: z.string().optional(),
+  planName: z.string().optional(),
+  planType: insurancePlanTypeEnum.optional().nullable(),
+  isPrimary: z.boolean(),
+
+  // Section B — Subscriber
+  subscriberIsPatient: z.boolean(),
+  subscriberFirstName: z.string().optional(),
+  subscriberLastName: z.string().optional(),
+  subscriberDob: z.coerce.date().optional().nullable(),
+  relationshipToPatient: insuranceRelationshipEnum.optional().nullable(),
+
+  // Section C — Patient address (recommended; we use patient profile, so optional here for inline edit if needed)
+  addressLine1: z.string().optional(),
+  addressLine2: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  postalCode: zipSchema.optional(),
+
+  // Section D — BCBS
+  bcbsAlphaPrefix: z.string().optional(),
+  bcbsStatePlan: z.string().optional(),
+
+  // Section E — Card refs (URLs set by upload API)
+  cardFrontRef: z.string().optional().nullable(),
+  cardBackRef: z.string().optional().nullable(),
+
+  // Advanced
+  rxBin: z.string().optional(),
+  rxPcn: z.string().optional(),
+  rxGroup: z.string().optional(),
 })
+
+export const insurancePolicyFormSchema = insurancePolicyFormSchemaBase.refine(
+  (data) => {
+    if (data.subscriberIsPatient) return true
+    return !!(
+      data.subscriberFirstName?.trim() &&
+      data.subscriberLastName?.trim() &&
+      data.subscriberDob &&
+      data.relationshipToPatient
+    )
+  },
+  {
+    message: 'When subscriber is not the patient, subscriber name, DOB, and relationship are required.',
+    path: ['subscriberLastName'],
+  }
+)
+
+/** Use for PATCH (partial updates); no .refine so .partial() works */
+export const insurancePolicyFormSchemaPartial = insurancePolicyFormSchemaBase.partial()
+
+export type InsurancePolicyFormValues = z.infer<typeof insurancePolicyFormSchema>
+
+// Legacy alias for any code still using old schema
+export const insurancePolicySchema = insurancePolicyFormSchema
 
 // Appointment schemas
 export const appointmentSchema = z.object({

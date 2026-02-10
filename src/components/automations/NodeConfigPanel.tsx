@@ -152,14 +152,14 @@ const EVENT_FIELDS: Record<string, Array<{ value: string; label: string; type: '
   ],
   'crm/insurance.created': [
     { value: 'insurance.patientId', label: 'Patient ID', type: 'string' },
-    { value: 'insurance.providerName', label: 'Provider Name', type: 'string' },
+    { value: 'insurance.payerNameRaw', label: 'Payer Name', type: 'string' },
     { value: 'insurance.eligibilityStatus', label: 'Eligibility Status', type: 'string' },
     { value: 'insurance.memberId', label: 'Member ID', type: 'string' },
     ...PATIENT_FIELDS,
   ],
   'crm/insurance.updated': [
     { value: 'insurance.patientId', label: 'Patient ID', type: 'string' },
-    { value: 'insurance.providerName', label: 'Provider Name', type: 'string' },
+    { value: 'insurance.payerNameRaw', label: 'Payer Name', type: 'string' },
     { value: 'insurance.eligibilityStatus', label: 'Eligibility Status', type: 'string' },
     { value: 'changes.eligibilityStatus', label: 'Eligibility Changed', type: 'string' },
     ...PATIENT_FIELDS,
@@ -996,13 +996,13 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                     handleUpdate({ args: { ...currentArgs, patientId: e.target.value } })
                   }}
                 />
-                <Label>Provider Name</Label>
+                <Label>Payer Name</Label>
                 <Input
-                  placeholder="Insurance provider name"
-                  value={config.args?.providerName || ''}
+                  placeholder="e.g. Aetna, BCBS of Texas"
+                  value={config.args?.payerNameRaw || ''}
                   onChange={(e) => {
                     const currentArgs = config.args || {}
-                    handleUpdate({ args: { ...currentArgs, providerName: e.target.value } })
+                    handleUpdate({ args: { ...currentArgs, payerNameRaw: e.target.value } })
                   }}
                 />
                 <Label>Member ID</Label>
@@ -1014,25 +1014,36 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                     handleUpdate({ args: { ...currentArgs, memberId: e.target.value } })
                   }}
                 />
-                <Label>Eligibility Status</Label>
-                <Select
-                  value={config.args?.eligibilityStatus || 'active'}
-                  onValueChange={(value) => {
+                <Label>Group # (optional)</Label>
+                <Input
+                  placeholder="Optional"
+                  value={config.args?.groupNumber || ''}
+                  onChange={(e) => {
                     const currentArgs = config.args || {}
-                    handleUpdate({ args: { ...currentArgs, eligibilityStatus: value } })
+                    handleUpdate({ args: { ...currentArgs, groupNumber: e.target.value } })
                   }}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ELIGIBILITY_STATUS_OPTIONS.map((status) => (
-                      <SelectItem key={status} value={status}>
-                        {status.charAt(0).toUpperCase() + status.slice(1)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                />
+                <Label>Plan Name (optional)</Label>
+                <Input
+                  placeholder="Optional"
+                  value={config.args?.planName || ''}
+                  onChange={(e) => {
+                    const currentArgs = config.args || {}
+                    handleUpdate({ args: { ...currentArgs, planName: e.target.value } })
+                  }}
+                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="create-insurance-primary"
+                    checked={config.args?.isPrimary !== false}
+                    onChange={(e) => {
+                      const currentArgs = config.args || {}
+                      handleUpdate({ args: { ...currentArgs, isPrimary: e.target.checked } })
+                    }}
+                  />
+                  <Label htmlFor="create-insurance-primary">Primary insurance</Label>
+                </div>
               </div>
             )}
 

@@ -1640,11 +1640,12 @@ export async function getPatientSummary(
         },
         insurancePolicies: {
           take: 3,
-          orderBy: { createdAt: 'desc' },
+          orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }],
           select: {
             id: true,
-            providerName: true,
-            eligibilityStatus: true,
+            payerNameRaw: true,
+            memberId: true,
+            isPrimary: true,
           },
         },
         timelineEntries: {

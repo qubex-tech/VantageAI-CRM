@@ -37,6 +37,8 @@ import {
   Globe,
   Pencil
 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { InsuranceTab } from './InsuranceTab'
 import { format, formatDistanceToNow } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import {
@@ -57,6 +59,7 @@ import { cn } from '@/lib/utils'
 interface PatientDetailViewProps {
   patient: {
     id: string
+    practiceId?: string
     name: string
     // Basic Information
     externalEhrId?: string | null
@@ -100,7 +103,27 @@ interface PatientDetailViewProps {
     createdAt: Date
     updatedAt: Date
     tags: Array<{ id: string; tag: string }>
-    insurancePolicies: Array<any>
+    insurancePolicies: Array<{
+      id: string
+      payerNameRaw: string
+      memberId: string
+      groupNumber?: string | null
+      planName?: string | null
+      planType?: string | null
+      isPrimary: boolean
+      subscriberIsPatient: boolean
+      subscriberFirstName?: string | null
+      subscriberLastName?: string | null
+      subscriberDob?: Date | string | null
+      relationshipToPatient?: string | null
+      bcbsAlphaPrefix?: string | null
+      bcbsStatePlan?: string | null
+      cardFrontRef?: string | null
+      cardBackRef?: string | null
+      rxBin?: string | null
+      rxPcn?: string | null
+      rxGroup?: string | null
+    }>
     appointments: Array<{
       id: string
       startTime: Date
@@ -224,7 +247,8 @@ interface PatientNote {
 }
 
 export function PatientDetailView({ patient, users = [], currentUserId = '' }: PatientDetailViewProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'activity' | 'appointments' | 'calls'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'activity' | 'appointments' | 'calls' | 'insurance'>('overview')
+  const router = useRouter()
   const [sidebarTab, setSidebarTab] = useState<'details' | 'comments'>('details')
   const [isEditing, setIsEditing] = useState(false)
   const [composeEmailOpen, setComposeEmailOpen] = useState(false)
@@ -516,6 +540,17 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
             >
               <PhoneIcon className="h-4 w-4" />
               Calls (0)
+            </button>
+            <button
+              onClick={() => setActiveTab('insurance')}
+              className={`px-1 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+                activeTab === 'insurance'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Shield className="h-4 w-4" />
+              Insurance {patient.insurancePolicies.length > 0 && `(${patient.insurancePolicies.length})`}
             </button>
           </div>
         </div>
@@ -890,6 +925,25 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                   No calls recorded
                 </div>
               </div>
+            )}
+
+            {activeTab === 'insurance' && (
+              <InsuranceTab
+                patientId={patient.id}
+                practiceId={patient.practiceId ?? ''}
+                patient={{
+                  id: patient.id,
+                  firstName: patient.firstName,
+                  lastName: patient.lastName,
+                  dateOfBirth: patient.dateOfBirth,
+                  addressLine1: patient.addressLine1,
+                  city: patient.city,
+                  state: patient.state,
+                  postalCode: patient.postalCode,
+                }}
+                policies={patient.insurancePolicies}
+                onRefresh={() => router.refresh()}
+              />
             )}
           </div>
         </div>

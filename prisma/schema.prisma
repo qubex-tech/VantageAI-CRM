@@ -258,20 +258,29 @@ model PatientTimelineEntry {
 }
 
 model InsurancePolicy {
-  id                String    @id @default(uuid())
-  practiceId        String
-  patientId         String
-  providerName      String
-  planName          String?
-  memberId          String
-  groupId           String?
-  policyHolderName  String
-  policyHolderPhone String?
-  eligibilityStatus String // 'active', 'inactive', 'pending', 'unknown'
-  lastVerifiedAt    DateTime?
-  fileMetadata      Json? // Store file info (path, size, type) - actual storage TODO
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id                    String    @id @default(uuid())
+  practiceId            String
+  patientId             String
+  payerNameRaw          String    // Payer name (required)
+  memberId              String    // Member ID / Policy # (required)
+  groupNumber           String?   // Group # (optional)
+  planName              String?   // Plan name (optional)
+  planType              String?   // PPO, HMO, EPO, POS, Medicare, Medicaid, Other, Unknown
+  isPrimary             Boolean   @default(true)
+  subscriberIsPatient    Boolean   @default(true)
+  subscriberFirstName    String?
+  subscriberLastName    String?
+  subscriberDob         DateTime?
+  relationshipToPatient String?   // Spouse, Child, Other
+  bcbsAlphaPrefix       String?   // BCBS routing: alpha prefix
+  bcbsStatePlan         String?   // e.g. "BCBS of Texas"
+  rxBin                 String?
+  rxPcn                 String?
+  rxGroup               String?
+  cardFrontRef          String?   // Blob storage ref/URL only
+  cardBackRef           String?   // Blob storage ref/URL only
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)

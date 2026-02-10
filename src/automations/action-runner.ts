@@ -88,13 +88,17 @@ const updateAppointmentStatusSchema = z.object({
 
 const createInsurancePolicySchema = z.object({
   patientId: z.string(),
-  providerName: z.string().min(1),
-  planName: z.string().optional(),
+  payerNameRaw: z.string().min(1),
   memberId: z.string().min(1),
-  groupId: z.string().optional(),
-  policyHolderName: z.string().min(1),
-  policyHolderPhone: z.string().optional(),
-  eligibilityStatus: z.enum(['active', 'inactive', 'pending', 'unknown']).default('active'),
+  groupNumber: z.string().optional(),
+  planName: z.string().optional(),
+  planType: z.string().optional(),
+  isPrimary: z.boolean().default(true),
+  subscriberIsPatient: z.boolean().default(true),
+  subscriberFirstName: z.string().optional(),
+  subscriberLastName: z.string().optional(),
+  subscriberDob: z.coerce.date().optional(),
+  relationshipToPatient: z.string().optional(),
 })
 
 const sendReminderSchema = z.object({
@@ -1069,13 +1073,17 @@ async function createInsurancePolicy(
     data: {
       practiceId,
       patientId: args.patientId,
-      providerName: args.providerName,
-      planName: args.planName,
+      payerNameRaw: args.payerNameRaw,
       memberId: args.memberId,
-      groupId: args.groupId,
-      policyHolderName: args.policyHolderName,
-      policyHolderPhone: args.policyHolderPhone,
-      eligibilityStatus: args.eligibilityStatus,
+      groupNumber: args.groupNumber ?? null,
+      planName: args.planName ?? null,
+      planType: args.planType ?? null,
+      isPrimary: args.isPrimary,
+      subscriberIsPatient: args.subscriberIsPatient,
+      subscriberFirstName: args.subscriberIsPatient ? null : (args.subscriberFirstName ?? null),
+      subscriberLastName: args.subscriberIsPatient ? null : (args.subscriberLastName ?? null),
+      subscriberDob: args.subscriberIsPatient ? null : (args.subscriberDob ?? null),
+      relationshipToPatient: args.subscriberIsPatient ? null : (args.relationshipToPatient ?? null),
     },
   })
 
@@ -1084,14 +1092,13 @@ async function createInsurancePolicy(
     await logPatientActivity({
       patientId: args.patientId,
       type: 'insurance',
-      title: `Insurance policy created: ${args.providerName}`,
-      description: `Policy: ${args.planName || 'N/A'}, Member ID: ${args.memberId}, Status: ${args.eligibilityStatus}`,
+      title: `Insurance policy created: ${args.payerNameRaw}`,
+      description: `Policy: ${args.planName || 'N/A'}, Member ID: ****${args.memberId.slice(-4)}`,
       metadata: {
         policyId: policy.id,
-        providerName: args.providerName,
+        payerNameRaw: args.payerNameRaw,
         planName: args.planName,
         memberId: args.memberId,
-        eligibilityStatus: args.eligibilityStatus,
         createdBy: 'automation',
       },
     })

@@ -51,7 +51,7 @@ const fieldOptions = [
   { value: 'appointment.notes', label: 'Appointment Notes', category: 'Appointment' },
   
   // Insurance fields
-  { value: 'insurance.providerName', label: 'Insurance Provider', category: 'Insurance' },
+  { value: 'insurance.payerNameRaw', label: 'Insurance Payer', category: 'Insurance' },
   { value: 'insurance.memberId', label: 'Insurance Member ID', category: 'Insurance' },
   { value: 'insurance.eligibilityStatus', label: 'Eligibility Status', category: 'Insurance' },
   
