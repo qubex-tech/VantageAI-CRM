@@ -16,6 +16,7 @@ function getTools() {
     name: t.name,
     description: t.description,
     inputSchema: t.input_schema,
+    input_schema: t.input_schema,
   }))
 }
 
@@ -70,7 +71,15 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // Fallback for clients expecting plain array response.
+  // Compatibility fallback for clients posting a non-JSON-RPC tools request.
+  // Include common shapes used by different MCP integrations.
   logMcpRequest('/mcp/tools', request, { auth: 'ok', status: 200 })
-  return applyCors(NextResponse.json(tools), request)
+  return applyCors(
+    NextResponse.json({
+      tools,
+      result: { tools },
+      data: tools,
+    }),
+    request
+  )
 }
