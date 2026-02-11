@@ -4,6 +4,27 @@ import type { RequestContext } from './handlers'
 
 export const TOOL_DEFINITIONS = [
   {
+    name: 'get_insurance_verification_context',
+    description: 'Single-call tool: resolve patient by id/policy/demographics, list policies, and return full verification bundle.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        patient_id: { type: 'string', format: 'uuid' },
+        policy_id: { type: 'string', format: 'uuid' },
+        first_name: { type: 'string' },
+        last_name: { type: 'string' },
+        dob: { type: 'string' },
+        zip: { type: 'string' },
+        include_address: { type: 'boolean', default: true },
+        include_rx: { type: 'boolean', default: true },
+        strict_minimum_necessary: { type: 'boolean', default: true },
+      },
+      description: 'Provide patient_id OR policy_id OR first_name+last_name+dob',
+    },
+    inputSchema: schemas.getInsuranceVerificationContextInput,
+    handler: handlers.handleGetInsuranceVerificationContext,
+  },
+  {
     name: 'get_patient_identity',
     description: 'Get patient identity and optionally address. Minimum necessary for verification.',
     input_schema: {
