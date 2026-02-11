@@ -11,7 +11,7 @@ export async function OPTIONS(request: NextRequest) {
   return handleCorsPreflight(request)
 }
 
-export async function GET(request: NextRequest) {
+function buildToolsResponse(request: NextRequest) {
   const auth = validateMcpHeaders(request.headers)
   if (!auth.ok) {
     logMcpRequest('/mcp/tools', request, { auth: auth.error.body.error.code, status: auth.error.status })
@@ -24,4 +24,12 @@ export async function GET(request: NextRequest) {
     inputSchema: t.input_schema,
   }))
   return applyCors(NextResponse.json(tools), request)
+}
+
+export async function GET(request: NextRequest) {
+  return buildToolsResponse(request)
+}
+
+export async function POST(request: NextRequest) {
+  return buildToolsResponse(request)
 }
