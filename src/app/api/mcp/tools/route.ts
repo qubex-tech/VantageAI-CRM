@@ -11,25 +11,66 @@ export async function OPTIONS(request: NextRequest) {
   return handleCorsPreflight(request)
 }
 
-function buildToolsResponse(request: NextRequest) {
-  const auth = validateMcpHeaders(request.headers)
-  if (!auth.ok) {
-    logMcpRequest('/mcp/tools', request, { auth: auth.error.body.error.code, status: auth.error.status })
-    return applyCors(NextResponse.json(auth.error.body, { status: auth.error.status }), request)
-  }
-  logMcpRequest('/mcp/tools', request, { auth: 'ok', status: 200 })
-  const tools = TOOL_DEFINITIONS.map((t) => ({
+function getTools() {
+  return TOOL_DEFINITIONS.map((t) => ({
     name: t.name,
     description: t.description,
     inputSchema: t.input_schema,
   }))
-  return applyCors(NextResponse.json(tools), request)
+}
+
+function validateToolsAuth(request: NextRequest) {
+  const auth = validateMcpHeaders(request.headers)
+  if (!auth.ok) {
+    logMcpRequest('/mcp/tools', request, { auth: auth.error.body.error.code, status: auth.error.status })
+    return { ok: false as const, response: applyCors(NextResponse.json(auth.error.body, { status: auth.error.status }), request) }
+  }
+  return { ok: true as const }
 }
 
 export async function GET(request: NextRequest) {
-  return buildToolsResponse(request)
+  const auth = validateToolsAuth(request)
+  if (!auth.ok) return auth.response
+
+  logMcpRequest('/mcp/tools', request, { auth: 'ok', status: 200 })
+  return applyCors(NextResponse.json(getTools()), request)
 }
 
 export async function POST(request: NextRequest) {
-  return buildToolsResponse(request)
+  const auth = validateToolsAuth(request)
+  if (!auth.ok) return auth.response
+
+  let payload: unknown = null
+  try {
+    const raw = await request.text()
+    payload = raw ? JSON.parse(raw) : null
+  } catch {
+    payload = null
+  }
+
+  const tools = getTools()
+
+  // Support MCP JSON-RPC tools/list for clients posting a unified MCP request body.
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    'jsonrpc' in payload &&
+    'method' in payload &&
+    (payload as { method?: unknown }).method === 'tools/list'
+  ) {
+    const id = (payload as { id?: unknown }).id ?? null
+    logMcpRequest('/mcp/tools', request, { auth: 'ok', status: 200 })
+    return applyCors(
+      NextResponse.json({
+        jsonrpc: '2.0',
+        id,
+        result: { tools },
+      }),
+      request
+    )
+  }
+
+  // Fallback for clients expecting plain array response.
+  logMcpRequest('/mcp/tools', request, { auth: 'ok', status: 200 })
+  return applyCors(NextResponse.json(tools), request)
 }
