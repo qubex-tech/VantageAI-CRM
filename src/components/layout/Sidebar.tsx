@@ -196,15 +196,15 @@ export function Sidebar() {
         )}
       >
         <div className="flex flex-col h-full">
-          {/* Logo/Header */}
+          {/* Logo/Header - padding aligned with nav for a clean, consistent inset */}
           <div className={cn(
-            "flex items-center justify-between border-b border-gray-200",
+            "flex items-center justify-between gap-3 border-b border-gray-200 px-4",
             !isCollapsed && practiceName ? "h-auto min-h-14 py-3" : "h-14"
           )}>
             {!isCollapsed && (
               <Link
                 href="/dashboard"
-                className="flex flex-col gap-0.5"
+                className="flex flex-col gap-0.5 min-w-0 flex-1 py-1 -mx-1 rounded-md hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-200 focus:ring-inset"
                 onClick={() => setIsOpen(false)}
               >
                 <span className="text-lg font-semibold text-gray-900 tracking-tight">
@@ -218,8 +218,8 @@ export function Sidebar() {
               </Link>
             )}
             {isCollapsed && (
-              <div className="w-full flex justify-center">
-                <div className="w-8 h-8 rounded-md bg-gray-900 flex items-center justify-center">
+              <div className="w-full flex justify-center flex-1">
+                <div className="w-8 h-8 rounded-lg bg-gray-900 flex items-center justify-center flex-shrink-0">
                   <span className="text-white text-xs font-semibold">V</span>
                 </div>
               </div>
@@ -227,7 +227,7 @@ export function Sidebar() {
             {/* Collapse button (desktop only) */}
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
-              className="hidden md:flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors"
+              className="hidden md:flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors flex-shrink-0"
               aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
               <ChevronLeft 
@@ -239,8 +239,8 @@ export function Sidebar() {
             </button>
           </div>
 
-          {/* Navigation */}
-          <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          {/* Navigation - same horizontal padding as header for aligned, clean look */}
+          <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
             {navItems.map((item) => {
               const Icon = item.icon
               const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
@@ -281,7 +281,7 @@ export function Sidebar() {
           </nav>
 
           {/* Logout button */}
-          <div className="px-3 py-4 border-t border-gray-200">
+          <div className="px-4 py-4 border-t border-gray-200">
             <div className={cn(
               "flex items-center",
               isCollapsed && "justify-center"
