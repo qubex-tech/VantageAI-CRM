@@ -80,6 +80,44 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  if (method === 'initialize') {
+    logMcpRequest('/mcp', request, { auth: 'ok', status: 200 })
+    return applyCors(
+      NextResponse.json({
+        jsonrpc: '2.0',
+        id,
+        result: {
+          protocolVersion: '2024-11-05',
+          capabilities: {
+            tools: { listChanged: false },
+          },
+          serverInfo: {
+            name: 'vantage-mcp',
+            version: '1.0.0',
+          },
+        },
+      }),
+      request
+    )
+  }
+
+  if (method === 'notifications/initialized') {
+    logMcpRequest('/mcp', request, { auth: 'ok', status: 204 })
+    return applyCors(new NextResponse(null, { status: 204 }), request)
+  }
+
+  if (method === 'ping') {
+    logMcpRequest('/mcp', request, { auth: 'ok', status: 200 })
+    return applyCors(
+      NextResponse.json({
+        jsonrpc: '2.0',
+        id,
+        result: {},
+      }),
+      request
+    )
+  }
+
   if (method === 'tools/call') {
     const params = (rpc.params ?? {}) as { name?: unknown; arguments?: unknown }
     const toolName = typeof params.name === 'string' ? params.name : ''
@@ -132,5 +170,6 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  logMcpRequest('/mcp', request, { auth: 'ok', status: 200 })
   return applyCors(NextResponse.json(jsonRpcError(id, -32601, `Method not found: ${method}`)), request)
 }
