@@ -1,16 +1,13 @@
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase-browser'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import Link from 'next/link'
-
 function LoginForm() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   
   // Validate callbackUrl to prevent open redirect vulnerabilities
@@ -20,22 +17,30 @@ function LoginForm() {
     : '/dashboard'
   
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
+  const [emailSent, setEmailSent] = useState(false)
 
   useEffect(() => {
     const msg = searchParams?.get('message')
-    if (msg) {
-      setMessage(msg)
-    }
+    if (msg) setMessage(msg)
   }, [searchParams])
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        window.location.href = callbackUrl
+      }
+    })
+    return () => subscription.unsubscribe()
+  }, [callbackUrl])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setLoading(true)
+    setEmailSent(false)
 
     try {
       // Check if Supabase is configured
@@ -48,73 +53,32 @@ function LoginForm() {
         return
       }
 
-      // Sign in with Supabase Auth
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      const origin = typeof window !== 'undefined' ? window.location.origin : ''
+      const { error: signInError } = await supabase.auth.signInWithOtp({
+        email: email.trim().toLowerCase(),
+        options: {
+          emailRedirectTo: `${origin}/login?callbackUrl=${encodeURIComponent(callbackUrl)}`,
+        },
       })
 
       if (signInError) {
-        // Log the error for debugging
-        console.error('Supabase sign in error:', signInError)
-        
-        // Handle specific Supabase error messages
-        let errorMessage = 'Invalid email or password'
-        
-        if (signInError.message) {
-          // Supabase error messages
-          if (signInError.message.includes('Invalid API key') || signInError.message.includes('API key')) {
-            errorMessage = 'Authentication service configuration error. Please contact support.'
-          } else if (signInError.message.includes('Invalid login credentials') || 
-                     signInError.message.includes('Invalid credentials')) {
-            errorMessage = 'Invalid email or password. Please check your credentials and try again.'
-          } else if (signInError.message.includes('Email not confirmed')) {
-            errorMessage = 'Please verify your email address before signing in'
-          } else {
-            // Use the error message but make it user-friendly
-            errorMessage = signInError.message
-          }
+        console.error('Supabase OTP error:', signInError)
+        let errorMessage = 'Could not send sign-in link.'
+        if (signInError.message?.includes('Invalid API key')) {
+          errorMessage = 'Authentication service configuration error. Please contact support.'
+        } else if (signInError.message) {
+          errorMessage = signInError.message
         }
-        
         setError(errorMessage)
         setLoading(false)
         return
       }
 
-      if (data.user && data.session) {
-        // Session is available immediately after signInWithPassword
-        // Use window.location for full page reload to ensure middleware picks up the session
-        window.location.href = callbackUrl
-      } else if (data.user) {
-        // User exists but session might not be immediately available
-        // Wait a moment for session cookies to be set
-        await new Promise(resolve => setTimeout(resolve, 500))
-        
-        // Verify session is available before redirecting
-        const { data: { session } } = await supabase.auth.getSession()
-        if (session) {
-          window.location.href = callbackUrl
-        } else {
-          // If session still not available, redirect anyway (cookies might propagate)
-          console.warn('Session not immediately available after login, redirecting anyway')
-          window.location.href = callbackUrl
-        }
-      }
-    } catch (err: any) {
+      setEmailSent(true)
+    } catch (err: unknown) {
       console.error('Login error:', err)
-      let errorMessage = 'An unexpected error occurred. Please try again.'
-      
-      if (err.message) {
-        if (err.message.includes('Missing Supabase environment variables')) {
-          errorMessage = 'Authentication service is not configured. Please contact support.'
-        } else if (err.message.includes('Invalid API key') || err.message.includes('API key')) {
-          errorMessage = 'Authentication service configuration error. Please contact support.'
-        } else {
-          errorMessage = err.message
-        }
-      }
-      
-      setError(errorMessage)
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred.')
+    } finally {
       setLoading(false)
     }
   }
@@ -124,7 +88,9 @@ function LoginForm() {
       <Card className="w-full max-w-md border border-gray-200 shadow-lg">
         <CardHeader className="text-center pb-4">
           <CardTitle className="text-xl font-semibold text-gray-900">Vantage AI</CardTitle>
-          <CardDescription className="text-sm text-gray-500 mt-1">Sign in to your account</CardDescription>
+          <CardDescription className="text-sm text-gray-500 mt-1">
+            {emailSent ? 'Check your email' : 'Sign in with a one-time link sent to your email'}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -138,17 +104,7 @@ function LoginForm() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 autoComplete="email"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                autoComplete="current-password"
+                disabled={emailSent}
               />
             </div>
             {message && (
@@ -157,24 +113,31 @@ function LoginForm() {
             {error && (
               <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">{error}</div>
             )}
-            <Button type="submit" className="w-full bg-gray-900 hover:bg-gray-800 text-white font-medium" disabled={loading}>
-              {loading ? 'Signing in...' : 'Sign in'}
+            {emailSent ? (
+              <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded">
+                We sent a sign-in link to <strong>{email}</strong>. Click the link in that email to sign in.
+                You can close this tab after opening the link.
+              </div>
+            ) : null}
+            <Button
+              type="submit"
+              className="w-full bg-gray-900 hover:bg-gray-800 text-white font-medium"
+              disabled={loading}
+            >
+              {loading ? 'Sending link...' : emailSent ? 'Send another link' : 'Send sign-in link'}
             </Button>
-            <div className="text-center text-sm space-y-2">
-              <div>
-                Don't have an account?{' '}
-                <Link href="/signup" className="text-gray-900 hover:underline font-medium">
-                  Sign up
-                </Link>
-              </div>
-              <div>
-                <Link href="/forgot-password" className="text-gray-900 hover:underline font-medium">
-                  Forgot password?
-                </Link>
-              </div>
-              <div className="text-xs text-gray-500 pt-2">
-                Having trouble signing in? Use "Forgot Password" to reset your password and create a new account.
-              </div>
+            {emailSent && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => setEmailSent(false)}
+              >
+                Use a different email
+              </Button>
+            )}
+            <div className="text-center text-xs text-gray-500 pt-2">
+              Sign-in is by email only. No password required.
             </div>
           </form>
         </CardContent>
