@@ -48,6 +48,7 @@ export function PracticeManagement() {
     { name: '', email: '', password: '' }
   ])
   const [isCreating, setIsCreating] = useState(false)
+  const [revokingId, setRevokingId] = useState<string | null>(null)
 
   // Load practices on mount
   useEffect(() => {
@@ -96,6 +97,25 @@ export function PracticeManagement() {
     const updated = [...regularUsers]
     updated[index] = { ...updated[index], [field]: value }
     setRegularUsers(updated)
+  }
+
+  const handleRevokeUser = async (userId: string, email: string) => {
+    if (!confirm(`Revoke access for ${email}? They will no longer be able to sign in.`)) return
+    setRevokingId(userId)
+    setError('')
+    try {
+      const res = await fetch(`/api/users/${userId}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to revoke user')
+      }
+      setSuccess(`Access revoked for ${email}`)
+      await loadPractices()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to revoke user')
+    } finally {
+      setRevokingId(null)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -412,9 +432,22 @@ export function PracticeManagement() {
                             {practice.users.map((user) => (
                               <span
                                 key={user.id}
-                                className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-gray-100 text-gray-700"
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-gray-100 text-gray-700"
                               >
                                 {user.name} ({user.email}) - {user.role}
+                                <button
+                                  type="button"
+                                  onClick={() => handleRevokeUser(user.id, user.email)}
+                                  disabled={revokingId === user.id}
+                                  className="ml-1 text-red-600 hover:text-red-800 disabled:opacity-50"
+                                  title="Revoke access"
+                                >
+                                  {revokingId === user.id ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-3 w-3" />
+                                  )}
+                                </button>
                               </span>
                             ))}
                           </div>

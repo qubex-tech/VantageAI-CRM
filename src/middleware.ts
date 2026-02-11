@@ -11,6 +11,15 @@ export async function middleware(req: NextRequest) {
   
   const { pathname } = req.nextUrl
   const host = req.headers.get('host') || ''
+
+  // Supabase PKCE redirects to / with ?code= - forward to auth callback
+  if (pathname === '/' && req.nextUrl.searchParams.has('code')) {
+    const next = req.nextUrl.searchParams.get('next') || '/dashboard'
+    const url = new URL('/auth/callback', req.url)
+    url.searchParams.set('code', req.nextUrl.searchParams.get('code')!)
+    url.searchParams.set('next', next)
+    return NextResponse.redirect(url)
+  }
   
   // Check if request is for portal domain
   const isPortalDomain = host === 'portal.getvantage.tech' || 
@@ -75,7 +84,7 @@ export async function middleware(req: NextRequest) {
     }
     
     // Allow access to auth pages and public API routes (webhooks)
-    const publicPaths = ['/login', '/signup', '/forgot-password', '/reset-password']
+    const publicPaths = ['/login', '/signup', '/forgot-password', '/reset-password', '/auth/callback']
     const isPublicPath = publicPaths.some(path => pathname.startsWith(path))
     
     // Allow MCP API (auth via X-API-Key header, not session)
