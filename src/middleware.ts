@@ -13,13 +13,9 @@ export async function middleware(req: NextRequest) {
   const host = req.headers.get('host') || ''
 
   // Some MCP clients post to the configured base URL directly ("/").
-  // Detect MCP-style headers and internally route to the MCP endpoint.
-  if (
-    pathname === '/' &&
-    req.method === 'POST' &&
-    req.headers.has('x-api-key') &&
-    req.headers.has('x-actor-id')
-  ) {
+  // Route POST / on CRM/local hosts to the MCP endpoint.
+  const isCrmLikeHost = host.includes('getvantage.tech') || host.startsWith('localhost')
+  if (pathname === '/' && req.method === 'POST' && isCrmLikeHost) {
     return NextResponse.rewrite(new URL('/mcp', req.url))
   }
 
