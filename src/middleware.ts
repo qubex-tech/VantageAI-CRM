@@ -12,6 +12,17 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
   const host = req.headers.get('host') || ''
 
+  // Some MCP clients post to the configured base URL directly ("/").
+  // Detect MCP-style headers and internally route to the MCP endpoint.
+  if (
+    pathname === '/' &&
+    req.method === 'POST' &&
+    req.headers.has('x-api-key') &&
+    req.headers.has('x-actor-id')
+  ) {
+    return NextResponse.rewrite(new URL('/mcp', req.url))
+  }
+
   // Supabase PKCE redirects to / with ?code= - forward to auth callback
   if (pathname === '/' && req.nextUrl.searchParams.has('code')) {
     const next = req.nextUrl.searchParams.get('next') || '/dashboard'
