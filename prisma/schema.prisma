@@ -361,6 +361,7 @@ model RetellIntegration {
   practiceId         String   @unique
   apiKey             String // Encrypted in production
   agentId            String? // Optional: default agent ID for this practice
+  insuranceVerificationAgentId String? // Agent ID dedicated to insurance verification outbound calls
   mcpBaseUrl         String? // Base MCP endpoint used for outbound tool calls
   mcpApiKey          String? // Optional header-based auth for MCP
   mcpActorId         String? // Optional actor id for MCP calls

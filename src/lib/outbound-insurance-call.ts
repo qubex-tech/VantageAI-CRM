@@ -83,7 +83,7 @@ export async function initiateInsuranceOutboundCall(input: InitiateInsuranceOutb
 
   const toolArgs: Record<string, unknown> = {
     to_number: insurerPhoneNormalized,
-    agent_id: agentId || integration.agentId || undefined,
+    agent_id: agentId || integration.insuranceVerificationAgentId || integration.agentId || undefined,
     call_purpose: 'insurance_verification',
     context: {
       patient: {

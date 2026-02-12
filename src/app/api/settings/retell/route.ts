@@ -7,6 +7,7 @@ import { z } from 'zod'
 const retellIntegrationSchema = z.object({
   apiKey: z.string().optional().or(z.literal('')),
   agentId: z.string().optional(),
+  insuranceVerificationAgentId: z.string().optional(),
   mcpBaseUrl: z.string().url().optional().or(z.literal('')),
   mcpApiKey: z.string().optional(),
   mcpActorId: z.string().optional(),
@@ -128,6 +129,7 @@ export async function POST(req: NextRequest) {
         practiceId: practiceId,
         apiKey: resolvedApiKey,
         agentId: validated.agentId,
+        insuranceVerificationAgentId: validated.insuranceVerificationAgentId || null,
         mcpBaseUrl: validated.mcpBaseUrl || null,
         mcpApiKey: validated.mcpApiKey || null,
         mcpActorId: validated.mcpActorId || null,
@@ -138,6 +140,7 @@ export async function POST(req: NextRequest) {
       update: {
         apiKey: resolvedApiKey,
         agentId: validated.agentId,
+        insuranceVerificationAgentId: validated.insuranceVerificationAgentId || null,
         mcpBaseUrl: validated.mcpBaseUrl || null,
         mcpApiKey: validated.mcpApiKey || null,
         mcpActorId: validated.mcpActorId || null,

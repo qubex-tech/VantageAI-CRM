@@ -46,6 +46,7 @@ export interface RetellIntegrationConfig {
   practiceId: string
   apiKey: string
   agentId: string | null
+  insuranceVerificationAgentId: string | null
   mcpBaseUrl: string | null
   mcpApiKey: string | null
   mcpActorId: string | null
@@ -233,6 +234,7 @@ export async function getRetellIntegrationConfig(practiceId: string): Promise<Re
     practiceId,
     apiKey: integration.apiKey,
     agentId: integration.agentId ?? null,
+    insuranceVerificationAgentId: integration.insuranceVerificationAgentId ?? null,
     mcpBaseUrl: integration.mcpBaseUrl ?? null,
     mcpApiKey: integration.mcpApiKey ?? null,
     mcpActorId: integration.mcpActorId ?? null,

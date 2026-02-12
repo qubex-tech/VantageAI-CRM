@@ -22,6 +22,7 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
   }
   const [apiKey, setApiKey] = useState('')
   const [agentId, setAgentId] = useState(initialIntegration?.agentId || '')
+  const [insuranceVerificationAgentId, setInsuranceVerificationAgentId] = useState(initialIntegration?.insuranceVerificationAgentId || '')
   const [mcpBaseUrl, setMcpBaseUrl] = useState(initialIntegration?.mcpBaseUrl || '')
   const [mcpApiKey, setMcpApiKey] = useState(initialIntegration?.mcpApiKey || '')
   const [mcpActorId, setMcpActorId] = useState(initialIntegration?.mcpActorId || '')
@@ -37,6 +38,7 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
   useEffect(() => {
     setApiKey('')
     setAgentId(initialIntegration?.agentId || '')
+    setInsuranceVerificationAgentId(initialIntegration?.insuranceVerificationAgentId || '')
     setMcpBaseUrl(initialIntegration?.mcpBaseUrl || '')
     setMcpApiKey(initialIntegration?.mcpApiKey || '')
     setMcpActorId(initialIntegration?.mcpActorId || '')
@@ -57,6 +59,7 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
         body: JSON.stringify({
           apiKey: apiKey || undefined,
           agentId: agentId || undefined,
+          insuranceVerificationAgentId: insuranceVerificationAgentId || undefined,
           mcpBaseUrl: mcpBaseUrl || undefined,
           mcpApiKey: mcpApiKey || undefined,
           mcpActorId: mcpActorId || undefined,
@@ -156,6 +159,23 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
             />
             <p className="text-xs text-gray-500">
               Optionally specify a default agent ID to filter calls by agent
+            </p>
+          </div>
+
+          <div className="space-y-2 border-t border-gray-200 pt-4">
+            <Label htmlFor="insuranceVerificationAgentId" className="text-sm font-medium text-gray-700">
+              Insurance Verification Agent ID
+            </Label>
+            <Input
+              id="insuranceVerificationAgentId"
+              type="text"
+              value={insuranceVerificationAgentId}
+              onChange={(e) => setInsuranceVerificationAgentId(e.target.value)}
+              placeholder="Agent ID used specifically for outbound insurance verification calls"
+              className="text-sm"
+            />
+            <p className="text-xs text-gray-500">
+              This agent is used for Healix-triggered insurance verification outbound calls. If empty, the default Agent ID above is used.
             </p>
           </div>
 
