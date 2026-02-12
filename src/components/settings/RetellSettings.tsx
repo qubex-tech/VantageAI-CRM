@@ -20,7 +20,7 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
     }
     return path
   }
-  const [apiKey, setApiKey] = useState(initialIntegration?.apiKey || '')
+  const [apiKey, setApiKey] = useState('')
   const [agentId, setAgentId] = useState(initialIntegration?.agentId || '')
   const [mcpBaseUrl, setMcpBaseUrl] = useState(initialIntegration?.mcpBaseUrl || '')
   const [mcpApiKey, setMcpApiKey] = useState(initialIntegration?.mcpApiKey || '')
@@ -32,8 +32,10 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
   const [success, setSuccess] = useState('')
   const [testing, setTesting] = useState(false)
 
+  const hasSavedApiKey = Boolean(initialIntegration?.hasApiKey || initialIntegration?.apiKey)
+
   useEffect(() => {
-    setApiKey(initialIntegration?.apiKey || '')
+    setApiKey('')
     setAgentId(initialIntegration?.agentId || '')
     setMcpBaseUrl(initialIntegration?.mcpBaseUrl || '')
     setMcpApiKey(initialIntegration?.mcpApiKey || '')
@@ -53,7 +55,7 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          apiKey,
+          apiKey: apiKey || undefined,
           agentId: agentId || undefined,
           mcpBaseUrl: mcpBaseUrl || undefined,
           mcpApiKey: mcpApiKey || undefined,
@@ -109,19 +111,24 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
         <form onSubmit={handleSave} className="space-y-6">
           <div className="space-y-2">
             <Label htmlFor="apiKey" className="text-sm font-medium text-gray-700">
-              API Key *
+              API Key {!hasSavedApiKey ? '*' : '(optional to change)'}
             </Label>
             <Input
               id="apiKey"
               type="password"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Enter your RetellAI API key"
+              placeholder={hasSavedApiKey ? 'Leave blank to keep existing key' : 'Enter your RetellAI API key'}
               className="font-mono text-sm"
-              required
+              required={!hasSavedApiKey}
             />
             <p className="text-xs text-gray-500">
-              Get your API key from{' '}
+              {hasSavedApiKey
+                ? 'A Retell API key is already configured for this practice. Enter a new key only if you want to rotate it.'
+                : 'Get your API key from '}
+              {!hasSavedApiKey && (
+              <>
+              {' '}
               <a
                 href="https://retellai.com/dashboard/settings/api-keys"
                 target="_blank"
@@ -130,6 +137,8 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
               >
                 RetellAI Dashboard → Settings → API Keys
               </a>
+              </>
+              )}
             </p>
           </div>
 
@@ -246,7 +255,7 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
               type="button"
               variant="outline"
               onClick={handleTest}
-              disabled={loading || testing || !apiKey}
+              disabled={loading || testing || (!apiKey && !hasSavedApiKey)}
               className="border-gray-300 text-gray-700 hover:bg-gray-50"
             >
               {testing ? 'Testing...' : 'Test Connection'}

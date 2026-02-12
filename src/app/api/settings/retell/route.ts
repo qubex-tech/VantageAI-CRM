@@ -5,7 +5,7 @@ import { isVantageAdmin } from '@/lib/permissions'
 import { z } from 'zod'
 
 const retellIntegrationSchema = z.object({
-  apiKey: z.string().min(1, 'API key is required'),
+  apiKey: z.string().optional().or(z.literal('')),
   agentId: z.string().optional(),
   mcpBaseUrl: z.string().url().optional().or(z.literal('')),
   mcpApiKey: z.string().optional(),
@@ -13,6 +13,17 @@ const retellIntegrationSchema = z.object({
   mcpRequestIdPrefix: z.string().optional(),
   outboundToolName: z.string().optional(),
 })
+
+function redactIntegration(integration: any) {
+  if (!integration) return null
+  return {
+    ...integration,
+    apiKey: integration.apiKey ? '********' : null,
+    hasApiKey: Boolean(integration.apiKey),
+    mcpApiKey: integration.mcpApiKey ? '********' : null,
+    hasMcpApiKey: Boolean(integration.mcpApiKey),
+  }
+}
 
 /**
  * Get RetellAI integration settings
@@ -43,7 +54,7 @@ export async function GET(req: NextRequest) {
       where: { practiceId: practiceId },
     })
 
-    return NextResponse.json({ integration })
+    return NextResponse.json({ integration: redactIntegration(integration) })
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to fetch RetellAI settings' },
@@ -82,20 +93,32 @@ export async function POST(req: NextRequest) {
     }
 
     const validated = retellIntegrationSchema.parse(body)
+    const existingIntegration = await prisma.retellIntegration.findUnique({
+      where: { practiceId: practiceId },
+    })
+    const resolvedApiKey = validated.apiKey?.trim() || existingIntegration?.apiKey
 
-    // Test connection by attempting to list calls
-    const { RetellApiClient } = await import('@/lib/retell-api')
-    const testClient = new RetellApiClient(validated.apiKey)
-    try {
-      await testClient.listCalls({ limit: 1 })
-    } catch (error) {
-      console.error('RetellAI API test failed:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      // Return more detailed error message to help user debug
+    if (!resolvedApiKey) {
       return NextResponse.json(
-        { error: `Invalid API key or connection failed: ${errorMessage}. Please check your RetellAI API key.` },
+        { error: 'Retell API key is required for initial setup.' },
         { status: 400 }
       )
+    }
+
+    // Only validate upstream Retell key when the key was changed/entered.
+    if (validated.apiKey?.trim()) {
+      const { RetellApiClient } = await import('@/lib/retell-api')
+      const testClient = new RetellApiClient(resolvedApiKey)
+      try {
+        await testClient.listCalls({ limit: 1 })
+      } catch (error) {
+        console.error('RetellAI API test failed:', error)
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+        return NextResponse.json(
+          { error: `Invalid API key or connection failed: ${errorMessage}. Please check your RetellAI API key.` },
+          { status: 400 }
+        )
+      }
     }
 
     // Create or update integration
@@ -103,7 +126,7 @@ export async function POST(req: NextRequest) {
       where: { practiceId: practiceId },
       create: {
         practiceId: practiceId,
-        apiKey: validated.apiKey,
+        apiKey: resolvedApiKey,
         agentId: validated.agentId,
         mcpBaseUrl: validated.mcpBaseUrl || null,
         mcpApiKey: validated.mcpApiKey || null,
@@ -113,7 +136,7 @@ export async function POST(req: NextRequest) {
         isActive: true,
       },
       update: {
-        apiKey: validated.apiKey,
+        apiKey: resolvedApiKey,
         agentId: validated.agentId,
         mcpBaseUrl: validated.mcpBaseUrl || null,
         mcpApiKey: validated.mcpApiKey || null,
@@ -123,7 +146,7 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    return NextResponse.json({ integration })
+    return NextResponse.json({ integration: redactIntegration(integration) })
   } catch (error) {
     if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
       const zodError = error as unknown as { issues: Array<{ path: (string | number)[]; message: string }> }
