@@ -412,44 +412,56 @@ export async function callRetellMcpTool(params: {
   const url = normalizeMcpBaseUrl(resolvedBaseUrl)
   const rpcId = `rpc-${Date.now()}`
 
-  // Best-effort initialize handshake for MCP servers that expect lifecycle calls.
-  await postJsonRpc(url, { jsonrpc: '2.0', id: `${rpcId}-init`, method: 'initialize', params: {} }, headers).catch(() => null)
+  try {
+    // Best-effort initialize handshake for MCP servers that expect lifecycle calls.
+    await postJsonRpc(url, { jsonrpc: '2.0', id: `${rpcId}-init`, method: 'initialize', params: {} }, headers).catch(() => null)
 
-  const callResponse = await postJsonRpc<{
-    content?: unknown
-    output?: Record<string, unknown>
-    call_id?: string
-    callId?: string
-    id?: string
-  }>(
-    url,
-    {
-      jsonrpc: '2.0',
-      id: `${rpcId}-call`,
-      method: 'tools/call',
-      params: {
-        name: toolName,
-        arguments: args,
+    const callResponse = await postJsonRpc<{
+      content?: unknown
+      output?: Record<string, unknown>
+      call_id?: string
+      callId?: string
+      id?: string
+    }>(
+      url,
+      {
+        jsonrpc: '2.0',
+        id: `${rpcId}-call`,
+        method: 'tools/call',
+        params: {
+          name: toolName,
+          arguments: args,
+        },
       },
-    },
-    headers
-  )
+      headers
+    )
 
-  if (callResponse.error) {
-    throw new Error(callResponse.error.message || 'MCP tools/call failed')
+    if (callResponse.error) {
+      throw new Error(callResponse.error.message || 'MCP tools/call failed')
+    }
+
+    const result = callResponse.result ?? null
+    const resultObj = typeof result === 'object' && result !== null ? (result as Record<string, unknown>) : null
+    const output = (resultObj?.output && typeof resultObj.output === 'object'
+      ? (resultObj.output as Record<string, unknown>)
+      : resultObj) || {}
+    const callId =
+      (typeof output.call_id === 'string' && output.call_id) ||
+      (typeof output.callId === 'string' && output.callId) ||
+      (typeof output.id === 'string' && output.id) ||
+      null
+
+    return { rawResult: result, callId }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    const isAuthError = /401|UNAUTHORIZED|Invalid or missing API key/i.test(message)
+
+    if (toolName === 'create_outbound_call' && isAuthError) {
+      console.warn('[Retell MCP] MCP auth failed, using local outbound fallback')
+      return executeLocalFallbackTool({ config, toolName, args })
+    }
+
+    throw error
   }
-
-  const result = callResponse.result ?? null
-  const resultObj = typeof result === 'object' && result !== null ? (result as Record<string, unknown>) : null
-  const output = (resultObj?.output && typeof resultObj.output === 'object'
-    ? (resultObj.output as Record<string, unknown>)
-    : resultObj) || {}
-  const callId =
-    (typeof output.call_id === 'string' && output.call_id) ||
-    (typeof output.callId === 'string' && output.callId) ||
-    (typeof output.id === 'string' && output.id) ||
-    null
-
-  return { rawResult: result, callId }
 }
 
