@@ -238,6 +238,18 @@ function getDefaultAppBaseUrl(): string | null {
   return null
 }
 
+function getDefaultMcpApiKey(): string | null {
+  const configuredSingle = process.env.MCP_API_KEY?.trim()
+  if (configuredSingle) return configuredSingle
+
+  const configuredKeys = (process.env.MCP_API_KEYS ?? '')
+    .split(',')
+    .map((k) => k.trim())
+    .filter(Boolean)
+
+  return configuredKeys[0] ?? null
+}
+
 function normalizeMcpBaseUrl(rawBaseUrl: string): string {
   const url = new URL(rawBaseUrl)
   let path = url.pathname.replace(/\/+$/, '') || ''
@@ -263,12 +275,14 @@ function normalizeMcpBaseUrl(rawBaseUrl: string): string {
 }
 
 function buildMcpHeaders(config: RetellIntegrationConfig, requestId: string): HeadersInit {
+  const resolvedApiKey = config.mcpApiKey?.trim() || getDefaultMcpApiKey()
+  const resolvedActorId = config.mcpActorId?.trim() || 'healix-outbound'
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'X-Request-Id': requestId,
   }
-  if (config.mcpApiKey) headers['x-api-key'] = config.mcpApiKey
-  if (config.mcpActorId) headers['x-actor-id'] = config.mcpActorId
+  if (resolvedApiKey) headers['x-api-key'] = resolvedApiKey
+  if (resolvedActorId) headers['x-actor-id'] = resolvedActorId
   return headers
 }
 
