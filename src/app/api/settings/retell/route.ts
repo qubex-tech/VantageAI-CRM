@@ -7,6 +7,11 @@ import { z } from 'zod'
 const retellIntegrationSchema = z.object({
   apiKey: z.string().min(1, 'API key is required'),
   agentId: z.string().optional(),
+  mcpBaseUrl: z.string().url().optional().or(z.literal('')),
+  mcpApiKey: z.string().optional(),
+  mcpActorId: z.string().optional(),
+  mcpRequestIdPrefix: z.string().optional(),
+  outboundToolName: z.string().optional(),
 })
 
 /**
@@ -100,11 +105,21 @@ export async function POST(req: NextRequest) {
         practiceId: practiceId,
         apiKey: validated.apiKey,
         agentId: validated.agentId,
+        mcpBaseUrl: validated.mcpBaseUrl || null,
+        mcpApiKey: validated.mcpApiKey || null,
+        mcpActorId: validated.mcpActorId || null,
+        mcpRequestIdPrefix: validated.mcpRequestIdPrefix || null,
+        outboundToolName: validated.outboundToolName || null,
         isActive: true,
       },
       update: {
         apiKey: validated.apiKey,
         agentId: validated.agentId,
+        mcpBaseUrl: validated.mcpBaseUrl || null,
+        mcpApiKey: validated.mcpApiKey || null,
+        mcpActorId: validated.mcpActorId || null,
+        mcpRequestIdPrefix: validated.mcpRequestIdPrefix || null,
+        outboundToolName: validated.outboundToolName || null,
       },
     })
 

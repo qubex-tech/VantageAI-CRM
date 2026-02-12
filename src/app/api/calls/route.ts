@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/middleware'
+import { z } from 'zod'
 import { getRetellClient } from '@/lib/retell-api'
+import { initiateInsuranceOutboundCall } from '@/lib/outbound-insurance-call'
 
 export const dynamic = 'force-dynamic'
+
+const initiateOutboundCallSchema = z.object({
+  patientId: z.string().uuid(),
+  policyId: z.string().uuid().optional(),
+  insurerPhone: z.string().optional(),
+  agentId: z.string().optional(),
+})
 
 /**
  * Process calls in the background without blocking the API response
@@ -107,6 +116,47 @@ export async function GET(req: NextRequest) {
         error: error instanceof Error ? error.message : 'Failed to fetch calls',
         calls: [] 
       },
+      { status: 500 }
+    )
+  }
+}
+
+/**
+ * POST /api/calls
+ * Initiate an outbound insurance verification call via Retell MCP tools/call.
+ */
+export async function POST(req: NextRequest) {
+  try {
+    const user = await requireAuth(req)
+    if (!user.practiceId) {
+      return NextResponse.json({ error: 'Practice ID is required for this operation' }, { status: 400 })
+    }
+    const practiceId = user.practiceId
+    const body = await req.json()
+    const parsed = initiateOutboundCallSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error.issues[0]?.message || 'Invalid request payload' }, { status: 400 })
+    }
+
+    const { patientId, policyId, insurerPhone, agentId } = parsed.data
+    const result = await initiateInsuranceOutboundCall({
+      practiceId,
+      userId: user.id,
+      patientId,
+      policyId,
+      insurerPhone,
+      agentId,
+      source: 'api',
+    })
+
+    return NextResponse.json({
+      success: true,
+      ...result,
+    })
+  } catch (error) {
+    console.error('Error initiating outbound insurance call:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to initiate outbound insurance call' },
       { status: 500 }
     )
   }

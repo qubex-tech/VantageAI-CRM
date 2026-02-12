@@ -20,6 +20,7 @@ import type { VariableContext } from './marketing/types'
 import { emitEvent } from './outbox'
 import { getCalClient } from './cal'
 import { bookAppointment as bookCalAppointment } from './agentActions'
+import { initiateInsuranceOutboundCall } from './outbound-insurance-call'
 
 export interface HealixToolResult {
   success: boolean
@@ -135,6 +136,15 @@ export interface GetAppointmentSummaryParams {
   appointmentId: string
 }
 
+export interface StartInsuranceVerificationCallParams {
+  clinicId: string
+  patientId?: string
+  patientName?: string
+  policyId?: string
+  insurerPhone?: string
+  agentId?: string
+}
+
 /**
  * Allowed tool names for validation
  */
@@ -153,6 +163,7 @@ export const ALLOWED_TOOLS = [
   'bookAppointment',
   'getPatientSummary',
   'getAppointmentSummary',
+  'startInsuranceVerificationCall',
 ] as const
 
 export type AllowedToolName = typeof ALLOWED_TOOLS[number]
@@ -1770,6 +1781,62 @@ export async function getAppointmentSummary(
 }
 
 /**
+ * Start an outbound insurance verification call via Retell MCP.
+ */
+export async function startInsuranceVerificationCall(
+  params: StartInsuranceVerificationCallParams,
+  userId: string
+): Promise<HealixToolResult> {
+  try {
+    const { hasAccess } = await validateClinicAccess(userId, params.clinicId)
+    if (!hasAccess) {
+      return {
+        success: false,
+        message: 'Access denied: You do not have permission to initiate calls in this clinic',
+      }
+    }
+
+    const resolved = await resolvePatientId(params.clinicId, params.patientId, params.patientName)
+    if (resolved.candidates) {
+      return {
+        success: false,
+        message: `Multiple patients match "${params.patientName}". Please specify the patient.`,
+        data: { candidates: resolved.candidates },
+      }
+    }
+    if (!resolved.patientId) {
+      return {
+        success: false,
+        message: resolved.error || 'Patient not found',
+      }
+    }
+
+    const result = await initiateInsuranceOutboundCall({
+      practiceId: params.clinicId,
+      userId,
+      patientId: resolved.patientId,
+      policyId: params.policyId,
+      insurerPhone: params.insurerPhone,
+      agentId: params.agentId,
+      source: 'healix',
+    })
+
+    return {
+      success: true,
+      message: result.callId
+        ? `Outbound insurance call started (call id: ${result.callId})`
+        : 'Outbound insurance call started',
+      data: result,
+    }
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to start insurance verification call',
+    }
+  }
+}
+
+/**
  * Execute a tool by name with validation
  */
 export async function executeTool(
@@ -1823,6 +1890,8 @@ export async function executeTool(
       return getPatientSummary(args as GetPatientSummaryParams, userId)
     case 'getAppointmentSummary':
       return getAppointmentSummary(args as GetAppointmentSummaryParams, userId)
+    case 'startInsuranceVerificationCall':
+      return startInsuranceVerificationCall(args as StartInsuranceVerificationCallParams, userId)
     default:
       return {
         success: false,

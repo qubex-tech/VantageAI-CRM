@@ -4,7 +4,12 @@ import { useState, useEffect, useCallback } from 'react'
 import { ComposeEmail } from './ComposeEmail'
 import { ComposeSms } from './ComposeSms'
 import { PatientNotes } from './PatientNotes'
-import { useHealixOpen } from '@/components/healix/HealixButton'
+import {
+  useHealixOpen,
+  setHealixContextOverride,
+  setHealixPendingPrompt,
+  setHealixPanelOpen,
+} from '@/components/healix/HealixButton'
 import Link from 'next/link'
 import { 
   Star, 
@@ -35,7 +40,8 @@ import {
   Plus,
   Shield,
   Globe,
-  Pencil
+  Pencil,
+  PhoneCall
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { InsuranceTab } from './InsuranceTab'
@@ -106,6 +112,8 @@ interface PatientDetailViewProps {
     insurancePolicies: Array<{
       id: string
       payerNameRaw: string
+      insurerPhoneRaw?: string | null
+      insurerPhoneNormalized?: string | null
       memberId: string
       groupNumber?: string | null
       planName?: string | null
@@ -384,6 +392,44 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
     }
   })
   const nextAppointment = upcomingAppointments.length > 0 ? upcomingAppointments[0] : null
+  const primaryPolicy = patient.insurancePolicies.find((p) => p.isPrimary) || patient.insurancePolicies[0] || null
+
+  const launchInsuranceAgentFlow = () => {
+    const patientName = getDisplayName()
+    const selectedPolicy = primaryPolicy
+    const insurerPhone = selectedPolicy?.insurerPhoneRaw || ''
+    const policyContext = selectedPolicy
+      ? `${selectedPolicy.payerNameRaw} (policy ${selectedPolicy.memberId.slice(-4).padStart(selectedPolicy.memberId.length, '*')})`
+      : 'No policy selected yet'
+
+    const prompt = insurerPhone
+      ? [
+          'Start insurance verification outbound call flow.',
+          `Patient: ${patientName} (${patient.id})`,
+          `Policy: ${policyContext}`,
+          `Insurer phone on file: ${insurerPhone}`,
+          'Confirm the phone number and then call POST /api/calls with patientId, policyId, and insurerPhone.',
+        ].join('\n')
+      : [
+          'Start insurance verification outbound call flow.',
+          `Patient: ${patientName} (${patient.id})`,
+          `Policy: ${policyContext}`,
+          'Ask me for the insurance company phone number first, then call POST /api/calls with patientId, policyId, and insurerPhone.',
+        ].join('\n')
+
+    setHealixContextOverride({
+      route: `/patients/${patient.id}`,
+      screenTitle: 'Patient Insurance Call',
+      patientId: patient.id,
+      visibleFields: {
+        patientName,
+        policyId: selectedPolicy?.id,
+        insurerPhone: insurerPhone || undefined,
+      },
+    })
+    setHealixPendingPrompt(prompt)
+    setHealixPanelOpen(true)
+  }
 
   if (isEditing) {
     return (
@@ -419,6 +465,15 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
           <div className="flex items-center gap-2 flex-shrink-0 ml-4">
             <Button variant="ghost" size="icon">
               <Clipboard className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={launchInsuranceAgentFlow}
+              aria-label="Start insurance agent call workflow"
+              title="Start insurance agent call workflow"
+            >
+              <PhoneCall className="h-4 w-4" />
             </Button>
             <Button
               variant="ghost"

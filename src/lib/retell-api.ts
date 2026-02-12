@@ -42,6 +42,17 @@ export interface RetellCallListItem {
   duration_ms?: number
 }
 
+export interface RetellIntegrationConfig {
+  practiceId: string
+  apiKey: string
+  agentId: string | null
+  mcpBaseUrl: string | null
+  mcpApiKey: string | null
+  mcpActorId: string | null
+  mcpRequestIdPrefix: string | null
+  outboundToolName: string | null
+}
+
 export class RetellApiClient {
   private apiKey: string
   private baseUrl: string
@@ -172,12 +183,11 @@ export class RetellApiClient {
 }
 
 /**
- * Get RetellAI client for a practice
- * Retrieves API key from database (stored per-practice)
+ * Load Retell integration settings for a practice.
  */
-export async function getRetellClient(practiceId: string): Promise<RetellApiClient> {
+export async function getRetellIntegrationConfig(practiceId: string): Promise<RetellIntegrationConfig> {
   const { prisma } = await import('./db')
-  
+
   const integration = await prisma.retellIntegration.findUnique({
     where: { practiceId },
   })
@@ -186,6 +196,114 @@ export async function getRetellClient(practiceId: string): Promise<RetellApiClie
     throw new Error('RetellAI integration not configured for this practice. Please configure it in Settings.')
   }
 
+  return {
+    practiceId,
+    apiKey: integration.apiKey,
+    agentId: integration.agentId ?? null,
+    mcpBaseUrl: integration.mcpBaseUrl ?? null,
+    mcpApiKey: integration.mcpApiKey ?? null,
+    mcpActorId: integration.mcpActorId ?? null,
+    mcpRequestIdPrefix: integration.mcpRequestIdPrefix ?? null,
+    outboundToolName: integration.outboundToolName ?? null,
+  }
+}
+
+/**
+ * Get RetellAI client for a practice.
+ */
+export async function getRetellClient(practiceId: string): Promise<RetellApiClient> {
+  const integration = await getRetellIntegrationConfig(practiceId)
   return new RetellApiClient(integration.apiKey)
+}
+
+type JsonRpcResponse<T = any> = {
+  jsonrpc?: string
+  id?: string | number | null
+  result?: T
+  error?: { code?: number; message?: string; data?: unknown }
+}
+
+function buildMcpHeaders(config: RetellIntegrationConfig, requestId: string): HeadersInit {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-Request-Id': requestId,
+  }
+  if (config.mcpApiKey) headers['x-api-key'] = config.mcpApiKey
+  if (config.mcpActorId) headers['x-actor-id'] = config.mcpActorId
+  return headers
+}
+
+async function postJsonRpc<T = unknown>(
+  url: string,
+  body: Record<string, unknown>,
+  headers: HeadersInit
+): Promise<JsonRpcResponse<T>> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '')
+    throw new Error(`MCP request failed (${response.status}): ${errorText || response.statusText}`)
+  }
+  return response.json()
+}
+
+export async function callRetellMcpTool(params: {
+  config: RetellIntegrationConfig
+  toolName: string
+  args: Record<string, unknown>
+}): Promise<{ rawResult: unknown; callId?: string | null }> {
+  const { config, toolName, args } = params
+  if (!config.mcpBaseUrl) {
+    throw new Error('Retell MCP base URL is not configured in settings.')
+  }
+
+  const requestIdPrefix = config.mcpRequestIdPrefix || 'healix-outbound'
+  const requestId = `${requestIdPrefix}-${Date.now()}`
+  const headers = buildMcpHeaders(config, requestId)
+  const url = config.mcpBaseUrl
+  const rpcId = `rpc-${Date.now()}`
+
+  // Best-effort initialize handshake for MCP servers that expect lifecycle calls.
+  await postJsonRpc(url, { jsonrpc: '2.0', id: `${rpcId}-init`, method: 'initialize', params: {} }, headers).catch(() => null)
+
+  const callResponse = await postJsonRpc<{
+    content?: unknown
+    output?: Record<string, unknown>
+    call_id?: string
+    callId?: string
+    id?: string
+  }>(
+    url,
+    {
+      jsonrpc: '2.0',
+      id: `${rpcId}-call`,
+      method: 'tools/call',
+      params: {
+        name: toolName,
+        arguments: args,
+      },
+    },
+    headers
+  )
+
+  if (callResponse.error) {
+    throw new Error(callResponse.error.message || 'MCP tools/call failed')
+  }
+
+  const result = callResponse.result ?? null
+  const resultObj = typeof result === 'object' && result !== null ? (result as Record<string, unknown>) : null
+  const output = (resultObj?.output && typeof resultObj.output === 'object'
+    ? (resultObj.output as Record<string, unknown>)
+    : resultObj) || {}
+  const callId =
+    (typeof output.call_id === 'string' && output.call_id) ||
+    (typeof output.callId === 'string' && output.callId) ||
+    (typeof output.id === 'string' && output.id) ||
+    null
+
+  return { rawResult: result, callId }
 }
 

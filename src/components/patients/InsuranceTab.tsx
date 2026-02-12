@@ -9,6 +9,7 @@ import { Shield, Plus, Pencil, Trash2, User, UserCircle } from 'lucide-react'
 type InsurancePolicy = {
   id: string
   payerNameRaw: string
+  insurerPhoneRaw?: string | null
   memberId: string
   groupNumber?: string | null
   planName?: string | null
@@ -138,6 +139,7 @@ export function InsuranceTab({
                     </div>
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
                       <span>Member ID: {maskMemberId(policy.memberId)}</span>
+                      {policy.insurerPhoneRaw && <span>Insurer phone: {policy.insurerPhoneRaw}</span>}
                       {policy.groupNumber && (
                         <span>Group #: {policy.groupNumber}</span>
                       )}

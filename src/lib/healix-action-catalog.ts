@@ -82,6 +82,15 @@ export const HEALIX_ACTION_CATALOG: HealixActionCatalogEntry[] = [
     executable: true,
   },
   {
+    id: 'start-insurance-verification-call',
+    label: 'Start insurance verification call',
+    description: 'Initiate an outbound Retell call to the insurer using patient + policy context.',
+    toolName: 'startInsuranceVerificationCall',
+    requiredArgs: ['patientId|patientName', 'policyId(optional)', 'insurerPhone(optional if already on file)'],
+    example: 'Call the insurer for this patient and verify benefits.',
+    executable: true,
+  },
+  {
     id: 'list-appointment-types',
     label: 'List appointment types',
     description: 'List available appointment visit types for scheduling.',

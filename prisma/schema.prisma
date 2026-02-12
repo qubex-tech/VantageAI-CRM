@@ -262,6 +262,8 @@ model InsurancePolicy {
   practiceId            String
   patientId             String
   payerNameRaw          String    // Payer name (required)
+  insurerPhoneRaw       String?   // Carrier phone as entered by staff/agent
+  insurerPhoneNormalized String?  // E.164-like normalized number for dialing
   memberId              String    // Member ID / Policy # (required)
   groupNumber           String?   // Group # (optional)
   planName              String?   // Plan name (optional)
@@ -355,13 +357,18 @@ model CalEventTypeMapping {
 }
 
 model RetellIntegration {
-  id         String   @id @default(uuid())
-  practiceId String   @unique
-  apiKey     String // Encrypted in production
-  agentId    String? // Optional: default agent ID for this practice
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                 String   @id @default(uuid())
+  practiceId         String   @unique
+  apiKey             String // Encrypted in production
+  agentId            String? // Optional: default agent ID for this practice
+  mcpBaseUrl         String? // Base MCP endpoint used for outbound tool calls
+  mcpApiKey          String? // Optional header-based auth for MCP
+  mcpActorId         String? // Optional actor id for MCP calls
+  mcpRequestIdPrefix String? // Optional request id prefix for observability
+  outboundToolName   String? // Optional outbound tool name (defaults to create_outbound_call)
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
 

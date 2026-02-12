@@ -55,6 +55,7 @@ export interface ReadinessResult {
 export function computeReadiness(
   policy: {
     payerNameRaw: string
+    insurerPhoneRaw?: string | null
     memberId: string
     subscriberIsPatient: boolean
     subscriberFirstName?: string | null
@@ -82,6 +83,9 @@ export function computeReadiness(
   }
   if (!policy.memberId?.trim()) {
     missing_fields.push({ field: 'member_id', reason: 'Required for verification' })
+  }
+  if (!policy.insurerPhoneRaw?.trim()) {
+    warnings.push({ field: 'insurance.insurer_phone', reason: 'Required before starting outbound insurer call' })
   }
 
   const nameParts = getPatientNameParts(patient)

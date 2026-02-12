@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/middleware'
 import { insurancePolicyFormSchema } from '@/lib/validations'
 import { createAuditLog, createTimelineEntry } from '@/lib/audit'
 import { emitEvent } from '@/lib/outbox'
+import { normalizePhoneForDialing } from '@/lib/phone'
 
 function mapBodyToPolicyData(body: Record<string, unknown>, practiceId: string, patientId: string) {
   const validated = insurancePolicyFormSchema.parse(body)
@@ -11,6 +12,8 @@ function mapBodyToPolicyData(body: Record<string, unknown>, practiceId: string, 
     practiceId,
     patientId,
     payerNameRaw: validated.payerNameRaw,
+    insurerPhoneRaw: validated.insurerPhone || null,
+    insurerPhoneNormalized: normalizePhoneForDialing(validated.insurerPhone),
     memberId: validated.memberId,
     groupNumber: validated.groupNumber || null,
     planName: validated.planName || null,

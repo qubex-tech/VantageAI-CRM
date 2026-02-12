@@ -22,6 +22,11 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
   }
   const [apiKey, setApiKey] = useState(initialIntegration?.apiKey || '')
   const [agentId, setAgentId] = useState(initialIntegration?.agentId || '')
+  const [mcpBaseUrl, setMcpBaseUrl] = useState(initialIntegration?.mcpBaseUrl || '')
+  const [mcpApiKey, setMcpApiKey] = useState(initialIntegration?.mcpApiKey || '')
+  const [mcpActorId, setMcpActorId] = useState(initialIntegration?.mcpActorId || '')
+  const [mcpRequestIdPrefix, setMcpRequestIdPrefix] = useState(initialIntegration?.mcpRequestIdPrefix || '')
+  const [outboundToolName, setOutboundToolName] = useState(initialIntegration?.outboundToolName || 'create_outbound_call')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -30,6 +35,11 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
   useEffect(() => {
     setApiKey(initialIntegration?.apiKey || '')
     setAgentId(initialIntegration?.agentId || '')
+    setMcpBaseUrl(initialIntegration?.mcpBaseUrl || '')
+    setMcpApiKey(initialIntegration?.mcpApiKey || '')
+    setMcpActorId(initialIntegration?.mcpActorId || '')
+    setMcpRequestIdPrefix(initialIntegration?.mcpRequestIdPrefix || '')
+    setOutboundToolName(initialIntegration?.outboundToolName || 'create_outbound_call')
   }, [initialIntegration])
 
   const handleSave = async (e: React.FormEvent) => {
@@ -45,6 +55,11 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
         body: JSON.stringify({
           apiKey,
           agentId: agentId || undefined,
+          mcpBaseUrl: mcpBaseUrl || undefined,
+          mcpApiKey: mcpApiKey || undefined,
+          mcpActorId: mcpActorId || undefined,
+          mcpRequestIdPrefix: mcpRequestIdPrefix || undefined,
+          outboundToolName: outboundToolName || undefined,
         }),
       })
 
@@ -133,6 +148,78 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
             <p className="text-xs text-gray-500">
               Optionally specify a default agent ID to filter calls by agent
             </p>
+          </div>
+
+          <div className="space-y-2 border-t border-gray-200 pt-4">
+            <Label htmlFor="mcpBaseUrl" className="text-sm font-medium text-gray-700">
+              MCP Base URL (Optional)
+            </Label>
+            <Input
+              id="mcpBaseUrl"
+              type="url"
+              value={mcpBaseUrl}
+              onChange={(e) => setMcpBaseUrl(e.target.value)}
+              placeholder="https://app.getvantage.tech/mcp"
+              className="text-sm"
+            />
+            <p className="text-xs text-gray-500">
+              Used for outbound call tool invocation via MCP JSON-RPC.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="mcpApiKey" className="text-sm font-medium text-gray-700">
+                MCP API Key (Optional)
+              </Label>
+              <Input
+                id="mcpApiKey"
+                type="password"
+                value={mcpApiKey}
+                onChange={(e) => setMcpApiKey(e.target.value)}
+                placeholder="x-api-key value"
+                className="font-mono text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="mcpActorId" className="text-sm font-medium text-gray-700">
+                MCP Actor ID (Optional)
+              </Label>
+              <Input
+                id="mcpActorId"
+                type="text"
+                value={mcpActorId}
+                onChange={(e) => setMcpActorId(e.target.value)}
+                placeholder="retell-healix"
+                className="text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="mcpRequestIdPrefix" className="text-sm font-medium text-gray-700">
+                Request ID Prefix (Optional)
+              </Label>
+              <Input
+                id="mcpRequestIdPrefix"
+                type="text"
+                value={mcpRequestIdPrefix}
+                onChange={(e) => setMcpRequestIdPrefix(e.target.value)}
+                placeholder="healix-outbound"
+                className="text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="outboundToolName" className="text-sm font-medium text-gray-700">
+                Outbound Tool Name (Optional)
+              </Label>
+              <Input
+                id="outboundToolName"
+                type="text"
+                value={outboundToolName}
+                onChange={(e) => setOutboundToolName(e.target.value)}
+                placeholder="create_outbound_call"
+                className="text-sm"
+              />
+            </div>
           </div>
 
           {(error || success) && (

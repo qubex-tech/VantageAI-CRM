@@ -92,6 +92,7 @@ export async function handleListInsurancePolicies(
   const policiesOut = policies.map((p, i) => ({
     policy_id: p.id,
     payer_name_raw: p.payerNameRaw,
+    insurer_phone: p.insurerPhoneRaw ?? undefined,
     is_primary: p.isPrimary,
     plan_type: p.planType ?? undefined,
     member_id_masked: maskLast4(p.memberId),
@@ -131,6 +132,7 @@ export async function handleGetInsurancePolicyDetails(
     policy_id: policy.id,
     patient_id: policy.patientId,
     payer_name_raw: policy.payerNameRaw,
+    insurer_phone: policy.insurerPhoneRaw ?? undefined,
     plan_name: policy.planName ?? undefined,
     plan_type: policy.planType ?? undefined,
     is_primary: policy.isPrimary,
@@ -228,6 +230,7 @@ export async function handleGetVerificationBundle(
     },
     insurance: {
       payer_name_raw: policy.payerNameRaw,
+      insurer_phone: policy.insurerPhoneRaw ?? undefined,
       member_id_masked: memberIdDisplay,
       group_number_masked: groupNumberDisplay,
       plan_name: policy.planName ?? undefined,
@@ -383,6 +386,7 @@ export async function handleGetInsuranceVerificationContext(
     return {
       policy_id: p.id,
       payer_name_raw: p.payerNameRaw,
+      insurer_phone: p.insurerPhoneRaw ?? undefined,
       is_primary: p.isPrimary,
       plan_name: p.planName ?? undefined,
       plan_type: p.planType ?? undefined,
@@ -419,6 +423,7 @@ export async function handleGetInsuranceVerificationContext(
       insurance: {
         policy_id: selectedPolicy.id,
         payer_name_raw: selectedPolicy.payerNameRaw,
+        insurer_phone: selectedPolicy.insurerPhoneRaw ?? undefined,
         member_id_masked: ctx.allowUnmasked ? selectedPolicy.memberId : maskLast4(selectedPolicy.memberId),
         group_number_masked: ctx.allowUnmasked
           ? (selectedPolicy.groupNumber ?? undefined)

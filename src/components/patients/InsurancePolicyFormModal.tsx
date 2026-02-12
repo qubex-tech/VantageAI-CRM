@@ -34,6 +34,7 @@ const RELATIONSHIPS = insuranceRelationshipEnum.options
 type InsurancePolicy = {
   id: string
   payerNameRaw: string
+  insurerPhoneRaw?: string | null
   memberId: string
   groupNumber?: string | null
   planName?: string | null
@@ -64,6 +65,7 @@ interface InsurancePolicyFormModalProps {
 
 const defaultValues: InsurancePolicyFormValues = {
   payerNameRaw: '',
+  insurerPhone: '',
   memberId: '',
   groupNumber: '',
   planName: '',
@@ -115,6 +117,7 @@ export function InsurancePolicyFormModal({
     if (policy) {
       setFormValues({
         payerNameRaw: policy.payerNameRaw ?? '',
+        insurerPhone: policy.insurerPhoneRaw ?? '',
         memberId: policy.memberId ?? '',
         groupNumber: policy.groupNumber ?? '',
         planName: policy.planName ?? '',
@@ -272,6 +275,19 @@ export function InsurancePolicyFormModal({
                 />
                 {errors.payerNameRaw && (
                   <p className="mt-1 text-xs text-red-600">{errors.payerNameRaw}</p>
+                )}
+              </div>
+              <div>
+                <Label htmlFor="insurerPhone">Insurer phone</Label>
+                <Input
+                  id="insurerPhone"
+                  value={formValues.insurerPhone ?? ''}
+                  onChange={(e) => setValue('insurerPhone', e.target.value)}
+                  placeholder="e.g. +1 (800) 555-0199"
+                  className="mt-1"
+                />
+                {errors.insurerPhone && (
+                  <p className="mt-1 text-xs text-red-600">{errors.insurerPhone}</p>
                 )}
               </div>
               <div>

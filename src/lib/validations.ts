@@ -66,9 +66,15 @@ const zipSchema = z.string().refine(
   { message: 'ZIP must be 5 digits or ZIP+4 (e.g. 12345-6789)' }
 )
 
+const insurerPhoneSchema = z.string().refine(
+  (v) => !v || /^[+()\-.\s\d]{7,20}$/.test(v.trim()),
+  { message: 'Insurer phone number must be a valid phone format' }
+)
+
 const insurancePolicyFormSchemaBase = z.object({
   // Section A — Payer & Policy
   payerNameRaw: z.string().min(1, 'Payer name is required'),
+  insurerPhone: insurerPhoneSchema.optional(),
   memberId: z.string().min(1, 'Member ID is required'),
   groupNumber: z.string().optional(),
   planName: z.string().optional(),

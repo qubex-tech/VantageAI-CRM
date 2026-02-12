@@ -4,11 +4,16 @@ import { requireAuth } from '@/lib/middleware'
 import { insurancePolicyFormSchemaPartial } from '@/lib/validations'
 import { createAuditLog } from '@/lib/audit'
 import { emitEvent } from '@/lib/outbox'
+import { normalizePhoneForDialing } from '@/lib/phone'
 
 function mapBodyToUpdateData(body: Record<string, unknown>) {
   const validated = insurancePolicyFormSchemaPartial.parse(body)
   const data: Record<string, unknown> = {}
   if (validated.payerNameRaw !== undefined) data.payerNameRaw = validated.payerNameRaw
+  if (validated.insurerPhone !== undefined) {
+    data.insurerPhoneRaw = validated.insurerPhone || null
+    data.insurerPhoneNormalized = normalizePhoneForDialing(validated.insurerPhone)
+  }
   if (validated.memberId !== undefined) data.memberId = validated.memberId
   if (validated.groupNumber !== undefined) data.groupNumber = validated.groupNumber || null
   if (validated.planName !== undefined) data.planName = validated.planName || null

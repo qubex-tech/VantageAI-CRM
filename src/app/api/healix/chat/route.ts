@@ -36,6 +36,7 @@ You have access to the following tools:
 - searchPatients: Search for patients
 - getPatientSummary: Get detailed patient information
 - getAppointmentSummary: Get appointment details
+- startInsuranceVerificationCall: Start an outbound insurance verification call to insurer
 - sendPortalInvite: Send secure portal invites (email/SMS)
 - listFormTemplates: List available patient form templates
 - requestFormCompletion: Create a form request and optionally notify the patient
