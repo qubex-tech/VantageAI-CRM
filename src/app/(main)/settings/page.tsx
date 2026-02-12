@@ -64,9 +64,14 @@ export default async function SettingsPage() {
       },
     })
 
-    retellIntegration = await prisma.retellIntegration.findUnique({
-      where: { practiceId: practiceId },
-    })
+    // Fetch Retell integration, handle gracefully if schema/migration is not yet synced
+    try {
+      retellIntegration = await prisma.retellIntegration.findUnique({
+        where: { practiceId: practiceId },
+      })
+    } catch (error) {
+      console.error('Error fetching Retell integration (schema may be out of sync):', error)
+    }
 
     // Fetch SendGrid integration, handle gracefully if table doesn't exist yet
     try {
