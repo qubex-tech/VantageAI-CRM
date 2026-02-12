@@ -223,6 +223,45 @@ type JsonRpcResponse<T = any> = {
   error?: { code?: number; message?: string; data?: unknown }
 }
 
+function getDefaultAppBaseUrl(): string | null {
+  const appBaseUrl = process.env.APP_BASE_URL?.trim()
+  if (appBaseUrl) return appBaseUrl
+
+  const nextAuthUrl = process.env.NEXTAUTH_URL?.trim()
+  if (nextAuthUrl) return nextAuthUrl
+
+  const vercelUrl = process.env.VERCEL_URL?.trim()
+  if (vercelUrl) {
+    return vercelUrl.startsWith('http') ? vercelUrl : `https://${vercelUrl}`
+  }
+
+  return null
+}
+
+function normalizeMcpBaseUrl(rawBaseUrl: string): string {
+  const url = new URL(rawBaseUrl)
+  let path = url.pathname.replace(/\/+$/, '') || ''
+
+  // Accept legacy MCP resource URLs and normalize them to the JSON-RPC endpoint.
+  if (path.endsWith('/tools') || path.endsWith('/health') || path.endsWith('/call')) {
+    path = path.replace(/\/(tools|health|call)$/, '')
+  }
+  if (path.startsWith('/api/mcp')) {
+    path = '/mcp'
+  }
+  if (!path || path === '/') {
+    path = '/mcp'
+  }
+
+  if (path !== '/mcp') {
+    path = '/mcp'
+  }
+
+  url.pathname = path
+  url.search = ''
+  return url.toString().replace(/\/$/, '')
+}
+
 function buildMcpHeaders(config: RetellIntegrationConfig, requestId: string): HeadersInit {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -256,14 +295,18 @@ export async function callRetellMcpTool(params: {
   args: Record<string, unknown>
 }): Promise<{ rawResult: unknown; callId?: string | null }> {
   const { config, toolName, args } = params
-  if (!config.mcpBaseUrl) {
-    throw new Error('Retell MCP base URL is not configured in settings.')
+  const configuredBaseUrl = config.mcpBaseUrl?.trim() || ''
+  const fallbackBaseUrl = getDefaultAppBaseUrl()
+  const resolvedBaseUrl = configuredBaseUrl || fallbackBaseUrl || ''
+
+  if (!resolvedBaseUrl) {
+    throw new Error('Retell MCP base URL is not configured in settings and no APP_BASE_URL/NEXTAUTH_URL fallback is available.')
   }
 
   const requestIdPrefix = config.mcpRequestIdPrefix || 'healix-outbound'
   const requestId = `${requestIdPrefix}-${Date.now()}`
   const headers = buildMcpHeaders(config, requestId)
-  const url = config.mcpBaseUrl
+  const url = normalizeMcpBaseUrl(resolvedBaseUrl)
   const rpcId = `rpc-${Date.now()}`
 
   // Best-effort initialize handshake for MCP servers that expect lifecycle calls.
