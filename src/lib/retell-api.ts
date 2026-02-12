@@ -180,6 +180,39 @@ export class RetellApiClient {
       throw error
     }
   }
+
+  /**
+   * Create an outbound phone call.
+   * Docs: https://docs.retellai.com/api-references/create-phone-call
+   */
+  async createPhoneCall(params: {
+    fromNumber: string
+    toNumber: string
+    overrideAgentId?: string
+    metadata?: Record<string, unknown>
+    dynamicVariables?: Record<string, string>
+  }): Promise<{ call_id?: string; [key: string]: unknown }> {
+    const response = await fetch(`${this.baseUrl}/create-phone-call`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from_number: params.fromNumber,
+        to_number: params.toNumber,
+        override_agent_id: params.overrideAgentId,
+        metadata: params.metadata,
+        retell_llm_dynamic_variables: params.dynamicVariables,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '')
+      throw new Error(`Retell create-phone-call failed (${response.status}): ${errorText || response.statusText}`)
+    }
+    return response.json()
+  }
 }
 
 /**
@@ -303,6 +336,58 @@ async function postJsonRpc<T = unknown>(
   return response.json()
 }
 
+async function executeLocalFallbackTool(params: {
+  config: RetellIntegrationConfig
+  toolName: string
+  args: Record<string, unknown>
+}): Promise<{ rawResult: unknown; callId?: string | null }> {
+  const { config, toolName, args } = params
+
+  if (toolName === 'create_outbound_call') {
+    const toNumber = (args.to_number as string | undefined)?.trim()
+    if (!toNumber) {
+      throw new Error('create_outbound_call requires to_number')
+    }
+    const fromNumber =
+      (args.from_number as string | undefined)?.trim() ||
+      process.env.RETELL_FROM_NUMBER?.trim() ||
+      ''
+    if (!fromNumber) {
+      throw new Error('RETELL_FROM_NUMBER is not configured for outbound call fallback')
+    }
+
+    const client = new RetellApiClient(config.apiKey)
+    const response = await client.createPhoneCall({
+      fromNumber,
+      toNumber,
+      overrideAgentId: (args.agent_id as string | undefined)?.trim() || config.agentId || undefined,
+      metadata: (args.context as Record<string, unknown> | undefined) || undefined,
+      dynamicVariables: {
+        patient_context: JSON.stringify((args.context as Record<string, unknown> | undefined) || {}),
+      },
+    })
+    const callId = typeof response.call_id === 'string' ? response.call_id : null
+    return { rawResult: response, callId }
+  }
+
+  const { invokeTool } = await import('@/lib/mcp/registry')
+  const result = await invokeTool(
+    toolName,
+    args,
+    {
+      requestId: `local-mcp-${Date.now()}`,
+      actorId: 'system',
+      actorType: 'system',
+      purpose: 'local fallback execution',
+      allowUnmasked: false,
+    }
+  )
+  if (result.error) {
+    throw new Error(result.error.message)
+  }
+  return { rawResult: result.output, callId: null }
+}
+
 export async function callRetellMcpTool(params: {
   config: RetellIntegrationConfig
   toolName: string
@@ -310,6 +395,10 @@ export async function callRetellMcpTool(params: {
 }): Promise<{ rawResult: unknown; callId?: string | null }> {
   const { config, toolName, args } = params
   const configuredBaseUrl = config.mcpBaseUrl?.trim() || ''
+  if (!configuredBaseUrl) {
+    return executeLocalFallbackTool({ config, toolName, args })
+  }
+
   const fallbackBaseUrl = getDefaultAppBaseUrl()
   const resolvedBaseUrl = configuredBaseUrl || fallbackBaseUrl || ''
 
