@@ -285,6 +285,18 @@ function getDefaultMcpApiKey(): string | null {
   return configuredKeys[0] ?? null
 }
 
+function generateUuid(): string {
+  try {
+    return crypto.randomUUID()
+  } catch {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = Math.floor(Math.random() * 16)
+      const v = c === 'x' ? r : (r & 0x3) | 0x8
+      return v.toString(16)
+    })
+  }
+}
+
 function normalizeMcpBaseUrl(rawBaseUrl: string): string {
   const url = new URL(rawBaseUrl)
   let path = url.pathname.replace(/\/+$/, '') || ''
@@ -312,9 +324,13 @@ function normalizeMcpBaseUrl(rawBaseUrl: string): string {
 function buildMcpHeaders(config: RetellIntegrationConfig, requestId: string): HeadersInit {
   const resolvedApiKey = config.mcpApiKey?.trim() || getDefaultMcpApiKey()
   const resolvedActorId = config.mcpActorId?.trim() || 'healix-outbound'
+  const uuidRequestId = generateUuid()
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'X-Request-Id': requestId,
+    'X-Request-Id': uuidRequestId,
+    'X-Purpose': 'insurance_verification',
+    'X-Actor-Type': 'agent',
+    'X-Client-Request-Id': requestId,
   }
   if (resolvedApiKey) headers['x-api-key'] = resolvedApiKey
   if (resolvedActorId) headers['x-actor-id'] = resolvedActorId
