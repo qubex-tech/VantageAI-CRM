@@ -125,7 +125,26 @@ export async function POST(request: NextRequest) {
       return applyCors(NextResponse.json(jsonRpcError(id, -32602, 'Invalid params: missing tool name')), request)
     }
 
-    const input = params.arguments ?? {}
+    let input: unknown = params.arguments ?? {}
+    if (typeof input === 'string') {
+      try {
+        input = JSON.parse(input)
+      } catch {
+        return applyCors(
+          NextResponse.json(jsonRpcError(id, -32602, 'Invalid params: arguments must be valid JSON object')),
+          request
+        )
+      }
+    }
+
+    if (input && typeof input === 'object' && !Array.isArray(input)) {
+      const normalizedInput: Record<string, unknown> = { ...(input as Record<string, unknown>) }
+      // Retell may send explicit nulls for optional identifiers; normalize to undefined.
+      if (normalizedInput.patient_id === null) delete normalizedInput.patient_id
+      if (normalizedInput.policy_id === null) delete normalizedInput.policy_id
+      input = normalizedInput
+    }
+
     const start = Date.now()
     const result = await invokeTool(toolName, input, {
       requestId: auth.ctx.requestId,
@@ -138,13 +157,18 @@ export async function POST(request: NextRequest) {
 
     if (result.error) {
       logMcpRequest('/mcp', request, { auth: 'ok', status: 200 })
+      const errorPayload = {
+        error: result.error,
+        output: result.output,
+        meta: { request_id: auth.ctx.requestId, latency_ms: latency },
+      }
       return applyCors(
         NextResponse.json({
           jsonrpc: '2.0',
           id,
           result: {
             isError: true,
-            content: [{ type: 'text', text: `${result.error.code}: ${result.error.message}` }],
+            content: [{ type: 'text', text: JSON.stringify(errorPayload) }],
             output: result.output,
             error: result.error,
             meta: { request_id: auth.ctx.requestId, latency_ms: latency },
