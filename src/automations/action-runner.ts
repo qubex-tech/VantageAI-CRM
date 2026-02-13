@@ -505,7 +505,12 @@ async function sendSms(
   try {
     const automationUserId = await resolveAutomationUserId(practiceId)
 
-    if (automationUserId) {
+    if (!automationUserId) {
+      console.warn('[AUTOMATION] Skipping SMS note creation: no valid user found', {
+        practiceId,
+        patientId: args.patientId,
+      })
+    } else {
       const messageSuffix = smsResult.messageId ? ` (MessageId: ${smsResult.messageId})` : ''
       await prisma.patientNote.create({
         data: {
@@ -518,7 +523,14 @@ async function sendSms(
       })
     }
   } catch (error) {
-    console.error('Failed to log SMS note:', error)
+    if ((error as any)?.code === 'P2003') {
+      console.warn('[AUTOMATION] Skipping SMS note creation due to invalid userId', {
+        patientId: args.patientId,
+        practiceId,
+      })
+    } else {
+      console.error('Failed to log SMS note:', error)
+    }
   }
 
   // Log to patient activity timeline
@@ -783,7 +795,12 @@ async function sendEmail(
     try {
       const automationUserId = await resolveAutomationUserId(practiceId, eventData.userId)
 
-      if (automationUserId) {
+      if (!automationUserId) {
+        console.warn('[AUTOMATION] Skipping email note creation: no valid user found', {
+          practiceId,
+          patientId: args.patientId,
+        })
+      } else {
         await prisma.patientNote.create({
           data: {
             patientId: args.patientId,
@@ -796,7 +813,14 @@ async function sendEmail(
         console.log(`[AUTOMATION] Email note created for patient ${args.patientId}`)
       }
     } catch (noteError) {
-      console.error(`[AUTOMATION] Failed to create email note:`, noteError)
+      if ((noteError as any)?.code === 'P2003') {
+        console.warn('[AUTOMATION] Skipping email note creation due to invalid userId', {
+          patientId: args.patientId,
+          practiceId,
+        })
+      } else {
+        console.error(`[AUTOMATION] Failed to create email note:`, noteError)
+      }
       // Don't fail the action if note creation fails
     }
 
