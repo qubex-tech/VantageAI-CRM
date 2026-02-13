@@ -819,7 +819,11 @@ async function sendEmail(
           practiceId,
         })
       } else {
-        console.error(`[AUTOMATION] Failed to create email note:`, noteError)
+        console.warn('[AUTOMATION] Email note creation failed; continuing without note', {
+          patientId: args.patientId,
+          practiceId,
+          error: noteError instanceof Error ? noteError.message : 'Unknown error',
+        })
       }
       // Don't fail the action if note creation fails
     }
