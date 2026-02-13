@@ -131,8 +131,7 @@ export async function POST(req: NextRequest) {
     const possibleBookingIds = [
       bookingId?.toString(),
       bookingUid,
-      bookingId, // In case it's stored as number
-    ].filter(Boolean)
+    ].filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
     
     console.log(`[${requestId}] Searching for appointment with calBookingId:`, possibleBookingIds)
     
