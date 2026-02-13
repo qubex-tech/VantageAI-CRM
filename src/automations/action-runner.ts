@@ -107,6 +107,39 @@ const sendReminderSchema = z.object({
   message: z.string(),
 })
 
+async function resolveAutomationUserId(
+  practiceId: string,
+  preferredUserId?: string
+) {
+  if (preferredUserId) {
+    const preferredUser = await prisma.user.findFirst({
+      where: {
+        id: preferredUserId,
+        practiceId,
+      },
+      select: { id: true },
+    })
+    if (preferredUser) return preferredUser.id
+  }
+
+  const adminUser = await prisma.user.findFirst({
+    where: {
+      practiceId,
+      role: { in: ['practice_admin', 'admin'] },
+    },
+    select: { id: true },
+  })
+
+  if (adminUser) return adminUser.id
+
+  const anyUser = await prisma.user.findFirst({
+    where: { practiceId },
+    select: { id: true },
+  })
+
+  return anyUser?.id || null
+}
+
 // Allowed fields for update_patient_fields (non-sensitive)
 const ALLOWED_PATIENT_FIELDS = [
   'notes',
@@ -470,17 +503,7 @@ async function sendSms(
 
   // Create a note to track SMS sent
   try {
-    // Find a valid user for automation
-    const adminUser = await prisma.user.findFirst({
-      where: {
-        practiceId,
-        role: { in: ['practice_admin', 'admin'] },
-      },
-    })
-    
-    const automationUserId = adminUser?.id || (await prisma.user.findFirst({
-      where: { practiceId },
-    }))?.id
+    const automationUserId = await resolveAutomationUserId(practiceId)
 
     if (automationUserId) {
       const messageSuffix = smsResult.messageId ? ` (MessageId: ${smsResult.messageId})` : ''
@@ -758,18 +781,7 @@ async function sendEmail(
 
     // Create a note to track email sent
     try {
-      let automationUserId = eventData.userId
-      if (!automationUserId) {
-        const adminUser = await prisma.user.findFirst({
-          where: {
-            practiceId,
-            role: { in: ['practice_admin', 'admin'] },
-          },
-        })
-        automationUserId = adminUser?.id || (await prisma.user.findFirst({
-          where: { practiceId },
-        }))?.id
-      }
+      const automationUserId = await resolveAutomationUserId(practiceId, eventData.userId)
 
       if (automationUserId) {
         await prisma.patientNote.create({
