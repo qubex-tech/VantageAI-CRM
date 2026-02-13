@@ -501,37 +501,7 @@ async function sendSms(
     }
   }
 
-  // Create a note to track SMS sent
-  try {
-    const automationUserId = await resolveAutomationUserId(practiceId)
-
-    if (!automationUserId) {
-      console.warn('[AUTOMATION] Skipping SMS note creation: no valid user found', {
-        practiceId,
-        patientId: args.patientId,
-      })
-    } else {
-      const messageSuffix = smsResult.messageId ? ` (MessageId: ${smsResult.messageId})` : ''
-      await prisma.patientNote.create({
-        data: {
-          patientId: args.patientId,
-          practiceId,
-          userId: automationUserId,
-          type: 'contact',
-          content: `[Automation SMS] Sent to ${phoneNumber}${messageSuffix}: ${messageBody}`,
-        },
-      })
-    }
-  } catch (error) {
-    if ((error as any)?.code === 'P2003') {
-      console.warn('[AUTOMATION] Skipping SMS note creation due to invalid userId', {
-        patientId: args.patientId,
-        practiceId,
-      })
-    } else {
-      console.error('Failed to log SMS note:', error)
-    }
-  }
+  // Skip PatientNote creation for automation SMS; activity log covers it.
 
   // Log to patient activity timeline
   try {
@@ -791,42 +761,7 @@ async function sendEmail(
       toEmail,
     })
 
-    // Create a note to track email sent
-    try {
-      const automationUserId = await resolveAutomationUserId(practiceId, eventData.userId)
-
-      if (!automationUserId) {
-        console.warn('[AUTOMATION] Skipping email note creation: no valid user found', {
-          practiceId,
-          patientId: args.patientId,
-        })
-      } else {
-        await prisma.patientNote.create({
-          data: {
-            patientId: args.patientId,
-            practiceId,
-            userId: automationUserId,
-            type: 'contact',
-            content: `[Automation Email] Sent to ${toEmail} (Subject: ${emailSubject}, MessageId: ${result.messageId}): ${emailBodyText.substring(0, 100)}${emailBodyText.length > 100 ? '...' : ''}`,
-          },
-        })
-        console.log(`[AUTOMATION] Email note created for patient ${args.patientId}`)
-      }
-    } catch (noteError) {
-      if ((noteError as any)?.code === 'P2003') {
-        console.warn('[AUTOMATION] Skipping email note creation due to invalid userId', {
-          patientId: args.patientId,
-          practiceId,
-        })
-      } else {
-        console.warn('[AUTOMATION] Email note creation failed; continuing without note', {
-          patientId: args.patientId,
-          practiceId,
-          error: noteError instanceof Error ? noteError.message : 'Unknown error',
-        })
-      }
-      // Don't fail the action if note creation fails
-    }
+    // Skip PatientNote creation for automation email; activity log covers it.
 
     // Log to patient activity timeline
     try {
