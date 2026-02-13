@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/db'
 import { logPatientActivity } from '@/lib/patient-activity'
 
@@ -138,6 +139,29 @@ async function resolveAutomationUserId(
   })
 
   return anyUser?.id || null
+}
+
+async function getOrCreateAutomationUserId(practiceId: string) {
+  const email = `automation+${practiceId}@getvantage.tech`
+  const existing = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true },
+  })
+  if (existing) return existing.id
+
+  const passwordHash = await bcrypt.hash(`${practiceId}-${Date.now()}-automation`, 10)
+  const created = await prisma.user.create({
+    data: {
+      email,
+      passwordHash,
+      name: 'Automation',
+      role: 'admin',
+      practiceId,
+    },
+    select: { id: true },
+  })
+
+  return created.id
 }
 
 // Allowed fields for update_patient_fields (non-sensitive)
@@ -501,7 +525,26 @@ async function sendSms(
     }
   }
 
-  // Skip PatientNote creation for automation SMS; activity log covers it.
+  // Create a note to track SMS sent (attribute to Automation user)
+  try {
+    const automationUserId = await getOrCreateAutomationUserId(practiceId)
+    const messageSuffix = smsResult.messageId ? ` (MessageId: ${smsResult.messageId})` : ''
+    await prisma.patientNote.create({
+      data: {
+        patientId: args.patientId,
+        practiceId,
+        userId: automationUserId,
+        type: 'contact',
+        content: `[Automation SMS] Sent to ${phoneNumber}${messageSuffix}: ${messageBody}`,
+      },
+    })
+  } catch (error) {
+    console.warn('[AUTOMATION] SMS note creation failed; continuing without note', {
+      patientId: args.patientId,
+      practiceId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    })
+  }
 
   // Log to patient activity timeline
   try {
@@ -761,7 +804,27 @@ async function sendEmail(
       toEmail,
     })
 
-    // Skip PatientNote creation for automation email; activity log covers it.
+    // Create a note to track email sent (attribute to Automation user)
+    try {
+      const automationUserId = await getOrCreateAutomationUserId(practiceId)
+      await prisma.patientNote.create({
+        data: {
+          patientId: args.patientId,
+          practiceId,
+          userId: automationUserId,
+          type: 'contact',
+          content: `[Automation Email] Sent to ${toEmail} (Subject: ${emailSubject}, MessageId: ${result.messageId}): ${emailBodyText.substring(0, 100)}${emailBodyText.length > 100 ? '...' : ''}`,
+        },
+      })
+      console.log(`[AUTOMATION] Email note created for patient ${args.patientId}`)
+    } catch (noteError) {
+      console.warn('[AUTOMATION] Email note creation failed; continuing without note', {
+        patientId: args.patientId,
+        practiceId,
+        error: noteError instanceof Error ? noteError.message : 'Unknown error',
+      })
+      // Don't fail the action if note creation fails
+    }
 
     // Log to patient activity timeline
     try {
