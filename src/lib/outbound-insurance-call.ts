@@ -88,9 +88,12 @@ export async function initiateInsuranceOutboundCall(input: InitiateInsuranceOutb
     agent_id: agentId || integration.insuranceVerificationAgentId || integration.agentId || undefined,
     call_purpose: 'insurance_verification',
     retell_llm_dynamic_variables: {
+      verification_bundle: verificationBundle || {},
       patient_id: resolvedPatientId || '',
       patient_name: patientFullName || '',
       patient_dob: patientIdentity.date_of_birth || '',
+      patient_first_name: patientIdentity.first_name || '',
+      patient_last_name: patientIdentity.last_name || '',
       policy_id: selectedPolicyId || '',
     },
     context: {
