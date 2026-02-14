@@ -421,6 +421,11 @@ export async function callRetellMcpTool(params: {
   args: Record<string, unknown>
 }): Promise<{ rawResult: unknown; callId?: string | null }> {
   const { config, toolName, args } = params
+  if (toolName === 'create_outbound_call') {
+    // Force direct Retell API call for outbound dialing so dynamic variables
+    // are always attached to the phone call payload.
+    return executeLocalFallbackTool({ config, toolName, args })
+  }
   const configuredBaseUrl = config.mcpBaseUrl?.trim() || ''
   if (!configuredBaseUrl) {
     return executeLocalFallbackTool({ config, toolName, args })
