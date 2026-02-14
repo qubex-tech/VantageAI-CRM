@@ -375,14 +375,23 @@ async function executeLocalFallbackTool(params: {
     }
 
     const client = new RetellApiClient(config.apiKey)
+    const explicitDynamicVars =
+      (args.retell_llm_dynamic_variables as Record<string, unknown> | undefined) ||
+      (args.dynamic_variables as Record<string, unknown> | undefined) ||
+      {}
+    const dynamicVariables: Record<string, string> = {
+      patient_context: JSON.stringify((args.context as Record<string, unknown> | undefined) || {}),
+    }
+    for (const [key, value] of Object.entries(explicitDynamicVars)) {
+      if (value === null || value === undefined) continue
+      dynamicVariables[key] = String(value)
+    }
     const response = await client.createPhoneCall({
       fromNumber,
       toNumber,
       overrideAgentId: (args.agent_id as string | undefined)?.trim() || config.agentId || undefined,
       metadata: (args.context as Record<string, unknown> | undefined) || undefined,
-      dynamicVariables: {
-        patient_context: JSON.stringify((args.context as Record<string, unknown> | undefined) || {}),
-      },
+      dynamicVariables,
     })
     const callId = typeof response.call_id === 'string' ? response.call_id : null
     return { rawResult: response, callId }

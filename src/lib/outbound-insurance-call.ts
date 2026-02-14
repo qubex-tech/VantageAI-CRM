@@ -80,14 +80,23 @@ export async function initiateInsuranceOutboundCall(input: InitiateInsuranceOutb
   const patientIdentity = contextOutput?.patient_identity || {}
   const verificationBundle = contextOutput?.verification_bundle || {}
   const readiness = verificationBundle?.readiness || {}
+  const patientFullName = [patientIdentity.first_name, patientIdentity.last_name].filter(Boolean).join(' ').trim()
+  const resolvedPatientId = patientIdentity.patient_id || patientId
 
   const toolArgs: Record<string, unknown> = {
     to_number: insurerPhoneNormalized,
     agent_id: agentId || integration.insuranceVerificationAgentId || integration.agentId || undefined,
     call_purpose: 'insurance_verification',
+    retell_llm_dynamic_variables: {
+      patient_id: resolvedPatientId || '',
+      patient_name: patientFullName || '',
+      patient_dob: patientIdentity.date_of_birth || '',
+      policy_id: selectedPolicyId || '',
+    },
     context: {
       patient: {
-        full_name: [patientIdentity.first_name, patientIdentity.last_name].filter(Boolean).join(' ').trim(),
+        id: resolvedPatientId || undefined,
+        full_name: patientFullName,
         date_of_birth: patientIdentity.date_of_birth,
       },
       policy: verificationBundle?.insurance || null,
