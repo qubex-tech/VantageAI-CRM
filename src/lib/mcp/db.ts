@@ -23,11 +23,22 @@ function toIsoDate(year: number, month: number, day: number): string | null {
 function normalizeDobCandidates(rawDob: string): string[] {
   const value = rawDob.trim()
   const candidates = new Set<string>()
+  const addWithNeighborDays = (isoDate: string) => {
+    candidates.add(isoDate)
+    const base = new Date(`${isoDate}T00:00:00.000Z`)
+    if (Number.isNaN(base.getTime())) return
+    const prev = new Date(base)
+    prev.setUTCDate(prev.getUTCDate() - 1)
+    const next = new Date(base)
+    next.setUTCDate(next.getUTCDate() + 1)
+    candidates.add(prev.toISOString().slice(0, 10))
+    candidates.add(next.toISOString().slice(0, 10))
+  }
 
   const isoMatch = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
   if (isoMatch) {
     const normalized = toIsoDate(Number(isoMatch[1]), Number(isoMatch[2]), Number(isoMatch[3]))
-    if (normalized) candidates.add(normalized)
+    if (normalized) addWithNeighborDays(normalized)
   }
 
   const slashMatch = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
@@ -38,16 +49,16 @@ function normalizeDobCandidates(rawDob: string): string[] {
 
     // Prefer US format (MM/DD/YYYY), but also try DD/MM/YYYY for ambiguous values.
     const us = toIsoDate(year, first, second)
-    if (us) candidates.add(us)
+    if (us) addWithNeighborDays(us)
 
     const international = toIsoDate(year, second, first)
-    if (international) candidates.add(international)
+    if (international) addWithNeighborDays(international)
   }
 
   // Final fallback for uncommon formats accepted by the JS runtime.
   const parsed = new Date(value)
   if (!Number.isNaN(parsed.getTime())) {
-    candidates.add(parsed.toISOString().slice(0, 10))
+    addWithNeighborDays(parsed.toISOString().slice(0, 10))
   }
 
   return Array.from(candidates)
