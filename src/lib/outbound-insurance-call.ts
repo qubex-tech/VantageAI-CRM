@@ -94,6 +94,9 @@ export async function initiateInsuranceOutboundCall(input: InitiateInsuranceOutb
       patient_dob: patientIdentity.date_of_birth || '',
       patient_first_name: patientIdentity.first_name || '',
       patient_last_name: patientIdentity.last_name || '',
+      'verification_bundle.patient.first_name': patientIdentity.first_name || '',
+      'verification_bundle.patient.last_name': patientIdentity.last_name || '',
+      'verification_bundle.patient.dob': patientIdentity.date_of_birth || '',
       policy_id: selectedPolicyId || '',
     },
     context: {
