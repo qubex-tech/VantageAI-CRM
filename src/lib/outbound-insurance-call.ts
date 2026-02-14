@@ -82,23 +82,33 @@ export async function initiateInsuranceOutboundCall(input: InitiateInsuranceOutb
   const readiness = verificationBundle?.readiness || {}
   const patientFullName = [patientIdentity.first_name, patientIdentity.last_name].filter(Boolean).join(' ').trim()
   const resolvedPatientId = patientIdentity.patient_id || patientId
+  const dynamicVariables: Record<string, string> = {
+    patient_id: resolvedPatientId || '',
+    patient_name: patientFullName || '',
+    patient_full_name: patientFullName || '',
+    patient_dob: patientIdentity.date_of_birth || '',
+    patient_first_name: patientIdentity.first_name || '',
+    patient_last_name: patientIdentity.last_name || '',
+    first_name: patientIdentity.first_name || '',
+    last_name: patientIdentity.last_name || '',
+    dob: patientIdentity.date_of_birth || '',
+    policy_id: selectedPolicyId || '',
+    verification_bundle: JSON.stringify(verificationBundle || {}),
+    verification_bundle_patient_first_name: patientIdentity.first_name || '',
+    verification_bundle_patient_last_name: patientIdentity.last_name || '',
+    verification_bundle_patient_dob: patientIdentity.date_of_birth || '',
+    'verification_bundle.patient.first_name': patientIdentity.first_name || '',
+    'verification_bundle.patient.last_name': patientIdentity.last_name || '',
+    'verification_bundle.patient.dob': patientIdentity.date_of_birth || '',
+  }
 
   const toolArgs: Record<string, unknown> = {
     to_number: insurerPhoneNormalized,
     agent_id: agentId || integration.insuranceVerificationAgentId || integration.agentId || undefined,
     call_purpose: 'insurance_verification',
-    retell_llm_dynamic_variables: {
-      verification_bundle: JSON.stringify(verificationBundle || {}),
-      patient_id: resolvedPatientId || '',
-      patient_name: patientFullName || '',
-      patient_dob: patientIdentity.date_of_birth || '',
-      patient_first_name: patientIdentity.first_name || '',
-      patient_last_name: patientIdentity.last_name || '',
-      'verification_bundle.patient.first_name': patientIdentity.first_name || '',
-      'verification_bundle.patient.last_name': patientIdentity.last_name || '',
-      'verification_bundle.patient.dob': patientIdentity.date_of_birth || '',
-      policy_id: selectedPolicyId || '',
-    },
+    // Pass vars under both keys to support different Retell outbound tool adapters.
+    retell_llm_dynamic_variables: dynamicVariables,
+    dynamic_variables: dynamicVariables,
     context: {
       patient: {
         id: resolvedPatientId || undefined,
