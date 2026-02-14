@@ -23,6 +23,21 @@ function jsonRpcError(id: unknown, code: number, message: string) {
   }
 }
 
+function normalizeNullableArgs(input: unknown): unknown {
+  if (Array.isArray(input)) {
+    return input.map(normalizeNullableArgs)
+  }
+  if (input && typeof input === 'object') {
+    const next: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+      if (value === null) continue
+      next[key] = normalizeNullableArgs(value)
+    }
+    return next
+  }
+  return input
+}
+
 export async function OPTIONS(request: NextRequest) {
   logMcpRequest('/mcp', request, { auth: 'preflight' })
   return handleCorsPreflight(request)
@@ -137,13 +152,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (input && typeof input === 'object' && !Array.isArray(input)) {
-      const normalizedInput: Record<string, unknown> = { ...(input as Record<string, unknown>) }
-      // Retell may send explicit nulls for optional identifiers; normalize to undefined.
-      if (normalizedInput.patient_id === null) delete normalizedInput.patient_id
-      if (normalizedInput.policy_id === null) delete normalizedInput.policy_id
-      input = normalizedInput
-    }
+    // Retell may send explicit nulls for optional fields (ids, zip, etc.).
+    input = normalizeNullableArgs(input)
 
     const start = Date.now()
     const result = await invokeTool(toolName, input, {
