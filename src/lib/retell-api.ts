@@ -191,7 +191,7 @@ export class RetellApiClient {
     toNumber: string
     overrideAgentId?: string
     metadata?: Record<string, unknown>
-    dynamicVariables?: Record<string, unknown>
+    dynamicVariables?: Record<string, string>
   }): Promise<{ call_id?: string; [key: string]: unknown }> {
     const response = await fetch(`${this.baseUrl}/create-phone-call`, {
       method: 'POST',
@@ -379,12 +379,12 @@ async function executeLocalFallbackTool(params: {
       (args.retell_llm_dynamic_variables as Record<string, unknown> | undefined) ||
       (args.dynamic_variables as Record<string, unknown> | undefined) ||
       {}
-    const dynamicVariables: Record<string, unknown> = {
+    const dynamicVariables: Record<string, string> = {
       patient_context: JSON.stringify((args.context as Record<string, unknown> | undefined) || {}),
     }
     for (const [key, value] of Object.entries(explicitDynamicVars)) {
       if (value === null || value === undefined) continue
-      dynamicVariables[key] = value
+      dynamicVariables[key] = typeof value === 'string' ? value : JSON.stringify(value)
     }
     const response = await client.createPhoneCall({
       fromNumber,
