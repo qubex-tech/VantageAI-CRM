@@ -130,6 +130,28 @@ export async function initiateInsuranceOutboundCall(input: InitiateInsuranceOutb
     },
   }
 
+  const outgoingDynamicVars =
+    (toolArgs.retell_llm_dynamic_variables as Record<string, unknown> | undefined) ||
+    (toolArgs.dynamic_variables as Record<string, unknown> | undefined) ||
+    {}
+  console.info('[OutboundCall][RetellDebug] Prepared outbound payload', {
+    practiceId,
+    patientId,
+    selectedPolicyId,
+    toolName,
+    toNumber: insurerPhoneNormalized,
+    agentId: (toolArgs.agent_id as string | undefined) || null,
+    dynamicVariableKeys: Object.keys(outgoingDynamicVars),
+    dynamicVariablePreview: {
+      patient_id: outgoingDynamicVars.patient_id ?? null,
+      patient_name: outgoingDynamicVars.patient_name ?? null,
+      patient_first_name: outgoingDynamicVars.patient_first_name ?? null,
+      patient_last_name: outgoingDynamicVars.patient_last_name ?? null,
+      patient_dob: outgoingDynamicVars.patient_dob ?? null,
+    },
+    hasVerificationBundle: typeof outgoingDynamicVars.verification_bundle === 'string' && (outgoingDynamicVars.verification_bundle as string).length > 0,
+  })
+
   const mcpResult = await callRetellMcpTool({
     config: integration,
     toolName,

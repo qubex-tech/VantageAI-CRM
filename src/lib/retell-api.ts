@@ -194,6 +194,21 @@ export class RetellApiClient {
     dynamicVariables?: Record<string, string>
   }): Promise<{ call_id?: string; [key: string]: unknown }> {
     const dynamicVariables = params.dynamicVariables || {}
+    console.info('[RetellApi][Debug] create-phone-call request', {
+      endpoint: `${this.baseUrl}/create-phone-call`,
+      fromNumber: params.fromNumber,
+      toNumber: params.toNumber,
+      overrideAgentId: params.overrideAgentId || null,
+      metadataKeys: params.metadata ? Object.keys(params.metadata) : [],
+      dynamicVariableKeys: Object.keys(dynamicVariables),
+      dynamicVariablePreview: {
+        patient_id: dynamicVariables.patient_id ?? null,
+        patient_name: dynamicVariables.patient_name ?? null,
+        patient_first_name: dynamicVariables.patient_first_name ?? null,
+        patient_last_name: dynamicVariables.patient_last_name ?? null,
+        patient_dob: dynamicVariables.patient_dob ?? null,
+      },
+    })
     const response = await fetch(`${this.baseUrl}/create-phone-call`, {
       method: 'POST',
       headers: {
@@ -214,9 +229,22 @@ export class RetellApiClient {
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => '')
+      console.error('[RetellApi][Debug] create-phone-call error', {
+        status: response.status,
+        statusText: response.statusText,
+        errorText,
+      })
       throw new Error(`Retell create-phone-call failed (${response.status}): ${errorText || response.statusText}`)
     }
-    return response.json()
+    const json = await response.json()
+    console.info('[RetellApi][Debug] create-phone-call response', {
+      callId:
+        (typeof json?.call_id === 'string' && json.call_id) ||
+        (typeof json?.callId === 'string' && json.callId) ||
+        null,
+      responseKeys: json && typeof json === 'object' ? Object.keys(json as Record<string, unknown>) : [],
+    })
+    return json
   }
 }
 
@@ -401,6 +429,18 @@ async function executeLocalFallbackTool(params: {
         patient_dob: dynamicVariables.patient_dob || undefined,
       },
       dynamicVariables,
+    })
+    console.info('[RetellApi][Debug] outbound call created via direct API', {
+      toolName,
+      callId: typeof response.call_id === 'string' ? response.call_id : null,
+      dynamicVariableKeys: Object.keys(dynamicVariables),
+      dynamicVariablePreview: {
+        patient_id: dynamicVariables.patient_id ?? null,
+        patient_name: dynamicVariables.patient_name ?? null,
+        patient_first_name: dynamicVariables.patient_first_name ?? null,
+        patient_last_name: dynamicVariables.patient_last_name ?? null,
+        patient_dob: dynamicVariables.patient_dob ?? null,
+      },
     })
     const callId = typeof response.call_id === 'string' ? response.call_id : null
     return { rawResult: response, callId }
