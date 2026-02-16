@@ -25,23 +25,46 @@ export async function initiateInsuranceOutboundCall(input: InitiateInsuranceOutb
     allowUnmasked: false,
   }
 
-  const contextResult = await invokeTool(
-    'get_insurance_verification_context',
-    {
-      patient_id: patientId,
-      policy_id: policyId,
-      include_address: true,
-      include_rx: true,
-      strict_minimum_necessary: true,
-    },
-    ctx
-  )
+  const invokeVerificationContext = async (opts: { includePolicyId: boolean }) =>
+    invokeTool(
+      'get_insurance_verification_context',
+      {
+        patient_id: patientId,
+        policy_id: opts.includePolicyId ? policyId : undefined,
+        include_address: true,
+        include_rx: true,
+        strict_minimum_necessary: true,
+      },
+      ctx
+    )
+
+  let contextResult = await invokeVerificationContext({ includePolicyId: true })
 
   if (contextResult.error) {
     throw new Error(contextResult.error.message || 'Unable to resolve insurance verification context')
   }
 
-  const contextOutput = contextResult.output as Record<string, any>
+  let contextOutput = contextResult.output as Record<string, any>
+  const contextDomainError = contextOutput?.error as { code?: string; message?: string } | undefined
+  if (contextDomainError && policyId) {
+    console.warn('[OutboundCall][RetellDebug] Context resolution failed with policy_id; retrying with patient_id only', {
+      patientId,
+      policyId,
+      code: contextDomainError.code || null,
+      message: contextDomainError.message || null,
+    })
+    contextResult = await invokeVerificationContext({ includePolicyId: false })
+    if (contextResult.error) {
+      throw new Error(contextResult.error.message || 'Unable to resolve insurance verification context')
+    }
+    contextOutput = contextResult.output as Record<string, any>
+  }
+
+  const unresolvedError = contextOutput?.error as { message?: string } | undefined
+  if (unresolvedError) {
+    throw new Error(unresolvedError.message || 'Unable to resolve insurance verification context')
+  }
+
   const selectedPolicyId = contextOutput?.resolution?.policy_id || policyId || null
   const selectedPolicy = selectedPolicyId
     ? await prisma.insurancePolicy.findFirst({
@@ -77,7 +100,26 @@ export async function initiateInsuranceOutboundCall(input: InitiateInsuranceOutb
 
   const integration = await getRetellIntegrationConfig(practiceId)
   const toolName = integration.outboundToolName || 'create_outbound_call'
-  const patientIdentity = contextOutput?.patient_identity || {}
+  const patientIdentity = { ...(contextOutput?.patient_identity || {}) } as Record<string, any>
+  if (!patientIdentity.first_name || !patientIdentity.last_name || !patientIdentity.date_of_birth) {
+    const patient = await prisma.patient.findFirst({
+      where: { id: patientId, practiceId, deletedAt: null },
+      select: { name: true, firstName: true, lastName: true, dateOfBirth: true },
+    })
+    if (patient) {
+      const fallbackFullName = patient.name?.trim() || ''
+      const fallbackFirst = patient.firstName?.trim() || fallbackFullName.split(/\s+/).filter(Boolean)[0] || ''
+      const fallbackLast =
+        patient.lastName?.trim() ||
+        fallbackFullName.split(/\s+/).filter(Boolean).slice(1).join(' ') ||
+        ''
+      if (!patientIdentity.first_name) patientIdentity.first_name = fallbackFirst
+      if (!patientIdentity.last_name) patientIdentity.last_name = fallbackLast
+      if (!patientIdentity.date_of_birth) {
+        patientIdentity.date_of_birth = patient.dateOfBirth ? patient.dateOfBirth.toISOString().slice(0, 10) : ''
+      }
+    }
+  }
   const verificationBundle = contextOutput?.verification_bundle || {}
   const readiness = verificationBundle?.readiness || {}
   const patientFullName = [patientIdentity.first_name, patientIdentity.last_name].filter(Boolean).join(' ').trim()
