@@ -40,22 +40,21 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'No active EHR connection' }, { status: 404 })
     }
 
-    const privateKeyConfig = connection.tokenEndpoint
-      ? getPrivateKeyJwtConfig(connection.providerId)
-      : null
+    const tokenEndpoint = connection.tokenEndpoint || undefined
+    const privateKeyConfig = tokenEndpoint ? getPrivateKeyJwtConfig(connection.providerId) : null
     const client = new FhirClient({
       baseUrl: connection.fhirBaseUrl,
-      tokenEndpoint: connection.tokenEndpoint || undefined,
+      tokenEndpoint,
       clientId: connection.clientId,
       clientSecret:
         !privateKeyConfig && connection.clientSecretEnc
           ? decryptString(connection.clientSecretEnc)
           : undefined,
-      clientAssertionProvider: privateKeyConfig && connection.tokenEndpoint
+      clientAssertionProvider: privateKeyConfig && tokenEndpoint
         ? () =>
             createClientAssertion({
               clientId: connection.clientId,
-              tokenEndpoint: connection.tokenEndpoint,
+              tokenEndpoint,
               privateKeyPem: privateKeyConfig.privateKeyPem,
               keyId: privateKeyConfig.keyId,
             })
