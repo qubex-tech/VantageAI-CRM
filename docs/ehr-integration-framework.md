@@ -16,7 +16,15 @@ Optional:
 ```
 SMART_ISSUER_ALLOWLIST=https://ehr.example.com,https://fhir.example.org
 SMART_DEFAULT_SCOPES=openid fhirUser profile offline_access patient/Patient.read patient/DocumentReference.read
+EHR_JWT_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----...-----END PRIVATE KEY-----
+EHR_JWT_KEY_ID=your-key-id
 ```
+
+If your EHR requires a JWKS URL for `private_key_jwt`, configure:
+
+- JWKS URL: `https://<your-domain>/api/integrations/ehr/jwks`
+- `EHR_JWT_PRIVATE_KEY` (PEM-encoded RSA private key)
+- Optional `EHR_JWT_KEY_ID` to set the JWKS `kid`
 
 ## Provider Plugin Checklist
 

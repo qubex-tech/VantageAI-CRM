@@ -1,3 +1,4 @@
+import crypto from 'crypto'
 import { generateNonce, generatePkce, generateState } from './pkce'
 
 export type SmartLaunchContext = {
@@ -110,10 +111,52 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: nu
   }
 }
 
+function base64UrlEncode(input: Buffer | string): string {
+  const buf = typeof input === 'string' ? Buffer.from(input) : input
+  return buf
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '')
+}
+
+export function createClientAssertion(params: {
+  clientId: string
+  tokenEndpoint: string
+  privateKeyPem: string
+  keyId?: string
+}): string {
+  const header = {
+    alg: 'RS256',
+    typ: 'JWT',
+    ...(params.keyId ? { kid: params.keyId } : {}),
+  }
+  const now = Math.floor(Date.now() / 1000)
+  const payload = {
+    iss: params.clientId,
+    sub: params.clientId,
+    aud: params.tokenEndpoint,
+    jti: generateState(),
+    exp: now + 300,
+  }
+
+  const headerEncoded = base64UrlEncode(JSON.stringify(header))
+  const payloadEncoded = base64UrlEncode(JSON.stringify(payload))
+  const signingInput = `${headerEncoded}.${payloadEncoded}`
+
+  const signer = crypto.createSign('RSA-SHA256')
+  signer.update(signingInput)
+  signer.end()
+  const signature = signer.sign(params.privateKeyPem)
+  const signatureEncoded = base64UrlEncode(signature)
+  return `${signingInput}.${signatureEncoded}`
+}
+
 export async function exchangeAuthorizationCode(params: {
   tokenEndpoint: string
   clientId: string
   clientSecret?: string
+  clientAssertion?: string
   code: string
   redirectUri: string
   codeVerifier: string
@@ -128,6 +171,10 @@ export async function exchangeAuthorizationCode(params: {
   })
   if (params.clientSecret) {
     body.set('client_secret', params.clientSecret)
+  }
+  if (params.clientAssertion) {
+    body.set('client_assertion_type', 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer')
+    body.set('client_assertion', params.clientAssertion)
   }
 
   const response = await fetchWithTimeout(
@@ -152,6 +199,7 @@ export async function refreshAccessToken(params: {
   tokenEndpoint: string
   clientId: string
   clientSecret?: string
+  clientAssertion?: string
   refreshToken: string
   scopes?: string
   timeoutMs?: number
@@ -166,6 +214,10 @@ export async function refreshAccessToken(params: {
   }
   if (params.clientSecret) {
     body.set('client_secret', params.clientSecret)
+  }
+  if (params.clientAssertion) {
+    body.set('client_assertion_type', 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer')
+    body.set('client_assertion', params.clientAssertion)
   }
 
   const response = await fetchWithTimeout(

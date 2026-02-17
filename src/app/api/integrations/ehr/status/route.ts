@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db'
 import { decryptString, encryptString } from '@/lib/integrations/ehr/crypto'
-import { resolveEhrPractice, getEhrSettings } from '@/lib/integrations/ehr/server'
+import { resolveEhrPractice, getEhrSettings, getPrivateKeyJwtConfig } from '@/lib/integrations/ehr/server'
 import { FhirClient } from '@/lib/integrations/fhir/fhirClient'
 import { summarizeCapabilities } from '@/lib/integrations/fhir/capabilities'
 import { logEhrAudit } from '@/lib/integrations/ehr/audit'
+import { createClientAssertion } from '@/lib/integrations/ehr/smartEngine'
 
 const querySchema = z.object({
   providerId: z.string(),
@@ -45,12 +46,25 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: 'Connection missing access token' }, { status: 409 })
       }
       try {
+        const privateKeyConfig = connection.tokenEndpoint
+          ? getPrivateKeyJwtConfig(connection.providerId)
+          : null
         const client = new FhirClient({
           baseUrl: connection.fhirBaseUrl,
           tokenEndpoint: connection.tokenEndpoint || undefined,
           clientId: connection.clientId,
-          clientSecret: connection.clientSecretEnc
-            ? decryptString(connection.clientSecretEnc)
+          clientSecret:
+            !privateKeyConfig && connection.clientSecretEnc
+              ? decryptString(connection.clientSecretEnc)
+              : undefined,
+          clientAssertionProvider: privateKeyConfig && connection.tokenEndpoint
+            ? () =>
+                createClientAssertion({
+                  clientId: connection.clientId,
+                  tokenEndpoint: connection.tokenEndpoint,
+                  privateKeyPem: privateKeyConfig.privateKeyPem,
+                  keyId: privateKeyConfig.keyId,
+                })
             : undefined,
           tokenState: {
             accessToken: decryptString(connection.accessTokenEnc),

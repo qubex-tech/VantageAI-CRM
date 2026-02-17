@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { resolveEhrPractice, getEhrSettings, upsertEhrSettings } from '@/lib/integrations/ehr/server'
+import {
+  resolveEhrPractice,
+  getEhrSettings,
+  upsertEhrSettings,
+  getPrivateKeyJwtConfig,
+} from '@/lib/integrations/ehr/server'
 import { listProviders, getProvider } from '@/lib/integrations/ehr/providers'
 import { EhrProviderConfig, EhrSettings } from '@/lib/integrations/ehr/types'
 
@@ -20,6 +25,7 @@ export async function GET(req: NextRequest) {
     const settings = await getEhrSettings(practiceId)
     return NextResponse.json({
       settings,
+      privateKeyJwtConfigured: !!getPrivateKeyJwtConfig('ecw'),
       providers: listProviders().map((provider) => ({
         id: provider.id,
         displayName: provider.displayName,

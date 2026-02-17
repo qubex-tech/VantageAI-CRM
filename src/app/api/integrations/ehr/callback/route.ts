@@ -7,9 +7,10 @@ import {
   decodeIdToken,
   exchangeAuthorizationCode,
   SmartLaunchContext,
+  createClientAssertion,
 } from '@/lib/integrations/ehr/smartEngine'
 import { prisma } from '@/lib/db'
-import { resolveEhrPractice, getEhrSettings } from '@/lib/integrations/ehr/server'
+import { resolveEhrPractice, getEhrSettings, getPrivateKeyJwtConfig } from '@/lib/integrations/ehr/server'
 import { getProvider } from '@/lib/integrations/ehr/providers'
 import { logEhrAudit } from '@/lib/integrations/ehr/audit'
 
@@ -70,10 +71,21 @@ export async function GET(req: NextRequest) {
     }
     const redirectUri = `${baseUrl.replace(/\/+$/g, '')}/api/integrations/ehr/callback`
 
+    const privateKeyConfig = getPrivateKeyJwtConfig(provider.id)
+    const clientAssertion = privateKeyConfig
+      ? createClientAssertion({
+          clientId: context.clientId,
+          tokenEndpoint: context.tokenEndpoint,
+          privateKeyPem: privateKeyConfig.privateKeyPem,
+          keyId: privateKeyConfig.keyId,
+        })
+      : undefined
+
     const tokenResponse = await exchangeAuthorizationCode({
       tokenEndpoint: context.tokenEndpoint,
       clientId: context.clientId,
-      clientSecret: (config as any).clientSecret,
+      clientSecret: privateKeyConfig ? undefined : (config as any).clientSecret,
+      clientAssertion,
       code: parsed.data.code,
       redirectUri,
       codeVerifier: context.codeVerifier,

@@ -92,3 +92,17 @@ export function isIssuerAllowed(issuer: string): boolean {
   }
   return allowlist.includes(issuer)
 }
+
+export function getPrivateKeyJwtConfig(providerId: string) {
+  if (providerId !== 'ecw') {
+    return null
+  }
+  const privateKeyPem = process.env.EHR_JWT_PRIVATE_KEY
+  if (!privateKeyPem) {
+    return null
+  }
+  return {
+    privateKeyPem,
+    keyId: process.env.EHR_JWT_KEY_ID,
+  }
+}

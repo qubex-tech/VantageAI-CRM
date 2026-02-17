@@ -91,6 +91,7 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
   const [bulkResult, setBulkResult] = useState<string | null>(null)
   const [practices, setPractices] = useState<Array<{ id: string; name: string }>>([])
   const [selectedPracticeId, setSelectedPracticeId] = useState<string>('')
+  const [privateKeyJwtConfigured, setPrivateKeyJwtConfigured] = useState(true)
 
   const resolvedProviders = providers.length > 0 ? providers : fallbackProviders
   const selectedProvider = useMemo(
@@ -99,6 +100,10 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
   )
 
   const activePracticeId = practiceId || selectedPracticeId
+  const requiresEcwKey =
+    selectedProviderId === 'ecw' &&
+    settings.enabledProviders.includes('ecw') &&
+    !privateKeyJwtConfigured
 
   const apiUrl = (path: string) => {
     if (!activePracticeId) return path
@@ -114,6 +119,9 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
     if (response.ok) {
       const data = await response.json()
       if (data.providers) setProviders(data.providers)
+      if (typeof data.privateKeyJwtConfigured === 'boolean') {
+        setPrivateKeyJwtConfigured(data.privateKeyJwtConfigured)
+      }
       if (data.settings) {
         setSettings({
           enabledProviders: data.settings.enabledProviders || [],
@@ -210,6 +218,10 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
   }
 
   const saveSettings = async () => {
+    if (requiresEcwKey) {
+      setError('Configure EHR_JWT_PRIVATE_KEY before saving eCW settings.')
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -375,6 +387,21 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
                 className="shrink-0"
                 />
               </div>
+              {selectedProviderId === 'ecw' &&
+                settings.enabledProviders.includes('ecw') &&
+                !privateKeyJwtConfigured && (
+                  <div className="rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                    eCW requires a JWKS URL for client authentication. Configure
+                    <span className="font-semibold"> EHR_JWT_PRIVATE_KEY</span> and optionally
+                    <span className="font-semibold"> EHR_JWT_KEY_ID</span>. Then use this JWKS
+                    URL:
+                    <div className="mt-1 break-all text-amber-900">
+                      {origin
+                        ? `${origin}/api/integrations/ehr/jwks`
+                        : '/api/integrations/ehr/jwks'}
+                    </div>
+                  </div>
+                )}
               <div className="grid gap-3">
                 {selectedProvider.uiFields.map((field) => (
                   <div key={field.id} className="space-y-1">
@@ -448,7 +475,7 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button onClick={saveSettings} disabled={saving}>
+            <Button onClick={saveSettings} disabled={saving || requiresEcwKey}>
               {saving ? 'Saving...' : 'Save settings'}
             </Button>
             <Button variant="outline" onClick={startStandaloneConnect}>

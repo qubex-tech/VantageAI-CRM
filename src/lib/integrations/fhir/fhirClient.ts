@@ -23,6 +23,7 @@ type FhirClientOptions = {
   tokenEndpoint?: string
   clientId?: string
   clientSecret?: string
+  clientAssertionProvider?: () => string | undefined
   tokenState: TokenState
   onTokenRefresh?: (tokenResponse: TokenResponse) => Promise<void> | void
   timeoutMs?: number
@@ -52,6 +53,7 @@ export class FhirClient {
   private tokenEndpoint?: string
   private clientId?: string
   private clientSecret?: string
+  private clientAssertionProvider?: () => string | undefined
   private tokenState: TokenState
   private onTokenRefresh?: (tokenResponse: TokenResponse) => Promise<void> | void
   private timeoutMs: number
@@ -61,6 +63,7 @@ export class FhirClient {
     this.tokenEndpoint = options.tokenEndpoint
     this.clientId = options.clientId
     this.clientSecret = options.clientSecret
+    this.clientAssertionProvider = options.clientAssertionProvider
     this.tokenState = options.tokenState
     this.onTokenRefresh = options.onTokenRefresh
     this.timeoutMs = options.timeoutMs ?? 10000
@@ -99,6 +102,7 @@ export class FhirClient {
       tokenEndpoint: this.tokenEndpoint,
       clientId: this.clientId,
       clientSecret: this.clientSecret,
+      clientAssertion: this.clientAssertionProvider?.(),
       refreshToken: this.tokenState.refreshToken,
       scopes: this.tokenState.scopes,
     })
@@ -114,6 +118,7 @@ export class FhirClient {
       tokenEndpoint: this.tokenEndpoint,
       clientId: this.clientId,
       clientSecret: this.clientSecret,
+      clientAssertion: this.clientAssertionProvider?.(),
       refreshToken: this.tokenState.refreshToken,
       scopes: this.tokenState.scopes,
     })
