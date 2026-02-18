@@ -59,6 +59,7 @@ export function HealixPanel({
   const [suggestedActions, setSuggestedActions] = useState<SuggestedAction[]>([])
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [lastUserMessage, setLastUserMessage] = useState<string | null>(null)
+  const [lastKnownPatientName, setLastKnownPatientName] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const [summary, setSummary] = useState<ConversationSummaryData | null>(null)
@@ -199,6 +200,10 @@ export function HealixPanel({
 
     setMessages((prev) => [...prev, userMessage])
     setLastUserMessage(messageText)
+    const inferredPatientName = extractPatientName(messageText)
+    if (inferredPatientName) {
+      setLastKnownPatientName(inferredPatientName)
+    }
     setInput('')
     setIsLoading(true)
     setCurrentResponse('')
@@ -464,6 +469,7 @@ export function HealixPanel({
             dateFrom: start.toISOString(),
             dateTo: end.toISOString(),
             timezone,
+            patientName: lastKnownPatientName || undefined,
           },
           why: 'View available slots for this appointment type.',
         }))
@@ -485,7 +491,7 @@ export function HealixPanel({
         const timezone = result?.result?.timezone || action.args?.timezone
         const patientId = action.args?.patientId || context.patientId
         const inferredName = extractPatientName(lastUserMessage)
-        const patientName = action.args?.patientName || inferredName
+        const patientName = action.args?.patientName || inferredName || lastKnownPatientName
 
         if (!patientId && !patientName) {
           const missingMessage: HealixMessage = {
