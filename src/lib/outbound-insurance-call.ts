@@ -99,6 +99,11 @@ export async function initiateInsuranceOutboundCall(input: InitiateInsuranceOutb
   }
 
   const integration = await getRetellIntegrationConfig(practiceId)
+  const practice = await prisma.practice.findUnique({
+    where: { id: practiceId },
+    select: { name: true },
+  })
+  const practiceName = practice?.name?.trim() || ''
   const toolName = integration.outboundToolName || 'create_outbound_call'
   const patientIdentity = { ...(contextOutput?.patient_identity || {}) } as Record<string, any>
   if (!patientIdentity.first_name || !patientIdentity.last_name || !patientIdentity.date_of_birth) {
@@ -125,6 +130,8 @@ export async function initiateInsuranceOutboundCall(input: InitiateInsuranceOutb
   const patientFullName = [patientIdentity.first_name, patientIdentity.last_name].filter(Boolean).join(' ').trim()
   const resolvedPatientId = patientIdentity.patient_id || patientId
   const dynamicVariables: Record<string, string> = {
+    practice_name: practiceName,
+    provider_name: practiceName,
     patient_id: resolvedPatientId || '',
     patient_name: patientFullName || '',
     patient_full_name: patientFullName || '',
@@ -152,6 +159,9 @@ export async function initiateInsuranceOutboundCall(input: InitiateInsuranceOutb
     retell_llm_dynamic_variables: dynamicVariables,
     dynamic_variables: dynamicVariables,
     context: {
+      practice: {
+        name: practiceName || undefined,
+      },
       patient: {
         id: resolvedPatientId || undefined,
         full_name: patientFullName,
@@ -185,6 +195,7 @@ export async function initiateInsuranceOutboundCall(input: InitiateInsuranceOutb
     agentId: (toolArgs.agent_id as string | undefined) || null,
     dynamicVariableKeys: Object.keys(outgoingDynamicVars),
     dynamicVariablePreview: {
+      practice_name: outgoingDynamicVars.practice_name ?? null,
       patient_id: outgoingDynamicVars.patient_id ?? null,
       patient_name: outgoingDynamicVars.patient_name ?? null,
       patient_first_name: outgoingDynamicVars.patient_first_name ?? null,

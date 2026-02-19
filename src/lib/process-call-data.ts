@@ -19,6 +19,38 @@ export interface ExtractedCallData {
   selected_date?: string
   preferred_dentist?: string
   call_reason?: string
+  insurance_verification?: {
+    provider_name?: string
+    npi?: string
+    tax_id?: string
+    member_id?: string
+    patient_first_name?: string
+    patient_last_name?: string
+    patient_dob?: string
+    coverage_effective_date?: string
+    policy_active?: string | boolean
+    specialist_office_visit_benefits?: string
+    telehealth_benefits?: string
+    referral_required?: string | boolean
+    cob_primary_plan?: string
+    cob_secondary_plan?: string
+    insurance_agent_name?: string
+    reference_number?: string
+  }
+  insurance_verification_missing_fields?: string[]
+}
+
+function firstNonEmptyString(value: unknown): string | undefined {
+  if (value === null || value === undefined) return undefined
+  const text = String(value).trim()
+  return text.length > 0 ? text : undefined
+}
+
+function firstDefined(...values: unknown[]): unknown {
+  for (const value of values) {
+    if (value !== null && value !== undefined && String(value).trim() !== '') return value
+  }
+  return undefined
 }
 
 /**
@@ -113,6 +145,106 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
         (extracted as any)[field] = callData[field]
       }
     }
+  }
+
+  const customData = (call.call_analysis?.custom_analysis_data || {}) as Record<string, unknown>
+  const metadata = (call.metadata || {}) as Record<string, unknown>
+  const root = call as unknown as Record<string, unknown>
+  const analysisRoot = (call.call_analysis || {}) as Record<string, unknown>
+
+  const insuranceVerification = {
+    provider_name: firstNonEmptyString(
+      firstDefined(
+        customData.provider_name,
+        customData.practice_name,
+        customData.clinic_name,
+        metadata.provider_name,
+        metadata.practice_name,
+        root.provider_name
+      )
+    ),
+    npi: firstNonEmptyString(
+      firstDefined(customData.npi, customData.provider_npi, metadata.npi, analysisRoot.npi, root.npi)
+    ),
+    tax_id: firstNonEmptyString(
+      firstDefined(customData.tax_id, customData.taxid, customData.tin, metadata.tax_id, analysisRoot.tax_id, root.tax_id)
+    ),
+    member_id: firstNonEmptyString(
+      firstDefined(customData.member_id, customData.insurance_id, metadata.member_id, analysisRoot.member_id, root.member_id)
+    ),
+    patient_first_name: firstNonEmptyString(
+      firstDefined(customData.patient_first_name, customData.first_name, metadata.patient_first_name, analysisRoot.patient_first_name)
+    ),
+    patient_last_name: firstNonEmptyString(
+      firstDefined(customData.patient_last_name, customData.last_name, metadata.patient_last_name, analysisRoot.patient_last_name)
+    ),
+    patient_dob: firstNonEmptyString(
+      firstDefined(customData.patient_dob, customData.dob, metadata.patient_dob, analysisRoot.patient_dob, root.patient_dob)
+    ),
+    coverage_effective_date: firstNonEmptyString(
+      firstDefined(customData.coverage_effective_date, customData.effective_date, metadata.coverage_effective_date, analysisRoot.coverage_effective_date)
+    ),
+    policy_active: firstDefined(
+      customData.policy_active,
+      customData.is_policy_active,
+      metadata.policy_active,
+      analysisRoot.policy_active
+    ) as string | boolean | undefined,
+    specialist_office_visit_benefits: firstNonEmptyString(
+      firstDefined(customData.specialist_office_visit_benefits, customData.specialist_benefits, metadata.specialist_office_visit_benefits)
+    ),
+    telehealth_benefits: firstNonEmptyString(
+      firstDefined(customData.telehealth_benefits, customData.televisit_benefits, metadata.telehealth_benefits)
+    ),
+    referral_required: firstDefined(
+      customData.referral_required,
+      customData.specialist_referral_required,
+      metadata.referral_required,
+      analysisRoot.referral_required
+    ) as string | boolean | undefined,
+    cob_primary_plan: firstNonEmptyString(
+      firstDefined(customData.cob_primary_plan, customData.primary_plan, metadata.cob_primary_plan)
+    ),
+    cob_secondary_plan: firstNonEmptyString(
+      firstDefined(customData.cob_secondary_plan, customData.secondary_plan, metadata.cob_secondary_plan)
+    ),
+    insurance_agent_name: firstNonEmptyString(
+      firstDefined(customData.insurance_agent_name, customData.representative_name, metadata.insurance_agent_name)
+    ),
+    reference_number: firstNonEmptyString(
+      firstDefined(customData.reference_number, customData.reference_no, metadata.reference_number, analysisRoot.reference_number)
+    ),
+  }
+
+  const requiredInsuranceFields = [
+    'provider_name',
+    'npi',
+    'tax_id',
+    'member_id',
+    'patient_first_name',
+    'patient_last_name',
+    'patient_dob',
+    'coverage_effective_date',
+    'policy_active',
+    'specialist_office_visit_benefits',
+    'telehealth_benefits',
+    'referral_required',
+    'insurance_agent_name',
+    'reference_number',
+  ] as const
+  const missingInsuranceFields = requiredInsuranceFields.filter((field) => {
+    const value = insuranceVerification[field]
+    return value === null || value === undefined || String(value).trim() === ''
+  })
+
+  if (
+    Object.values(insuranceVerification).some((value) => value !== null && value !== undefined && String(value).trim() !== '')
+  ) {
+    extracted.insurance_verification = insuranceVerification
+    extracted.insurance_verification_missing_fields = missingInsuranceFields
+  }
+  if (!extracted.patient_name && insuranceVerification.patient_first_name && insuranceVerification.patient_last_name) {
+    extracted.patient_name = `${insuranceVerification.patient_first_name} ${insuranceVerification.patient_last_name}`.trim()
   }
 
   console.log('[extractCallData] Final extracted data:', extracted)
@@ -323,6 +455,16 @@ export async function processRetellCallData(
     callAnalysis: call.call_analysis,
     metadata: call.metadata,
   })
+  if (extractedData.insurance_verification) {
+    console.log('[processRetellCallData] Insurance verification capture summary:', {
+      callId: call.call_id,
+      capturedFields: Object.keys(extractedData.insurance_verification).filter((k) => {
+        const value = (extractedData.insurance_verification as Record<string, unknown>)[k]
+        return value !== null && value !== undefined && String(value).trim() !== ''
+      }),
+      missingFields: extractedData.insurance_verification_missing_fields || [],
+    })
+  }
 
   // Create or update patient
   const { patientId, isNew } = await processCallDataForPatient(
