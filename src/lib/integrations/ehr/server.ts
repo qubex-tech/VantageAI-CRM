@@ -97,7 +97,8 @@ export function getPrivateKeyJwtConfig(providerId: string) {
   if (providerId !== 'ecw') {
     return null
   }
-  const privateKeyPem = process.env.EHR_JWT_PRIVATE_KEY
+  const rawKey = process.env.EHR_JWT_PRIVATE_KEY
+  const privateKeyPem = rawKey ? rawKey.replace(/\\n/g, '\n') : undefined
   if (!privateKeyPem) {
     return null
   }
