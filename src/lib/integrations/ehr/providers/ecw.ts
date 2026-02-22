@@ -27,13 +27,11 @@ export const ecwProvider: EhrProvider = {
   },
   defaultScopes: ({ enableWrite, enablePatientCreate, enableNoteCreate }) => {
     const scopes = new Set(
-      'openid fhirUser profile offline_access patient/Patient.read patient/DocumentReference.read'
-        .split(' ')
-        .filter(Boolean)
+      'patient/Patient.read patient/DocumentReference.read'.split(' ').filter(Boolean)
     )
     if (enableWrite) {
-      if (enablePatientCreate) scopes.add('patient/Patient.write')
-      if (enableNoteCreate) scopes.add('patient/DocumentReference.write')
+      if (enablePatientCreate) scopes.add('user/Patient.create')
+      if (enableNoteCreate) scopes.add('user/DocumentReference.create')
     }
     return Array.from(scopes).join(' ')
   },
