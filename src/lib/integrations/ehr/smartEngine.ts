@@ -137,6 +137,8 @@ export function createClientAssertion(params: {
     sub: params.clientId,
     aud: params.tokenEndpoint,
     jti: generateState(),
+    iat: now,
+    nbf: now,
     exp: now + 300,
   }
 
