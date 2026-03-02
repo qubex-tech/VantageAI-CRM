@@ -72,12 +72,23 @@ export async function GET(req: NextRequest) {
     const redirectUri = `${baseUrl.replace(/\/+$/g, '')}/api/integrations/ehr/callback`
 
     const privateKeyConfig = getPrivateKeyJwtConfig(provider.id)
+    const audOverride =
+      provider.id === 'ecw'
+        ? (() => {
+            try {
+              return new URL(context.tokenEndpoint).origin
+            } catch {
+              return undefined
+            }
+          })()
+        : undefined
     const clientAssertion = privateKeyConfig
       ? createClientAssertion({
           clientId: context.clientId,
           tokenEndpoint: context.tokenEndpoint,
           privateKeyPem: privateKeyConfig.privateKeyPem,
           keyId: privateKeyConfig.keyId,
+          audience: audOverride,
         })
       : undefined
 

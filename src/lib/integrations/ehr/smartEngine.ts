@@ -125,6 +125,7 @@ export function createClientAssertion(params: {
   tokenEndpoint: string
   privateKeyPem: string
   keyId?: string
+  audience?: string
 }): string {
   const header = {
     alg: 'RS256',
@@ -135,7 +136,7 @@ export function createClientAssertion(params: {
   const payload = {
     iss: params.clientId,
     sub: params.clientId,
-    aud: params.tokenEndpoint,
+    aud: params.audience || params.tokenEndpoint,
     jti: generateState(),
     iat: now,
     nbf: now,

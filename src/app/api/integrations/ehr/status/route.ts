@@ -48,6 +48,16 @@ export async function GET(req: NextRequest) {
       try {
         const tokenEndpoint = connection.tokenEndpoint || undefined
         const privateKeyConfig = tokenEndpoint ? getPrivateKeyJwtConfig(connection.providerId) : null
+        const audOverride =
+          connection.providerId === 'ecw' && tokenEndpoint
+            ? (() => {
+                try {
+                  return new URL(tokenEndpoint).origin
+                } catch {
+                  return undefined
+                }
+              })()
+            : undefined
         const client = new FhirClient({
           baseUrl: connection.fhirBaseUrl,
           tokenEndpoint,
@@ -63,6 +73,7 @@ export async function GET(req: NextRequest) {
                   tokenEndpoint,
                   privateKeyPem: privateKeyConfig.privateKeyPem,
                   keyId: privateKeyConfig.keyId,
+                  audience: audOverride,
                 })
             : undefined,
           tokenState: {
