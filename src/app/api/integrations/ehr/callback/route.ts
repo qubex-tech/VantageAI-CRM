@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
     const privateKeyConfig = getPrivateKeyJwtConfig(provider.id)
     const audOverride =
       provider.id === 'ecw'
-        ? context.issuer
+        ? process.env.EHR_ECW_CLIENT_ASSERTION_AUD || undefined
         : undefined
     const clientAssertion = privateKeyConfig
       ? createClientAssertion({
