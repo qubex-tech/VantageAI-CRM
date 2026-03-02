@@ -91,7 +91,17 @@ export async function middleware(req: NextRequest) {
     }
     
     // Allow access to auth pages and public API routes (webhooks)
-    const publicPaths = ['/login', '/signup', '/forgot-password', '/reset-password', '/auth/callback']
+    const publicPaths = [
+      '/login',
+      '/signup',
+      '/forgot-password',
+      '/reset-password',
+      '/auth/callback',
+      '/api/integrations/ehr/login',
+      '/api/integrations/ehr/launch',
+      '/api/integrations/ehr/callback',
+      '/api/integrations/ehr/jwks',
+    ]
     const isPublicPath = publicPaths.some(path => pathname.startsWith(path))
     
     // Allow MCP API (auth via X-API-Key header, not session)
