@@ -74,13 +74,7 @@ export async function GET(req: NextRequest) {
     const privateKeyConfig = getPrivateKeyJwtConfig(provider.id)
     const audOverride =
       provider.id === 'ecw'
-        ? (() => {
-            try {
-              return new URL(context.tokenEndpoint).origin
-            } catch {
-              return undefined
-            }
-          })()
+        ? context.issuer
         : undefined
     const clientAssertion = privateKeyConfig
       ? createClientAssertion({
