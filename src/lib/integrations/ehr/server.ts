@@ -98,7 +98,15 @@ export function getPrivateKeyJwtConfig(providerId: string) {
     return null
   }
   const rawKey = process.env.EHR_JWT_PRIVATE_KEY
-  const privateKeyPem = rawKey ? rawKey.replace(/\\n/g, '\n') : undefined
+  const normalizedKey = rawKey
+    ? rawKey
+        .trim()
+        .replace(/^"+|"+$/g, '')
+        .replace(/^'+|'+$/g, '')
+        .replace(/\\r/g, '')
+        .replace(/\\n/g, '\n')
+    : undefined
+  const privateKeyPem = normalizedKey ? normalizedKey.replace(/\r/g, '') : undefined
   if (!privateKeyPem) {
     return null
   }
