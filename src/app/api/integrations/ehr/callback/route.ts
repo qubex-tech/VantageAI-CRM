@@ -85,16 +85,45 @@ export async function GET(req: NextRequest) {
           audience: audOverride,
         })
       : undefined
+    const assertionSummary = (() => {
+      if (!clientAssertion) return null
+      const [headerPart, payloadPart] = clientAssertion.split('.')
+      try {
+        const decode = (part: string) =>
+          JSON.parse(Buffer.from(part.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString())
+        return {
+          header: decode(headerPart),
+          payload: decode(payloadPart),
+        }
+      } catch {
+        return { error: 'unable_to_decode' }
+      }
+    })()
 
-    const tokenResponse = await exchangeAuthorizationCode({
-      tokenEndpoint: context.tokenEndpoint,
-      clientId: context.clientId,
-      clientSecret: privateKeyConfig ? undefined : (config as any).clientSecret,
-      clientAssertion,
-      code: parsed.data.code,
-      redirectUri,
-      codeVerifier: context.codeVerifier,
-    })
+    let tokenResponse: Awaited<ReturnType<typeof exchangeAuthorizationCode>>
+    try {
+      tokenResponse = await exchangeAuthorizationCode({
+        tokenEndpoint: context.tokenEndpoint,
+        clientId: context.clientId,
+        clientSecret: privateKeyConfig ? undefined : (config as any).clientSecret,
+        clientAssertion,
+        code: parsed.data.code,
+        redirectUri,
+        codeVerifier: context.codeVerifier,
+      })
+    } catch (error) {
+      console.error('EHR token exchange failed', {
+        providerId: provider.id,
+        tokenEndpoint: context.tokenEndpoint,
+        issuer: context.issuer,
+        clientId: context.clientId,
+        audOverride,
+        jwksUrl: `${baseUrl.replace(/\/+$/g, '')}/api/integrations/ehr/jwks`,
+        assertionSummary,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      throw error
+    }
 
     let idTokenPayload: Record<string, unknown> | null = null
     if (tokenResponse.id_token) {
