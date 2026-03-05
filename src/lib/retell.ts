@@ -8,6 +8,7 @@ import { prisma } from './db'
 import { findOrCreatePatientByPhone, getAvailableSlots, bookAppointment, cancelAppointment } from './agentActions'
 import { redactPHI } from './phi'
 import { createAuditLog } from './audit'
+import type { Prisma } from '@prisma/client'
 import {
   isCurogramEscalationEnabled,
   normalizePhoneToE164,
@@ -123,6 +124,7 @@ export async function processRetellWebhook(
         const escalationMeta = {
           ...metadata,
           curogramEscalationAttemptedAt: new Date().toISOString(),
+          curogramEscalationSentAt: null as string | null,
           curogramEscalationStatus: escalationResult.status,
           curogramEscalationResponse: escalationResult.body.slice(0, 500),
           curogramEscalationCallerNumber: normalizedCallerNumber,
@@ -136,7 +138,7 @@ export async function processRetellWebhook(
         conversation = await prisma.voiceConversation.update({
           where: { id: conversation.id },
           data: {
-            metadata: escalationMeta,
+            metadata: escalationMeta as Prisma.InputJsonObject,
           },
         })
       } else {
@@ -147,7 +149,7 @@ export async function processRetellWebhook(
               ...metadata,
               curogramEscalationAttemptedAt: new Date().toISOString(),
               curogramEscalationError: 'Missing valid callerNumber for Curogram payload',
-            },
+            } as Prisma.InputJsonObject,
           },
         })
       }
