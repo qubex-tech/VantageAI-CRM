@@ -489,6 +489,11 @@ export async function processRetellCallData(
     })
 
     if (existingConversation) {
+      const existingMetadata =
+        existingConversation.metadata && typeof existingConversation.metadata === 'object'
+          ? (existingConversation.metadata as Record<string, unknown>)
+          : {}
+
       await prisma.voiceConversation.update({
         where: { id: existingConversation.id },
         data: {
@@ -496,7 +501,11 @@ export async function processRetellCallData(
           transcript: call.transcript || existingConversation.transcript,
           extractedIntent: extractedData.call_reason || existingConversation.extractedIntent,
           outcome: extractedData.call_successful ? 'appointment_booked' : existingConversation.outcome || 'information_only',
-          metadata: extractedData as any,
+          // Preserve existing webhook metadata (e.g. Curogram delivery logs) while adding extracted fields.
+          metadata: {
+            ...existingMetadata,
+            ...(extractedData as Record<string, unknown>),
+          } as any,
           endedAt: call.end_timestamp ? new Date(call.end_timestamp) : existingConversation.endedAt,
         },
       })
