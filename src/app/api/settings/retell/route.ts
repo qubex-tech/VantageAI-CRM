@@ -4,6 +4,14 @@ import { requireAuth } from '@/lib/middleware'
 import { isVantageAdmin } from '@/lib/permissions'
 import { z } from 'zod'
 
+function isMissingCurogramColumnError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return (
+    message.includes('retell_integrations.curogramEscalationEnabled') ||
+    message.includes('retell_integrations.curogramEscalationUrl')
+  )
+}
+
 const retellIntegrationSchema = z.object({
   apiKey: z.string().optional().or(z.literal('')),
   agentId: z.string().optional(),
@@ -53,9 +61,39 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ integration: null })
     }
 
-    const integration = await prisma.retellIntegration.findUnique({
-      where: { practiceId: practiceId },
-    })
+    let integration: any
+    try {
+      integration = await prisma.retellIntegration.findUnique({
+        where: { practiceId: practiceId },
+      })
+    } catch (error) {
+      if (!isMissingCurogramColumnError(error)) throw error
+      integration = await prisma.retellIntegration.findUnique({
+        where: { practiceId: practiceId },
+        select: {
+          id: true,
+          practiceId: true,
+          apiKey: true,
+          agentId: true,
+          insuranceVerificationAgentId: true,
+          mcpBaseUrl: true,
+          mcpApiKey: true,
+          mcpActorId: true,
+          mcpRequestIdPrefix: true,
+          outboundToolName: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      })
+      if (integration) {
+        integration = {
+          ...integration,
+          curogramEscalationEnabled: false,
+          curogramEscalationUrl: null,
+        }
+      }
+    }
 
     return NextResponse.json({ integration: redactIntegration(integration) })
   } catch (error) {
@@ -98,6 +136,7 @@ export async function POST(req: NextRequest) {
     const validated = retellIntegrationSchema.parse(body)
     const existingIntegration = await prisma.retellIntegration.findUnique({
       where: { practiceId: practiceId },
+      select: { apiKey: true },
     })
     const resolvedApiKey = validated.apiKey?.trim() || existingIntegration?.apiKey
     const curogramEscalationEnabled = Boolean(validated.curogramEscalationEnabled)
@@ -134,35 +173,70 @@ export async function POST(req: NextRequest) {
     }
 
     // Create or update integration
-    const integration = await prisma.retellIntegration.upsert({
-      where: { practiceId: practiceId },
-      create: {
-        practiceId: practiceId,
-        apiKey: resolvedApiKey,
-        agentId: validated.agentId,
-        insuranceVerificationAgentId: validated.insuranceVerificationAgentId || null,
-        curogramEscalationEnabled,
-        curogramEscalationUrl,
-        mcpBaseUrl: validated.mcpBaseUrl || null,
-        mcpApiKey: validated.mcpApiKey || null,
-        mcpActorId: validated.mcpActorId || null,
-        mcpRequestIdPrefix: validated.mcpRequestIdPrefix || null,
-        outboundToolName: validated.outboundToolName || null,
-        isActive: true,
-      },
-      update: {
-        apiKey: resolvedApiKey,
-        agentId: validated.agentId,
-        insuranceVerificationAgentId: validated.insuranceVerificationAgentId || null,
-        curogramEscalationEnabled,
-        curogramEscalationUrl,
-        mcpBaseUrl: validated.mcpBaseUrl || null,
-        mcpApiKey: validated.mcpApiKey || null,
-        mcpActorId: validated.mcpActorId || null,
-        mcpRequestIdPrefix: validated.mcpRequestIdPrefix || null,
-        outboundToolName: validated.outboundToolName || null,
-      },
-    })
+    let integration: any
+    try {
+      integration = await prisma.retellIntegration.upsert({
+        where: { practiceId: practiceId },
+        create: {
+          practiceId: practiceId,
+          apiKey: resolvedApiKey,
+          agentId: validated.agentId,
+          insuranceVerificationAgentId: validated.insuranceVerificationAgentId || null,
+          curogramEscalationEnabled,
+          curogramEscalationUrl,
+          mcpBaseUrl: validated.mcpBaseUrl || null,
+          mcpApiKey: validated.mcpApiKey || null,
+          mcpActorId: validated.mcpActorId || null,
+          mcpRequestIdPrefix: validated.mcpRequestIdPrefix || null,
+          outboundToolName: validated.outboundToolName || null,
+          isActive: true,
+        },
+        update: {
+          apiKey: resolvedApiKey,
+          agentId: validated.agentId,
+          insuranceVerificationAgentId: validated.insuranceVerificationAgentId || null,
+          curogramEscalationEnabled,
+          curogramEscalationUrl,
+          mcpBaseUrl: validated.mcpBaseUrl || null,
+          mcpApiKey: validated.mcpApiKey || null,
+          mcpActorId: validated.mcpActorId || null,
+          mcpRequestIdPrefix: validated.mcpRequestIdPrefix || null,
+          outboundToolName: validated.outboundToolName || null,
+        },
+      })
+    } catch (error) {
+      if (!isMissingCurogramColumnError(error)) throw error
+      integration = await prisma.retellIntegration.upsert({
+        where: { practiceId: practiceId },
+        create: {
+          practiceId: practiceId,
+          apiKey: resolvedApiKey,
+          agentId: validated.agentId,
+          insuranceVerificationAgentId: validated.insuranceVerificationAgentId || null,
+          mcpBaseUrl: validated.mcpBaseUrl || null,
+          mcpApiKey: validated.mcpApiKey || null,
+          mcpActorId: validated.mcpActorId || null,
+          mcpRequestIdPrefix: validated.mcpRequestIdPrefix || null,
+          outboundToolName: validated.outboundToolName || null,
+          isActive: true,
+        },
+        update: {
+          apiKey: resolvedApiKey,
+          agentId: validated.agentId,
+          insuranceVerificationAgentId: validated.insuranceVerificationAgentId || null,
+          mcpBaseUrl: validated.mcpBaseUrl || null,
+          mcpApiKey: validated.mcpApiKey || null,
+          mcpActorId: validated.mcpActorId || null,
+          mcpRequestIdPrefix: validated.mcpRequestIdPrefix || null,
+          outboundToolName: validated.outboundToolName || null,
+        },
+      })
+      integration = {
+        ...integration,
+        curogramEscalationEnabled: false,
+        curogramEscalationUrl: null,
+      }
+    }
 
     return NextResponse.json({ integration: redactIntegration(integration) })
   } catch (error) {

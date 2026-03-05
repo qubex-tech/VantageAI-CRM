@@ -256,6 +256,17 @@ export async function getRetellIntegrationConfig(practiceId: string): Promise<Re
 
   const integration = await prisma.retellIntegration.findUnique({
     where: { practiceId },
+    select: {
+      apiKey: true,
+      agentId: true,
+      insuranceVerificationAgentId: true,
+      mcpBaseUrl: true,
+      mcpApiKey: true,
+      mcpActorId: true,
+      mcpRequestIdPrefix: true,
+      outboundToolName: true,
+      isActive: true,
+    },
   })
 
   if (!integration || !integration.isActive) {

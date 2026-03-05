@@ -92,13 +92,28 @@ export async function processRetellWebhook(
   }
 
   // Trigger Curogram escalation-to-text once per call.
-  const retellIntegration = await prisma.retellIntegration.findUnique({
-    where: { practiceId },
-    select: {
-      curogramEscalationEnabled: true,
-      curogramEscalationUrl: true,
-    },
-  })
+  let retellIntegration: { curogramEscalationEnabled: boolean; curogramEscalationUrl: string | null } | null = null
+  try {
+    retellIntegration = await prisma.retellIntegration.findUnique({
+      where: { practiceId },
+      select: {
+        curogramEscalationEnabled: true,
+        curogramEscalationUrl: true,
+      },
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    const missingCurogramColumns =
+      message.includes('retell_integrations.curogramEscalationEnabled') ||
+      message.includes('retell_integrations.curogramEscalationUrl')
+    if (!missingCurogramColumns) {
+      throw error
+    }
+    console.warn('[Curogram Escalation] Migration not yet applied; feature temporarily disabled for this practice', {
+      practiceId,
+      callId,
+    })
+  }
   const curogramEscalationEnabled = isCurogramEscalationEnabled({
     enabled: Boolean(retellIntegration?.curogramEscalationEnabled),
     endpointUrl: retellIntegration?.curogramEscalationUrl,

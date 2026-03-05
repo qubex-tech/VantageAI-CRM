@@ -15,11 +15,19 @@ export async function RetellChatWidgetWrapper() {
   }
 
   // Get practice's Retell integration
-  const retellIntegration = await prisma.retellIntegration.findUnique({
-    where: {
-      practiceId: session.practiceId,
-    },
-  })
+  let retellIntegration: { agentId: string | null } | null = null
+  try {
+    retellIntegration = await prisma.retellIntegration.findUnique({
+      where: {
+        practiceId: session.practiceId,
+      },
+      select: {
+        agentId: true,
+      },
+    })
+  } catch (error) {
+    console.error('Failed to load Retell integration for portal widget:', error)
+  }
 
   // Get public key from environment variable or integration
   // For now, we'll use an environment variable
