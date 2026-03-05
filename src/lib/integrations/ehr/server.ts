@@ -97,6 +97,9 @@ export function getPrivateKeyJwtConfig(providerId: string) {
   if (providerId !== 'ecw') {
     return null
   }
+  if (process.env.EHR_ECW_AUTH_MODE === 'client_secret') {
+    return null
+  }
   const rawKey = process.env.EHR_JWT_PRIVATE_KEY
   const normalizedKey = rawKey
     ? rawKey
