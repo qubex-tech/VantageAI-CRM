@@ -92,7 +92,19 @@ export async function processRetellWebhook(
   }
 
   // Trigger Curogram escalation-to-text once per call.
-  if (conversation && callId && isCurogramEscalationEnabled()) {
+  const retellIntegration = await prisma.retellIntegration.findUnique({
+    where: { practiceId },
+    select: {
+      curogramEscalationEnabled: true,
+      curogramEscalationUrl: true,
+    },
+  })
+  const curogramEscalationEnabled = isCurogramEscalationEnabled({
+    enabled: Boolean(retellIntegration?.curogramEscalationEnabled),
+    endpointUrl: retellIntegration?.curogramEscalationUrl,
+  })
+
+  if (conversation && callId && curogramEscalationEnabled) {
     const metadata = (conversation.metadata || {}) as Record<string, unknown>
     const alreadySent = Boolean(metadata.curogramEscalationSentAt)
     const shouldAttemptEscalation =
@@ -129,6 +141,10 @@ export async function processRetellWebhook(
         const escalationResult = await sendCurogramEscalation({
           callerNumber: normalizedCallerNumber,
           intentTopic,
+        }, {
+          endpointUrl: retellIntegration?.curogramEscalationUrl,
+          requestId,
+          callId,
         })
 
         console.log('[Curogram Escalation] Result', {
@@ -184,6 +200,17 @@ export async function processRetellWebhook(
         })
       }
     }
+  } else if (
+    conversation &&
+    callId &&
+    retellIntegration?.curogramEscalationEnabled &&
+    !retellIntegration?.curogramEscalationUrl?.trim()
+  ) {
+    console.warn('[Curogram Escalation] Skipped: setting enabled without URL', {
+      requestId,
+      practiceId,
+      callId,
+    })
   }
 
   // Handle tool calls

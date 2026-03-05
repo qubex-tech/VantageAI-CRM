@@ -6,6 +6,10 @@ export interface CurogramEscalationPayload {
 interface CurogramEscalationOptions {
   requestId?: string
   callId?: string
+  endpointUrl?: string | null
+  timeoutMs?: number
+  authHeaderName?: string | null
+  authHeaderValue?: string | null
 }
 
 function parseTimeoutMs(raw: string | undefined): number {
@@ -30,20 +34,23 @@ export function normalizePhoneToE164(phone: string | undefined | null): string |
   return `+${digits}`
 }
 
-export function isCurogramEscalationEnabled(): boolean {
-  return Boolean(process.env.CUROGRAM_AI_ESCALATION_URL?.trim())
+export function isCurogramEscalationEnabled(input: {
+  enabled: boolean
+  endpointUrl?: string | null
+}): boolean {
+  return Boolean(input.enabled && input.endpointUrl?.trim())
 }
 
 export async function sendCurogramEscalation(
   payload: CurogramEscalationPayload,
   options: CurogramEscalationOptions = {}
 ): Promise<{ ok: boolean; status: number; body: string }> {
-  const url = process.env.CUROGRAM_AI_ESCALATION_URL?.trim()
+  const url = options.endpointUrl?.trim() || process.env.CUROGRAM_AI_ESCALATION_URL?.trim()
   if (!url) {
-    return { ok: false, status: 0, body: 'CUROGRAM_AI_ESCALATION_URL not configured' }
+    return { ok: false, status: 0, body: 'Curogram escalation URL not configured' }
   }
 
-  const timeoutMs = parseTimeoutMs(process.env.CUROGRAM_AI_ESCALATION_TIMEOUT_MS)
+  const timeoutMs = options.timeoutMs || parseTimeoutMs(process.env.CUROGRAM_AI_ESCALATION_TIMEOUT_MS)
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
@@ -51,8 +58,8 @@ export async function sendCurogramEscalation(
     'Content-Type': 'application/json',
   }
 
-  const authHeaderName = process.env.CUROGRAM_AI_ESCALATION_AUTH_HEADER?.trim()
-  const authHeaderValue = process.env.CUROGRAM_AI_ESCALATION_AUTH_VALUE?.trim()
+  const authHeaderName = options.authHeaderName?.trim() || process.env.CUROGRAM_AI_ESCALATION_AUTH_HEADER?.trim()
+  const authHeaderValue = options.authHeaderValue?.trim() || process.env.CUROGRAM_AI_ESCALATION_AUTH_VALUE?.trim()
   if (authHeaderName && authHeaderValue) {
     headers[authHeaderName] = authHeaderValue
   }

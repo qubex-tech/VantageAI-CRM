@@ -23,6 +23,8 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
   const [apiKey, setApiKey] = useState('')
   const [agentId, setAgentId] = useState(initialIntegration?.agentId || '')
   const [insuranceVerificationAgentId, setInsuranceVerificationAgentId] = useState(initialIntegration?.insuranceVerificationAgentId || '')
+  const [curogramEscalationEnabled, setCurogramEscalationEnabled] = useState(Boolean(initialIntegration?.curogramEscalationEnabled))
+  const [curogramEscalationUrl, setCurogramEscalationUrl] = useState(initialIntegration?.curogramEscalationUrl || '')
   const [mcpBaseUrl, setMcpBaseUrl] = useState(initialIntegration?.mcpBaseUrl || '')
   const [mcpApiKey, setMcpApiKey] = useState(initialIntegration?.mcpApiKey || '')
   const [mcpActorId, setMcpActorId] = useState(initialIntegration?.mcpActorId || '')
@@ -39,6 +41,8 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
     setApiKey('')
     setAgentId(initialIntegration?.agentId || '')
     setInsuranceVerificationAgentId(initialIntegration?.insuranceVerificationAgentId || '')
+    setCurogramEscalationEnabled(Boolean(initialIntegration?.curogramEscalationEnabled))
+    setCurogramEscalationUrl(initialIntegration?.curogramEscalationUrl || '')
     setMcpBaseUrl(initialIntegration?.mcpBaseUrl || '')
     setMcpApiKey(initialIntegration?.mcpApiKey || '')
     setMcpActorId(initialIntegration?.mcpActorId || '')
@@ -60,6 +64,8 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
           apiKey: apiKey || undefined,
           agentId: agentId || undefined,
           insuranceVerificationAgentId: insuranceVerificationAgentId || undefined,
+          curogramEscalationEnabled,
+          curogramEscalationUrl: curogramEscalationUrl || undefined,
           mcpBaseUrl: mcpBaseUrl || undefined,
           mcpApiKey: mcpApiKey || undefined,
           mcpActorId: mcpActorId || undefined,
@@ -177,6 +183,38 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
             <p className="text-xs text-gray-500">
               This agent is used for Healix-triggered insurance verification outbound calls. If empty, the default Agent ID above is used.
             </p>
+          </div>
+
+          <div className="space-y-3 border-t border-gray-200 pt-4">
+            <div className="flex items-center gap-3">
+              <input
+                id="curogramEscalationEnabled"
+                type="checkbox"
+                checked={curogramEscalationEnabled}
+                onChange={(e) => setCurogramEscalationEnabled(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-500"
+              />
+              <Label htmlFor="curogramEscalationEnabled" className="text-sm font-medium text-gray-700">
+                Enable Curogram AI Escalation to Text for this practice
+              </Label>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="curogramEscalationUrl" className="text-sm font-medium text-gray-700">
+                Curogram Escalation URL
+              </Label>
+              <Input
+                id="curogramEscalationUrl"
+                type="url"
+                value={curogramEscalationUrl}
+                onChange={(e) => setCurogramEscalationUrl(e.target.value)}
+                placeholder="https://voip.curogram.com/ai-escalation-to-text/<practice-guid>"
+                className="text-sm"
+                required={curogramEscalationEnabled}
+              />
+              <p className="text-xs text-gray-500">
+                This practice-specific endpoint is used only when the toggle above is enabled.
+              </p>
+            </div>
           </div>
 
           <div className="space-y-2 border-t border-gray-200 pt-4">

@@ -8,6 +8,8 @@ const retellIntegrationSchema = z.object({
   apiKey: z.string().optional().or(z.literal('')),
   agentId: z.string().optional(),
   insuranceVerificationAgentId: z.string().optional(),
+  curogramEscalationEnabled: z.boolean().optional(),
+  curogramEscalationUrl: z.string().url().optional().or(z.literal('')),
   mcpBaseUrl: z.string().url().optional().or(z.literal('')),
   mcpApiKey: z.string().optional(),
   mcpActorId: z.string().optional(),
@@ -98,10 +100,19 @@ export async function POST(req: NextRequest) {
       where: { practiceId: practiceId },
     })
     const resolvedApiKey = validated.apiKey?.trim() || existingIntegration?.apiKey
+    const curogramEscalationEnabled = Boolean(validated.curogramEscalationEnabled)
+    const curogramEscalationUrl = validated.curogramEscalationUrl?.trim() || null
 
     if (!resolvedApiKey) {
       return NextResponse.json(
         { error: 'Retell API key is required for initial setup.' },
+        { status: 400 }
+      )
+    }
+
+    if (curogramEscalationEnabled && !curogramEscalationUrl) {
+      return NextResponse.json(
+        { error: 'Curogram escalation URL is required when Curogram escalation is enabled.' },
         { status: 400 }
       )
     }
@@ -130,6 +141,8 @@ export async function POST(req: NextRequest) {
         apiKey: resolvedApiKey,
         agentId: validated.agentId,
         insuranceVerificationAgentId: validated.insuranceVerificationAgentId || null,
+        curogramEscalationEnabled,
+        curogramEscalationUrl,
         mcpBaseUrl: validated.mcpBaseUrl || null,
         mcpApiKey: validated.mcpApiKey || null,
         mcpActorId: validated.mcpActorId || null,
@@ -141,6 +154,8 @@ export async function POST(req: NextRequest) {
         apiKey: resolvedApiKey,
         agentId: validated.agentId,
         insuranceVerificationAgentId: validated.insuranceVerificationAgentId || null,
+        curogramEscalationEnabled,
+        curogramEscalationUrl,
         mcpBaseUrl: validated.mcpBaseUrl || null,
         mcpApiKey: validated.mcpApiKey || null,
         mcpActorId: validated.mcpActorId || null,
