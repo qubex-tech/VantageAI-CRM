@@ -25,7 +25,21 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
     }
-    const { practiceId, user } = await resolveEhrPractice(parsed.data.practiceId)
+    const apiKey = req.headers.get('x-api-key') || req.headers.get('authorization')
+    const backendApiKey = process.env.EHR_BACKEND_API_KEY
+    const isApiKeyAuth =
+      backendApiKey &&
+      apiKey &&
+      (apiKey === backendApiKey || apiKey === `Bearer ${backendApiKey}`)
+
+    if (!parsed.data.practiceId && !isApiKeyAuth) {
+      return NextResponse.json({ error: 'practiceId is required' }, { status: 400 })
+    }
+
+    const authContext = isApiKeyAuth
+      ? { practiceId: parsed.data.practiceId!, user: { id: 'system' } }
+      : await resolveEhrPractice(parsed.data.practiceId)
+    const { practiceId, user } = authContext
     const settings = await getEhrSettings(practiceId)
     if (!settings?.enabledProviders?.includes(parsed.data.providerId as any)) {
       return NextResponse.json({ error: 'Provider not enabled for tenant' }, { status: 403 })
@@ -135,6 +149,7 @@ export async function POST(req: NextRequest) {
         issuer: connection.issuer,
         scopes: connection.scopesGranted,
         authMode: privateKeyConfig ? 'private_key_jwt' : 'client_secret',
+        authContext: isApiKeyAuth ? 'api_key' : 'user_session',
       },
     })
 

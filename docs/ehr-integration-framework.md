@@ -20,6 +20,7 @@ EHR_JWT_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----...-----END PRIVATE KEY-----
 EHR_JWT_KEY_ID=your-key-id
 EHR_ECW_AUTH_MODE=private_key_jwt
 EHR_BACKEND_SCOPES=system/Patient.read system/DocumentReference.read
+EHR_BACKEND_API_KEY=replace-with-strong-random
 ```
 
 If your EHR requires a JWKS URL for `private_key_jwt`, configure:
@@ -68,6 +69,7 @@ Stored in `practice_settings.ehrIntegrations`:
 4. Save settings
 5. Use **Standalone connect** or configure the EHR launch URL
 6. For backend services, call **POST** `/api/integrations/ehr/backend/connect`
+   - For server-to-server usage, set `EHR_BACKEND_API_KEY` and send `x-api-key` or `Authorization: Bearer <key>`
 
 ## Troubleshooting Matrix
 
