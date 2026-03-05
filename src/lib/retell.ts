@@ -8,6 +8,12 @@ import { prisma } from './db'
 import { findOrCreatePatientByPhone, getAvailableSlots, bookAppointment, cancelAppointment } from './agentActions'
 import { redactPHI } from './phi'
 import { createAuditLog } from './audit'
+import {
+  isCurogramEscalationEnabled,
+  normalizePhoneToE164,
+  resolveCurogramIntentTopic,
+  sendCurogramEscalation,
+} from './curogram'
 
 /**
  * RetellAI webhook payload - matches https://docs.retellai.com/features/webhook-overview
@@ -45,6 +51,7 @@ export async function processRetellWebhook(
   event: RetellWebhookEvent
 ): Promise<any> {
   const { event: eventType, call, transcript, tool_calls } = event
+  const callId = call?.call_id
 
   // Caller phone: RetellAI uses from_number (inbound) / to_number (outbound) per docs
   const callerPhone =
@@ -57,16 +64,16 @@ export async function processRetellWebhook(
   let conversation = await prisma.voiceConversation.findFirst({
     where: {
       practiceId,
-      retellCallId: call?.call_id,
+      retellCallId: callId,
     },
   })
 
-  if (!conversation && call?.call_id) {
+  if (!conversation && callId) {
     conversation = await prisma.voiceConversation.create({
       data: {
         practiceId,
         callerPhone,
-        retellCallId: call.call_id,
+        retellCallId: callId,
         startedAt: call?.start_timestamp ? new Date(call.start_timestamp) : new Date(),
         transcript: transcriptText ? redactPHI(transcriptText) : undefined,
       },
@@ -80,6 +87,71 @@ export async function processRetellWebhook(
         updatedAt: new Date(),
       },
     })
+  }
+
+  // Trigger Curogram escalation-to-text once per call.
+  if (conversation && callId && isCurogramEscalationEnabled()) {
+    const metadata = (conversation.metadata || {}) as Record<string, unknown>
+    const alreadySent = Boolean(metadata.curogramEscalationSentAt)
+    const shouldAttemptEscalation =
+      !alreadySent &&
+      (eventType === 'call_started' || eventType === 'call_analyzed' || eventType === 'call_ended')
+
+    if (shouldAttemptEscalation) {
+      const normalizedCallerNumber = normalizePhoneToE164(callerPhone)
+      if (normalizedCallerNumber) {
+        const callAnalysis = (call?.call_analysis || {}) as Record<string, unknown>
+        const customAnalysis = (callAnalysis.custom_analysis_data || {}) as Record<string, unknown>
+        const metadataFromCall = (call?.metadata || {}) as Record<string, unknown>
+
+        const intentTopic = resolveCurogramIntentTopic({
+          callReason:
+            (customAnalysis.call_reason as string | undefined) ||
+            (callAnalysis.call_reason as string | undefined) ||
+            (metadataFromCall.call_reason as string | undefined),
+          callSummary:
+            (callAnalysis.call_summary as string | undefined) ||
+            (customAnalysis.call_summary as string | undefined),
+          defaultIntent: process.env.CUROGRAM_AI_ESCALATION_DEFAULT_INTENT || 'AI call escalation',
+        })
+
+        const escalationResult = await sendCurogramEscalation({
+          callerNumber: normalizedCallerNumber,
+          intentTopic,
+        })
+
+        const escalationMeta = {
+          ...metadata,
+          curogramEscalationAttemptedAt: new Date().toISOString(),
+          curogramEscalationStatus: escalationResult.status,
+          curogramEscalationResponse: escalationResult.body.slice(0, 500),
+          curogramEscalationCallerNumber: normalizedCallerNumber,
+          curogramEscalationIntentTopic: intentTopic || null,
+        }
+
+        if (escalationResult.ok) {
+          escalationMeta.curogramEscalationSentAt = new Date().toISOString()
+        }
+
+        conversation = await prisma.voiceConversation.update({
+          where: { id: conversation.id },
+          data: {
+            metadata: escalationMeta,
+          },
+        })
+      } else {
+        await prisma.voiceConversation.update({
+          where: { id: conversation.id },
+          data: {
+            metadata: {
+              ...metadata,
+              curogramEscalationAttemptedAt: new Date().toISOString(),
+              curogramEscalationError: 'Missing valid callerNumber for Curogram payload',
+            },
+          },
+        })
+      }
+    }
   }
 
   // Handle tool calls
