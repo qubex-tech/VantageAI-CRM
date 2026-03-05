@@ -5,10 +5,11 @@ export type EhrProviderId = 'ecw' | 'pcc' | 'athena' | 'epic' | 'generic'
 export type EhrProviderField = {
   id: string
   label: string
-  type: 'text' | 'password' | 'url'
+  type: 'text' | 'password' | 'url' | 'select' | 'boolean'
   placeholder?: string
   helpText?: string
   required?: boolean
+  options?: Array<{ label: string; value: string }>
 }
 
 export type EhrProviderConfig = Record<string, unknown>

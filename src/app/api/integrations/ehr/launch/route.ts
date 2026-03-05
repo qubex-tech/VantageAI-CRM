@@ -42,6 +42,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Provider config missing or invalid' }, { status: 400 })
     }
     const config = configParse.data
+    if ((config as any).authFlow === 'backend_services') {
+      return NextResponse.json(
+        { error: 'Backend services app configured. Use backend connect endpoint.' },
+        { status: 409 }
+      )
+    }
     const transformedParams = provider.transformLaunchParams
       ? provider.transformLaunchParams(Object.fromEntries(req.nextUrl.searchParams))
       : Object.fromEntries(req.nextUrl.searchParams)
@@ -56,12 +62,16 @@ export async function GET(req: NextRequest) {
 
     const discovery = await discoverSmartConfiguration(issInput)
     const fhirBaseUrl = provider.buildFhirBaseUrl(config)
-    const scopes = provider.defaultScopes({
+    let scopes = provider.defaultScopes({
       enableWrite: settings.enableWrite,
       enablePatientCreate: settings.enablePatientCreate,
       enableNoteCreate: settings.enableNoteCreate,
       enableBulkExport: settings.enableBulkExport,
     })
+    if (provider.id === 'ecw') {
+      const oidcScopes = 'openid fhirUser profile offline_access'
+      scopes = `${oidcScopes} ${scopes}`.trim()
+    }
 
     const context = createLaunchContext({
       providerId: provider.id,

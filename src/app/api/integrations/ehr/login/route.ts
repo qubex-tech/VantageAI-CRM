@@ -43,15 +43,25 @@ export async function GET(req: NextRequest) {
     if (!isIssuerAllowed(issuer)) {
       return NextResponse.json({ error: 'Issuer not allowed' }, { status: 403 })
     }
+    if ((config as any).authFlow === 'backend_services') {
+      return NextResponse.json(
+        { error: 'Backend services app configured. Use backend connect endpoint.' },
+        { status: 409 }
+      )
+    }
 
     const discovery = await discoverSmartConfiguration(issuer)
     const fhirBaseUrl = provider.buildFhirBaseUrl(config)
-    const scopes = provider.defaultScopes({
+    let scopes = provider.defaultScopes({
       enableWrite: settings.enableWrite,
       enablePatientCreate: settings.enablePatientCreate,
       enableNoteCreate: settings.enableNoteCreate,
       enableBulkExport: settings.enableBulkExport,
     })
+    if (provider.id === 'ecw') {
+      const oidcScopes = 'openid fhirUser profile offline_access'
+      scopes = `${oidcScopes} ${scopes}`.trim()
+    }
 
     const context = createLaunchContext({
       providerId: provider.id,

@@ -14,10 +14,11 @@ type Provider = {
   uiFields: Array<{
     id: string
     label: string
-    type: 'text' | 'password' | 'url'
+    type: 'text' | 'password' | 'url' | 'select' | 'boolean'
     placeholder?: string
     helpText?: string
     required?: boolean
+    options?: Array<{ label: string; value: string }>
   }>
   supportsBulkExport?: boolean
 }
@@ -51,6 +52,16 @@ const fallbackProviders: Provider[] = [
       { id: 'fhirBaseUrl', label: 'FHIR Base URL (optional override)', type: 'url' },
       { id: 'clientId', label: 'Client ID', type: 'text', required: true },
       { id: 'clientSecret', label: 'Client Secret (optional)', type: 'password' },
+      {
+        id: 'authFlow',
+        label: 'Auth Flow',
+        type: 'select',
+        options: [
+          { label: 'SMART App Launch (user login)', value: 'smart_launch' },
+          { label: 'Backend Services (client_credentials)', value: 'backend_services' },
+        ],
+        helpText: 'Use SMART App Launch for CRM user sign-in. Use Backend Services for server-to-server.',
+      },
     ],
   },
   {
@@ -195,7 +206,7 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
     }
   }, [resolvedProviders, selectedProviderId])
 
-  const updateProviderConfig = (fieldId: string, value: string) => {
+  const updateProviderConfig = (fieldId: string, value: string | boolean) => {
     setSettings((prev) => ({
       ...prev,
       providerConfigs: {
@@ -406,12 +417,37 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
                 {selectedProvider.uiFields.map((field) => (
                   <div key={field.id} className="space-y-1">
                     <label className="text-sm font-medium text-gray-700">{field.label}</label>
-                    <Input
-                      type={field.type}
-                      placeholder={field.placeholder}
-                      value={settings.providerConfigs?.[selectedProviderId]?.[field.id] || ''}
-                      onChange={(event) => updateProviderConfig(field.id, event.target.value)}
-                    />
+                    {field.type === 'select' ? (
+                      <select
+                        className="w-full rounded border border-gray-200 p-2 text-sm"
+                        value={settings.providerConfigs?.[selectedProviderId]?.[field.id] || ''}
+                        onChange={(event) => updateProviderConfig(field.id, event.target.value)}
+                      >
+                        <option value="" disabled>
+                          Select an option
+                        </option>
+                        {(field.options || []).map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : field.type === 'boolean' ? (
+                      <Switch
+                        checked={Boolean(
+                          settings.providerConfigs?.[selectedProviderId]?.[field.id]
+                        )}
+                        onCheckedChange={(checked) => updateProviderConfig(field.id, checked)}
+                        className="shrink-0"
+                      />
+                    ) : (
+                      <Input
+                        type={field.type}
+                        placeholder={field.placeholder}
+                        value={settings.providerConfigs?.[selectedProviderId]?.[field.id] || ''}
+                        onChange={(event) => updateProviderConfig(field.id, event.target.value)}
+                      />
+                    )}
                     {field.helpText && (
                       <p className="text-xs text-gray-500">{field.helpText}</p>
                     )}
