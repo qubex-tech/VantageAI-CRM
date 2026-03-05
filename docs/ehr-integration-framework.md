@@ -19,6 +19,7 @@ SMART_DEFAULT_SCOPES=openid fhirUser profile offline_access patient/Patient.read
 EHR_JWT_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----...-----END PRIVATE KEY-----
 EHR_JWT_KEY_ID=your-key-id
 EHR_ECW_AUTH_MODE=private_key_jwt
+EHR_BACKEND_SCOPES=system/Patient.read system/DocumentReference.read
 ```
 
 If your EHR requires a JWKS URL for `private_key_jwt`, configure:
@@ -66,6 +67,7 @@ Stored in `practice_settings.ehrIntegrations`:
 3. Configure issuer + client ID (+ client secret if needed)
 4. Save settings
 5. Use **Standalone connect** or configure the EHR launch URL
+6. For backend services, call **POST** `/api/integrations/ehr/backend/connect`
 
 ## Troubleshooting Matrix
 

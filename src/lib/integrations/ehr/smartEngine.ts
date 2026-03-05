@@ -241,6 +241,47 @@ export async function refreshAccessToken(params: {
   return (await response.json()) as TokenResponse
 }
 
+export async function exchangeClientCredentials(params: {
+  tokenEndpoint: string
+  clientId: string
+  clientSecret?: string
+  clientAssertion?: string
+  scopes?: string
+  timeoutMs?: number
+}): Promise<TokenResponse> {
+  const body = new URLSearchParams({
+    grant_type: 'client_credentials',
+    client_id: params.clientId,
+  })
+  if (params.scopes) {
+    body.set('scope', params.scopes)
+  }
+  if (params.clientSecret) {
+    body.set('client_secret', params.clientSecret)
+  }
+  if (params.clientAssertion) {
+    body.set('client_assertion_type', 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer')
+    body.set('client_assertion', params.clientAssertion)
+  }
+
+  const response = await fetchWithTimeout(
+    params.tokenEndpoint,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    },
+    params.timeoutMs ?? 10000
+  )
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Client credentials exchange failed: ${errorText}`)
+  }
+
+  return (await response.json()) as TokenResponse
+}
+
 export async function revokeToken(params: {
   revocationEndpoint: string
   token: string

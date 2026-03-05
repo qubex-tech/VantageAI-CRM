@@ -101,6 +101,7 @@ export async function middleware(req: NextRequest) {
       '/api/integrations/ehr/launch',
       '/api/integrations/ehr/callback',
       '/api/integrations/ehr/jwks',
+      '/api/integrations/ehr/backend/connect',
     ]
     const isPublicPath = publicPaths.some(path => pathname.startsWith(path))
     
