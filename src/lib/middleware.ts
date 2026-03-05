@@ -6,6 +6,28 @@ import crypto from 'crypto'
 import { getSupabaseSessionFromRequest } from './auth-supabase'
 import { syncSupabaseUserToPrisma } from './sync-supabase-user'
 
+function normalizeHexSignature(raw: string, allowedPrefixes: string[] = []): string {
+  let value = raw.trim()
+  for (const prefix of allowedPrefixes) {
+    if (value.startsWith(prefix)) {
+      value = value.slice(prefix.length)
+      break
+    }
+  }
+  return value
+}
+
+function safeCompareHexSignatures(receivedHex: string, expectedHex: string): boolean {
+  // Ensure timingSafeEqual only runs on equal-length, valid hex buffers.
+  if (!/^[a-fA-F0-9]+$/.test(receivedHex) || !/^[a-fA-F0-9]+$/.test(expectedHex)) {
+    return false
+  }
+  if (receivedHex.length !== expectedHex.length || receivedHex.length % 2 !== 0) {
+    return false
+  }
+  return crypto.timingSafeEqual(Buffer.from(receivedHex, 'hex'), Buffer.from(expectedHex, 'hex'))
+}
+
 /**
  * Get the current user's session with practiceId
  */
@@ -136,7 +158,7 @@ export function verifyRetellSignature(
 
   try {
     // RetellAI typically sends signature in format: sha256=<hex_hash>
-    const receivedHash = signature.replace('sha256=', '')
+    const receivedHash = normalizeHexSignature(signature, ['sha256='])
     
     // Compute expected HMAC-SHA256
     const expectedHash = crypto
@@ -145,10 +167,7 @@ export function verifyRetellSignature(
       .digest('hex')
 
     // Constant-time comparison to prevent timing attacks
-    return crypto.timingSafeEqual(
-      Buffer.from(receivedHash, 'hex'),
-      Buffer.from(expectedHash, 'hex')
-    )
+    return safeCompareHexSignatures(receivedHash, expectedHash)
   } catch (error) {
     console.error('RetellAI signature verification error:', error)
     return false
@@ -171,6 +190,8 @@ export function verifyCalSignature(
   }
 
   try {
+    const receivedHash = normalizeHexSignature(signature, ['sha256=', 'sha256:'])
+
     // Cal.com sends signature as hex-encoded HMAC-SHA256 in x-cal-signature-256 header
     // Create HMAC using the secret key and the payload body
     const expectedHash = crypto
@@ -180,10 +201,7 @@ export function verifyCalSignature(
 
     // Constant-time comparison to prevent timing attacks
     // Compare the received signature (hex) with the computed hash (hex)
-    return crypto.timingSafeEqual(
-      Buffer.from(signature, 'hex'),
-      Buffer.from(expectedHash, 'hex')
-    )
+    return safeCompareHexSignatures(receivedHash, expectedHash)
   } catch (error) {
     console.error('Cal.com signature verification error:', error)
     return false
