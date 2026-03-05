@@ -53,6 +53,7 @@ export async function processRetellWebhook(
 ): Promise<any> {
   const { event: eventType, call, transcript, tool_calls } = event
   const callId = call?.call_id
+  const requestId = `retell-curogram-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
   // Caller phone: RetellAI uses from_number (inbound) / to_number (outbound) per docs
   const callerPhone =
@@ -116,9 +117,27 @@ export async function processRetellWebhook(
           defaultIntent: process.env.CUROGRAM_AI_ESCALATION_DEFAULT_INTENT || 'AI call escalation',
         })
 
+        console.log('[Curogram Escalation] Sending', {
+          requestId,
+          practiceId,
+          callId,
+          eventType,
+          callerNumber: normalizedCallerNumber,
+          hasIntentTopic: Boolean(intentTopic),
+        })
+
         const escalationResult = await sendCurogramEscalation({
           callerNumber: normalizedCallerNumber,
           intentTopic,
+        })
+
+        console.log('[Curogram Escalation] Result', {
+          requestId,
+          practiceId,
+          callId,
+          ok: escalationResult.ok,
+          status: escalationResult.status,
+          responsePreview: escalationResult.body.slice(0, 200),
         })
 
         const escalationMeta = {
@@ -129,6 +148,8 @@ export async function processRetellWebhook(
           curogramEscalationResponse: escalationResult.body.slice(0, 500),
           curogramEscalationCallerNumber: normalizedCallerNumber,
           curogramEscalationIntentTopic: intentTopic || null,
+          curogramEscalationRequestId: requestId,
+          curogramEscalationEventType: eventType,
         }
 
         if (escalationResult.ok) {
@@ -142,6 +163,13 @@ export async function processRetellWebhook(
           },
         })
       } else {
+        console.warn('[Curogram Escalation] Skipped: invalid caller number', {
+          requestId,
+          practiceId,
+          callId,
+          callerPhone,
+        })
+
         await prisma.voiceConversation.update({
           where: { id: conversation.id },
           data: {
@@ -149,6 +177,8 @@ export async function processRetellWebhook(
               ...metadata,
               curogramEscalationAttemptedAt: new Date().toISOString(),
               curogramEscalationError: 'Missing valid callerNumber for Curogram payload',
+              curogramEscalationRequestId: requestId,
+              curogramEscalationEventType: eventType,
             } as Prisma.InputJsonObject,
           },
         })
