@@ -7,6 +7,13 @@
 import { prisma } from './db'
 import { RetellCall } from './retell-api'
 import { createAuditLog } from './audit'
+import type { Prisma } from '@prisma/client'
+import {
+  isCurogramEscalationEnabled,
+  normalizePhoneToE164,
+  resolveCurogramIntentTopic,
+  sendCurogramEscalation,
+} from './curogram'
 
 export interface ExtractedCallData {
   call_summary?: string
@@ -38,6 +45,131 @@ export interface ExtractedCallData {
     reference_number?: string
   }
   insurance_verification_missing_fields?: string[]
+}
+
+type EscalationConversation = {
+  id: string
+  metadata: Prisma.JsonValue | null
+  callerPhone: string
+  retellCallId: string | null
+}
+
+async function triggerCurogramAfterRetellProcessing(
+  practiceId: string,
+  call: RetellCall,
+  extractedData: ExtractedCallData,
+  conversation: EscalationConversation
+): Promise<void> {
+  if (!call.call_id) return
+
+  let retellIntegration: { curogramEscalationEnabled: boolean; curogramEscalationUrl: string | null } | null = null
+  try {
+    retellIntegration = await prisma.retellIntegration.findUnique({
+      where: { practiceId },
+      select: {
+        curogramEscalationEnabled: true,
+        curogramEscalationUrl: true,
+      },
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    const missingCurogramColumns =
+      message.includes('retell_integrations.curogramEscalationEnabled') ||
+      message.includes('retell_integrations.curogramEscalationUrl')
+    if (!missingCurogramColumns) throw error
+    console.warn('[Curogram Escalation] Migration not yet applied; skipping post-call escalation', {
+      practiceId,
+      callId: call.call_id,
+    })
+    return
+  }
+
+  const enabled = isCurogramEscalationEnabled({
+    enabled: Boolean(retellIntegration?.curogramEscalationEnabled),
+    endpointUrl: retellIntegration?.curogramEscalationUrl,
+  })
+  if (!enabled) return
+
+  const metadata =
+    conversation.metadata && typeof conversation.metadata === 'object'
+      ? (conversation.metadata as Record<string, unknown>)
+      : {}
+
+  // Enforce one escalation attempt per call after full Retell processing.
+  if (metadata.curogramEscalationAttemptedAt || metadata.curogramEscalationSentAt) return
+
+  const requestId = `retell-curogram-post-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const callerNumber = normalizePhoneToE164(
+    extractedData.user_phone_number || call.from_number || call.to_number || conversation.callerPhone
+  )
+
+  if (!callerNumber) {
+    await prisma.voiceConversation.update({
+      where: { id: conversation.id },
+      data: {
+        metadata: {
+          ...metadata,
+          curogramEscalationAttemptedAt: new Date().toISOString(),
+          curogramEscalationError: 'Missing valid callerNumber for Curogram payload',
+          curogramEscalationRequestId: requestId,
+          curogramEscalationEventType: 'post_call_processing',
+        } as Prisma.InputJsonObject,
+      },
+    })
+    return
+  }
+
+  const intentTopic = resolveCurogramIntentTopic({
+    callReason: extractedData.call_reason,
+    callSummary: extractedData.call_summary,
+    defaultIntent: process.env.CUROGRAM_AI_ESCALATION_DEFAULT_INTENT || 'AI call escalation',
+  })
+
+  console.log('[Curogram Escalation] Sending after Retell processing', {
+    requestId,
+    practiceId,
+    callId: call.call_id,
+    callerNumber,
+    hasIntentTopic: Boolean(intentTopic),
+  })
+
+  const escalationResult = await sendCurogramEscalation(
+    {
+      callerNumber,
+      intentTopic,
+    },
+    {
+      endpointUrl: retellIntegration?.curogramEscalationUrl,
+      requestId,
+      callId: call.call_id,
+    }
+  )
+
+  console.log('[Curogram Escalation] Post-call result', {
+    requestId,
+    practiceId,
+    callId: call.call_id,
+    ok: escalationResult.ok,
+    status: escalationResult.status,
+    responsePreview: escalationResult.body.slice(0, 200),
+  })
+
+  await prisma.voiceConversation.update({
+    where: { id: conversation.id },
+    data: {
+      metadata: {
+        ...metadata,
+        curogramEscalationAttemptedAt: new Date().toISOString(),
+        curogramEscalationSentAt: escalationResult.ok ? new Date().toISOString() : null,
+        curogramEscalationStatus: escalationResult.status,
+        curogramEscalationResponse: escalationResult.body.slice(0, 500),
+        curogramEscalationCallerNumber: callerNumber,
+        curogramEscalationIntentTopic: intentTopic || null,
+        curogramEscalationRequestId: requestId,
+        curogramEscalationEventType: 'post_call_processing',
+      } as Prisma.InputJsonObject,
+    },
+  })
 }
 
 function firstNonEmptyString(value: unknown): string | undefined {
@@ -477,6 +609,7 @@ export async function processRetellCallData(
   console.log('[processRetellCallData] Patient processing result:', { patientId, isNew })
 
   // Update or create voice conversation record
+  let conversationForEscalation: EscalationConversation | null = null
   if (call.call_id) {
     const phoneNumber = extractedData.user_phone_number || 'unknown'
     
@@ -494,7 +627,7 @@ export async function processRetellCallData(
           ? (existingConversation.metadata as Record<string, unknown>)
           : {}
 
-      await prisma.voiceConversation.update({
+      conversationForEscalation = await prisma.voiceConversation.update({
         where: { id: existingConversation.id },
         data: {
           patientId: patientId || existingConversation.patientId,
@@ -510,7 +643,7 @@ export async function processRetellCallData(
         },
       })
     } else {
-      await prisma.voiceConversation.create({
+      conversationForEscalation = await prisma.voiceConversation.create({
         data: {
           practiceId,
           patientId: patientId || undefined,
@@ -525,6 +658,10 @@ export async function processRetellCallData(
         },
       })
     }
+  }
+
+  if (conversationForEscalation) {
+    await triggerCurogramAfterRetellProcessing(practiceId, call, extractedData, conversationForEscalation)
   }
 
   return { patientId, extractedData }

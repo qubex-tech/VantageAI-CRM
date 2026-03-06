@@ -11,6 +11,9 @@ export interface RetellCall {
   agent_id: string
   agent_name?: string
   call_status: string
+  from_number?: string
+  to_number?: string
+  direction?: 'inbound' | 'outbound'
   start_timestamp?: number
   end_timestamp?: number
   duration_ms?: number

@@ -8,13 +8,6 @@ import { prisma } from './db'
 import { findOrCreatePatientByPhone, getAvailableSlots, bookAppointment, cancelAppointment } from './agentActions'
 import { redactPHI } from './phi'
 import { createAuditLog } from './audit'
-import type { Prisma } from '@prisma/client'
-import {
-  isCurogramEscalationEnabled,
-  normalizePhoneToE164,
-  resolveCurogramIntentTopic,
-  sendCurogramEscalation,
-} from './curogram'
 
 /**
  * RetellAI webhook payload - matches https://docs.retellai.com/features/webhook-overview
@@ -53,7 +46,6 @@ export async function processRetellWebhook(
 ): Promise<any> {
   const { event: eventType, call, transcript, tool_calls } = event
   const callId = call?.call_id
-  const requestId = `retell-curogram-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
   // Caller phone: RetellAI uses from_number (inbound) / to_number (outbound) per docs
   const callerPhone =
@@ -88,143 +80,6 @@ export async function processRetellWebhook(
         endedAt: call?.end_timestamp ? new Date(call.end_timestamp) : undefined,
         updatedAt: new Date(),
       },
-    })
-  }
-
-  // Trigger Curogram escalation-to-text once per call.
-  let retellIntegration: { curogramEscalationEnabled: boolean; curogramEscalationUrl: string | null } | null = null
-  try {
-    retellIntegration = await prisma.retellIntegration.findUnique({
-      where: { practiceId },
-      select: {
-        curogramEscalationEnabled: true,
-        curogramEscalationUrl: true,
-      },
-    })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    const missingCurogramColumns =
-      message.includes('retell_integrations.curogramEscalationEnabled') ||
-      message.includes('retell_integrations.curogramEscalationUrl')
-    if (!missingCurogramColumns) {
-      throw error
-    }
-    console.warn('[Curogram Escalation] Migration not yet applied; feature temporarily disabled for this practice', {
-      practiceId,
-      callId,
-    })
-  }
-  const curogramEscalationEnabled = isCurogramEscalationEnabled({
-    enabled: Boolean(retellIntegration?.curogramEscalationEnabled),
-    endpointUrl: retellIntegration?.curogramEscalationUrl,
-  })
-
-  if (conversation && callId && curogramEscalationEnabled) {
-    const metadata = (conversation.metadata || {}) as Record<string, unknown>
-    const alreadySent = Boolean(metadata.curogramEscalationSentAt)
-    const shouldAttemptEscalation =
-      !alreadySent &&
-      (eventType === 'call_started' || eventType === 'call_analyzed' || eventType === 'call_ended')
-
-    if (shouldAttemptEscalation) {
-      const normalizedCallerNumber = normalizePhoneToE164(callerPhone)
-      if (normalizedCallerNumber) {
-        const callAnalysis = (call?.call_analysis || {}) as Record<string, unknown>
-        const customAnalysis = (callAnalysis.custom_analysis_data || {}) as Record<string, unknown>
-        const metadataFromCall = (call?.metadata || {}) as Record<string, unknown>
-
-        const intentTopic = resolveCurogramIntentTopic({
-          callReason:
-            (customAnalysis.call_reason as string | undefined) ||
-            (callAnalysis.call_reason as string | undefined) ||
-            (metadataFromCall.call_reason as string | undefined),
-          callSummary:
-            (callAnalysis.call_summary as string | undefined) ||
-            (customAnalysis.call_summary as string | undefined),
-          defaultIntent: process.env.CUROGRAM_AI_ESCALATION_DEFAULT_INTENT || 'AI call escalation',
-        })
-
-        console.log('[Curogram Escalation] Sending', {
-          requestId,
-          practiceId,
-          callId,
-          eventType,
-          callerNumber: normalizedCallerNumber,
-          hasIntentTopic: Boolean(intentTopic),
-        })
-
-        const escalationResult = await sendCurogramEscalation({
-          callerNumber: normalizedCallerNumber,
-          intentTopic,
-        }, {
-          endpointUrl: retellIntegration?.curogramEscalationUrl,
-          requestId,
-          callId,
-        })
-
-        console.log('[Curogram Escalation] Result', {
-          requestId,
-          practiceId,
-          callId,
-          ok: escalationResult.ok,
-          status: escalationResult.status,
-          responsePreview: escalationResult.body.slice(0, 200),
-        })
-
-        const escalationMeta = {
-          ...metadata,
-          curogramEscalationAttemptedAt: new Date().toISOString(),
-          curogramEscalationSentAt: null as string | null,
-          curogramEscalationStatus: escalationResult.status,
-          curogramEscalationResponse: escalationResult.body.slice(0, 500),
-          curogramEscalationCallerNumber: normalizedCallerNumber,
-          curogramEscalationIntentTopic: intentTopic || null,
-          curogramEscalationRequestId: requestId,
-          curogramEscalationEventType: eventType,
-        }
-
-        if (escalationResult.ok) {
-          escalationMeta.curogramEscalationSentAt = new Date().toISOString()
-        }
-
-        conversation = await prisma.voiceConversation.update({
-          where: { id: conversation.id },
-          data: {
-            metadata: escalationMeta as Prisma.InputJsonObject,
-          },
-        })
-      } else {
-        console.warn('[Curogram Escalation] Skipped: invalid caller number', {
-          requestId,
-          practiceId,
-          callId,
-          callerPhone,
-        })
-
-        await prisma.voiceConversation.update({
-          where: { id: conversation.id },
-          data: {
-            metadata: {
-              ...metadata,
-              curogramEscalationAttemptedAt: new Date().toISOString(),
-              curogramEscalationError: 'Missing valid callerNumber for Curogram payload',
-              curogramEscalationRequestId: requestId,
-              curogramEscalationEventType: eventType,
-            } as Prisma.InputJsonObject,
-          },
-        })
-      }
-    }
-  } else if (
-    conversation &&
-    callId &&
-    retellIntegration?.curogramEscalationEnabled &&
-    !retellIntegration?.curogramEscalationUrl?.trim()
-  ) {
-    console.warn('[Curogram Escalation] Skipped: setting enabled without URL', {
-      requestId,
-      practiceId,
-      callId,
     })
   }
 
