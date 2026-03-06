@@ -19,9 +19,9 @@ function parseTimeoutMs(raw: string | undefined): number {
   return parsed
 }
 
-export function normalizePhoneToE164(phone: string | undefined | null): string | null {
-  if (!phone) return null
-  const trimmed = phone.trim()
+export function normalizePhoneToE164(phone: unknown): string | null {
+  if (phone === null || phone === undefined) return null
+  const trimmed = String(phone).trim()
   if (!trimmed) return null
 
   if (trimmed.startsWith('+')) {
