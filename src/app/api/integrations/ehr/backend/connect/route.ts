@@ -15,8 +15,16 @@ const bodySchema = z.object({
   scopes: z.string().optional(),
 })
 
-function getDefaultBackendScopes() {
-  return process.env.EHR_BACKEND_SCOPES || 'system/Patient.read system/DocumentReference.read'
+function getDefaultBackendScopes(settings?: { enableWrite?: boolean; enablePatientCreate?: boolean; enableNoteCreate?: boolean }) {
+  if (process.env.EHR_BACKEND_SCOPES) {
+    return process.env.EHR_BACKEND_SCOPES
+  }
+  const scopes = new Set(['system/Patient.read', 'system/DocumentReference.read'])
+  if (settings?.enableWrite) {
+    if (settings.enablePatientCreate) scopes.add('system/Patient.write')
+    if (settings.enableNoteCreate) scopes.add('system/DocumentReference.write')
+  }
+  return Array.from(scopes).join(' ')
 }
 
 export async function POST(req: NextRequest) {
@@ -35,6 +43,9 @@ export async function POST(req: NextRequest) {
     if (!parsed.data.practiceId && !isApiKeyAuth) {
       return NextResponse.json({ error: 'practiceId is required' }, { status: 400 })
     }
+    if (isApiKeyAuth && !parsed.data.practiceId) {
+      return NextResponse.json({ error: 'practiceId is required for API key auth' }, { status: 400 })
+    }
 
     const authContext = isApiKeyAuth
       ? { practiceId: parsed.data.practiceId!, user: { id: 'system' } }
@@ -52,6 +63,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Provider config missing or invalid' }, { status: 400 })
     }
     const config = configParse.data as Record<string, unknown>
+    if ((config as any).authFlow !== 'backend_services') {
+      return NextResponse.json(
+        { error: 'Provider is configured for SMART App Launch. Switch auth flow to backend services.' },
+        { status: 409 }
+      )
+    }
+    const authFlow = 'backend_services'
     const issuer = String(config.issuer)
     const discovery = await discoverSmartConfiguration(issuer)
 
@@ -70,7 +88,7 @@ export async function POST(req: NextRequest) {
         })
       : undefined
 
-    const scopes = parsed.data.scopes || getDefaultBackendScopes()
+    const scopes = parsed.data.scopes || getDefaultBackendScopes(settings || undefined)
     const tokenResponse = await exchangeClientCredentials({
       tokenEndpoint: discovery.tokenEndpoint,
       clientId: String(config.clientId),
@@ -97,13 +115,15 @@ export async function POST(req: NextRequest) {
 
     const connection = await prisma.ehrConnection.upsert({
       where: {
-        tenantId_providerId_issuer: {
+        tenantId_providerId_issuer_authFlow: {
           tenantId: practiceId,
           providerId: provider.id,
           issuer: discovery.issuer,
+          authFlow,
         },
       },
       update: {
+        authFlow,
         fhirBaseUrl: discovery.fhirBaseUrl,
         authorizationEndpoint: discovery.authorizationEndpoint,
         tokenEndpoint: discovery.tokenEndpoint,
@@ -121,6 +141,7 @@ export async function POST(req: NextRequest) {
       create: {
         tenantId: practiceId,
         providerId: provider.id,
+        authFlow,
         issuer: discovery.issuer,
         fhirBaseUrl: discovery.fhirBaseUrl,
         authorizationEndpoint: discovery.authorizationEndpoint,

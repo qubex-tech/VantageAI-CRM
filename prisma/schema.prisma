@@ -430,6 +430,7 @@ model EhrConnection {
   id                    String   @id @default(uuid())
   tenantId              String
   providerId            String
+  authFlow              String   @default("smart_launch")
   status                String   @default("connected")
   issuer                String
   fhirBaseUrl           String
@@ -451,9 +452,10 @@ model EhrConnection {
   practice Practice @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   facilityMaps EhrFacilityMap[]
 
-  @@unique([tenantId, providerId, issuer])
+  @@unique([tenantId, providerId, issuer, authFlow])
   @@index([tenantId])
   @@index([providerId])
+  @@index([authFlow])
   @@index([status])
   @@map("ehr_connections")
 }

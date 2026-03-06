@@ -64,6 +64,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Provider config missing or invalid' }, { status: 400 })
     }
     const config = configParse.data
+    const authFlow = 'smart_launch'
 
     const baseUrl = process.env.APP_BASE_URL
     if (!baseUrl) {
@@ -158,13 +159,15 @@ export async function GET(req: NextRequest) {
 
     const connection = await prisma.ehrConnection.upsert({
       where: {
-        tenantId_providerId_issuer: {
+        tenantId_providerId_issuer_authFlow: {
           tenantId: practiceId,
           providerId: provider.id,
           issuer: context.issuer,
+          authFlow,
         },
       },
       update: {
+        authFlow,
         fhirBaseUrl: context.fhirBaseUrl,
         authorizationEndpoint: context.authorizationEndpoint,
         tokenEndpoint: context.tokenEndpoint,
@@ -186,6 +189,7 @@ export async function GET(req: NextRequest) {
       create: {
         tenantId: practiceId,
         providerId: provider.id,
+        authFlow,
         issuer: context.issuer,
         fhirBaseUrl: context.fhirBaseUrl,
         authorizationEndpoint: context.authorizationEndpoint,

@@ -67,9 +67,24 @@ Stored in `practice_settings.ehrIntegrations`:
 2. Select a provider and enable it
 3. Configure issuer + client ID (+ client secret if needed)
 4. Save settings
-5. Use **Standalone connect** or configure the EHR launch URL
-6. For backend services, call **POST** `/api/integrations/ehr/backend/connect`
-   - For server-to-server usage, set `EHR_BACKEND_API_KEY` and send `x-api-key` or `Authorization: Bearer <key>`
+5. Use **Standalone connect** or configure the EHR launch URL for SMART App Launch.
+6. For backend services:
+   - Set the provider `authFlow` to `backend_services`.
+   - Call **POST** `/api/integrations/ehr/backend/connect`.
+   - For server-to-server usage, set `EHR_BACKEND_API_KEY` and send `x-api-key` or `Authorization: Bearer <key>`.
+   - Backend services should use `system/*` scopes (read + write as needed).
+
+## Hybrid SMART + Backend Services
+
+Use two eCW apps:
+
+- **SMART App Launch app** for CRM user login + patient context.
+- **Backend Services app** for server-to-server reads/writes (e.g., draft notes or patient creation).
+
+In this framework:
+
+- SMART App Launch routes (`/api/integrations/ehr/login`, `/api/integrations/ehr/launch`) only work when `authFlow=smart_launch`.
+- Backend services tokens are obtained via `/api/integrations/ehr/backend/connect` and should be used for write operations.
 
 ## Troubleshooting Matrix
 

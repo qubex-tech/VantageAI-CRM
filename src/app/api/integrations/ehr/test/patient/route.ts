@@ -21,13 +21,25 @@ export async function GET(req: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ error: 'Missing patientId' }, { status: 400 })
     }
-    const { practiceId, user } = await resolveEhrPractice(parsed.data.practiceId)
+    const apiKey = req.headers.get('x-api-key') || req.headers.get('authorization')
+    const backendApiKey = process.env.EHR_BACKEND_API_KEY
+    const isApiKeyAuth =
+      backendApiKey &&
+      apiKey &&
+      (apiKey === backendApiKey || apiKey === `Bearer ${backendApiKey}`)
+    if (isApiKeyAuth && !parsed.data.practiceId) {
+      return NextResponse.json({ error: 'practiceId is required for API key auth' }, { status: 400 })
+    }
+    const authContext = isApiKeyAuth
+      ? { practiceId: parsed.data.practiceId!, user: { id: 'system' } }
+      : await resolveEhrPractice(parsed.data.practiceId)
+    const { practiceId, user } = authContext
     const settings = await getEhrSettings(practiceId)
     if (!settings?.enabledProviders?.includes(parsed.data.providerId as any)) {
       return NextResponse.json({ error: 'Provider not enabled for tenant' }, { status: 403 })
     }
 
-    const connection = await prisma.ehrConnection.findFirst({
+    const connections = await prisma.ehrConnection.findMany({
       where: {
         tenantId: practiceId,
         providerId: parsed.data.providerId,
@@ -35,8 +47,22 @@ export async function GET(req: NextRequest) {
       },
       orderBy: { updatedAt: 'desc' },
     })
+    const expectedAuthFlow = isApiKeyAuth ? 'backend_services' : 'smart_launch'
+    const connection = connections.find((candidate) => candidate.authFlow === expectedAuthFlow)
 
     if (!connection?.accessTokenEnc) {
+      if (connections.length > 0 && expectedAuthFlow === 'smart_launch') {
+        return NextResponse.json(
+          { error: 'SMART App Launch connection required. Use standalone connect.' },
+          { status: 409 }
+        )
+      }
+      if (expectedAuthFlow === 'backend_services') {
+        return NextResponse.json(
+          { error: 'No backend services connection. Use backend connect endpoint.' },
+          { status: 409 }
+        )
+      }
       return NextResponse.json({ error: 'No active EHR connection' }, { status: 404 })
     }
 

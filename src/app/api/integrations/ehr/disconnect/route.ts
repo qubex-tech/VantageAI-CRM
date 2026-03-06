@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Provider not enabled for tenant' }, { status: 403 })
     }
 
-    const connection = await prisma.ehrConnection.findFirst({
+    const connections = await prisma.ehrConnection.findMany({
       where: {
         tenantId: practiceId,
         providerId: parsed.data.providerId,
@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
       },
       orderBy: { updatedAt: 'desc' },
     })
+    const connection = connections.find((candidate) => candidate.authFlow === 'smart_launch')
 
     if (!connection) {
       return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
