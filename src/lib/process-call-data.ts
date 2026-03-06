@@ -661,6 +661,29 @@ export async function processRetellCallData(
   }
 
   if (conversationForEscalation) {
+    const markerMetadata =
+      conversationForEscalation.metadata && typeof conversationForEscalation.metadata === 'object'
+        ? (conversationForEscalation.metadata as Record<string, unknown>)
+        : {}
+
+    // Diagnostic marker to confirm this post-call pipeline runs in production.
+    conversationForEscalation = await prisma.voiceConversation.update({
+      where: { id: conversationForEscalation.id },
+      data: {
+        metadata: {
+          ...markerMetadata,
+          curogramPipelineSeenAt: new Date().toISOString(),
+          curogramPipelineVersion: 'post_call_v1',
+        } as Prisma.InputJsonObject,
+      },
+    })
+
+    console.log('[Curogram Escalation] Post-call pipeline reached', {
+      practiceId,
+      callId: call.call_id,
+      conversationId: conversationForEscalation.id,
+    })
+
     await triggerCurogramAfterRetellProcessing(practiceId, call, extractedData, conversationForEscalation)
   }
 
