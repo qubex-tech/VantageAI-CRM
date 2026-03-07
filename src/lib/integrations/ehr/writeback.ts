@@ -250,7 +250,7 @@ export async function writeBackRetellCallToEhr(params: {
       const name =
         parsePatientName(patientRecord.name) || parsePatientName(extractedData.patient_name)
       if (name) {
-        const telecom = []
+        const telecom: Array<{ system: 'phone' | 'email'; value: string; use?: string }> = []
         const phone = patientRecord.primaryPhone || patientRecord.phone
         if (phone) telecom.push({ system: 'phone', value: phone, use: 'mobile' })
         if (patientRecord.email) telecom.push({ system: 'email', value: patientRecord.email })
