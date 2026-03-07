@@ -1,6 +1,7 @@
 import { inngest } from '../client'
 import { getRetellClient } from '@/lib/retell-api'
 import { processRetellCallData } from '@/lib/process-call-data'
+import { writeBackRetellCallToEhr } from '@/lib/integrations/ehr/writeback'
 import type { RetellCall } from '@/lib/retell-api'
 
 /**
@@ -47,8 +48,17 @@ export const processRetellCallEnded = inngest.createFunction(
       return { error: 'Failed to get call' }
     }
 
-    await step.run('process-call-data', async () => {
-      await processRetellCallData(practiceId, fullCall, null)
+    const { patientId, extractedData } = await step.run('process-call-data', async () => {
+      return processRetellCallData(practiceId, fullCall, null)
+    })
+
+    await step.run('ehr-writeback', async () => {
+      await writeBackRetellCallToEhr({
+        practiceId,
+        patientId,
+        call: fullCall,
+        extractedData,
+      })
     })
 
     return { callId, practiceId }

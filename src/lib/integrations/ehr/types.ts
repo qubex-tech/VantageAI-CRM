@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export type EhrProviderId = 'ecw' | 'pcc' | 'athena' | 'epic' | 'generic'
+export type EhrProviderId = 'ecw' | 'ecw_bulk' | 'ecw_write' | 'pcc' | 'athena' | 'epic' | 'generic'
 
 export type EhrProviderField = {
   id: string

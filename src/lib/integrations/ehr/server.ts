@@ -94,7 +94,7 @@ export function isIssuerAllowed(issuer: string): boolean {
 }
 
 export function getPrivateKeyJwtConfig(providerId: string) {
-  if (providerId !== 'ecw') {
+  if (!providerId.startsWith('ecw')) {
     return null
   }
   if (process.env.EHR_ECW_AUTH_MODE === 'client_secret') {

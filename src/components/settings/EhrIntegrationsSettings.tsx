@@ -65,6 +65,27 @@ const fallbackProviders: Provider[] = [
     ],
   },
   {
+    id: 'ecw_bulk',
+    displayName: 'eClinicalWorks - Backend (Bulk Read)',
+    uiFields: [
+      { id: 'issuer', label: 'Issuer URL', type: 'url', required: true },
+      { id: 'fhirBaseUrl', label: 'FHIR Base URL (optional override)', type: 'url' },
+      { id: 'clientId', label: 'Client ID', type: 'text', required: true },
+      { id: 'clientSecret', label: 'Client Secret (optional)', type: 'password' },
+    ],
+    supportsBulkExport: true,
+  },
+  {
+    id: 'ecw_write',
+    displayName: 'eClinicalWorks - Backend (Write)',
+    uiFields: [
+      { id: 'issuer', label: 'Issuer URL', type: 'url', required: true },
+      { id: 'fhirBaseUrl', label: 'FHIR Base URL (optional override)', type: 'url' },
+      { id: 'clientId', label: 'Client ID', type: 'text', required: true },
+      { id: 'clientSecret', label: 'Client Secret (optional)', type: 'password' },
+    ],
+  },
+  {
     id: 'pcc',
     displayName: 'PointClickCare (PCC)',
     uiFields: [
@@ -111,10 +132,10 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
   )
 
   const activePracticeId = practiceId || selectedPracticeId
+  const isEcwProvider = selectedProviderId.startsWith('ecw')
+  const isBackendProvider = selectedProviderId.startsWith('ecw_')
   const requiresEcwKey =
-    selectedProviderId === 'ecw' &&
-    settings.enabledProviders.includes('ecw') &&
-    !privateKeyJwtConfigured
+    isEcwProvider && settings.enabledProviders.includes(selectedProviderId) && !privateKeyJwtConfigured
 
   const apiUrl = (path: string) => {
     if (!activePracticeId) return path
@@ -276,6 +297,10 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
 
   const testFetchPatient = async () => {
     setTestResult(null)
+    if (isBackendProvider) {
+      setTestResult('Backend services connection requires API key usage. Use the backend connect endpoint.')
+      return
+    }
     if (!patientId) {
       setTestResult('Patient ID is required')
       return
@@ -295,6 +320,10 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
 
   const testCreateNote = async () => {
     setNoteResult(null)
+    if (isBackendProvider) {
+      setNoteResult('Backend services connection requires API key usage. Use the backend connect endpoint.')
+      return
+    }
     if (!notePatientId || !noteText) {
       setNoteResult('Patient ID and note text are required')
       return
@@ -398,8 +427,8 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
                 className="shrink-0"
                 />
               </div>
-              {selectedProviderId === 'ecw' &&
-                settings.enabledProviders.includes('ecw') &&
+              {isEcwProvider &&
+                settings.enabledProviders.includes(selectedProviderId) &&
                 !privateKeyJwtConfigured && (
                   <div className="rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
                     eCW requires a JWKS URL for client authentication. Configure
@@ -514,24 +543,35 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
             <Button onClick={saveSettings} disabled={saving || requiresEcwKey}>
               {saving ? 'Saving...' : 'Save settings'}
             </Button>
-            <Button variant="outline" onClick={startStandaloneConnect}>
-              Standalone connect
-            </Button>
+            {!isBackendProvider && (
+              <Button variant="outline" onClick={startStandaloneConnect}>
+                Standalone connect
+              </Button>
+            )}
             <Button variant="outline" onClick={disconnect}>
               Disconnect
             </Button>
           </div>
-          <div className="rounded border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
-            <p className="font-medium text-gray-700">EHR Launch URL</p>
-            <p className="break-all">
-              {origin
-                ? `${origin}/api/integrations/ehr/launch?providerId=${selectedProviderId}`
-                : `/api/integrations/ehr/launch?providerId=${selectedProviderId}`}
-            </p>
-            <p className="mt-1">
-              Configure this as the SMART launch URL in your EHR app registry.
-            </p>
-          </div>
+          {!isBackendProvider ? (
+            <div className="rounded border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
+              <p className="font-medium text-gray-700">EHR Launch URL</p>
+              <p className="break-all">
+                {origin
+                  ? `${origin}/api/integrations/ehr/launch?providerId=${selectedProviderId}`
+                  : `/api/integrations/ehr/launch?providerId=${selectedProviderId}`}
+              </p>
+              <p className="mt-1">
+                Configure this as the SMART launch URL in your EHR app registry.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
+              Backend services connection uses the backend connect endpoint.
+              <div className="mt-1 break-all text-blue-900">
+                {origin ? `${origin}/api/integrations/ehr/backend/connect` : '/api/integrations/ehr/backend/connect'}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -577,7 +617,9 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
             value={patientId}
             onChange={(e) => setPatientId(e.target.value)}
           />
-          <Button onClick={testFetchPatient}>Fetch patient by ID</Button>
+          <Button onClick={testFetchPatient} disabled={isBackendProvider}>
+            Fetch patient by ID
+          </Button>
           {testResult && <div className="text-sm text-gray-700">{testResult}</div>}
         </CardContent>
       </Card>
@@ -604,7 +646,9 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
             <Switch checked={requireBinary} onCheckedChange={setRequireBinary} />
             <span className="text-sm text-gray-600">Use Binary attachment</span>
           </div>
-          <Button onClick={testCreateNote}>Create draft note</Button>
+          <Button onClick={testCreateNote} disabled={isBackendProvider}>
+            Create draft note
+          </Button>
           {noteResult && <div className="text-sm text-gray-700">{noteResult}</div>}
         </CardContent>
       </Card>

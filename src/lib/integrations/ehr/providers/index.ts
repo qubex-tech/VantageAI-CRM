@@ -1,9 +1,17 @@
 import { EhrProvider, EhrProviderId } from '../types'
 import { ecwProvider } from './ecw'
+import { ecwBulkProvider } from './ecwBulk'
+import { ecwWriteProvider } from './ecwWrite'
 import { pccProvider } from './pcc'
 import { genericSmartProvider } from './genericSmart'
 
-const providers: EhrProvider[] = [ecwProvider, pccProvider, genericSmartProvider]
+const providers: EhrProvider[] = [
+  ecwProvider,
+  ecwBulkProvider,
+  ecwWriteProvider,
+  pccProvider,
+  genericSmartProvider,
+]
 
 export function getProvider(providerId: EhrProviderId): EhrProvider {
   const provider = providers.find((entry) => entry.id === providerId)

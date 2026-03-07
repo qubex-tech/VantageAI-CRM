@@ -74,17 +74,19 @@ Stored in `practice_settings.ehrIntegrations`:
    - For server-to-server usage, set `EHR_BACKEND_API_KEY` and send `x-api-key` or `Authorization: Bearer <key>`.
    - Backend services should use `system/*` scopes (read + write as needed).
 
-## Hybrid SMART + Backend Services
+## Hybrid SMART + Backend Services (eCW)
 
-Use two eCW apps:
+Use three eCW connections:
 
-- **SMART App Launch app** for CRM user login + patient context.
-- **Backend Services app** for server-to-server reads/writes (e.g., draft notes or patient creation).
+- **SMART App Launch app (`ecw`)** for CRM user login + patient context.
+- **Backend Services app (`ecw_bulk`)** for nightly bulk patient reads.
+- **Backend Services app (`ecw_write`)** for write-back after calls (draft notes, optional patient create).
 
 In this framework:
 
 - SMART App Launch routes (`/api/integrations/ehr/login`, `/api/integrations/ehr/launch`) only work when `authFlow=smart_launch`.
 - Backend services tokens are obtained via `/api/integrations/ehr/backend/connect` and should be used for write operations.
+ - Backend services apps use `system/*` scopes and are configured as separate providers (`ecw_bulk`, `ecw_write`).
 
 ## Troubleshooting Matrix
 

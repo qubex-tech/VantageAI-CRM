@@ -35,7 +35,10 @@ export async function GET(req: NextRequest) {
       },
       orderBy: { updatedAt: 'desc' },
     })
-    const connection = connections.find((candidate) => candidate.authFlow === 'smart_launch')
+    const expectedAuthFlow = parsed.data.providerId.startsWith('ecw_')
+      ? 'backend_services'
+      : 'smart_launch'
+    const connection = connections.find((candidate) => candidate.authFlow === expectedAuthFlow)
 
     if (!connection) {
       return NextResponse.json({ connected: false })
@@ -49,10 +52,9 @@ export async function GET(req: NextRequest) {
       try {
         const tokenEndpoint = connection.tokenEndpoint || undefined
         const privateKeyConfig = tokenEndpoint ? getPrivateKeyJwtConfig(connection.providerId) : null
-        const audOverride =
-          connection.providerId === 'ecw'
-            ? process.env.EHR_ECW_CLIENT_ASSERTION_AUD || undefined
-            : undefined
+        const audOverride = connection.providerId.startsWith('ecw')
+          ? process.env.EHR_ECW_CLIENT_ASSERTION_AUD || undefined
+          : undefined
         const client = new FhirClient({
           baseUrl: connection.fhirBaseUrl,
           tokenEndpoint,

@@ -68,10 +68,9 @@ export async function GET(req: NextRequest) {
 
     const tokenEndpoint = connection.tokenEndpoint || undefined
     const privateKeyConfig = tokenEndpoint ? getPrivateKeyJwtConfig(connection.providerId) : null
-    const audOverride =
-      connection.providerId === 'ecw'
-        ? process.env.EHR_ECW_CLIENT_ASSERTION_AUD || undefined
-        : undefined
+    const audOverride = connection.providerId.startsWith('ecw')
+      ? process.env.EHR_ECW_CLIENT_ASSERTION_AUD || undefined
+      : undefined
     const client = new FhirClient({
       baseUrl: connection.fhirBaseUrl,
       tokenEndpoint,

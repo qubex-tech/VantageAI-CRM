@@ -32,7 +32,10 @@ export async function POST(req: NextRequest) {
       },
       orderBy: { updatedAt: 'desc' },
     })
-    const connection = connections.find((candidate) => candidate.authFlow === 'smart_launch')
+    const expectedAuthFlow = parsed.data.providerId.startsWith('ecw_')
+      ? 'backend_services'
+      : 'smart_launch'
+    const connection = connections.find((candidate) => candidate.authFlow === expectedAuthFlow)
 
     if (!connection) {
       return NextResponse.json({ error: 'Connection not found' }, { status: 404 })

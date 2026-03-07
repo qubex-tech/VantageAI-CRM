@@ -15,16 +15,19 @@ const bodySchema = z.object({
   scopes: z.string().optional(),
 })
 
-function getDefaultBackendScopes(settings?: { enableWrite?: boolean; enablePatientCreate?: boolean; enableNoteCreate?: boolean }) {
+function getDefaultBackendScopes(params: {
+  provider: ReturnType<typeof getProvider>
+  settings?: { enableWrite?: boolean; enablePatientCreate?: boolean; enableNoteCreate?: boolean }
+}) {
   if (process.env.EHR_BACKEND_SCOPES) {
     return process.env.EHR_BACKEND_SCOPES
   }
-  const scopes = new Set(['system/Patient.read', 'system/DocumentReference.read'])
-  if (settings?.enableWrite) {
-    if (settings.enablePatientCreate) scopes.add('system/Patient.write')
-    if (settings.enableNoteCreate) scopes.add('system/DocumentReference.write')
-  }
-  return Array.from(scopes).join(' ')
+  return params.provider.defaultScopes({
+    enableWrite: params.settings?.enableWrite,
+    enablePatientCreate: params.settings?.enablePatientCreate,
+    enableNoteCreate: params.settings?.enableNoteCreate,
+    enableBulkExport: params.settings?.enableBulkExport,
+  })
 }
 
 export async function POST(req: NextRequest) {
@@ -74,10 +77,9 @@ export async function POST(req: NextRequest) {
     const discovery = await discoverSmartConfiguration(issuer)
 
     const privateKeyConfig = getPrivateKeyJwtConfig(provider.id)
-    const audOverride =
-      provider.id === 'ecw'
-        ? process.env.EHR_ECW_CLIENT_ASSERTION_AUD || undefined
-        : undefined
+    const audOverride = provider.id.startsWith('ecw')
+      ? process.env.EHR_ECW_CLIENT_ASSERTION_AUD || undefined
+      : undefined
     const clientAssertion = privateKeyConfig
       ? createClientAssertion({
           clientId: String(config.clientId),
@@ -88,7 +90,8 @@ export async function POST(req: NextRequest) {
         })
       : undefined
 
-    const scopes = parsed.data.scopes || getDefaultBackendScopes(settings || undefined)
+    const scopes =
+      parsed.data.scopes || getDefaultBackendScopes({ provider, settings: settings || undefined })
     const tokenResponse = await exchangeClientCredentials({
       tokenEndpoint: discovery.tokenEndpoint,
       clientId: String(config.clientId),

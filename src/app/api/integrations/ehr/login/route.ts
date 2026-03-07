@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
       enableNoteCreate: settings.enableNoteCreate,
       enableBulkExport: settings.enableBulkExport,
     })
-    if (provider.id === 'ecw') {
+    if (provider.id.startsWith('ecw')) {
       const oidcScopes = 'openid fhirUser profile offline_access'
       scopes = `${oidcScopes} ${scopes}`.trim()
     }

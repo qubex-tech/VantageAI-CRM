@@ -1,0 +1,350 @@
+import { prisma } from '@/lib/db'
+import { decryptString, encryptString } from '@/lib/integrations/ehr/crypto'
+import { logEhrAudit } from '@/lib/integrations/ehr/audit'
+import { getEhrSettings, getPrivateKeyJwtConfig } from '@/lib/integrations/ehr/server'
+import { createClientAssertion } from '@/lib/integrations/ehr/smartEngine'
+import { createDraftDocumentReference } from '@/lib/integrations/fhir/resources/documentReference'
+import { createPatient } from '@/lib/integrations/fhir/resources/patient'
+import { FhirClient, WriteNotSupportedError } from '@/lib/integrations/fhir/fhirClient'
+import type { ExtractedCallData } from '@/lib/process-call-data'
+import type { RetellCall } from '@/lib/retell-api'
+import type { Prisma } from '@prisma/client'
+
+const WRITEBACK_PROVIDER_ID = 'ecw_write'
+
+type WritebackResult = {
+  status: 'skipped' | 'success' | 'error'
+  reason?: string
+  noteId?: string
+  reviewUrl?: string
+}
+
+function parsePatientName(fullName: string | null | undefined): {
+  given: string[]
+  family?: string
+  text?: string
+} | null {
+  if (!fullName) return null
+  const cleaned = fullName.trim()
+  if (!cleaned) return null
+  const parts = cleaned.split(/\s+/)
+  if (parts.length === 1) {
+    return { given: [parts[0]], text: cleaned }
+  }
+  const family = parts[parts.length - 1]
+  const given = parts.slice(0, -1)
+  return { given, family, text: cleaned }
+}
+
+function truncateText(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value
+  return `${value.slice(0, maxLength)}\n\n[Truncated]`
+}
+
+function buildCallNoteText(call: RetellCall, extractedData: ExtractedCallData): string {
+  const lines: string[] = []
+  lines.push('Vantage AI call summary (draft)')
+  if (call.call_id) lines.push(`Call ID: ${call.call_id}`)
+  if (extractedData.call_reason) lines.push(`Call reason: ${extractedData.call_reason}`)
+  if (extractedData.call_summary) lines.push(`Summary: ${extractedData.call_summary}`)
+  const detailed = extractedData.detailed_call_summary || call.call_analysis?.call_summary
+  if (detailed && detailed !== extractedData.call_summary) {
+    lines.push(`Details: ${detailed}`)
+  }
+  if (extractedData.selected_date || extractedData.selected_time) {
+    lines.push(
+      `Requested time: ${[extractedData.selected_date, extractedData.selected_time]
+        .filter(Boolean)
+        .join(' ')}`
+    )
+  }
+  if (extractedData.preferred_dentist) {
+    lines.push(`Preferred provider: ${extractedData.preferred_dentist}`)
+  }
+  if (extractedData.insurance_verification) {
+    lines.push('Insurance verification captured: yes')
+  }
+  if (call.transcript) {
+    lines.push('')
+    lines.push('Transcript (truncated):')
+    lines.push(truncateText(call.transcript, 4000))
+  }
+  return lines.filter(Boolean).join('\n')
+}
+
+async function markConversationMetadata(
+  practiceId: string,
+  callId: string,
+  updates: Record<string, unknown>
+) {
+  const conversation = await prisma.voiceConversation.findFirst({
+    where: { practiceId, retellCallId: callId },
+  })
+  if (!conversation) return null
+  const existingMetadata =
+    conversation.metadata && typeof conversation.metadata === 'object'
+      ? (conversation.metadata as Record<string, unknown>)
+      : {}
+  return prisma.voiceConversation.update({
+    where: { id: conversation.id },
+    data: {
+      metadata: {
+        ...existingMetadata,
+        ...updates,
+      } as Prisma.InputJsonObject,
+    },
+  })
+}
+
+export async function writeBackRetellCallToEhr(params: {
+  practiceId: string
+  patientId: string | null
+  call: RetellCall
+  extractedData: ExtractedCallData
+}): Promise<WritebackResult> {
+  const { practiceId, patientId, call, extractedData } = params
+  if (!call.call_id) {
+    return { status: 'skipped', reason: 'missing_call_id' }
+  }
+
+  const settings = await getEhrSettings(practiceId)
+  if (!settings?.enabledProviders?.includes(WRITEBACK_PROVIDER_ID as any)) {
+    return { status: 'skipped', reason: 'provider_not_enabled' }
+  }
+  if (!settings.enableWrite || !settings.enableNoteCreate) {
+    return { status: 'skipped', reason: 'write_disabled' }
+  }
+
+  const existingConversation = await prisma.voiceConversation.findFirst({
+    where: { practiceId, retellCallId: call.call_id },
+    select: { metadata: true },
+  })
+  const existingMetadata =
+    existingConversation?.metadata && typeof existingConversation.metadata === 'object'
+      ? (existingConversation.metadata as Record<string, unknown>)
+      : {}
+  if (existingMetadata.ehrWritebackStatus === 'success') {
+    return { status: 'skipped', reason: 'already_written' }
+  }
+
+  await markConversationMetadata(practiceId, call.call_id, {
+    ehrWritebackStatus: 'in_progress',
+    ehrWritebackStartedAt: new Date().toISOString(),
+    ehrWritebackProviderId: WRITEBACK_PROVIDER_ID,
+  })
+
+  try {
+    const connections = await prisma.ehrConnection.findMany({
+      where: {
+        tenantId: practiceId,
+        providerId: WRITEBACK_PROVIDER_ID,
+      },
+      orderBy: { updatedAt: 'desc' },
+    })
+    const connection = connections.find((candidate) => candidate.authFlow === 'backend_services')
+    if (!connection?.accessTokenEnc) {
+      await markConversationMetadata(practiceId, call.call_id, {
+        ehrWritebackStatus: 'error',
+        ehrWritebackError: 'No backend services connection for writeback provider.',
+        ehrWritebackFailedAt: new Date().toISOString(),
+      })
+      return { status: 'error', reason: 'missing_connection' }
+    }
+
+    const tokenEndpoint = connection.tokenEndpoint || undefined
+    const privateKeyConfig = tokenEndpoint ? getPrivateKeyJwtConfig(connection.providerId) : null
+    const audOverride = connection.providerId.startsWith('ecw')
+      ? process.env.EHR_ECW_CLIENT_ASSERTION_AUD || undefined
+      : undefined
+    const client = new FhirClient({
+      baseUrl: connection.fhirBaseUrl,
+      tokenEndpoint,
+      clientId: connection.clientId,
+      clientSecret:
+        !privateKeyConfig && connection.clientSecretEnc
+          ? decryptString(connection.clientSecretEnc)
+          : undefined,
+      clientAssertionProvider:
+        privateKeyConfig && tokenEndpoint
+          ? () =>
+              createClientAssertion({
+                clientId: connection.clientId,
+                tokenEndpoint,
+                privateKeyPem: privateKeyConfig.privateKeyPem,
+                keyId: privateKeyConfig.keyId,
+                audience: audOverride,
+              })
+          : undefined,
+      tokenState: {
+        accessToken: decryptString(connection.accessTokenEnc),
+        refreshToken: connection.refreshTokenEnc
+          ? decryptString(connection.refreshTokenEnc)
+          : undefined,
+        tokenType: undefined,
+        expiresAt: connection.expiresAt,
+        scopes: connection.scopesGranted || undefined,
+      },
+      onTokenRefresh: async (tokenResponse) => {
+        await prisma.ehrConnection.update({
+          where: { id: connection.id },
+          data: {
+            accessTokenEnc: encryptString(tokenResponse.access_token),
+            refreshTokenEnc: tokenResponse.refresh_token
+              ? encryptString(tokenResponse.refresh_token)
+              : connection.refreshTokenEnc,
+            expiresAt: tokenResponse.expires_in
+              ? new Date(Date.now() + tokenResponse.expires_in * 1000)
+              : connection.expiresAt,
+            scopesGranted: tokenResponse.scope || connection.scopesGranted,
+          },
+        })
+        await logEhrAudit({
+          tenantId: practiceId,
+          actorUserId: 'system',
+          action: 'EHR_TOKEN_REFRESH',
+          providerId: connection.providerId,
+          entity: 'EhrConnection',
+          entityId: connection.id,
+        })
+      },
+    })
+
+    let capabilityStatement
+    try {
+      capabilityStatement = await client.getCapabilityStatement()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ''
+      if (message.includes('Token refresh failed') || message.includes('FHIR request failed: 401')) {
+        await prisma.ehrConnection.update({
+          where: { id: connection.id },
+          data: { status: 'expired' },
+        })
+        await logEhrAudit({
+          tenantId: practiceId,
+          actorUserId: 'system',
+          action: 'EHR_TOKEN_EXPIRED',
+          providerId: connection.providerId,
+          entity: 'EhrConnection',
+          entityId: connection.id,
+        })
+        await markConversationMetadata(practiceId, call.call_id, {
+          ehrWritebackStatus: 'error',
+          ehrWritebackError: 'EHR token expired',
+          ehrWritebackFailedAt: new Date().toISOString(),
+        })
+        return { status: 'error', reason: 'token_expired' }
+      }
+      throw error
+    }
+
+    let ehrPatientId: string | null = null
+    let patientRecord = null
+    if (patientId) {
+      patientRecord = await prisma.patient.findUnique({
+        where: { id: patientId },
+      })
+      ehrPatientId = patientRecord?.externalEhrId || null
+    }
+
+    if (!ehrPatientId && settings.enablePatientCreate && patientRecord) {
+      const name =
+        parsePatientName(patientRecord.name) || parsePatientName(extractedData.patient_name)
+      if (name) {
+        const telecom = []
+        const phone = patientRecord.primaryPhone || patientRecord.phone
+        if (phone) telecom.push({ system: 'phone', value: phone, use: 'mobile' })
+        if (patientRecord.email) telecom.push({ system: 'email', value: patientRecord.email })
+        const birthDate = patientRecord.dateOfBirth
+          ? patientRecord.dateOfBirth.toISOString().split('T')[0]
+          : undefined
+        const created = await createPatient(
+          client,
+          {
+            name,
+            telecom: telecom.length ? telecom : undefined,
+            gender: patientRecord.gender || undefined,
+            birthDate,
+          },
+          capabilityStatement
+        )
+        const createdId = (created as any)?.id
+        if (createdId) {
+          ehrPatientId = createdId
+          await prisma.patient.update({
+            where: { id: patientRecord.id },
+            data: { externalEhrId: createdId },
+          })
+          await logEhrAudit({
+            tenantId: practiceId,
+            actorUserId: 'system',
+            action: 'FHIR_WRITE',
+            providerId: connection.providerId,
+            entity: 'Patient',
+            entityId: createdId,
+            metadata: {
+              patientId: patientRecord.id,
+            },
+          })
+        }
+      }
+    }
+
+    if (!ehrPatientId) {
+      await markConversationMetadata(practiceId, call.call_id, {
+        ehrWritebackStatus: 'error',
+        ehrWritebackError: 'Missing EHR patient ID for writeback.',
+        ehrWritebackFailedAt: new Date().toISOString(),
+      })
+      return { status: 'error', reason: 'missing_patient_id' }
+    }
+
+    const noteText = buildCallNoteText(call, extractedData)
+    const created = await createDraftDocumentReference({
+      client,
+      patientId: ehrPatientId,
+      noteText,
+      preferPreliminary: false,
+      capabilityStatement,
+    })
+
+    await logEhrAudit({
+      tenantId: practiceId,
+      actorUserId: 'system',
+      action: 'FHIR_WRITE',
+      providerId: connection.providerId,
+      entity: 'DocumentReference',
+      entityId: created.id || undefined,
+      metadata: {
+        patientId: ehrPatientId,
+        callId: call.call_id,
+      },
+    })
+
+    await markConversationMetadata(practiceId, call.call_id, {
+      ehrWritebackStatus: 'success',
+      ehrWritebackCompletedAt: new Date().toISOString(),
+      ehrWritebackNoteId: created.id || null,
+      ehrWritebackReviewUrl: created.reviewUrl || null,
+      ehrWritebackPatientId: ehrPatientId,
+    })
+
+    return { status: 'success', noteId: created.id, reviewUrl: created.reviewUrl }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'EHR writeback failed'
+    if (error instanceof WriteNotSupportedError) {
+      await markConversationMetadata(practiceId, call.call_id, {
+        ehrWritebackStatus: 'error',
+        ehrWritebackError: 'Write not supported by EHR',
+        ehrWritebackFailedAt: new Date().toISOString(),
+        ehrWritebackSupportedInteractions: error.supportedInteractions,
+      })
+      return { status: 'error', reason: 'write_not_supported' }
+    }
+    await markConversationMetadata(practiceId, call.call_id, {
+      ehrWritebackStatus: 'error',
+      ehrWritebackError: message,
+      ehrWritebackFailedAt: new Date().toISOString(),
+    })
+    return { status: 'error', reason: 'exception' }
+  }
+}
