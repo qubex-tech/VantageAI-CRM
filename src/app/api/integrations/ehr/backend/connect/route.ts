@@ -17,7 +17,12 @@ const bodySchema = z.object({
 
 function getDefaultBackendScopes(params: {
   provider: ReturnType<typeof getProvider>
-  settings?: { enableWrite?: boolean; enablePatientCreate?: boolean; enableNoteCreate?: boolean }
+  settings?: {
+    enableWrite?: boolean
+    enablePatientCreate?: boolean
+    enableNoteCreate?: boolean
+    enableBulkExport?: boolean
+  }
 }) {
   if (process.env.EHR_BACKEND_SCOPES) {
     return process.env.EHR_BACKEND_SCOPES
