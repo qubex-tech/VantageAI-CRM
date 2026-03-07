@@ -2,14 +2,105 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/middleware'
 import { prisma } from '@/lib/db'
 import { createClient } from '@supabase/supabase-js'
-import { isVantageAdmin } from '@/lib/permissions'
+import { canManageUsers } from '@/lib/permissions'
 import { createAuditLog } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
+function getTargetUserAndCheckPermission(
+  currentUser: Awaited<ReturnType<typeof requireAuth>>,
+  targetId: string
+) {
+  const userForPermissions = {
+    id: currentUser.id,
+    email: currentUser.email,
+    name: currentUser.name ?? null,
+    practiceId: currentUser.practiceId,
+    role: currentUser.role,
+  }
+  return { userForPermissions }
+}
+
+/**
+ * PATCH /api/users/[id]
+ * Update user name and/or role. Requires canManageUsers for the user's practice.
+ */
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const currentUser = await requireAuth(req)
+    const { id } = await params
+    if (!id) {
+      return NextResponse.json({ error: 'User ID required' }, { status: 400 })
+    }
+
+    const targetUser = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, practiceId: true, email: true, name: true, role: true },
+    })
+    if (!targetUser) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+    if (!targetUser.practiceId) {
+      return NextResponse.json(
+        { error: 'Cannot update a user without a practice.' },
+        { status: 400 }
+      )
+    }
+
+    const { userForPermissions } = getTargetUserAndCheckPermission(currentUser, id)
+    if (!canManageUsers(userForPermissions, targetUser.practiceId)) {
+      return NextResponse.json(
+        { error: 'You do not have permission to update this user.' },
+        { status: 403 }
+      )
+    }
+
+    const body = await req.json()
+    const { name, role } = body
+    const updateData: { name?: string; role?: string } = {}
+    if (typeof name === 'string' && name.trim()) {
+      updateData.name = name.trim()
+    }
+    if (role === 'practice_admin' || role === 'regular_user') {
+      updateData.role = role
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json({ user: targetUser })
+    }
+
+    const updated = await prisma.user.update({
+      where: { id },
+      data: updateData,
+      select: { id: true, email: true, name: true, role: true, createdAt: true },
+    })
+
+    await createAuditLog({
+      practiceId: targetUser.practiceId,
+      userId: currentUser.id,
+      action: 'update',
+      resourceType: 'user',
+      resourceId: id,
+      changes: { before: targetUser, after: updated },
+    })
+
+    return NextResponse.json({ user: updated })
+  } catch (error) {
+    console.error('Error updating user:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to update user' },
+      { status: 500 }
+    )
+  }
+}
+
 /**
  * DELETE /api/users/[id]
- * Revoke user access: remove from Supabase Auth + Prisma. Vantage Admin only.
+ * Revoke user access: remove from Supabase Auth + Prisma.
+ * Requires canManageUsers for the user's practice (practice admin or vantage admin).
  */
 export async function DELETE(
   req: NextRequest,
@@ -17,21 +108,6 @@ export async function DELETE(
 ) {
   try {
     const currentUser = await requireAuth(req)
-
-    const userForPermissions = {
-      id: currentUser.id,
-      email: currentUser.email,
-      name: currentUser.name ?? null,
-      practiceId: currentUser.practiceId,
-      role: currentUser.role,
-    }
-    if (!isVantageAdmin(userForPermissions)) {
-      return NextResponse.json(
-        { error: 'Only Vantage Admins can revoke user access.' },
-        { status: 403 }
-      )
-    }
-
     const { id } = await params
     if (!id) {
       return NextResponse.json({ error: 'User ID required' }, { status: 400 })
@@ -51,6 +127,26 @@ export async function DELETE(
     })
     if (!targetUser) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+    if (!targetUser.practiceId) {
+      return NextResponse.json(
+        { error: 'Cannot delete a user without a practice.' },
+        { status: 400 }
+      )
+    }
+
+    const userForPermissions = {
+      id: currentUser.id,
+      email: currentUser.email,
+      name: currentUser.name ?? null,
+      practiceId: currentUser.practiceId,
+      role: currentUser.role,
+    }
+    if (!canManageUsers(userForPermissions, targetUser.practiceId)) {
+      return NextResponse.json(
+        { error: 'You do not have permission to remove this user.' },
+        { status: 403 }
+      )
     }
 
     // Delete from Supabase Auth (by email, since we don't store supabase user id)

@@ -2,8 +2,9 @@ import { redirect } from 'next/navigation'
 import { getSupabaseSession } from '@/lib/auth-supabase'
 import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
 import { prisma } from '@/lib/db'
-import { isVantageAdmin, canConfigureAPIs } from '@/lib/permissions'
+import { isVantageAdmin, canConfigureAPIs, canManageUsers } from '@/lib/permissions'
 import { CalSettings } from '@/components/settings/CalSettings'
+import { TeamManagement } from '@/components/settings/TeamManagement'
 import { RetellSettings } from '@/components/settings/RetellSettings'
 import { SendgridSettings } from '@/components/settings/SendgridSettings'
 import { TwilioSettings } from '@/components/settings/TwilioSettings'
@@ -94,11 +95,21 @@ export default async function SettingsPage() {
     }
   }
 
+  const hasTeamTab = !!user.practiceId && canManageUsers(userForPermissions, user.practiceId)
+
   // Determine default tab
   const hasVantageAdminTab = isVantageAdminUser
   const hasPracticeApiTab = isVantageAdminUser
   const hasApiTab = canConfigureAPI && user.practiceId
-  const defaultTab = hasVantageAdminTab ? "vantage-admin" : hasPracticeApiTab ? "practice-api" : hasApiTab ? "api" : undefined
+  const defaultTab = hasVantageAdminTab
+    ? 'vantage-admin'
+    : hasTeamTab
+      ? 'team'
+      : hasPracticeApiTab
+        ? 'practice-api'
+        : hasApiTab
+          ? 'api'
+          : undefined
 
   return (
     <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8 max-w-4xl">
@@ -107,9 +118,12 @@ export default async function SettingsPage() {
         <p className="text-sm text-gray-500">Manage your practice settings</p>
       </div>
 
-      {(hasVantageAdminTab || hasPracticeApiTab || hasApiTab) ? (
+      {(hasVantageAdminTab || hasPracticeApiTab || hasApiTab || hasTeamTab) ? (
         <Tabs defaultValue={defaultTab} className="w-full">
           <TabsList>
+            {hasTeamTab && (
+              <TabsTrigger value="team">Team</TabsTrigger>
+            )}
             {hasVantageAdminTab && (
               <TabsTrigger value="vantage-admin">Vantage Admin</TabsTrigger>
             )}
@@ -120,6 +134,12 @@ export default async function SettingsPage() {
               <TabsTrigger value="api">API Configuration</TabsTrigger>
             )}
           </TabsList>
+
+          {hasTeamTab && (
+            <TabsContent value="team" className="mt-6">
+              <TeamManagement />
+            </TabsContent>
+          )}
 
           {/* Vantage Admin Tab - Only visible to Vantage Admins */}
           {hasVantageAdminTab && (
