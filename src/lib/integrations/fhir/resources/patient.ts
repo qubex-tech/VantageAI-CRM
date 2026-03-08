@@ -52,5 +52,18 @@ export async function createPatient(
     telecom: input.telecom,
     identifier: input.identifiers,
   }
-  return client.request('/Patient', { method: 'POST', body: JSON.stringify(resource) })
+  const bundle = {
+    resourceType: 'Bundle',
+    type: 'transaction',
+    entry: [
+      {
+        resource,
+        request: {
+          method: 'POST',
+          url: 'Patient',
+        },
+      },
+    ],
+  }
+  return client.request('/', { method: 'POST', body: JSON.stringify(bundle) })
 }

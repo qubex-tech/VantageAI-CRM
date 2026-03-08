@@ -128,7 +128,7 @@ export function createClientAssertion(params: {
   audience?: string
 }): string {
   const header = {
-    alg: 'RS256',
+    alg: 'RS384',
     typ: 'JWT',
     ...(params.keyId ? { kid: params.keyId } : {}),
   }
@@ -147,7 +147,7 @@ export function createClientAssertion(params: {
   const payloadEncoded = base64UrlEncode(JSON.stringify(payload))
   const signingInput = `${headerEncoded}.${payloadEncoded}`
 
-  const signer = crypto.createSign('RSA-SHA256')
+  const signer = crypto.createSign('RSA-SHA384')
   signer.update(signingInput)
   signer.end()
   const signature = signer.sign(params.privateKeyPem)

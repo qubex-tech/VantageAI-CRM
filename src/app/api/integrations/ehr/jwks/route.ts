@@ -25,7 +25,7 @@ function getJwks() {
         ...jwk,
         kid,
         use: 'sig',
-        alg: 'RS256',
+        alg: 'RS384',
       },
     ],
   }

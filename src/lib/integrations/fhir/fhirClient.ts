@@ -218,9 +218,22 @@ export class FhirClient {
       identifier: input.identifiers,
     }
 
-    return this.request('/Patient', {
+    const bundle = {
+      resourceType: 'Bundle',
+      type: 'transaction',
+      entry: [
+        {
+          resource,
+          request: {
+            method: 'POST',
+            url: 'Patient',
+          },
+        },
+      ],
+    }
+    return this.request('/', {
       method: 'POST',
-      body: JSON.stringify(resource),
+      body: JSON.stringify(bundle),
     })
   }
 

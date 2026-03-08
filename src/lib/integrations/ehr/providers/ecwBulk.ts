@@ -28,6 +28,6 @@ export const ecwBulkProvider: EhrProvider = {
     return (override || issuer).replace(/\/+$/g, '')
   },
   defaultScopes: () => {
-    return 'system/Patient.read'
+    return 'system/Patient.read system/Group.read'
   },
 }
