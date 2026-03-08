@@ -73,6 +73,21 @@ Stored in `practice_settings.ehrIntegrations`:
    - Call **POST** `/api/integrations/ehr/backend/connect`.
    - For server-to-server usage, set `EHR_BACKEND_API_KEY` and send `x-api-key` or `Authorization: Bearer <key>`.
    - Backend services should use `system/*` scopes (read + write as needed).
+   - If you don't want to reference internal `providerId`, pass `issuer` + `clientId` directly in the request body (and include `scopes`).
+
+Example (issuer + clientId, no providerId):
+
+```
+curl -sS -X POST "https://<your-domain>/api/integrations/ehr/backend/connect" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: <EHR_BACKEND_API_KEY>" \
+  -d '{
+    "practiceId": "<practice-id>",
+    "issuer": "https://<ehr-fhir-base>/fhir/r4/<issuer-id>",
+    "clientId": "<backend-client-id>",
+    "scopes": "system/Patient.read system/DocumentReference.read"
+  }'
+```
 
 ## Hybrid SMART + Backend Services (eCW)
 

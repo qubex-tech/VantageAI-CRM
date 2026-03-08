@@ -10,10 +10,19 @@ import { createClientAssertion, exchangeClientCredentials } from '@/lib/integrat
 import { logEhrAudit } from '@/lib/integrations/ehr/audit'
 
 const bodySchema = z.object({
-  providerId: z.string(),
+  providerId: z.string().optional(),
   practiceId: z.string().optional(),
   scopes: z.string().optional(),
+  issuer: z.string().url().optional(),
+  clientId: z.string().min(3).optional(),
+  clientSecret: z.string().min(4).optional(),
 })
+
+function isEcwIssuer(issuer: string | undefined) {
+  if (!issuer) return false
+  const normalized = issuer.toLowerCase()
+  return normalized.includes('ecwcloud.com') || normalized.includes('eclinicalworks.com')
+}
 
 function getDefaultBackendScopes(params: {
   provider: ReturnType<typeof getProvider>
@@ -60,29 +69,61 @@ export async function POST(req: NextRequest) {
       : await resolveEhrPractice(parsed.data.practiceId)
     const { practiceId, user } = authContext
     const settings = await getEhrSettings(practiceId)
-    if (!settings?.enabledProviders?.includes(parsed.data.providerId as any)) {
-      return NextResponse.json({ error: 'Provider not enabled for tenant' }, { status: 403 })
-    }
-
-    const provider = getProvider(parsed.data.providerId as any)
-    const providerConfig = settings?.providerConfigs?.[provider.id]
-    const configParse = provider.configSchema.safeParse(providerConfig || {})
-    if (!configParse.success) {
-      return NextResponse.json({ error: 'Provider config missing or invalid' }, { status: 400 })
-    }
-    const config = configParse.data as Record<string, unknown>
-    if ((config as any).authFlow !== 'backend_services') {
+    const hasProviderId = Boolean(parsed.data.providerId)
+    const hasDirectConfig = Boolean(parsed.data.issuer && parsed.data.clientId)
+    if (!hasProviderId && !hasDirectConfig) {
       return NextResponse.json(
-        { error: 'Provider is configured for SMART App Launch. Switch auth flow to backend services.' },
-        { status: 409 }
+        { error: 'providerId or issuer+clientId is required' },
+        { status: 400 }
       )
     }
-    const authFlow = 'backend_services'
-    const issuer = String(config.issuer)
+
+    let providerId = parsed.data.providerId
+    let config: Record<string, unknown> = {}
+    let issuer = ''
+    let authFlow = 'backend_services'
+    let useProviderDefaults = false
+
+    if (hasProviderId) {
+      if (!settings?.enabledProviders?.includes(parsed.data.providerId as any)) {
+        return NextResponse.json({ error: 'Provider not enabled for tenant' }, { status: 403 })
+      }
+      const provider = getProvider(parsed.data.providerId as any)
+      const providerConfig = settings?.providerConfigs?.[provider.id]
+      const configParse = provider.configSchema.safeParse(providerConfig || {})
+      if (!configParse.success) {
+        return NextResponse.json({ error: 'Provider config missing or invalid' }, { status: 400 })
+      }
+      config = configParse.data as Record<string, unknown>
+      if ((config as any).authFlow !== 'backend_services') {
+        return NextResponse.json(
+          { error: 'Provider is configured for SMART App Launch. Switch auth flow to backend services.' },
+          { status: 409 }
+        )
+      }
+      providerId = provider.id
+      issuer = String(config.issuer)
+      useProviderDefaults = true
+    } else {
+      issuer = String(parsed.data.issuer)
+      config = {
+        issuer,
+        clientId: parsed.data.clientId,
+        clientSecret: parsed.data.clientSecret,
+        authFlow: 'backend_services',
+      }
+      providerId = isEcwIssuer(issuer) ? 'ecw_write' : 'generic'
+      if (!parsed.data.scopes) {
+        return NextResponse.json(
+          { error: 'scopes is required when providerId is not supplied' },
+          { status: 400 }
+        )
+      }
+    }
     const discovery = await discoverSmartConfiguration(issuer)
 
-    const privateKeyConfig = getPrivateKeyJwtConfig(provider.id)
-    const audOverride = provider.id.startsWith('ecw')
+    const privateKeyConfig = getPrivateKeyJwtConfig(String(providerId))
+    const audOverride = String(providerId).startsWith('ecw') || isEcwIssuer(issuer)
       ? process.env.EHR_ECW_CLIENT_ASSERTION_AUD || undefined
       : undefined
     const clientAssertion = privateKeyConfig
@@ -96,7 +137,13 @@ export async function POST(req: NextRequest) {
       : undefined
 
     const scopes =
-      parsed.data.scopes || getDefaultBackendScopes({ provider, settings: settings || undefined })
+      useProviderDefaults && parsed.data.providerId
+        ? parsed.data.scopes ||
+          getDefaultBackendScopes({
+            provider: getProvider(parsed.data.providerId as any),
+            settings: settings || undefined,
+          })
+        : parsed.data.scopes
     const tokenResponse = await exchangeClientCredentials({
       tokenEndpoint: discovery.tokenEndpoint,
       clientId: String(config.clientId),
@@ -125,7 +172,7 @@ export async function POST(req: NextRequest) {
       where: {
         tenantId_providerId_issuer_authFlow: {
           tenantId: practiceId,
-          providerId: provider.id,
+          providerId: String(providerId),
           issuer: discovery.issuer,
           authFlow,
         },
@@ -148,7 +195,7 @@ export async function POST(req: NextRequest) {
       },
       create: {
         tenantId: practiceId,
-        providerId: provider.id,
+        providerId: String(providerId),
         authFlow,
         issuer: discovery.issuer,
         fhirBaseUrl: discovery.fhirBaseUrl,
@@ -171,7 +218,7 @@ export async function POST(req: NextRequest) {
       tenantId: practiceId,
       actorUserId: user.id,
       action: 'EHR_CONNECT',
-      providerId: provider.id,
+      providerId: String(providerId),
       entity: 'EhrConnection',
       entityId: connection.id,
       metadata: {
