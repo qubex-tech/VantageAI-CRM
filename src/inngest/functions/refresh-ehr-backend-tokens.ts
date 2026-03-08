@@ -37,7 +37,13 @@ export const refreshEhrBackendTokens = inngest.createFunction(
     for (const connection of connections) {
       await step.run(`refresh-${connection.id}`, async () => {
         try {
-          await refreshBackendConnection({ connection, now })
+          const fresh = await prisma.ehrConnection.findUnique({
+            where: { id: connection.id },
+          })
+          if (!fresh) {
+            return
+          }
+          await refreshBackendConnection({ connection: fresh, now })
           refreshed += 1
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error)
