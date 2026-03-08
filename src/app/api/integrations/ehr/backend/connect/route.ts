@@ -16,12 +16,20 @@ const bodySchema = z.object({
   issuer: z.string().url().optional(),
   clientId: z.string().min(3).optional(),
   clientSecret: z.string().min(4).optional(),
+  debug: z.boolean().optional(),
 })
 
 function isEcwIssuer(issuer: string | undefined) {
   if (!issuer) return false
   const normalized = issuer.toLowerCase()
   return normalized.includes('ecwcloud.com') || normalized.includes('eclinicalworks.com')
+}
+
+function decodeJwtSegment(segment: string) {
+  const normalized = segment.replace(/-/g, '+').replace(/_/g, '/')
+  const padded = normalized.padEnd(normalized.length + (4 - (normalized.length % 4 || 4)) % 4, '=')
+  const decoded = Buffer.from(padded, 'base64').toString('utf8')
+  return JSON.parse(decoded) as Record<string, unknown>
 }
 
 function getDefaultBackendScopes(params: {
@@ -45,11 +53,14 @@ function getDefaultBackendScopes(params: {
 }
 
 export async function POST(req: NextRequest) {
+  let debugInfo: Record<string, unknown> | null = null
+  let debugRequested = false
   try {
     const parsed = bodySchema.safeParse(await req.json().catch(() => ({})))
     if (!parsed.success) {
       return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
     }
+    debugRequested = Boolean(parsed.data.debug)
     const apiKey = req.headers.get('x-api-key') || req.headers.get('authorization')
     const backendApiKey = process.env.EHR_BACKEND_API_KEY
     const isApiKeyAuth =
@@ -122,6 +133,15 @@ export async function POST(req: NextRequest) {
     }
     const discovery = await discoverSmartConfiguration(issuer)
 
+    const scopes =
+      useProviderDefaults && parsed.data.providerId
+        ? parsed.data.scopes ||
+          getDefaultBackendScopes({
+            provider: getProvider(parsed.data.providerId as any),
+            settings: settings || undefined,
+          })
+        : parsed.data.scopes
+
     const privateKeyConfig = getPrivateKeyJwtConfig(String(providerId))
     const audOverride = String(providerId).startsWith('ecw') || isEcwIssuer(issuer)
       ? process.env.EHR_ECW_CLIENT_ASSERTION_AUD || undefined
@@ -136,14 +156,28 @@ export async function POST(req: NextRequest) {
         })
       : undefined
 
-    const scopes =
-      useProviderDefaults && parsed.data.providerId
-        ? parsed.data.scopes ||
-          getDefaultBackendScopes({
-            provider: getProvider(parsed.data.providerId as any),
-            settings: settings || undefined,
-          })
-        : parsed.data.scopes
+    if (debugRequested && clientAssertion) {
+      try {
+        const [headerSegment, payloadSegment] = clientAssertion.split('.')
+        const header = decodeJwtSegment(headerSegment)
+        const payload = decodeJwtSegment(payloadSegment)
+        debugInfo = {
+          header,
+          payload,
+          issuer,
+          tokenEndpoint: discovery.tokenEndpoint,
+          audOverride: audOverride || null,
+          scopes: scopes || null,
+          clientId: String(config.clientId),
+          providerId: providerId ? String(providerId) : null,
+        }
+      } catch (error) {
+        debugInfo = {
+          error: 'Failed to decode client assertion',
+          message: error instanceof Error ? error.message : String(error),
+        }
+      }
+    }
     const tokenResponse = await exchangeClientCredentials({
       tokenEndpoint: discovery.tokenEndpoint,
       clientId: String(config.clientId),
@@ -234,9 +268,13 @@ export async function POST(req: NextRequest) {
       issuer: connection.issuer,
       scopes: connection.scopesGranted,
       expiresAt: connection.expiresAt,
+      ...(debugRequested && debugInfo ? { debug: debugInfo } : {}),
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Backend connect failed'
+    if (debugRequested && debugInfo) {
+      return NextResponse.json({ error: message, debug: debugInfo }, { status: 500 })
+    }
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
