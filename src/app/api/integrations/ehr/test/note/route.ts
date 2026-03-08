@@ -7,6 +7,7 @@ import { resolveEhrPractice, getEhrSettings, getPrivateKeyJwtConfig } from '@/li
 import { logEhrAudit } from '@/lib/integrations/ehr/audit'
 import { createDraftDocumentReference } from '@/lib/integrations/fhir/resources/documentReference'
 import { createClientAssertion } from '@/lib/integrations/ehr/smartEngine'
+import { refreshBackendConnectionIfNeeded } from '@/lib/integrations/ehr/backendTokens'
 
 const bodySchema = z.object({
   providerId: z.string(),
@@ -78,23 +79,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No active EHR connection' }, { status: 404 })
     }
 
-    const tokenEndpoint = connection.tokenEndpoint || undefined
+    const refreshedConnection = await refreshBackendConnectionIfNeeded({ connection })
+    const tokenEndpoint = refreshedConnection.tokenEndpoint || undefined
     const privateKeyConfig = tokenEndpoint ? getPrivateKeyJwtConfig(connection.providerId) : null
     const audOverride = connection.providerId.startsWith('ecw')
       ? process.env.EHR_ECW_CLIENT_ASSERTION_AUD || undefined
       : undefined
     const client = new FhirClient({
-      baseUrl: connection.fhirBaseUrl,
+      baseUrl: refreshedConnection.fhirBaseUrl,
       tokenEndpoint,
-      clientId: connection.clientId,
+      clientId: refreshedConnection.clientId,
       clientSecret:
-        !privateKeyConfig && connection.clientSecretEnc
-          ? decryptString(connection.clientSecretEnc)
+        !privateKeyConfig && refreshedConnection.clientSecretEnc
+          ? decryptString(refreshedConnection.clientSecretEnc)
           : undefined,
       clientAssertionProvider: privateKeyConfig && tokenEndpoint
         ? () =>
             createClientAssertion({
-              clientId: connection.clientId,
+              clientId: refreshedConnection.clientId,
               tokenEndpoint,
               privateKeyPem: privateKeyConfig.privateKeyPem,
               keyId: privateKeyConfig.keyId,
@@ -102,26 +104,26 @@ export async function POST(req: NextRequest) {
             })
         : undefined,
       tokenState: {
-        accessToken: decryptString(connection.accessTokenEnc),
-        refreshToken: connection.refreshTokenEnc
-          ? decryptString(connection.refreshTokenEnc)
+        accessToken: decryptString(refreshedConnection.accessTokenEnc),
+        refreshToken: refreshedConnection.refreshTokenEnc
+          ? decryptString(refreshedConnection.refreshTokenEnc)
           : undefined,
         tokenType: undefined,
-        expiresAt: connection.expiresAt,
-        scopes: connection.scopesGranted || undefined,
+        expiresAt: refreshedConnection.expiresAt,
+        scopes: refreshedConnection.scopesGranted || undefined,
       },
       onTokenRefresh: async (tokenResponse) => {
         await prisma.ehrConnection.update({
-          where: { id: connection.id },
+          where: { id: refreshedConnection.id },
           data: {
             accessTokenEnc: encryptString(tokenResponse.access_token),
             refreshTokenEnc: tokenResponse.refresh_token
               ? encryptString(tokenResponse.refresh_token)
-              : connection.refreshTokenEnc,
+              : refreshedConnection.refreshTokenEnc,
             expiresAt: tokenResponse.expires_in
               ? new Date(Date.now() + tokenResponse.expires_in * 1000)
-              : connection.expiresAt,
-            scopesGranted: tokenResponse.scope || connection.scopesGranted,
+              : refreshedConnection.expiresAt,
+            scopesGranted: tokenResponse.scope || refreshedConnection.scopesGranted,
           },
         })
         await logEhrAudit({
