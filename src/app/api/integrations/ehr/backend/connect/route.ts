@@ -250,7 +250,7 @@ export async function POST(req: NextRequest) {
 
     await logEhrAudit({
       tenantId: practiceId,
-      actorUserId: user.id,
+      actorUserId: isApiKeyAuth ? null : user.id,
       action: 'EHR_CONNECT',
       providerId: String(providerId),
       entity: 'EhrConnection',
