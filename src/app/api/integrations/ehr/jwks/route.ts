@@ -26,6 +26,8 @@ function getJwks() {
         kid,
         use: 'sig',
         alg: 'RS384',
+        key_ops: ['verify'],
+        ext: true,
       },
     ],
   }
