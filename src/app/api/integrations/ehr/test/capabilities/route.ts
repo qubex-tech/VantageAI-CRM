@@ -91,7 +91,7 @@ export async function GET(req: NextRequest) {
             })
         : undefined,
       tokenState: {
-        accessToken: decryptString(refreshedConnection.accessTokenEnc),
+        accessToken: decryptString(refreshedConnection.accessTokenEnc!),
         refreshToken: refreshedConnection.refreshTokenEnc
           ? decryptString(refreshedConnection.refreshTokenEnc)
           : undefined,
