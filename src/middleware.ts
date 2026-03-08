@@ -103,6 +103,7 @@ export async function middleware(req: NextRequest) {
       '/api/integrations/ehr/jwks',
       '/api/integrations/ehr/backend/connect',
       '/api/integrations/ehr/test/patient',
+      '/api/integrations/ehr/test/capabilities',
     ]
     const isPublicPath = publicPaths.some(path => pathname.startsWith(path))
     
