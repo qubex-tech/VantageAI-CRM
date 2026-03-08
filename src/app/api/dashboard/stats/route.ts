@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
           deletedAt: null,
         },
       }),
-      prisma.conversation.count({
+      prisma.communicationConversation.count({
         where: {
           practiceId,
           status: 'open',

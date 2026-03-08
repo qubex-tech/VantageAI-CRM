@@ -53,9 +53,9 @@ export async function requireAuth(req?: NextRequest) {
           token: bearerToken,
           secret: process.env.NEXTAUTH_SECRET!,
         })
-        if (decoded?.id) {
+        if (decoded?.sub) {
           return {
-            id: decoded.id as string,
+            id: decoded.sub as string,
             email: decoded.email as string,
             name: (decoded.name ?? null) as string | null,
             practiceId: (decoded.practiceId ?? null) as string | null,
