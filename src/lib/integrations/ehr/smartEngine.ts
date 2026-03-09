@@ -111,6 +111,22 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: nu
   }
 }
 
+async function fetchWithRetry(url: string, options: RequestInit, timeoutMs: number) {
+  const delays = [0, 1000, 3000]
+  let lastError: unknown
+  for (const delay of delays) {
+    if (delay > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delay))
+    }
+    try {
+      return await fetchWithTimeout(url, options, timeoutMs)
+    } catch (error) {
+      lastError = error
+    }
+  }
+  throw lastError
+}
+
 function base64UrlEncode(input: Buffer | string): string {
   const buf = typeof input === 'string' ? Buffer.from(input) : input
   return buf
@@ -180,14 +196,14 @@ export async function exchangeAuthorizationCode(params: {
     body.set('client_assertion', params.clientAssertion)
   }
 
-  const response = await fetchWithTimeout(
+  const response = await fetchWithRetry(
     params.tokenEndpoint,
     {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
     },
-    params.timeoutMs ?? 10000
+    params.timeoutMs ?? 30000
   )
 
   if (!response.ok) {
@@ -223,14 +239,14 @@ export async function refreshAccessToken(params: {
     body.set('client_assertion', params.clientAssertion)
   }
 
-  const response = await fetchWithTimeout(
+  const response = await fetchWithRetry(
     params.tokenEndpoint,
     {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
     },
-    params.timeoutMs ?? 10000
+    params.timeoutMs ?? 30000
   )
 
   if (!response.ok) {
@@ -264,14 +280,14 @@ export async function exchangeClientCredentials(params: {
     body.set('client_assertion', params.clientAssertion)
   }
 
-  const response = await fetchWithTimeout(
+  const response = await fetchWithRetry(
     params.tokenEndpoint,
     {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
     },
-    params.timeoutMs ?? 10000
+    params.timeoutMs ?? 30000
   )
 
   if (!response.ok) {
