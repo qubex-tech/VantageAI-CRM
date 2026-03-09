@@ -122,6 +122,7 @@ export async function GET(req: NextRequest) {
           entityId: connection.id,
         })
       },
+      timeoutMs: 30000,
     })
 
     let capabilityStatement: CapabilityStatement
