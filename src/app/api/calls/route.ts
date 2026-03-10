@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/middleware'
 import { z } from 'zod'
+import { prisma } from '@/lib/db'
 import { getRetellClient } from '@/lib/retell-api'
 import { initiateInsuranceOutboundCall } from '@/lib/outbound-insurance-call'
 
@@ -95,9 +96,21 @@ export async function GET(req: NextRequest) {
 
     const calls = result.calls || []
 
-    // Return calls immediately, process in background if requested
-    // This ensures the API responds quickly and the UI is not blocked
-    const response = NextResponse.json(result)
+    // Fetch call IDs that have been reviewed by any user in this practice
+    let reviewedCallIds: string[] = []
+    try {
+      const reviews = await prisma.callReview.findMany({
+        where: { practiceId },
+        select: { callId: true },
+        distinct: ['callId'],
+      })
+      reviewedCallIds = reviews.map((r) => r.callId)
+    } catch (e) {
+      // Table may not exist yet if migration not run
+    }
+
+    // Return calls + reviewed IDs for unread flags
+    const response = NextResponse.json({ ...result, reviewedCallIds })
     
     // If processing is requested, do it in the background (don't await)
     if (shouldProcess && calls.length > 0) {
@@ -112,9 +125,10 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     console.error('Error fetching calls:', error)
     return NextResponse.json(
-      { 
+      {
         error: error instanceof Error ? error.message : 'Failed to fetch calls',
-        calls: [] 
+        calls: [],
+        reviewedCallIds: [],
       },
       { status: 500 }
     )

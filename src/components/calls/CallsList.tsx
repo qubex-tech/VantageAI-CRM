@@ -20,13 +20,15 @@ interface RetellCallListItem {
 
 interface CallsListProps {
   initialCalls: RetellCallListItem[]
+  initialReviewedCallIds?: string[]
   error?: string | null
 }
 
-export function CallsList({ initialCalls, error: initialError }: CallsListProps) {
+export function CallsList({ initialCalls, initialReviewedCallIds = [], error: initialError }: CallsListProps) {
   const router = useRouter()
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [calls, setCalls] = useState(initialCalls)
+  const [reviewedCallIds, setReviewedCallIds] = useState<Set<string>>(() => new Set(initialReviewedCallIds))
   const [error, setError] = useState<string | null>(initialError || null)
 
   // Refresh function
@@ -43,7 +45,9 @@ export function CallsList({ initialCalls, error: initialError }: CallsListProps)
       
       if (response.ok && data.calls) {
         setCalls(data.calls)
-        // Also refresh the server component data to keep it in sync
+        if (Array.isArray(data.reviewedCallIds)) {
+          setReviewedCallIds(new Set(data.reviewedCallIds))
+        }
         router.refresh()
         
         if (processCalls) {
@@ -60,11 +64,15 @@ export function CallsList({ initialCalls, error: initialError }: CallsListProps)
     }
   }
 
-  // Sync initial calls when they change from server
+  // Sync initial data when they change from server
   useEffect(() => {
     setCalls(initialCalls)
+    setReviewedCallIds((prev) => {
+      const next = new Set(initialReviewedCallIds)
+      return next.size === prev.size && initialReviewedCallIds.every((id) => prev.has(id)) ? prev : next
+    })
     setError(initialError || null)
-  }, [initialCalls, initialError])
+  }, [initialCalls, initialReviewedCallIds, initialError])
 
   // Process calls in the background completely asynchronously without blocking
   // Use a separate function that doesn't affect UI state
@@ -79,8 +87,10 @@ export function CallsList({ initialCalls, error: initialError }: CallsListProps)
         if (mounted && response.ok) {
           const data = await response.json()
           if (data.calls) {
-            // Update calls silently in the background (user already sees initial data)
             setCalls(data.calls)
+            if (Array.isArray(data.reviewedCallIds)) {
+              setReviewedCallIds(new Set(data.reviewedCallIds))
+            }
             console.log('[CallsList] Background processing completed')
           }
         }
@@ -183,17 +193,29 @@ export function CallsList({ initialCalls, error: initialError }: CallsListProps)
         </Card>
       ) : (
         <div className="space-y-3">
-          {calls.map((call) => (
+          {calls.map((call) => {
+            const isUnread = !reviewedCallIds.has(call.call_id)
+            return (
             <Link key={call.call_id} href={`/calls/${call.call_id}`}>
-              <Card className="border border-gray-200 shadow-sm hover:shadow-md hover:border-gray-300 transition-all cursor-pointer">
+              <Card className={`border shadow-sm hover:shadow-md transition-all cursor-pointer ${isUnread ? 'border-blue-200 bg-blue-50/30' : 'border-gray-200 hover:border-gray-300'}`}>
                 <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base font-semibold text-gray-900">
-                      Call {call.call_id.slice(0, 8)}...
-                    </CardTitle>
-                    <span className={`inline-block text-xs px-2 py-1 rounded-md font-medium ${getStatusColor(call.call_status)}`}>
-                      {call.call_status}
-                    </span>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {isUnread && (
+                        <span className="flex h-2 w-2 flex-shrink-0 rounded-full bg-blue-500" title="Unread" aria-hidden />
+                      )}
+                      <CardTitle className="text-base font-semibold text-gray-900 truncate">
+                        Call {call.call_id.slice(0, 8)}...
+                      </CardTitle>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {isUnread && (
+                        <span className="text-xs font-medium text-blue-600">New</span>
+                      )}
+                      <span className={`inline-block text-xs px-2 py-1 rounded-md font-medium ${getStatusColor(call.call_status)}`}>
+                        {call.call_status}
+                      </span>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -213,7 +235,8 @@ export function CallsList({ initialCalls, error: initialError }: CallsListProps)
                 </CardContent>
               </Card>
             </Link>
-          ))}
+          );
+          })}
         </div>
       )}
     </div>

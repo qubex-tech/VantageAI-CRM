@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getSupabaseSession } from '@/lib/auth-supabase'
 import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
+import { prisma } from '@/lib/db'
 import { CallsList } from '@/components/calls/CallsList'
 
 export const dynamic = 'force-dynamic'
@@ -82,9 +83,21 @@ export default async function CallsPage({
     error = err instanceof Error ? err.message : 'Failed to fetch calls'
   }
 
+  let reviewedCallIds: string[] = []
+  try {
+    const reviews = await prisma.callReview.findMany({
+      where: { practiceId },
+      select: { callId: true },
+      distinct: ['callId'],
+    })
+    reviewedCallIds = reviews.map((r) => r.callId)
+  } catch {
+    // call_reviews table may not exist yet
+  }
+
   return (
     <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
-      <CallsList initialCalls={calls} error={error} />
+      <CallsList initialCalls={calls} initialReviewedCallIds={reviewedCallIds} error={error} />
     </div>
   )
 }

@@ -78,6 +78,7 @@ model Practice {
   communicationTriggers      CommunicationTrigger[]
   knowledgeBaseArticles      KnowledgeBaseArticle[]
   knowledgeBaseChunks        KnowledgeBaseChunk[]
+  callReviews                CallReview[]
   knowledgeBaseFaqs          KnowledgeBaseFaq[]
 
   @@index([slug])
@@ -115,6 +116,7 @@ model User {
   communicationMessages            CommunicationMessage[]
   communicationAssignments         CommunicationAssignment[] @relation("CommunicationAssignmentUser")
   communicationAssignmentActions   CommunicationAssignment[] @relation("CommunicationAssignmentActor")
+  callReviews                      CallReview[]
 
   @@index([practiceId])
   @@index([email])
@@ -518,6 +520,22 @@ model VoiceConversation {
   @@index([callerPhone])
   @@index([startedAt])
   @@map("voice_conversations")
+}
+
+model CallReview {
+  id         String   @id @default(uuid())
+  callId     String   // Retell call_id
+  practiceId String
+  userId     String
+  reviewedAt DateTime @default(now())
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([callId, practiceId, userId])
+  @@index([practiceId])
+  @@index([callId])
+  @@map("call_reviews")
 }
 
 model Workflow {
