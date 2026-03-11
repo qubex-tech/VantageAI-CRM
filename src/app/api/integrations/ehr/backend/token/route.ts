@@ -27,10 +27,13 @@ export async function POST(req: NextRequest) {
     }
     const apiKey = req.headers.get('x-api-key') || req.headers.get('authorization')
     const backendApiKey = process.env.EHR_BACKEND_API_KEY
+    const normalizeKey = (value: string | null | undefined) =>
+      value ? value.trim() : value
     const isApiKeyAuth =
-      backendApiKey &&
-      apiKey &&
-      (apiKey === backendApiKey || apiKey === `Bearer ${backendApiKey}`)
+      normalizeKey(backendApiKey) &&
+      normalizeKey(apiKey) &&
+      (normalizeKey(apiKey) === normalizeKey(backendApiKey) ||
+        normalizeKey(apiKey) === `Bearer ${normalizeKey(backendApiKey)}`)
     if (!isApiKeyAuth) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
