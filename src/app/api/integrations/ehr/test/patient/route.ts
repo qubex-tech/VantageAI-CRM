@@ -5,7 +5,7 @@ import { decryptString, encryptString } from '@/lib/integrations/ehr/crypto'
 import { FhirClient } from '@/lib/integrations/fhir/fhirClient'
 import { resolveEhrPractice, getEhrSettings, getPrivateKeyJwtConfig } from '@/lib/integrations/ehr/server'
 import { logEhrAudit } from '@/lib/integrations/ehr/audit'
-import { getPatient, createPatient } from '@/lib/integrations/fhir/resources/patient'
+import { getPatient, createPatient, searchPatients } from '@/lib/integrations/fhir/resources/patient'
 import { createClientAssertion } from '@/lib/integrations/ehr/smartEngine'
 import { refreshBackendConnectionIfNeeded } from '@/lib/integrations/ehr/backendTokens'
 
@@ -14,6 +14,15 @@ const querySchema = z.object({
   patientId: z.string().min(1),
   issuer: z.string().url().optional(),
   practiceId: z.string().optional(),
+})
+
+const searchSchema = z.object({
+  providerId: z.string(),
+  issuer: z.string().url().optional(),
+  practiceId: z.string().optional(),
+  identifier: z.string().optional(),
+  name: z.string().optional(),
+  birthdate: z.string().optional(),
 })
 
 const createSchema = z.object({
@@ -381,6 +390,145 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ patient: created })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create patient'
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+}
+
+export async function PUT(req: NextRequest) {
+  try {
+    const parsed = searchSchema.safeParse(await req.json().catch(() => ({})))
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
+    }
+    if (!parsed.data.identifier && !parsed.data.name && !parsed.data.birthdate) {
+      return NextResponse.json(
+        { error: 'Provide identifier, name, or birthdate for search.' },
+        { status: 400 }
+      )
+    }
+    const apiKey = req.headers.get('x-api-key') || req.headers.get('authorization')
+    const backendApiKey = process.env.EHR_BACKEND_API_KEY
+    const isApiKeyAuth =
+      backendApiKey &&
+      apiKey &&
+      (apiKey === backendApiKey || apiKey === `Bearer ${backendApiKey}`)
+    if (isApiKeyAuth && !parsed.data.practiceId) {
+      return NextResponse.json({ error: 'practiceId is required for API key auth' }, { status: 400 })
+    }
+    const authContext = isApiKeyAuth
+      ? { practiceId: parsed.data.practiceId!, user: { id: 'system' } }
+      : await resolveEhrPractice(parsed.data.practiceId)
+    const { practiceId, user } = authContext
+    const settings = await getEhrSettings(practiceId)
+    if (!settings?.enabledProviders?.includes(parsed.data.providerId as any)) {
+      return NextResponse.json({ error: 'Provider not enabled for tenant' }, { status: 403 })
+    }
+
+    const connections = await prisma.ehrConnection.findMany({
+      where: {
+        tenantId: practiceId,
+        providerId: parsed.data.providerId,
+        issuer: parsed.data.issuer || undefined,
+      },
+      orderBy: { updatedAt: 'desc' },
+    })
+    const expectedAuthFlow = isApiKeyAuth ? 'backend_services' : 'smart_launch'
+    const connection = connections.find((candidate) => candidate.authFlow === expectedAuthFlow)
+
+    if (!connection?.accessTokenEnc) {
+      if (connections.length > 0 && expectedAuthFlow === 'smart_launch') {
+        return NextResponse.json(
+          { error: 'SMART App Launch connection required. Use standalone connect.' },
+          { status: 409 }
+        )
+      }
+      if (expectedAuthFlow === 'backend_services') {
+        return NextResponse.json(
+          { error: 'No backend services connection. Use backend connect endpoint.' },
+          { status: 409 }
+        )
+      }
+      return NextResponse.json({ error: 'No active EHR connection' }, { status: 404 })
+    }
+
+    const refreshedConnection = await refreshBackendConnectionIfNeeded({ connection })
+    const tokenEndpoint = refreshedConnection.tokenEndpoint || undefined
+    const privateKeyConfig = tokenEndpoint ? getPrivateKeyJwtConfig(connection.providerId) : null
+    const audOverride = connection.providerId.startsWith('ecw')
+      ? process.env.EHR_ECW_CLIENT_ASSERTION_AUD || undefined
+      : undefined
+    const client = new FhirClient({
+      baseUrl: refreshedConnection.fhirBaseUrl,
+      tokenEndpoint,
+      clientId: refreshedConnection.clientId,
+      clientSecret:
+        !privateKeyConfig && refreshedConnection.clientSecretEnc
+          ? decryptString(refreshedConnection.clientSecretEnc)
+          : undefined,
+      clientAssertionProvider: privateKeyConfig && tokenEndpoint
+        ? () =>
+            createClientAssertion({
+              clientId: refreshedConnection.clientId,
+              tokenEndpoint,
+              privateKeyPem: privateKeyConfig.privateKeyPem,
+              keyId: privateKeyConfig.keyId,
+              audience: audOverride,
+            })
+        : undefined,
+      tokenState: {
+        accessToken: decryptString(refreshedConnection.accessTokenEnc!),
+        refreshToken: refreshedConnection.refreshTokenEnc
+          ? decryptString(refreshedConnection.refreshTokenEnc)
+          : undefined,
+        tokenType: undefined,
+        expiresAt: refreshedConnection.expiresAt,
+        scopes: refreshedConnection.scopesGranted || undefined,
+      },
+      onTokenRefresh: async (tokenResponse) => {
+        await prisma.ehrConnection.update({
+          where: { id: refreshedConnection.id },
+          data: {
+            accessTokenEnc: encryptString(tokenResponse.access_token),
+            refreshTokenEnc: tokenResponse.refresh_token
+              ? encryptString(tokenResponse.refresh_token)
+              : refreshedConnection.refreshTokenEnc,
+            expiresAt: tokenResponse.expires_in
+              ? new Date(Date.now() + tokenResponse.expires_in * 1000)
+              : refreshedConnection.expiresAt,
+            scopesGranted: tokenResponse.scope || refreshedConnection.scopesGranted,
+          },
+        })
+        await logEhrAudit({
+          tenantId: practiceId,
+          actorUserId: isApiKeyAuth ? null : user.id,
+          action: 'EHR_TOKEN_REFRESH',
+          providerId: connection.providerId,
+          entity: 'EhrConnection',
+          entityId: connection.id,
+        })
+      },
+    })
+
+    const query: Record<string, string> = {}
+    if (parsed.data.identifier) query.identifier = parsed.data.identifier
+    if (parsed.data.name) query.name = parsed.data.name
+    if (parsed.data.birthdate) query.birthdate = parsed.data.birthdate
+
+    const results = await searchPatients(client, query)
+    await logEhrAudit({
+      tenantId: practiceId,
+      actorUserId: isApiKeyAuth ? null : user.id,
+      action: 'FHIR_READ',
+      providerId: connection.providerId,
+      entity: 'Patient',
+      metadata: {
+        query,
+      },
+    })
+
+    return NextResponse.json({ results })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to search patient'
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
