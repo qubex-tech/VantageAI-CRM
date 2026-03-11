@@ -89,6 +89,29 @@ curl -sS -X POST "https://<your-domain>/api/integrations/ehr/backend/connect" \
   }'
 ```
 
+## Bulk Export (eCW)
+
+eCW bulk export requires the `org_id` segment in the URL path (per eCW spec). Provide `orgId` in the bulk kickoff request and the system will construct:
+
+```
+GET {fhir_base_url}/{org_id}/Group/{group_id}/$export
+```
+
+Kickoff request example:
+
+```
+curl -sS -X POST "https://<your-domain>/api/integrations/ehr/bulk/start" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: <EHR_BACKEND_API_KEY>" \
+  -d '{
+    "practiceId": "<practice-id>",
+    "providerId": "ecw_bulk",
+    "orgId": "<org_id>",
+    "groupId": "<group_id>",
+    "type": "Patient"
+  }'
+```
+
 ## Hybrid SMART + Backend Services (eCW)
 
 Use three eCW connections:

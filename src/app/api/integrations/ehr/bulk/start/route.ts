@@ -10,10 +10,16 @@ import { logEhrAudit } from '@/lib/integrations/ehr/audit'
 const bodySchema = z.object({
   providerId: z.string(),
   practiceId: z.string().optional(),
+  orgId: z.string().min(1),
   groupId: z.string().min(1),
   type: z.string().optional(),
   since: z.string().optional(),
 })
+
+function buildBulkBaseUrl(baseUrl: string, orgId: string) {
+  const trimmed = baseUrl.replace(/\/+$/g, '')
+  return trimmed.endsWith(`/${orgId}`) ? trimmed.slice(0, -1 * (orgId.length + 1)) : trimmed
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -65,7 +71,7 @@ export async function POST(req: NextRequest) {
     const refreshedConnection = await refreshBackendConnectionIfNeeded({ connection })
     const accessToken = decryptString(refreshedConnection.accessTokenEnc!)
 
-    const baseUrl = refreshedConnection.fhirBaseUrl.replace(/\/+$/g, '')
+    const baseUrl = buildBulkBaseUrl(refreshedConnection.fhirBaseUrl, parsed.data.orgId)
     const params = new URLSearchParams()
     if (parsed.data.type) {
       params.set('_type', parsed.data.type)
@@ -73,7 +79,7 @@ export async function POST(req: NextRequest) {
     if (parsed.data.since) {
       params.set('_since', parsed.data.since)
     }
-    const exportUrl = `${baseUrl}/Group/${parsed.data.groupId}/$export${
+    const exportUrl = `${baseUrl}/${parsed.data.orgId}/Group/${parsed.data.groupId}/$export${
       params.toString() ? `?${params.toString()}` : ''
     }`
 
