@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { getEhrSettings, resolveEhrPractice, getPrivateKeyJwtConfig } from '@/lib/integrations/ehr/server'
+import { getEhrSettings, getPrivateKeyJwtConfig } from '@/lib/integrations/ehr/server'
 import { getProvider } from '@/lib/integrations/ehr/providers'
 import { discoverSmartConfiguration } from '@/lib/integrations/ehr/discovery'
 import { createClientAssertion, exchangeClientCredentials } from '@/lib/integrations/ehr/smartEngine'
@@ -41,8 +41,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'practiceId is required for API key auth' }, { status: 400 })
     }
 
-    const authContext = await resolveEhrPractice(parsed.data.practiceId)
-    const { practiceId } = authContext
+    const practiceId = parsed.data.practiceId
     const settings = await getEhrSettings(practiceId)
 
     const hasProviderId = Boolean(parsed.data.providerId)
