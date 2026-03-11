@@ -124,6 +124,7 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
   const [practices, setPractices] = useState<Array<{ id: string; name: string }>>([])
   const [selectedPracticeId, setSelectedPracticeId] = useState<string>('')
   const [privateKeyJwtConfigured, setPrivateKeyJwtConfigured] = useState(true)
+  const [ecwStatusMap, setEcwStatusMap] = useState<Record<string, StatusResponse | null>>({})
 
   const resolvedProviders = providers.length > 0 ? providers : fallbackProviders
   const selectedProvider = useMemo(
@@ -180,6 +181,25 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
     }
   }
 
+  const fetchEcwStatuses = async () => {
+    if (!activePracticeId) return
+    const providerIds = ['ecw', 'ecw_bulk', 'ecw_write']
+    const results = await Promise.all(
+      providerIds.map(async (providerId) => {
+        const params = new URLSearchParams()
+        params.set('providerId', providerId)
+        if (activePracticeId) params.set('practiceId', activePracticeId)
+        const response = await fetch(`/api/integrations/ehr/status?${params.toString()}`)
+        if (!response.ok) {
+          return [providerId, null] as const
+        }
+        const data = (await response.json()) as StatusResponse
+        return [providerId, data] as const
+      })
+    )
+    setEcwStatusMap(Object.fromEntries(results))
+  }
+
   useEffect(() => {
     const load = async () => {
       setLoading(true)
@@ -218,6 +238,7 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
     if (activePracticeId) {
       fetchSettings()
       fetchStatus()
+      fetchEcwStatuses()
     }
   }, [selectedProviderId, activePracticeId])
 
@@ -247,6 +268,20 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
       else current.delete(selectedProviderId)
       return { ...prev, enabledProviders: Array.from(current) }
     })
+  }
+
+  const renderEcwStatus = (providerId: string) => {
+    if (!settings.enabledProviders.includes(providerId)) {
+      return { label: 'Disabled', tone: 'text-gray-500 bg-gray-100 border-gray-200' }
+    }
+    const statusEntry = ecwStatusMap[providerId]
+    if (!statusEntry) {
+      return { label: 'Unknown', tone: 'text-gray-500 bg-gray-100 border-gray-200' }
+    }
+    if (statusEntry.connected) {
+      return { label: 'Connected', tone: 'text-emerald-700 bg-emerald-50 border-emerald-200' }
+    }
+    return { label: statusEntry.status || 'Disconnected', tone: 'text-amber-700 bg-amber-50 border-amber-200' }
   }
 
   const saveSettings = async () => {
@@ -572,6 +607,37 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
               </div>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="border border-gray-200">
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold text-gray-900">eCW App Status</CardTitle>
+          <CardDescription className="text-sm text-gray-500">
+            Connection status for all three eCW apps in this practice.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          {['ecw', 'ecw_bulk', 'ecw_write'].map((providerId) => {
+            const display =
+              providerId === 'ecw'
+                ? 'SMART App Launch'
+                : providerId === 'ecw_bulk'
+                  ? 'Backend Bulk Read'
+                  : 'Backend Write'
+            const statusInfo = renderEcwStatus(providerId)
+            return (
+              <div key={providerId} className="flex items-center justify-between rounded border border-gray-200 p-3">
+                <div>
+                  <div className="text-sm font-medium text-gray-700">{display}</div>
+                  <div className="text-xs text-gray-500">{providerId}</div>
+                </div>
+                <span className={`rounded border px-2 py-1 text-xs font-medium ${statusInfo.tone}`}>
+                  {statusInfo.label}
+                </span>
+              </div>
+            )
+          })}
         </CardContent>
       </Card>
 
