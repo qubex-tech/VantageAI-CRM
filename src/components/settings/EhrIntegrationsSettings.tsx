@@ -612,7 +612,7 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
 
       <Card className="border border-gray-200">
         <CardHeader>
-          <CardTitle className="text-lg font-semibold text-gray-900">eCW App Status</CardTitle>
+          <CardTitle className="text-lg font-semibold text-gray-900">EHR App Status</CardTitle>
           <CardDescription className="text-sm text-gray-500">
             Connection status for all three eCW apps in this practice.
           </CardDescription>
