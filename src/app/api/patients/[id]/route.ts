@@ -6,6 +6,7 @@ import { createAuditLog, createTimelineEntry } from '@/lib/audit'
 import { tenantScope } from '@/lib/db'
 import { logPatientChanges } from '@/lib/patient-activity'
 import { emitEvent } from '@/lib/outbox'
+import { syncPatientUpdateToEhr } from '@/lib/integrations/ehr/patientUpdate'
 
 export const dynamic = 'force-dynamic'
 
@@ -204,6 +205,18 @@ export async function PATCH(
         userId: user.id,
       },
     })
+
+    try {
+      await syncPatientUpdateToEhr({
+        practiceId,
+        patientId: patient.id,
+        email: patient.email,
+        phone: patient.primaryPhone || patient.phone,
+        actorUserId: user.id,
+      })
+    } catch (err) {
+      console.error('[EHR] Patient update sync failed', err)
+    }
 
     return NextResponse.json({ patient })
   } catch (error) {
