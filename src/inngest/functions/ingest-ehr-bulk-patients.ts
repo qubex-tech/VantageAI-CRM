@@ -142,7 +142,13 @@ export const ingestEhrBulkPatients = inngest.createFunction(
     }
 
     const refreshed = await step.run('refresh-token', async () => {
-      return refreshBackendConnectionIfNeeded({ connection })
+      const fresh = await prisma.ehrConnection.findUnique({
+        where: { id: connection.id },
+      })
+      if (!fresh) {
+        throw new Error('Backend services connection not found')
+      }
+      return refreshBackendConnectionIfNeeded({ connection: fresh })
     })
     const accessToken = decryptString(refreshed.accessTokenEnc!)
 
