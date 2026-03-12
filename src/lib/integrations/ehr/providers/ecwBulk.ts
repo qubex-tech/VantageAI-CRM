@@ -7,6 +7,8 @@ const configSchema = z.object({
   clientId: z.string().min(3),
   clientSecret: z.string().min(4).optional(),
   authFlow: z.literal('backend_services').optional().default('backend_services'),
+  orgId: z.string().min(1),
+  groupId: z.string().min(1),
 })
 
 export const ecwBulkProvider: EhrProvider = {
@@ -19,6 +21,20 @@ export const ecwBulkProvider: EhrProvider = {
     { id: 'fhirBaseUrl', label: 'FHIR Base URL (optional override)', type: 'url' },
     { id: 'clientId', label: 'Client ID', type: 'text', required: true },
     { id: 'clientSecret', label: 'Client Secret (optional)', type: 'password' },
+    {
+      id: 'orgId',
+      label: 'eCW Org ID',
+      type: 'text',
+      required: true,
+      helpText: 'Required for bulk export URLs (org_id path segment).',
+    },
+    {
+      id: 'groupId',
+      label: 'Group ID',
+      type: 'text',
+      required: true,
+      helpText: 'FHIR Group ID used for bulk $export kickoff.',
+    },
   ],
   allowConfidentialClient: true,
   supportsBulkExport: true,

@@ -384,12 +384,21 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
 
   const startBulkExport = async () => {
     setBulkResult(null)
+    const bulkConfig = settings.providerConfigs?.[selectedProviderId] || {}
+    const orgId = bulkConfig.orgId
+    const groupId = bulkConfig.groupId
+    if (!orgId || !groupId) {
+      setBulkResult('Configure org ID and group ID in provider settings first.')
+      return
+    }
     const response = await fetch('/api/integrations/ehr/bulk/start', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         providerId: selectedProviderId,
         practiceId: activePracticeId,
+        orgId,
+        groupId,
       }),
     })
     const data = await response.json()
@@ -728,6 +737,10 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
+            <div className="rounded border border-gray-200 bg-gray-50 p-2 text-xs text-gray-700">
+              <div>Org ID: {settings.providerConfigs?.[selectedProviderId]?.orgId || 'Not set'}</div>
+              <div>Group ID: {settings.providerConfigs?.[selectedProviderId]?.groupId || 'Not set'}</div>
+            </div>
             <Button onClick={startBulkExport}>Start bulk export</Button>
             {bulkResult && <div className="text-sm text-gray-700">{bulkResult}</div>}
           </CardContent>

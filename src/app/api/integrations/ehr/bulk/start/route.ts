@@ -10,8 +10,8 @@ import { logEhrAudit } from '@/lib/integrations/ehr/audit'
 const bodySchema = z.object({
   providerId: z.string(),
   practiceId: z.string().optional(),
-  orgId: z.string().min(1),
-  groupId: z.string().min(1),
+  orgId: z.string().min(1).optional(),
+  groupId: z.string().min(1).optional(),
   type: z.string().optional(),
   since: z.string().optional(),
 })
@@ -52,6 +52,17 @@ export async function POST(req: NextRequest) {
     if (!provider.supportsBulkExport) {
       return NextResponse.json({ error: 'Provider does not support bulk export' }, { status: 400 })
     }
+    const providerConfig = settings?.providerConfigs?.[parsed.data.providerId] as
+      | { orgId?: string; groupId?: string }
+      | undefined
+    const orgId = parsed.data.orgId || providerConfig?.orgId
+    const groupId = parsed.data.groupId || providerConfig?.groupId
+    if (!orgId || !groupId) {
+      return NextResponse.json(
+        { error: 'orgId and groupId are required for bulk export' },
+        { status: 400 }
+      )
+    }
 
     const connections = await prisma.ehrConnection.findMany({
       where: {
@@ -71,7 +82,7 @@ export async function POST(req: NextRequest) {
     const refreshedConnection = await refreshBackendConnectionIfNeeded({ connection })
     const accessToken = decryptString(refreshedConnection.accessTokenEnc!)
 
-    const baseUrl = buildBulkBaseUrl(refreshedConnection.fhirBaseUrl, parsed.data.orgId)
+    const baseUrl = buildBulkBaseUrl(refreshedConnection.fhirBaseUrl, orgId)
     const params = new URLSearchParams()
     if (parsed.data.type) {
       params.set('_type', parsed.data.type)
@@ -79,7 +90,7 @@ export async function POST(req: NextRequest) {
     if (parsed.data.since) {
       params.set('_since', parsed.data.since)
     }
-    const exportUrl = `${baseUrl}/${parsed.data.orgId}/Group/${parsed.data.groupId}/$export${
+    const exportUrl = `${baseUrl}/${orgId}/Group/${groupId}/$export${
       params.toString() ? `?${params.toString()}` : ''
     }`
 
@@ -111,7 +122,8 @@ export async function POST(req: NextRequest) {
       entity: 'EhrConnection',
       entityId: refreshedConnection.id,
       metadata: {
-        groupId: parsed.data.groupId,
+        groupId,
+        orgId,
         exportUrl,
         contentLocation,
         retryAfter,

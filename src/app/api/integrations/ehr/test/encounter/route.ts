@@ -16,19 +16,32 @@ const querySchema = z.object({
   practiceId: z.string().optional(),
 })
 
-const createSchema = z.object({
-  providerId: z.string(),
-  patientId: z.string().min(1),
-  issuer: z.string().url().optional(),
-  practiceId: z.string().optional(),
-  status: z.string().optional(),
-  classCode: z.string().optional(),
-  classSystem: z.string().optional(),
-  typeText: z.string().optional(),
-  start: z.string().optional(),
-  end: z.string().optional(),
-  reasonText: z.string().optional(),
-})
+const createSchema = z
+  .object({
+    providerId: z.string(),
+    issuer: z.string().url().optional(),
+    practiceId: z.string().optional(),
+    patientId: z.string().min(1).optional(),
+    skipCapabilityCheck: z.boolean().optional(),
+    status: z.string().optional(),
+    classCode: z.string().optional(),
+    classSystem: z.string().optional(),
+    typeText: z.string().optional(),
+    start: z.string().optional(),
+    end: z.string().optional(),
+    reasonText: z.string().optional(),
+    bundle: z
+      .object({
+        resourceType: z.literal('Bundle'),
+        type: z.string().optional(),
+        entry: z.array(z.any()).optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .refine((data) => data.bundle || data.patientId, {
+    message: 'patientId or bundle is required',
+  })
 
 export async function GET(req: NextRequest) {
   try {
@@ -275,45 +288,51 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    const capabilityStatement = await client.getCapabilityStatement()
-    if (!supportsResourceInteraction(capabilityStatement, 'Encounter', 'create')) {
-      return NextResponse.json(
-        { error: 'Encounter create not supported' },
-        { status: 409 }
-      )
+    if (!parsed.data.skipCapabilityCheck) {
+      const capabilityStatement = await client.getCapabilityStatement()
+      if (!supportsResourceInteraction(capabilityStatement, 'Encounter', 'create')) {
+        return NextResponse.json(
+          { error: 'Encounter create not supported' },
+          { status: 409 }
+        )
+      }
     }
 
-    const status = parsed.data.status || 'finished'
-    const classSystem =
-      parsed.data.classSystem || 'http://terminology.hl7.org/CodeSystem/v3-ActCode'
-    const classCode = parsed.data.classCode || 'AMB'
-    const now = new Date().toISOString()
-    const encounter: Record<string, unknown> = {
-      resourceType: 'Encounter',
-      status,
-      class: { system: classSystem, code: classCode },
-      subject: { reference: `Patient/${parsed.data.patientId}` },
-      type: parsed.data.typeText ? [{ text: parsed.data.typeText }] : undefined,
-      period: {
-        start: parsed.data.start || now,
-        end: parsed.data.end || parsed.data.start || now,
-      },
-      reasonCode: parsed.data.reasonText ? [{ text: parsed.data.reasonText }] : undefined,
-    }
-
-    const bundle = {
-      resourceType: 'Bundle',
-      type: 'transaction',
-      entry: [
-        {
-          resource: encounter,
-          request: {
-            method: 'POST',
-            url: 'Encounter',
+    const bundle =
+      parsed.data.bundle ||
+      (() => {
+        const status = parsed.data.status || 'finished'
+        const classSystem =
+          parsed.data.classSystem || 'http://terminology.hl7.org/CodeSystem/v3-ActCode'
+        const classCode = parsed.data.classCode || 'AMB'
+        const now = new Date().toISOString()
+        const encounter: Record<string, unknown> = {
+          resourceType: 'Encounter',
+          status,
+          class: { system: classSystem, code: classCode },
+          subject: { reference: `Patient/${parsed.data.patientId}` },
+          type: parsed.data.typeText ? [{ text: parsed.data.typeText }] : undefined,
+          period: {
+            start: parsed.data.start || now,
+            end: parsed.data.end || parsed.data.start || now,
           },
-        },
-      ],
-    }
+          reasonCode: parsed.data.reasonText ? [{ text: parsed.data.reasonText }] : undefined,
+        }
+
+        return {
+          resourceType: 'Bundle',
+          type: 'transaction',
+          entry: [
+            {
+              resource: encounter,
+              request: {
+                method: 'POST',
+                url: 'Encounter',
+              },
+            },
+          ],
+        }
+      })()
 
     const created = await client.request('/', {
       method: 'POST',
