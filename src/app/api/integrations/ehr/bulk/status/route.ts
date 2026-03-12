@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
     const response = await fetch(parsed.data.statusUrl, {
       method: 'GET',
       headers: {
-        accept: 'application/fhir+json',
+        accept: 'application/json',
         authorization: `Bearer ${accessToken}`,
       },
     })
