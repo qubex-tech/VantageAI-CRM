@@ -23,7 +23,11 @@ function mergeTelecom(base: TelecomEntry[] | undefined, updates: TelecomEntry[])
   return Array.from(normalized.values()).filter((entry) => entry.value)
 }
 
-function buildUpdatePayload(basePatient: any, updates: { email?: string | null; phone?: string | null }) {
+function buildUpdatePayload(
+  basePatient: any,
+  updates: { email?: string | null; phone?: string | null },
+  requestUrl: string
+) {
   const telecomUpdates: TelecomEntry[] = []
   if (updates.phone) {
     telecomUpdates.push({ system: 'phone', value: updates.phone, use: 'home' })
@@ -66,10 +70,15 @@ function buildUpdatePayload(basePatient: any, updates: { email?: string | null; 
     entry: [
       {
         resource,
-        request: { method: 'PUT', url: 'Patient' },
+        request: { method: 'PUT', url: requestUrl },
       },
     ],
   }
+}
+
+function extractResponseStatus(payload: any) {
+  const entry = payload?.entry?.[0]
+  return entry?.response?.status || entry?.response?.statusCode || null
 }
 
 export async function syncPatientUpdateToEhr(params: {
@@ -166,11 +175,19 @@ export async function syncPatientUpdateToEhr(params: {
   })
 
   const basePatient = await client.request(`/Patient/${patient.externalEhrId}`)
-  const bundle = buildUpdatePayload(basePatient, { email, phone })
-  const updated = await client.request('/', {
+  const bundle = buildUpdatePayload(basePatient, { email, phone }, 'Patient')
+  let updated = await client.request('/', {
     method: 'POST',
     body: JSON.stringify(bundle),
   })
+  const status = extractResponseStatus(updated)
+  if (status === '100' && basePatient?.id) {
+    const retryBundle = buildUpdatePayload(basePatient, { email, phone }, `Patient/${basePatient.id}`)
+    updated = await client.request('/', {
+      method: 'POST',
+      body: JSON.stringify(retryBundle),
+    })
+  }
 
   await logEhrAudit({
     tenantId: practiceId,
