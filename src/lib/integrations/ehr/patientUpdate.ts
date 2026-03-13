@@ -174,7 +174,21 @@ export async function syncPatientUpdateToEhr(params: {
     },
   })
 
-  const basePatient = await client.request(`/Patient/${patient.externalEhrId}`)
+  const basePatient = (await client.request(`/Patient/${patient.externalEhrId}`)) as {
+    id?: string
+    meta?: { profile?: string[] }
+    extension?: any
+    identifier?: any
+    active?: boolean
+    name?: any
+    telecom?: any
+    birthDate?: string
+    gender?: string
+    address?: any
+    contact?: any
+    generalPractitioner?: any
+    communication?: any
+  }
   const bundle = buildUpdatePayload(basePatient, { email, phone }, 'Patient')
   let updated = await client.request('/', {
     method: 'POST',
