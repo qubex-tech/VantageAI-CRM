@@ -112,6 +112,7 @@ export async function middleware(req: NextRequest) {
       '/api/integrations/ehr/bulk/start',
       '/api/integrations/ehr/bulk/status',
       '/api/integrations/ehr/bulk/import',
+      '/api/integrations/ehr/writeback/retell',
     ]
     const isPublicPath = publicPaths.some(path => pathname.startsWith(path))
     
