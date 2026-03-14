@@ -340,6 +340,8 @@ export async function writeBackRetellCallToEhr(params: {
       ehrWritebackNoteId: created.id || null,
       ehrWritebackReviewUrl: created.reviewUrl || null,
       ehrWritebackPatientId: ehrPatientId,
+      ehrWritebackError: null,
+      ehrWritebackFailedAt: null,
     })
 
     return { status: 'success', noteId: created.id, reviewUrl: created.reviewUrl }
