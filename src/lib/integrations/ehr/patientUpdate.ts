@@ -93,16 +93,37 @@ export async function syncPatientUpdateToEhr(params: {
     return { status: 'skipped', reason: 'no_fields' }
   }
 
+  console.log('[EHR Patient Update] Start', {
+    practiceId,
+    patientId,
+    hasEmail: Boolean(email),
+    hasPhone: Boolean(phone),
+  })
+
   const settings = await getEhrSettings(practiceId)
   if (!settings?.enabledProviders?.includes(UPDATE_PROVIDER_ID as any)) {
+    console.warn('[EHR Patient Update] Skipped - provider not enabled', {
+      practiceId,
+      patientId,
+      providerId: UPDATE_PROVIDER_ID,
+    })
     return { status: 'skipped', reason: 'provider_not_enabled' }
   }
   if (!settings.enableWrite) {
+    console.warn('[EHR Patient Update] Skipped - write disabled', {
+      practiceId,
+      patientId,
+      enableWrite: settings.enableWrite,
+    })
     return { status: 'skipped', reason: 'write_disabled' }
   }
 
   const patient = await prisma.patient.findUnique({ where: { id: patientId } })
   if (!patient?.externalEhrId) {
+    console.warn('[EHR Patient Update] Skipped - missing externalEhrId', {
+      practiceId,
+      patientId,
+    })
     return { status: 'skipped', reason: 'missing_ehr_id' }
   }
 
@@ -112,6 +133,11 @@ export async function syncPatientUpdateToEhr(params: {
   })
   const connection = connections.find((candidate) => candidate.authFlow === 'backend_services')
   if (!connection?.accessTokenEnc) {
+    console.error('[EHR Patient Update] Missing backend connection', {
+      practiceId,
+      patientId,
+      providerId: UPDATE_PROVIDER_ID,
+    })
     return { status: 'skipped', reason: 'missing_connection' }
   }
 
@@ -174,33 +200,57 @@ export async function syncPatientUpdateToEhr(params: {
     },
   })
 
-  const basePatient = (await client.request(`/Patient/${patient.externalEhrId}`)) as {
-    id?: string
-    meta?: { profile?: string[] }
-    extension?: any
-    identifier?: any
-    active?: boolean
-    name?: any
-    telecom?: any
-    birthDate?: string
-    gender?: string
-    address?: any
-    contact?: any
-    generalPractitioner?: any
-    communication?: any
-  }
-  const bundle = buildUpdatePayload(basePatient, { email, phone }, 'Patient')
-  let updated = await client.request('/', {
-    method: 'POST',
-    body: JSON.stringify(bundle),
-  })
-  const status = extractResponseStatus(updated)
-  if (status === '100' && basePatient?.id) {
-    const retryBundle = buildUpdatePayload(basePatient, { email, phone }, `Patient/${basePatient.id}`)
+  let updated: unknown
+  try {
+    const basePatient = (await client.request(`/Patient/${patient.externalEhrId}`)) as {
+      id?: string
+      meta?: { profile?: string[] }
+      extension?: any
+      identifier?: any
+      active?: boolean
+      name?: any
+      telecom?: any
+      birthDate?: string
+      gender?: string
+      address?: any
+      contact?: any
+      generalPractitioner?: any
+      communication?: any
+    }
+    const bundle = buildUpdatePayload(basePatient, { email, phone }, 'Patient')
     updated = await client.request('/', {
       method: 'POST',
-      body: JSON.stringify(retryBundle),
+      body: JSON.stringify(bundle),
     })
+    const status = extractResponseStatus(updated)
+    if (status === '100' && basePatient?.id) {
+      console.warn('[EHR Patient Update] Retry with FHIR id', {
+        practiceId,
+        patientId,
+        ehrPatientId: basePatient.id,
+        status,
+      })
+      const retryBundle = buildUpdatePayload(basePatient, { email, phone }, `Patient/${basePatient.id}`)
+      updated = await client.request('/', {
+        method: 'POST',
+        body: JSON.stringify(retryBundle),
+      })
+    }
+    console.log('[EHR Patient Update] Success', {
+      practiceId,
+      patientId,
+      ehrPatientId: patient.externalEhrId,
+      responseStatus: extractResponseStatus(updated),
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'EHR update failed'
+    console.error('[EHR Patient Update] Failed', {
+      practiceId,
+      patientId,
+      ehrPatientId: patient.externalEhrId,
+      error: message,
+    })
+    throw error
   }
 
   await logEhrAudit({
