@@ -305,14 +305,7 @@ export async function writeBackRetellCallToEhr(params: {
             telecom: telecom.length ? telecom : undefined,
             gender: patientRecord.gender || 'unknown',
             birthDate,
-            identifiers: connection.providerId.startsWith('ecw')
-              ? [
-                  {
-                    system: ECW_PATIENT_IDENTIFIER_SYSTEM,
-                    value: patientRecord.id,
-                  },
-                ]
-              : undefined,
+            identifiers: undefined,
           },
           capabilityStatement,
           { skipCapabilityCheck: connection.providerId.startsWith('ecw') }
