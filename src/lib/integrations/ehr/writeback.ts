@@ -12,7 +12,6 @@ import type { Prisma } from '@prisma/client'
 import { refreshBackendConnectionIfNeeded } from '@/lib/integrations/ehr/backendTokens'
 
 const WRITEBACK_PROVIDER_ID = 'ecw_write'
-const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.326070'
 
 type WritebackResult = {
   status: 'skipped' | 'success' | 'error'
@@ -41,20 +40,6 @@ function parsePatientName(fullName: string | null | undefined): {
 function truncateText(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value
   return `${value.slice(0, maxLength)}\n\n[Truncated]`
-}
-
-async function resolveEhrPatientIdByIdentifier(params: {
-  client: FhirClient
-  identifierSystem: string
-  identifierValue: string
-}) {
-  const { client, identifierSystem, identifierValue } = params
-  const query = new URLSearchParams()
-  query.set('identifier', `${identifierSystem}|${identifierValue}`)
-  const result = (await client.request(`/Patient?${query.toString()}`)) as any
-  const entry = Array.isArray(result?.entry) ? (result.entry as Array<{ resource?: any }>) : []
-  const patientEntry = entry.find((item: { resource?: any }) => item?.resource?.resourceType === 'Patient')
-  return patientEntry?.resource?.id as string | undefined
 }
 
 function buildCallNoteText(call: RetellCall, extractedData: ExtractedCallData): string {
@@ -333,23 +318,7 @@ export async function writeBackRetellCallToEhr(params: {
           { skipCapabilityCheck: connection.providerId.startsWith('ecw') }
         )
         const location = (created as any)?.entry?.[0]?.response?.location as string | undefined
-        let createdId = location?.includes('/') ? location.split('/')[1] : undefined
-        if (!createdId) {
-          try {
-            createdId = await resolveEhrPatientIdByIdentifier({
-              client,
-              identifierSystem: ECW_PATIENT_IDENTIFIER_SYSTEM,
-              identifierValue: patientRecord.id,
-            })
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error)
-            console.error('[EHR Writeback] Identifier lookup failed', {
-              practiceId,
-              callId: call.call_id,
-              error: message,
-            })
-          }
-        }
+        const createdId = location?.includes('/') ? location.split('/')[1] : undefined
         if (!createdId) {
           console.error('[EHR Writeback] Missing created patient id', {
             practiceId,

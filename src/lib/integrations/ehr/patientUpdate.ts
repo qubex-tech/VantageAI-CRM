@@ -8,23 +8,7 @@ import { logEhrAudit } from '@/lib/integrations/ehr/audit'
 import { createPatient } from '@/lib/integrations/fhir/resources/patient'
 
 const UPDATE_PROVIDER_ID = 'ecw_write'
-const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.326070'
-
 type TelecomEntry = { system?: string; value?: string; use?: string }
-
-async function resolveEhrPatientIdByIdentifier(params: {
-  client: FhirClient
-  identifierSystem: string
-  identifierValue: string
-}) {
-  const { client, identifierSystem, identifierValue } = params
-  const query = new URLSearchParams()
-  query.set('identifier', `${identifierSystem}|${identifierValue}`)
-  const result = (await client.request(`/Patient?${query.toString()}`)) as any
-  const entry = Array.isArray(result?.entry) ? (result.entry as Array<{ resource?: any }>) : []
-  const patientEntry = entry.find((item: { resource?: any }) => item?.resource?.resourceType === 'Patient')
-  return patientEntry?.resource?.id as string | undefined
-}
 
 function mergeTelecom(base: TelecomEntry[] | undefined, updates: TelecomEntry[]) {
   const normalized = new Map<string, TelecomEntry>()
@@ -432,14 +416,7 @@ export async function syncPatientCreateToEhr(params: {
         telecom: telecom.length ? telecom : undefined,
         gender: patient.gender || 'unknown',
         birthDate,
-        identifiers: isEcw
-          ? [
-              {
-                system: ECW_PATIENT_IDENTIFIER_SYSTEM,
-                value: patient.id,
-              },
-            ]
-          : undefined,
+        identifiers: undefined,
       },
       capabilityStatement,
       { skipCapabilityCheck: connection.providerId.startsWith('ecw') }
@@ -456,22 +433,6 @@ export async function syncPatientCreateToEhr(params: {
 
   const location = created?.entry?.[0]?.response?.location as string | undefined
   let createdId = location?.includes('/') ? location.split('/')[1] : undefined
-  if (!createdId) {
-    try {
-      createdId = await resolveEhrPatientIdByIdentifier({
-        client,
-        identifierSystem: ECW_PATIENT_IDENTIFIER_SYSTEM,
-        identifierValue: patient.id,
-      })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      console.error('[EHR Patient Create] Identifier lookup failed', {
-        practiceId,
-        patientId,
-        error: message,
-      })
-    }
-  }
   if (!createdId) {
     console.error('[EHR Patient Create] Missing created patient id', {
       practiceId,
