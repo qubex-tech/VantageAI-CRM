@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { resolveEhrPractice } from '@/lib/integrations/ehr/server'
+import { prisma } from '@/lib/db'
 import { getRetellClient } from '@/lib/retell-api'
 import { processRetellCallData } from '@/lib/process-call-data'
 import { writeBackRetellCallToEhr } from '@/lib/integrations/ehr/writeback'
@@ -43,7 +44,32 @@ export async function POST(req: NextRequest) {
       extractedData,
     })
 
-    return NextResponse.json({ status: result.status, reason: result.reason })
+    let writebackMeta: Record<string, unknown> | undefined
+    if (isApiKeyAuth) {
+      const conversation = await prisma.voiceConversation.findFirst({
+        where: { practiceId, retellCallId: parsed.data.callId },
+        select: { metadata: true },
+      })
+      const metadata =
+        conversation?.metadata && typeof conversation.metadata === 'object'
+          ? (conversation.metadata as Record<string, unknown>)
+          : {}
+      writebackMeta = {
+        ehrWritebackStatus: metadata.ehrWritebackStatus,
+        ehrWritebackError: metadata.ehrWritebackError,
+        ehrWritebackFailedAt: metadata.ehrWritebackFailedAt,
+        ehrWritebackNoteId: metadata.ehrWritebackNoteId,
+        ehrWritebackReviewUrl: metadata.ehrWritebackReviewUrl,
+        ehrWritebackPatientId: metadata.ehrWritebackPatientId,
+        ehrWritebackSupportedInteractions: metadata.ehrWritebackSupportedInteractions,
+      }
+    }
+
+    return NextResponse.json({
+      status: result.status,
+      reason: result.reason,
+      ...(writebackMeta ? { writebackMeta } : {}),
+    })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to retry EHR writeback'
     return NextResponse.json({ error: message }, { status: 500 })
