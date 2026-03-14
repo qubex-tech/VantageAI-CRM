@@ -5,8 +5,10 @@ import { createClientAssertion } from '@/lib/integrations/ehr/smartEngine'
 import { refreshBackendConnectionIfNeeded } from '@/lib/integrations/ehr/backendTokens'
 import { FhirClient } from '@/lib/integrations/fhir/fhirClient'
 import { logEhrAudit } from '@/lib/integrations/ehr/audit'
+import { createPatient } from '@/lib/integrations/fhir/resources/patient'
 
 const UPDATE_PROVIDER_ID = 'ecw_write'
+const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.329155'
 
 type TelecomEntry = { system?: string; value?: string; use?: string }
 
@@ -266,4 +268,198 @@ export async function syncPatientUpdateToEhr(params: {
   })
 
   return { status: 'success', response: updated }
+}
+
+export async function syncPatientCreateToEhr(params: {
+  practiceId: string
+  patientId: string
+  actorUserId: string
+}) {
+  const { practiceId, patientId, actorUserId } = params
+
+  console.log('[EHR Patient Create] Start', { practiceId, patientId })
+
+  const settings = await getEhrSettings(practiceId)
+  if (!settings?.enabledProviders?.includes(UPDATE_PROVIDER_ID as any)) {
+    console.warn('[EHR Patient Create] Skipped - provider not enabled', {
+      practiceId,
+      patientId,
+      providerId: UPDATE_PROVIDER_ID,
+    })
+    return { status: 'skipped', reason: 'provider_not_enabled' }
+  }
+  if (!settings.enableWrite || !settings.enablePatientCreate) {
+    console.warn('[EHR Patient Create] Skipped - write disabled', {
+      practiceId,
+      patientId,
+      enableWrite: settings.enableWrite,
+      enablePatientCreate: settings.enablePatientCreate,
+    })
+    return { status: 'skipped', reason: 'write_disabled' }
+  }
+
+  const patient = await prisma.patient.findUnique({ where: { id: patientId } })
+  if (!patient) {
+    console.warn('[EHR Patient Create] Skipped - patient not found', { practiceId, patientId })
+    return { status: 'skipped', reason: 'missing_patient' }
+  }
+  if (patient.externalEhrId) {
+    console.log('[EHR Patient Create] Skipped - already linked', {
+      practiceId,
+      patientId,
+      externalEhrId: patient.externalEhrId,
+    })
+    return { status: 'skipped', reason: 'already_linked' }
+  }
+
+  const connections = await prisma.ehrConnection.findMany({
+    where: { tenantId: practiceId, providerId: UPDATE_PROVIDER_ID },
+    orderBy: { updatedAt: 'desc' },
+  })
+  const connection = connections.find((candidate) => candidate.authFlow === 'backend_services')
+  if (!connection?.accessTokenEnc) {
+    console.error('[EHR Patient Create] Missing backend connection', {
+      practiceId,
+      patientId,
+      providerId: UPDATE_PROVIDER_ID,
+    })
+    return { status: 'skipped', reason: 'missing_connection' }
+  }
+
+  const refreshedConnection = await refreshBackendConnectionIfNeeded({ connection })
+  const tokenEndpoint = refreshedConnection.tokenEndpoint || undefined
+  const privateKeyConfig = tokenEndpoint ? getPrivateKeyJwtConfig(connection.providerId) : null
+  const audOverride = connection.providerId.startsWith('ecw')
+    ? process.env.EHR_ECW_CLIENT_ASSERTION_AUD || undefined
+    : undefined
+  const client = new FhirClient({
+    baseUrl: refreshedConnection.fhirBaseUrl,
+    tokenEndpoint,
+    clientId: refreshedConnection.clientId,
+    clientSecret:
+      !privateKeyConfig && refreshedConnection.clientSecretEnc
+        ? decryptString(refreshedConnection.clientSecretEnc)
+        : undefined,
+    clientAssertionProvider:
+      privateKeyConfig && tokenEndpoint
+        ? () =>
+            createClientAssertion({
+              clientId: refreshedConnection.clientId,
+              tokenEndpoint,
+              privateKeyPem: privateKeyConfig.privateKeyPem,
+              keyId: privateKeyConfig.keyId,
+              audience: audOverride,
+            })
+        : undefined,
+    tokenState: {
+      accessToken: decryptString(refreshedConnection.accessTokenEnc!),
+      refreshToken: refreshedConnection.refreshTokenEnc
+        ? decryptString(refreshedConnection.refreshTokenEnc)
+        : undefined,
+      tokenType: undefined,
+      expiresAt: refreshedConnection.expiresAt,
+      scopes: refreshedConnection.scopesGranted || undefined,
+    },
+    onTokenRefresh: async (tokenResponse) => {
+      await prisma.ehrConnection.update({
+        where: { id: refreshedConnection.id },
+        data: {
+          accessTokenEnc: encryptString(tokenResponse.access_token),
+          refreshTokenEnc: tokenResponse.refresh_token
+            ? encryptString(tokenResponse.refresh_token)
+            : refreshedConnection.refreshTokenEnc,
+          expiresAt: tokenResponse.expires_in
+            ? new Date(Date.now() + tokenResponse.expires_in * 1000)
+            : refreshedConnection.expiresAt,
+          scopesGranted: tokenResponse.scope || refreshedConnection.scopesGranted,
+        },
+      })
+      await logEhrAudit({
+        tenantId: practiceId,
+        actorUserId,
+        action: 'EHR_TOKEN_REFRESH',
+        providerId: connection.providerId,
+        entity: 'EhrConnection',
+        entityId: connection.id,
+      })
+    },
+  })
+
+  const given = patient.firstName
+    ? [patient.firstName]
+    : patient.name
+        .split(' ')
+        .filter(Boolean)
+        .slice(0, -1)
+        .filter(Boolean)
+  const family = patient.lastName || patient.name.split(' ').slice(-1).join(' ') || undefined
+  const name = {
+    given: given.length ? given : [patient.name],
+    family,
+    text: patient.name,
+  }
+  const telecom: Array<{ system: 'phone' | 'email'; value: string; use?: string }> = []
+  if (patient.phone || patient.primaryPhone) {
+    telecom.push({ system: 'phone', value: patient.primaryPhone || patient.phone, use: 'home' })
+  }
+  if (patient.email) {
+    telecom.push({ system: 'email', value: patient.email, use: 'home' })
+  }
+  const birthDate = patient.dateOfBirth ? patient.dateOfBirth.toISOString().split('T')[0] : undefined
+
+  let created: any
+  try {
+    const capabilityStatement = await client.getCapabilityStatement()
+    created = await createPatient(
+      client,
+      {
+        name,
+        telecom: telecom.length ? telecom : undefined,
+        gender: patient.gender || 'unknown',
+        birthDate,
+        identifiers: connection.providerId.startsWith('ecw')
+          ? [
+              {
+                system: ECW_PATIENT_IDENTIFIER_SYSTEM,
+                value: patient.id,
+              },
+            ]
+          : undefined,
+      },
+      capabilityStatement,
+      { skipCapabilityCheck: connection.providerId.startsWith('ecw') }
+    )
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'EHR create failed'
+    console.error('[EHR Patient Create] Failed', {
+      practiceId,
+      patientId,
+      error: message,
+    })
+    throw error
+  }
+
+  const createdId = created?.entry?.[0]?.response?.location?.split('/')?.[1] || created?.id
+  if (createdId) {
+    await prisma.patient.update({
+      where: { id: patient.id },
+      data: { externalEhrId: createdId },
+    })
+    await logEhrAudit({
+      tenantId: practiceId,
+      actorUserId,
+      action: 'FHIR_WRITE',
+      providerId: connection.providerId,
+      entity: 'Patient',
+      entityId: createdId,
+      metadata: { patientId: patient.id },
+    })
+    console.log('[EHR Patient Create] Success', {
+      practiceId,
+      patientId,
+      ehrPatientId: createdId,
+    })
+  }
+
+  return { status: 'success', ehrPatientId: createdId }
 }

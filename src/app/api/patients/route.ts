@@ -5,6 +5,7 @@ import { patientSchema } from '@/lib/validations'
 import { createAuditLog, createTimelineEntry } from '@/lib/audit'
 import { tenantScope } from '@/lib/db'
 import { emitEvent } from '@/lib/outbox'
+import { syncPatientCreateToEhr } from '@/lib/integrations/ehr/patientUpdate'
 
 export async function GET(req: NextRequest) {
   try {
@@ -198,6 +199,16 @@ export async function POST(req: NextRequest) {
         userId: user.id,
       },
     })
+
+    try {
+      await syncPatientCreateToEhr({
+        practiceId,
+        patientId: patient.id,
+        actorUserId: user.id,
+      })
+    } catch (err) {
+      console.error('[EHR] Patient create sync failed', err)
+    }
 
     return NextResponse.json({ patient }, { status: 201 })
   } catch (error) {
