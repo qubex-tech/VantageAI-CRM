@@ -319,6 +319,14 @@ export async function writeBackRetellCallToEhr(params: {
           capabilityStatement,
           { skipCapabilityCheck: connection.providerId.startsWith('ecw') }
         )
+        const responseStatus = (created as any)?.entry?.[0]?.response?.status as string | undefined
+        const responseLocation = (created as any)?.entry?.[0]?.response?.location as string | undefined
+        console.log('[EHR Writeback] Patient create response', {
+          practiceId,
+          callId: call.call_id,
+          status: responseStatus,
+          location: responseLocation,
+        })
         const location = (created as any)?.entry?.[0]?.response?.location as string | undefined
         const createdId = location?.includes('/') ? location.split('/')[1] : undefined
         if (!createdId) {

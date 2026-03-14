@@ -430,6 +430,14 @@ export async function syncPatientCreateToEhr(params: {
       capabilityStatement,
       { skipCapabilityCheck: connection.providerId.startsWith('ecw') }
     )
+    const responseStatus = created?.entry?.[0]?.response?.status as string | undefined
+    const responseLocation = created?.entry?.[0]?.response?.location as string | undefined
+    console.log('[EHR Patient Create] Response', {
+      practiceId,
+      patientId,
+      status: responseStatus,
+      location: responseLocation,
+    })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'EHR create failed'
     console.error('[EHR Patient Create] Failed', {
