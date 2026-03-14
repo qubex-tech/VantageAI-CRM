@@ -440,13 +440,22 @@ export async function syncPatientCreateToEhr(params: {
     const responseStatus = created?.entry?.[0]?.response?.status as string | undefined
     const responseLocation = created?.entry?.[0]?.response?.location as string | undefined
     const responseType = created?.resourceType as string | undefined
+    const entryCount = Array.isArray(created?.entry) ? created.entry.length : 0
     console.log('[EHR Patient Create] Response', {
       practiceId,
       patientId,
       status: responseStatus,
       location: responseLocation,
       resourceType: responseType,
+      entryCount,
     })
+    if (responseType === 'Bundle' && !responseStatus && entryCount === 0) {
+      console.error('[EHR Patient Create] Empty bundle response', {
+        practiceId,
+        patientId,
+        response: created,
+      })
+    }
     if (responseType === 'OperationOutcome') {
       console.error('[EHR Patient Create] OperationOutcome', {
         practiceId,
