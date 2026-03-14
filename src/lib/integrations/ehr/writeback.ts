@@ -13,6 +13,7 @@ import { refreshBackendConnectionIfNeeded } from '@/lib/integrations/ehr/backend
 
 const WRITEBACK_PROVIDER_ID = 'ecw_write'
 const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.326070'
+const ECW_PATIENT_IDENTIFIER_VALUE = '15455'
 
 type WritebackResult = {
   status: 'skipped' | 'success' | 'error'
@@ -299,7 +300,6 @@ export async function writeBackRetellCallToEhr(params: {
           if (connection.providerId.startsWith('ecw') && name.text) {
             name.text = undefined
           }
-        const identifierValue = patientRecord.externalEhrId || patientRecord.id
         const created = await createPatient(
           client,
           {
@@ -311,7 +311,7 @@ export async function writeBackRetellCallToEhr(params: {
               ? [
                   {
                     system: ECW_PATIENT_IDENTIFIER_SYSTEM,
-                    value: identifierValue,
+                    value: ECW_PATIENT_IDENTIFIER_VALUE,
                   },
                 ]
               : undefined,

@@ -9,6 +9,7 @@ import { createPatient } from '@/lib/integrations/fhir/resources/patient'
 
 const UPDATE_PROVIDER_ID = 'ecw_write'
 const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.326070'
+const ECW_PATIENT_IDENTIFIER_VALUE = '15455'
 type TelecomEntry = { system?: string; value?: string; use?: string }
 
 function mergeTelecom(base: TelecomEntry[] | undefined, updates: TelecomEntry[]) {
@@ -406,11 +407,17 @@ export async function syncPatientCreateToEhr(params: {
     telecom.push({ system: 'email', value: patient.email, use: isEcw ? undefined : 'home' })
   }
   const birthDate = patient.dateOfBirth ? patient.dateOfBirth.toISOString().split('T')[0] : undefined
+  if (isEcw && !birthDate) {
+    console.warn('[EHR Patient Create] Skipped - missing birthDate', {
+      practiceId,
+      patientId,
+    })
+    return { status: 'skipped', reason: 'missing_birthdate' }
+  }
 
   let created: any
   try {
     const capabilityStatement = await client.getCapabilityStatement()
-    const identifierValue = patient.externalEhrId || patient.id
     created = await createPatient(
       client,
       {
@@ -422,7 +429,7 @@ export async function syncPatientCreateToEhr(params: {
           ? [
               {
                 system: ECW_PATIENT_IDENTIFIER_SYSTEM,
-                value: identifierValue,
+                value: ECW_PATIENT_IDENTIFIER_VALUE,
               },
             ]
           : undefined,
