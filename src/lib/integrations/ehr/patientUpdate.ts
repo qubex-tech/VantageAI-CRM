@@ -418,6 +418,54 @@ export async function syncPatientCreateToEhr(params: {
   let created: any
   try {
     const capabilityStatement = await client.getCapabilityStatement()
+    const payload = {
+      resourceType: 'Bundle',
+      type: 'transaction',
+      entry: [
+        {
+          resource: {
+            resourceType: 'Patient',
+            meta: {
+              profile: ['http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient'],
+            },
+            identifier: isEcw
+              ? [
+                  {
+                    use: 'usual',
+                    system: ECW_PATIENT_IDENTIFIER_SYSTEM,
+                    value: ECW_PATIENT_IDENTIFIER_VALUE,
+                  },
+                ]
+              : undefined,
+            name: [
+              {
+                use: 'usual',
+                family: name.family,
+                given: name.given,
+              },
+            ],
+            telecom: telecom.length
+              ? telecom.map((item) => ({
+                  system: item.system,
+                  value: item.value,
+                  ...(item.use ? { use: item.use } : {}),
+                }))
+              : undefined,
+            gender: patient.gender || 'unknown',
+            birthDate,
+          },
+          request: {
+            method: 'POST',
+            url: 'Patient',
+          },
+        },
+      ],
+    }
+    console.log('[EHR Patient Create] Payload', {
+      practiceId,
+      patientId,
+      payload,
+    })
     created = await createPatient(
       client,
       {
