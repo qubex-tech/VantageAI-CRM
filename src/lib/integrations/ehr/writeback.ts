@@ -109,11 +109,30 @@ export async function writeBackRetellCallToEhr(params: {
     return { status: 'skipped', reason: 'missing_call_id' }
   }
 
+  console.log('[EHR Writeback] Start', {
+    practiceId,
+    callId: call.call_id,
+    patientId,
+    hasExtractedName: Boolean(extractedData.patient_name),
+    hasExtractedPhone: Boolean(extractedData.user_phone_number),
+  })
+
   const settings = await getEhrSettings(practiceId)
   if (!settings?.enabledProviders?.includes(WRITEBACK_PROVIDER_ID as any)) {
+    console.warn('[EHR Writeback] Skipped - provider not enabled', {
+      practiceId,
+      callId: call.call_id,
+      providerId: WRITEBACK_PROVIDER_ID,
+    })
     return { status: 'skipped', reason: 'provider_not_enabled' }
   }
   if (!settings.enableWrite || !settings.enableNoteCreate) {
+    console.warn('[EHR Writeback] Skipped - write disabled', {
+      practiceId,
+      callId: call.call_id,
+      enableWrite: settings.enableWrite,
+      enableNoteCreate: settings.enableNoteCreate,
+    })
     return { status: 'skipped', reason: 'write_disabled' }
   }
 
@@ -126,6 +145,12 @@ export async function writeBackRetellCallToEhr(params: {
       ? (existingConversation.metadata as Record<string, unknown>)
       : {}
   if (existingMetadata.ehrWritebackStatus === 'success') {
+    console.log('[EHR Writeback] Skipped - already written', {
+      practiceId,
+      callId: call.call_id,
+      ehrWritebackPatientId: existingMetadata.ehrWritebackPatientId,
+      ehrWritebackNoteId: existingMetadata.ehrWritebackNoteId,
+    })
     return { status: 'skipped', reason: 'already_written' }
   }
 
@@ -145,6 +170,11 @@ export async function writeBackRetellCallToEhr(params: {
     })
     const connection = connections.find((candidate) => candidate.authFlow === 'backend_services')
     if (!connection?.accessTokenEnc) {
+      console.error('[EHR Writeback] Missing backend connection', {
+        practiceId,
+        callId: call.call_id,
+        providerId: WRITEBACK_PROVIDER_ID,
+      })
       await markConversationMetadata(practiceId, call.call_id, {
         ehrWritebackStatus: 'error',
         ehrWritebackError: 'No backend services connection for writeback provider.',
@@ -302,6 +332,11 @@ export async function writeBackRetellCallToEhr(params: {
     }
 
     if (!ehrPatientId) {
+      console.error('[EHR Writeback] Missing EHR patient ID', {
+        practiceId,
+        callId: call.call_id,
+        patientId,
+      })
       await markConversationMetadata(practiceId, call.call_id, {
         ehrWritebackStatus: 'error',
         ehrWritebackError: 'Missing EHR patient ID for writeback.',
@@ -344,10 +379,23 @@ export async function writeBackRetellCallToEhr(params: {
       ehrWritebackFailedAt: null,
     })
 
+    console.log('[EHR Writeback] Success', {
+      practiceId,
+      callId: call.call_id,
+      ehrPatientId,
+      noteId: created.id || null,
+      reviewUrl: created.reviewUrl || null,
+    })
+
     return { status: 'success', noteId: created.id, reviewUrl: created.reviewUrl }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'EHR writeback failed'
     if (error instanceof WriteNotSupportedError) {
+      console.error('[EHR Writeback] Not supported', {
+        practiceId,
+        callId: call.call_id,
+        supportedInteractions: error.supportedInteractions,
+      })
       await markConversationMetadata(practiceId, call.call_id, {
         ehrWritebackStatus: 'error',
         ehrWritebackError: 'Write not supported by EHR',
@@ -356,6 +404,11 @@ export async function writeBackRetellCallToEhr(params: {
       })
       return { status: 'error', reason: 'write_not_supported' }
     }
+    console.error('[EHR Writeback] Failed', {
+      practiceId,
+      callId: call.call_id,
+      error: message,
+    })
     await markConversationMetadata(practiceId, call.call_id, {
       ehrWritebackStatus: 'error',
       ehrWritebackError: message,
