@@ -203,7 +203,7 @@ export async function writeBackRetellCallToEhr(params: {
         })
         await logEhrAudit({
           tenantId: practiceId,
-          actorUserId: 'system',
+          actorUserId: null,
           action: 'EHR_TOKEN_REFRESH',
           providerId: connection.providerId,
           entity: 'EhrConnection',
@@ -224,7 +224,7 @@ export async function writeBackRetellCallToEhr(params: {
         })
         await logEhrAudit({
           tenantId: practiceId,
-          actorUserId: 'system',
+          actorUserId: null,
           action: 'EHR_TOKEN_EXPIRED',
           providerId: connection.providerId,
           entity: 'EhrConnection',
@@ -288,7 +288,7 @@ export async function writeBackRetellCallToEhr(params: {
           })
           await logEhrAudit({
             tenantId: practiceId,
-            actorUserId: 'system',
+            actorUserId: null,
             action: 'FHIR_WRITE',
             providerId: connection.providerId,
             entity: 'Patient',
@@ -323,7 +323,7 @@ export async function writeBackRetellCallToEhr(params: {
 
     await logEhrAudit({
       tenantId: practiceId,
-      actorUserId: 'system',
+      actorUserId: null,
       action: 'FHIR_WRITE',
       providerId: connection.providerId,
       entity: 'DocumentReference',
