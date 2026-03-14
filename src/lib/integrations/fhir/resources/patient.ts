@@ -32,9 +32,10 @@ export async function searchPatients(client: FhirClient, query: Record<string, s
 export async function createPatient(
   client: FhirClient,
   input: PatientInput,
-  capabilityStatement: any
+  capabilityStatement: any,
+  options?: { skipCapabilityCheck?: boolean }
 ) {
-  if (!supportsResourceInteraction(capabilityStatement, 'Patient', 'create')) {
+  if (!options?.skipCapabilityCheck && !supportsResourceInteraction(capabilityStatement, 'Patient', 'create')) {
     throw new WriteNotSupportedError('Patient create not supported', [])
   }
   const resource: any = {

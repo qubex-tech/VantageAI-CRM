@@ -267,7 +267,8 @@ export async function writeBackRetellCallToEhr(params: {
             gender: patientRecord.gender || undefined,
             birthDate,
           },
-          capabilityStatement
+          capabilityStatement,
+          { skipCapabilityCheck: connection.providerId.startsWith('ecw') }
         )
         const createdId = (created as any)?.id
         if (createdId) {
@@ -307,6 +308,7 @@ export async function writeBackRetellCallToEhr(params: {
       noteText,
       preferPreliminary: false,
       capabilityStatement,
+      skipCapabilityCheck: connection.providerId.startsWith('ecw'),
     })
 
     await logEhrAudit({

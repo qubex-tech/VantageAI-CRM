@@ -10,8 +10,12 @@ export async function createDraftDocumentReference(params: {
   preferPreliminary?: boolean
   requireBinary?: boolean
   capabilityStatement: any
+  skipCapabilityCheck?: boolean
 }) {
-  if (!supportsResourceInteraction(params.capabilityStatement, 'DocumentReference', 'create')) {
+  if (
+    !params.skipCapabilityCheck &&
+    !supportsResourceInteraction(params.capabilityStatement, 'DocumentReference', 'create')
+  ) {
     throw new WriteNotSupportedError('DocumentReference create not supported', [])
   }
 
