@@ -439,7 +439,17 @@ export async function syncPatientCreateToEhr(params: {
     throw error
   }
 
-  const createdId = created?.entry?.[0]?.response?.location?.split('/')?.[1] || created?.id
+  const location = created?.entry?.[0]?.response?.location as string | undefined
+  const createdId = location?.includes('/') ? location.split('/')[1] : undefined
+  if (!createdId) {
+    console.error('[EHR Patient Create] Missing created patient id', {
+      practiceId,
+      patientId,
+      location,
+    })
+    return { status: 'error', reason: 'missing_created_id' }
+  }
+
   if (createdId) {
     await prisma.patient.update({
       where: { id: patient.id },

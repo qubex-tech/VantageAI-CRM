@@ -309,7 +309,21 @@ export async function writeBackRetellCallToEhr(params: {
           capabilityStatement,
           { skipCapabilityCheck: connection.providerId.startsWith('ecw') }
         )
-        const createdId = (created as any)?.id
+        const location = (created as any)?.entry?.[0]?.response?.location as string | undefined
+        const createdId = location?.includes('/') ? location.split('/')[1] : undefined
+        if (!createdId) {
+          console.error('[EHR Writeback] Missing created patient id', {
+            practiceId,
+            callId: call.call_id,
+            location,
+          })
+          await markConversationMetadata(practiceId, call.call_id, {
+            ehrWritebackStatus: 'error',
+            ehrWritebackError: 'Missing created EHR patient id.',
+            ehrWritebackFailedAt: new Date().toISOString(),
+          })
+          return { status: 'error', reason: 'missing_created_id' }
+        }
         if (createdId) {
           ehrPatientId = createdId
           await prisma.patient.update({
