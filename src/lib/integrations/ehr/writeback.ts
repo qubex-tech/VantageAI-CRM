@@ -43,6 +43,20 @@ function truncateText(value: string, maxLength: number): string {
   return `${value.slice(0, maxLength)}\n\n[Truncated]`
 }
 
+async function resolveEhrPatientIdByIdentifier(params: {
+  client: FhirClient
+  identifierSystem: string
+  identifierValue: string
+}) {
+  const { client, identifierSystem, identifierValue } = params
+  const query = new URLSearchParams()
+  query.set('identifier', `${identifierSystem}|${identifierValue}`)
+  const result = (await client.request(`/Patient?${query.toString()}`)) as any
+  const entry = Array.isArray(result?.entry) ? result.entry : []
+  const patientEntry = entry.find((item) => item?.resource?.resourceType === 'Patient')
+  return patientEntry?.resource?.id as string | undefined
+}
+
 function buildCallNoteText(call: RetellCall, extractedData: ExtractedCallData): string {
   const lines: string[] = []
   lines.push('Vantage AI call summary (draft)')
@@ -310,7 +324,23 @@ export async function writeBackRetellCallToEhr(params: {
           { skipCapabilityCheck: connection.providerId.startsWith('ecw') }
         )
         const location = (created as any)?.entry?.[0]?.response?.location as string | undefined
-        const createdId = location?.includes('/') ? location.split('/')[1] : undefined
+        let createdId = location?.includes('/') ? location.split('/')[1] : undefined
+        if (!createdId) {
+          try {
+            createdId = await resolveEhrPatientIdByIdentifier({
+              client,
+              identifierSystem: ECW_PATIENT_IDENTIFIER_SYSTEM,
+              identifierValue: patientRecord.id,
+            })
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error)
+            console.error('[EHR Writeback] Identifier lookup failed', {
+              practiceId,
+              callId: call.call_id,
+              error: message,
+            })
+          }
+        }
         if (!createdId) {
           console.error('[EHR Writeback] Missing created patient id', {
             practiceId,
