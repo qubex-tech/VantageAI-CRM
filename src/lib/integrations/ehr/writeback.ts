@@ -52,8 +52,8 @@ async function resolveEhrPatientIdByIdentifier(params: {
   const query = new URLSearchParams()
   query.set('identifier', `${identifierSystem}|${identifierValue}`)
   const result = (await client.request(`/Patient?${query.toString()}`)) as any
-  const entry = Array.isArray(result?.entry) ? result.entry : []
-  const patientEntry = entry.find((item) => item?.resource?.resourceType === 'Patient')
+  const entry = Array.isArray(result?.entry) ? (result.entry as Array<{ resource?: any }>) : []
+  const patientEntry = entry.find((item: { resource?: any }) => item?.resource?.resourceType === 'Patient')
   return patientEntry?.resource?.id as string | undefined
 }
 
