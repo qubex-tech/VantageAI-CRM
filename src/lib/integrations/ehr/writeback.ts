@@ -12,7 +12,7 @@ import type { Prisma } from '@prisma/client'
 import { refreshBackendConnectionIfNeeded } from '@/lib/integrations/ehr/backendTokens'
 
 const WRITEBACK_PROVIDER_ID = 'ecw_write'
-const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.329155'
+const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.326070'
 
 type WritebackResult = {
   status: 'skipped' | 'success' | 'error'
@@ -294,16 +294,25 @@ export async function writeBackRetellCallToEhr(params: {
     }
 
     if (!ehrPatientId && settings.enablePatientCreate && patientRecord) {
-      const name =
-        parsePatientName(patientRecord.name) || parsePatientName(extractedData.patient_name)
+        const name =
+          parsePatientName(patientRecord.name) || parsePatientName(extractedData.patient_name)
       if (name) {
         const telecom: Array<{ system: 'phone' | 'email'; value: string; use?: string }> = []
         const phone = patientRecord.primaryPhone || patientRecord.phone
-        if (phone) telecom.push({ system: 'phone', value: phone, use: 'mobile' })
+          if (phone) {
+            telecom.push({
+              system: 'phone',
+              value: phone,
+              use: connection.providerId.startsWith('ecw') ? 'home' : 'mobile',
+            })
+          }
         if (patientRecord.email) telecom.push({ system: 'email', value: patientRecord.email })
         const birthDate = patientRecord.dateOfBirth
           ? patientRecord.dateOfBirth.toISOString().split('T')[0]
           : undefined
+          if (connection.providerId.startsWith('ecw') && name.text) {
+            name.text = undefined
+          }
         const created = await createPatient(
           client,
           {

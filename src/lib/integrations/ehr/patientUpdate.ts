@@ -8,7 +8,7 @@ import { logEhrAudit } from '@/lib/integrations/ehr/audit'
 import { createPatient } from '@/lib/integrations/fhir/resources/patient'
 
 const UPDATE_PROVIDER_ID = 'ecw_write'
-const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.329155'
+const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.326070'
 
 type TelecomEntry = { system?: string; value?: string; use?: string }
 
@@ -407,17 +407,18 @@ export async function syncPatientCreateToEhr(params: {
         .slice(0, -1)
         .filter(Boolean)
   const family = patient.lastName || patient.name.split(' ').slice(-1).join(' ') || undefined
+  const isEcw = connection.providerId.startsWith('ecw')
   const name = {
     given: given.length ? given : [patient.name],
     family,
-    text: patient.name,
+    text: isEcw ? undefined : patient.name,
   }
   const telecom: Array<{ system: 'phone' | 'email'; value: string; use?: string }> = []
   if (patient.phone || patient.primaryPhone) {
     telecom.push({ system: 'phone', value: patient.primaryPhone || patient.phone, use: 'home' })
   }
   if (patient.email) {
-    telecom.push({ system: 'email', value: patient.email, use: 'home' })
+    telecom.push({ system: 'email', value: patient.email, use: isEcw ? undefined : 'home' })
   }
   const birthDate = patient.dateOfBirth ? patient.dateOfBirth.toISOString().split('T')[0] : undefined
 
@@ -431,7 +432,7 @@ export async function syncPatientCreateToEhr(params: {
         telecom: telecom.length ? telecom : undefined,
         gender: patient.gender || 'unknown',
         birthDate,
-        identifiers: connection.providerId.startsWith('ecw')
+        identifiers: isEcw
           ? [
               {
                 system: ECW_PATIENT_IDENTIFIER_SYSTEM,
