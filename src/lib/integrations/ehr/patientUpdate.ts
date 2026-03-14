@@ -432,12 +432,21 @@ export async function syncPatientCreateToEhr(params: {
     )
     const responseStatus = created?.entry?.[0]?.response?.status as string | undefined
     const responseLocation = created?.entry?.[0]?.response?.location as string | undefined
+    const responseType = created?.resourceType as string | undefined
     console.log('[EHR Patient Create] Response', {
       practiceId,
       patientId,
       status: responseStatus,
       location: responseLocation,
+      resourceType: responseType,
     })
+    if (responseType === 'OperationOutcome') {
+      console.error('[EHR Patient Create] OperationOutcome', {
+        practiceId,
+        patientId,
+        outcome: created,
+      })
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'EHR create failed'
     console.error('[EHR Patient Create] Failed', {
