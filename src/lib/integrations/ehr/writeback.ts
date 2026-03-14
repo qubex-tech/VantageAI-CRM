@@ -318,6 +318,7 @@ export async function writeBackRetellCallToEhr(params: {
       preferPreliminary: false,
       capabilityStatement,
       skipCapabilityCheck: connection.providerId.startsWith('ecw'),
+      useTransaction: connection.providerId.startsWith('ecw'),
     })
 
     await logEhrAudit({

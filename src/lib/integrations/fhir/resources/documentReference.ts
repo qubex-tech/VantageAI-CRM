@@ -11,6 +11,7 @@ export async function createDraftDocumentReference(params: {
   requireBinary?: boolean
   capabilityStatement: any
   skipCapabilityCheck?: boolean
+  useTransaction?: boolean
 }) {
   if (
     !params.skipCapabilityCheck &&
@@ -60,6 +61,30 @@ export async function createDraftDocumentReference(params: {
 
   if (params.authorReference) {
     resource.author = [{ reference: params.authorReference }]
+  }
+
+  if (params.useTransaction) {
+    const bundle = {
+      resourceType: 'Bundle',
+      type: 'transaction',
+      entry: [
+        {
+          resource,
+          request: {
+            method: 'POST',
+            url: 'DocumentReference',
+          },
+        },
+      ],
+    }
+    const response = (await params.client.request('/', {
+      method: 'POST',
+      body: JSON.stringify(bundle),
+    })) as any
+    const location = response?.entry?.[0]?.response?.location as string | undefined
+    const id = location ? location.split('/')[1] : undefined
+    const reviewUrl = id ? `${params.client.getBaseUrl()}/DocumentReference/${id}` : undefined
+    return { id, reviewUrl, resource: response }
   }
 
   const created = (await params.client.request('/DocumentReference', {
