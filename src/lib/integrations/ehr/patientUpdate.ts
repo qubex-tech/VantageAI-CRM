@@ -8,6 +8,7 @@ import { logEhrAudit } from '@/lib/integrations/ehr/audit'
 import { createPatient } from '@/lib/integrations/fhir/resources/patient'
 
 const UPDATE_PROVIDER_ID = 'ecw_write'
+const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.326070'
 type TelecomEntry = { system?: string; value?: string; use?: string }
 
 function mergeTelecom(base: TelecomEntry[] | undefined, updates: TelecomEntry[]) {
@@ -409,6 +410,7 @@ export async function syncPatientCreateToEhr(params: {
   let created: any
   try {
     const capabilityStatement = await client.getCapabilityStatement()
+    const identifierValue = patient.externalEhrId || patient.id
     created = await createPatient(
       client,
       {
@@ -416,7 +418,14 @@ export async function syncPatientCreateToEhr(params: {
         telecom: telecom.length ? telecom : undefined,
         gender: patient.gender || 'unknown',
         birthDate,
-        identifiers: undefined,
+        identifiers: isEcw
+          ? [
+              {
+                system: ECW_PATIENT_IDENTIFIER_SYSTEM,
+                value: identifierValue,
+              },
+            ]
+          : undefined,
       },
       capabilityStatement,
       { skipCapabilityCheck: connection.providerId.startsWith('ecw') }

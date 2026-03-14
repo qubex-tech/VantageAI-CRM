@@ -12,6 +12,7 @@ import type { Prisma } from '@prisma/client'
 import { refreshBackendConnectionIfNeeded } from '@/lib/integrations/ehr/backendTokens'
 
 const WRITEBACK_PROVIDER_ID = 'ecw_write'
+const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.326070'
 
 type WritebackResult = {
   status: 'skipped' | 'success' | 'error'
@@ -298,6 +299,7 @@ export async function writeBackRetellCallToEhr(params: {
           if (connection.providerId.startsWith('ecw') && name.text) {
             name.text = undefined
           }
+        const identifierValue = patientRecord.externalEhrId || patientRecord.id
         const created = await createPatient(
           client,
           {
@@ -305,7 +307,14 @@ export async function writeBackRetellCallToEhr(params: {
             telecom: telecom.length ? telecom : undefined,
             gender: patientRecord.gender || 'unknown',
             birthDate,
-            identifiers: undefined,
+            identifiers: connection.providerId.startsWith('ecw')
+              ? [
+                  {
+                    system: ECW_PATIENT_IDENTIFIER_SYSTEM,
+                    value: identifierValue,
+                  },
+                ]
+              : undefined,
           },
           capabilityStatement,
           { skipCapabilityCheck: connection.providerId.startsWith('ecw') }
