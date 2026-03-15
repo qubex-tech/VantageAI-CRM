@@ -109,6 +109,7 @@ export async function middleware(req: NextRequest) {
       '/api/integrations/ehr/test/patient/update',
       '/api/integrations/ehr/test/encounter',
       '/api/integrations/ehr/test/capabilities',
+      '/api/integrations/ehr/status',
       '/api/integrations/ehr/bulk/start',
       '/api/integrations/ehr/bulk/status',
       '/api/integrations/ehr/bulk/import',
