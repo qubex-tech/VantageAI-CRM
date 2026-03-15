@@ -168,6 +168,7 @@ export async function syncPatientUpdateToEhr(params: {
       expiresAt: refreshedConnection.expiresAt,
       scopes: refreshedConnection.scopesGranted || undefined,
     },
+    timeoutMs: 30000,
     onTokenRefresh: async (tokenResponse) => {
       await prisma.ehrConnection.update({
         where: { id: refreshedConnection.id },
