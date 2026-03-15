@@ -464,7 +464,7 @@ export async function syncPatientCreateToEhr(params: {
     console.log('[EHR Patient Create] Payload', {
       practiceId,
       patientId,
-      payload,
+      payload: JSON.stringify(payload),
     })
     created = await createPatient(
       client,
