@@ -52,6 +52,7 @@ export async function POST(req: NextRequest) {
     }
 
     const enabledProviders = new Set(parsed.data.enabledProviders || [])
+    const configWarnings: Array<{ providerId: string; error: string }> = []
     const providerConfigs: Record<string, EhrProviderConfig> = {}
     for (const [providerId, config] of Object.entries(parsed.data.providerConfigs || {})) {
       if (!enabledProviders.has(providerId)) {
@@ -62,10 +63,12 @@ export async function POST(req: NextRequest) {
       const provider = getProvider(providerId as any)
       const result = provider.configSchema.safeParse(config || {})
       if (!result.success) {
-        return NextResponse.json(
-          { error: `Invalid config for provider ${providerId}` },
-          { status: 400 }
-        )
+        configWarnings.push({
+          providerId,
+          error: `Invalid config for provider ${providerId}`,
+        })
+        providerConfigs[providerId] = config as EhrProviderConfig
+        continue
       }
       providerConfigs[providerId] = result.data
     }
@@ -79,7 +82,10 @@ export async function POST(req: NextRequest) {
       enableBulkExport: parsed.data.enableBulkExport,
     }
     const stored = await upsertEhrSettings(practiceId, settings)
-    return NextResponse.json({ settings: stored.ehrIntegrations })
+    return NextResponse.json({
+      settings: stored.ehrIntegrations,
+      warnings: configWarnings.length ? configWarnings : undefined,
+    })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to update settings'
     return NextResponse.json({ error: message }, { status: 500 })
