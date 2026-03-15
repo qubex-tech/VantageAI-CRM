@@ -511,7 +511,7 @@ export async function syncPatientCreateToEhr(params: {
         console.error('[EHR Patient Create] OperationOutcome entry', {
           practiceId,
           patientId,
-          outcome: responseEntry.resource,
+          outcome: JSON.stringify(responseEntry.resource),
         })
       }
     }
