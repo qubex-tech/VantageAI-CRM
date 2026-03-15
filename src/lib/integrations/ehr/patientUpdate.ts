@@ -212,6 +212,12 @@ export async function syncPatientUpdateToEhr(params: {
       communication?: any
     }
     const bundle = buildUpdatePayload(basePatient, { email, phone }, 'Patient')
+    console.log('[EHR Patient Update] Payload', {
+      practiceId,
+      patientId,
+      ehrPatientId: patient.externalEhrId,
+      payload: JSON.stringify(bundle),
+    })
     updated = await client.request('/', {
       method: 'POST',
       body: JSON.stringify(bundle),
