@@ -44,6 +44,14 @@ function truncateText(value: string, maxLength: number): string {
   return `${value.slice(0, maxLength)}\n\n[Truncated]`
 }
 
+function formatEcwPhone(value: string): string {
+  const digits = value.replace(/\D/g, '')
+  if (digits.length === 10) {
+    return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`
+  }
+  return value
+}
+
 function buildCallNoteText(call: RetellCall, extractedData: ExtractedCallData): string {
   const lines: string[] = []
   lines.push('Vantage AI call summary (draft)')
@@ -286,13 +294,13 @@ export async function writeBackRetellCallToEhr(params: {
       if (name) {
         const telecom: Array<{ system: 'phone' | 'email'; value: string; use?: string }> = []
         const phone = patientRecord.primaryPhone || patientRecord.phone
-          if (phone) {
-            telecom.push({
-              system: 'phone',
-              value: phone,
-              use: connection.providerId.startsWith('ecw') ? 'home' : 'mobile',
-            })
-          }
+        if (phone) {
+          telecom.push({
+            system: 'phone',
+            value: connection.providerId.startsWith('ecw') ? formatEcwPhone(phone) : phone,
+            use: connection.providerId.startsWith('ecw') ? 'home' : 'mobile',
+          })
+        }
         if (patientRecord.email) telecom.push({ system: 'email', value: patientRecord.email })
         const birthDate = patientRecord.dateOfBirth
           ? patientRecord.dateOfBirth.toISOString().split('T')[0]

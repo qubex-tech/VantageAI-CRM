@@ -12,6 +12,14 @@ const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.326070'
 const ECW_PATIENT_IDENTIFIER_VALUE = '15455'
 type TelecomEntry = { system?: string; value?: string; use?: string }
 
+function formatEcwPhone(value: string): string {
+  const digits = value.replace(/\D/g, '')
+  if (digits.length === 10) {
+    return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`
+  }
+  return value
+}
+
 function mergeTelecom(base: TelecomEntry[] | undefined, updates: TelecomEntry[]) {
   const normalized = new Map<string, TelecomEntry>()
   for (const entry of base || []) {
@@ -28,11 +36,13 @@ function mergeTelecom(base: TelecomEntry[] | undefined, updates: TelecomEntry[])
 function buildUpdatePayload(
   basePatient: any,
   updates: { email?: string | null; phone?: string | null },
-  requestUrl: string
+  requestUrl: string,
+  options?: { formatEcwPhone?: boolean }
 ) {
   const telecomUpdates: TelecomEntry[] = []
   if (updates.phone) {
-    telecomUpdates.push({ system: 'phone', value: updates.phone, use: 'home' })
+    const phoneValue = options?.formatEcwPhone ? formatEcwPhone(updates.phone) : updates.phone
+    telecomUpdates.push({ system: 'phone', value: phoneValue, use: 'home' })
   }
   if (updates.email) {
     telecomUpdates.push({ system: 'email', value: updates.email, use: 'home' })
@@ -211,7 +221,9 @@ export async function syncPatientUpdateToEhr(params: {
       generalPractitioner?: any
       communication?: any
     }
-    const bundle = buildUpdatePayload(basePatient, { email, phone }, 'Patient')
+    const bundle = buildUpdatePayload(basePatient, { email, phone }, 'Patient', {
+      formatEcwPhone: connection.providerId.startsWith('ecw'),
+    })
     console.log('[EHR Patient Update] Payload', {
       practiceId,
       patientId,
@@ -230,7 +242,9 @@ export async function syncPatientUpdateToEhr(params: {
         ehrPatientId: basePatient.id,
         status,
       })
-      const retryBundle = buildUpdatePayload(basePatient, { email, phone }, `Patient/${basePatient.id}`)
+      const retryBundle = buildUpdatePayload(basePatient, { email, phone }, `Patient/${basePatient.id}`, {
+        formatEcwPhone: connection.providerId.startsWith('ecw'),
+      })
       updated = await client.request('/', {
         method: 'POST',
         body: JSON.stringify(retryBundle),
@@ -399,7 +413,12 @@ export async function syncPatientCreateToEhr(params: {
   }
   const telecom: Array<{ system: 'phone' | 'email'; value: string; use?: string }> = []
   if (patient.phone || patient.primaryPhone) {
-    telecom.push({ system: 'phone', value: patient.primaryPhone || patient.phone, use: 'home' })
+    const phoneValue = patient.primaryPhone || patient.phone
+    telecom.push({
+      system: 'phone',
+      value: isEcw && phoneValue ? formatEcwPhone(phoneValue) : phoneValue,
+      use: 'home',
+    })
   }
   if (patient.email) {
     telecom.push({ system: 'email', value: patient.email, use: isEcw ? undefined : 'home' })
