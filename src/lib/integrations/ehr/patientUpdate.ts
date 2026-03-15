@@ -39,6 +39,7 @@ function buildUpdatePayload(
   }
 
   const resource: any = {
+    ...basePatient,
     resourceType: 'Patient',
     id: basePatient?.id,
     meta: basePatient?.meta
@@ -51,17 +52,7 @@ function buildUpdatePayload(
       : {
           profile: ['http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient'],
         },
-    extension: basePatient?.extension,
-    identifier: basePatient?.identifier,
-    active: basePatient?.active,
-    name: basePatient?.name,
     telecom: mergeTelecom(basePatient?.telecom, telecomUpdates),
-    birthDate: basePatient?.birthDate,
-    gender: basePatient?.gender,
-    address: basePatient?.address,
-    contact: basePatient?.contact,
-    generalPractitioner: basePatient?.generalPractitioner,
-    communication: basePatient?.communication,
   }
 
   return {
