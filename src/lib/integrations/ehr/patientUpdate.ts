@@ -507,6 +507,13 @@ export async function syncPatientCreateToEhr(params: {
         patientId,
         entry: responseEntry,
       })
+      if (responseEntry.resource?.resourceType === 'OperationOutcome') {
+        console.error('[EHR Patient Create] OperationOutcome entry', {
+          practiceId,
+          patientId,
+          outcome: responseEntry.resource,
+        })
+      }
     }
     if (responseType === 'Bundle' && !responseStatus && entryCount === 0) {
       console.error('[EHR Patient Create] Empty bundle response', {
