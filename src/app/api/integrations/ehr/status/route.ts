@@ -22,7 +22,16 @@ export async function GET(req: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ error: 'Invalid query parameters' }, { status: 400 })
     }
-    const { practiceId, user } = await resolveEhrPractice(parsed.data.practiceId)
+    const apiKey = req.headers.get('x-api-key') || req.headers.get('authorization')
+    const backendApiKey = process.env.EHR_BACKEND_API_KEY
+    const isApiKeyAuth =
+      backendApiKey && apiKey && (apiKey === backendApiKey || apiKey === `Bearer ${backendApiKey}`)
+    if (isApiKeyAuth && !parsed.data.practiceId) {
+      return NextResponse.json({ error: 'practiceId is required for API key auth' }, { status: 400 })
+    }
+    const { practiceId, user } = isApiKeyAuth
+      ? { practiceId: parsed.data.practiceId!, user: { id: 'system' } }
+      : await resolveEhrPractice(parsed.data.practiceId)
     const settings = await getEhrSettings(practiceId)
     if (!settings?.enabledProviders?.includes(parsed.data.providerId as any)) {
       return NextResponse.json({ error: 'Provider not enabled for tenant' }, { status: 403 })
@@ -102,7 +111,7 @@ export async function GET(req: NextRequest) {
             })
             await logEhrAudit({
               tenantId: practiceId,
-              actorUserId: user.id,
+              actorUserId: isApiKeyAuth ? null : user.id,
               action: 'EHR_TOKEN_REFRESH',
               providerId: connection.providerId,
               entity: 'EhrConnection',
@@ -121,7 +130,7 @@ export async function GET(req: NextRequest) {
           })
           await logEhrAudit({
             tenantId: practiceId,
-            actorUserId: user.id,
+            actorUserId: isApiKeyAuth ? null : user.id,
             action: 'EHR_TOKEN_EXPIRED',
             providerId: connection.providerId,
             entity: 'EhrConnection',
