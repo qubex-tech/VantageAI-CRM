@@ -132,8 +132,9 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    const connected = Boolean(connection.accessTokenEnc) && connection.status !== 'disconnected'
     return NextResponse.json({
-      connected: true,
+      connected,
       status: connection.status,
       issuer: connection.issuer,
       fhirBaseUrl: connection.fhirBaseUrl,
