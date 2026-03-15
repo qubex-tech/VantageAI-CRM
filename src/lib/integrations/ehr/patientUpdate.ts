@@ -485,8 +485,12 @@ export async function syncPatientCreateToEhr(params: {
       capabilityStatement,
       { skipCapabilityCheck: connection.providerId.startsWith('ecw') }
     )
-    const responseStatus = created?.entry?.[0]?.response?.status as string | undefined
-    const responseLocation = created?.entry?.[0]?.response?.location as string | undefined
+    const responseEntry = created?.entry?.[0]
+    const responseMeta = responseEntry?.response
+    const responseStatus = (responseMeta?.status || responseMeta?.statusCode) as string | undefined
+    const responseLocation = (responseMeta?.location ||
+      responseMeta?.locationHeader ||
+      responseMeta?.url) as string | undefined
     const responseType = created?.resourceType as string | undefined
     const entryCount = Array.isArray(created?.entry) ? created.entry.length : 0
     console.log('[EHR Patient Create] Response', {
@@ -497,6 +501,13 @@ export async function syncPatientCreateToEhr(params: {
       resourceType: responseType,
       entryCount,
     })
+    if (responseEntry) {
+      console.log('[EHR Patient Create] Response entry', {
+        practiceId,
+        patientId,
+        entry: responseEntry,
+      })
+    }
     if (responseType === 'Bundle' && !responseStatus && entryCount === 0) {
       console.error('[EHR Patient Create] Empty bundle response', {
         practiceId,
@@ -521,8 +532,15 @@ export async function syncPatientCreateToEhr(params: {
     throw error
   }
 
-  const location = created?.entry?.[0]?.response?.location as string | undefined
+  const responseEntry = created?.entry?.[0]
+  const responseMeta = responseEntry?.response
+  const location = (responseMeta?.location ||
+    responseMeta?.locationHeader ||
+    responseMeta?.url) as string | undefined
   let createdId = location?.includes('/') ? location.split('/')[1] : undefined
+  if (!createdId) {
+    createdId = responseEntry?.resource?.id as string | undefined
+  }
   if (!createdId) {
     console.error('[EHR Patient Create] Missing created patient id', {
       practiceId,
