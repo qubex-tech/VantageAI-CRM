@@ -51,8 +51,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid settings' }, { status: 400 })
     }
 
+    const enabledProviders = new Set(parsed.data.enabledProviders || [])
     const providerConfigs: Record<string, EhrProviderConfig> = {}
     for (const [providerId, config] of Object.entries(parsed.data.providerConfigs || {})) {
+      if (!enabledProviders.has(providerId)) {
+        // Allow saving settings for other providers without validating disabled configs.
+        providerConfigs[providerId] = config as EhrProviderConfig
+        continue
+      }
       const provider = getProvider(providerId as any)
       const result = provider.configSchema.safeParse(config || {})
       if (!result.success) {
