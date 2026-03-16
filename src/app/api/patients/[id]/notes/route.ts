@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
 import { createAuditLog } from '@/lib/audit'
+import { syncPatientNoteToEhrEncounter } from '@/lib/integrations/ehr/writeback'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +16,9 @@ const NOTE_TYPES = [
   'allergy',
   'contact',
   'insurance',
+  'telephone_encounter',
+  'online_visit',
+  'onsite_visit',
   'other',
 ] as const
 
@@ -162,6 +166,20 @@ export async function POST(
       resourceId: patientId,
       changes: { after: { noteType: type, content: content.trim() } },
     })
+
+    if (['telephone_encounter', 'online_visit', 'onsite_visit'].includes(type)) {
+      try {
+        await syncPatientNoteToEhrEncounter({
+          practiceId: user.practiceId,
+          patientId,
+          noteType: type,
+          content: content.trim(),
+          actorUserId: user.id,
+        })
+      } catch (error) {
+        console.error('Failed to sync note to EHR encounter:', error)
+      }
+    }
 
     return NextResponse.json({ note }, { status: 201 })
   } catch (error) {

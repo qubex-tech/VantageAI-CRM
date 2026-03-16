@@ -8,12 +8,22 @@ import { createPatient } from '@/lib/integrations/fhir/resources/patient'
 import { FhirClient, WriteNotSupportedError } from '@/lib/integrations/fhir/fhirClient'
 import type { ExtractedCallData } from '@/lib/process-call-data'
 import type { RetellCall } from '@/lib/retell-api'
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
+import { randomUUID } from 'crypto'
 import { refreshBackendConnectionIfNeeded } from '@/lib/integrations/ehr/backendTokens'
 
 const WRITEBACK_PROVIDER_ID = 'ecw_write'
 const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.326070'
 const ECW_PATIENT_IDENTIFIER_VALUE = '15455'
+const ECW_TELEPHONE_PRACTITIONER =
+  'Practitioner/Lt2IFR5Ah76n4d8TFP5gBPiX1g1-Q2P9s8IYoGZvbFM'
+const ECW_TELEPHONE_LOCATION =
+  'Location/Lt2IFR5Ah76n4d8TFP5gBFO4aIYpuamqju2XjvYx6Ik'
+const ENCOUNTER_NOTE_TYPES = [
+  'telephone_encounter',
+  'online_visit',
+  'onsite_visit',
+] as const
 
 type WritebackResult = {
   status: 'skipped' | 'success' | 'error'
@@ -50,6 +60,33 @@ function formatEcwPhone(value: string): string {
     return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`
   }
   return value
+}
+
+function formatChicagoIso(date: Date): string {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Chicago',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+      timeZoneName: 'shortOffset',
+    })
+    const parts = formatter.formatToParts(date)
+    const get = (type: string) => parts.find((part) => part.type === type)?.value || ''
+    const offsetRaw = get('timeZoneName') || 'GMT'
+    const offsetMatch = offsetRaw.match(/GMT([+-]\d{1,2})/)
+    const offsetHours = offsetMatch ? Number(offsetMatch[1]) : 0
+    const offset = `${offsetHours >= 0 ? '+' : '-'}${String(Math.abs(offsetHours)).padStart(2, '0')}:00`
+    return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get(
+      'minute'
+    )}:${get('second')}${offset}`
+  } catch {
+    return date.toISOString()
+  }
 }
 
 function buildCallNoteText(call: RetellCall, extractedData: ExtractedCallData): string {
@@ -90,6 +127,95 @@ function buildTelephoneEncounterNoteText(
   const detailed = extractedData.detailed_call_summary || call.call_analysis?.call_summary
   if (!detailed) return null
   return ['Telephone encounter note', '', 'Detailed Call Summary:', detailed].join('\n')
+}
+
+function buildTelephoneEncounterBundle(params: {
+  patientId: string
+  noteText: string
+  startTime: Date
+  endTime: Date
+  encounterId?: string
+  requestMethod?: 'POST' | 'PUT'
+}) {
+  const bundleId = randomUUID()
+  const encounterId = params.encounterId || randomUUID()
+  const requestMethod = params.requestMethod || 'POST'
+  const requestUrl = requestMethod === 'PUT' ? `Encounter/${encounterId}` : 'Encounter'
+  return {
+    resourceType: 'Bundle',
+    id: bundleId,
+    meta: { lastUpdated: formatChicagoIso(new Date()) },
+    type: 'transaction',
+    entry: [
+      {
+        resource: {
+          resourceType: 'Encounter',
+          id: encounterId,
+          meta: {
+            lastUpdated: formatChicagoIso(new Date()),
+            profile: ['http://hl7.org/fhir/us/core/StructureDefinition/us-core-encounter'],
+          },
+          extension: [
+            {
+              url: 'http://eclinicalworks.com/supportingInfo/telephoneEncounter/messages',
+              valueString: params.noteText,
+            },
+            {
+              url: 'http://eclinicalworks.com/supportingInfo/telephoneEncounter/notes',
+              valueString: params.noteText,
+            },
+          ],
+          status: 'planned',
+          class: {
+            system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
+            code: 'VR',
+            display: 'virtual',
+          },
+          type: [
+            {
+              coding: [
+                {
+                  system: 'http://snomed.info/sct',
+                  code: '185317003',
+                  display: 'Telephonic Encounter',
+                },
+              ],
+              text: 'Telephonic Encounter',
+            },
+          ],
+          subject: { reference: `Patient/${params.patientId}` },
+          participant: [
+            {
+              individual: { reference: ECW_TELEPHONE_PRACTITIONER, type: 'Practitioner' },
+            },
+          ],
+          period: {
+            start: formatChicagoIso(params.startTime),
+            end: formatChicagoIso(params.endTime),
+          },
+          reasonCode: [{ text: 'Telephone encounter' }],
+          location: [
+            {
+              location: { reference: ECW_TELEPHONE_LOCATION, type: 'Location' },
+            },
+          ],
+        },
+        request: { method: requestMethod, url: requestUrl },
+      },
+    ],
+  }
+}
+
+function formatEncounterNote(type: string, content: string) {
+  const label =
+    type === 'telephone_encounter'
+      ? 'Telephone Encounter Notes'
+      : type === 'online_visit'
+        ? 'Online Visit Notes'
+        : type === 'onsite_visit'
+          ? 'Onsite Visit Notes'
+          : 'Note'
+  return `${label}\n\n${content}`
 }
 
 async function markConversationMetadata(
@@ -395,6 +521,41 @@ export async function writeBackRetellCallToEhr(params: {
     }
 
     const noteText = buildCallNoteText(call, extractedData)
+    const encounterNoteText = buildTelephoneEncounterNoteText(call, extractedData)
+    let encounterId: string | null = null
+    let encounterUrl: string | null = null
+    if (encounterNoteText) {
+      const startTime = new Date()
+      const endTime = new Date(startTime.getTime() + 15 * 60 * 1000)
+      const encounterBundle = buildTelephoneEncounterBundle({
+        patientId: ehrPatientId,
+        noteText: encounterNoteText,
+        startTime,
+        endTime,
+      })
+      const encounterResponse = (await client.request('/', {
+        method: 'POST',
+        body: JSON.stringify(encounterBundle),
+      })) as any
+      const encounterLocation = encounterResponse?.entry?.[0]?.response?.location as
+        | string
+        | undefined
+      encounterId = encounterLocation?.includes('/') ? encounterLocation.split('/')[1] : null
+      encounterUrl = encounterId ? `${client.getBaseUrl()}/Encounter/${encounterId}` : null
+      await logEhrAudit({
+        tenantId: practiceId,
+        actorUserId: null,
+        action: 'FHIR_WRITE',
+        providerId: connection.providerId,
+        entity: 'Encounter',
+        entityId: encounterId || undefined,
+        metadata: {
+          patientId: ehrPatientId,
+          callId: call.call_id,
+          noteType: 'telephone_encounter',
+        },
+      })
+    }
     const created = await createDraftDocumentReference({
       client,
       patientId: ehrPatientId,
@@ -455,6 +616,8 @@ export async function writeBackRetellCallToEhr(params: {
       ehrWritebackReviewUrl: created.reviewUrl || null,
       ehrWritebackTelephoneNoteId: telephoneNoteId,
       ehrWritebackTelephoneNoteUrl: telephoneNoteUrl,
+      ehrWritebackEncounterId: encounterId,
+      ehrWritebackEncounterUrl: encounterUrl,
       ehrWritebackPatientId: ehrPatientId,
       ehrWritebackError: null,
       ehrWritebackFailedAt: null,
@@ -497,4 +660,151 @@ export async function writeBackRetellCallToEhr(params: {
     })
     return { status: 'error', reason: 'exception' }
   }
+}
+
+export async function syncPatientNoteToEhrEncounter(params: {
+  practiceId: string
+  patientId: string
+  noteType: string
+  content: string
+  actorUserId: string
+}) {
+  const { practiceId, patientId, noteType, content, actorUserId } = params
+  if (!ENCOUNTER_NOTE_TYPES.includes(noteType as any)) {
+    return { status: 'skipped', reason: 'note_type_not_supported' }
+  }
+  const settings = await getEhrSettings(practiceId)
+  if (!settings?.enabledProviders?.includes(WRITEBACK_PROVIDER_ID as any)) {
+    return { status: 'skipped', reason: 'provider_not_enabled' }
+  }
+  if (!settings.enableWrite) {
+    return { status: 'skipped', reason: 'write_disabled' }
+  }
+
+  const patient = await prisma.patient.findFirst({
+    where: { id: patientId, practiceId, deletedAt: null },
+  })
+  if (!patient?.externalEhrId) {
+    return { status: 'skipped', reason: 'missing_ehr_id' }
+  }
+
+  const conversations = await prisma.voiceConversation.findMany({
+    where: {
+      practiceId,
+      patientId,
+      metadata: { not: Prisma.JsonNull },
+    },
+    orderBy: { updatedAt: 'desc' },
+    take: 10,
+  })
+  const encounterId =
+    conversations
+      .map((conversation) =>
+        conversation.metadata && typeof conversation.metadata === 'object'
+          ? (conversation.metadata as Record<string, unknown>)
+          : null
+      )
+      .map((metadata) => (metadata?.ehrWritebackEncounterId as string | undefined) || null)
+      .find(Boolean) || null
+  if (!encounterId) {
+    return { status: 'skipped', reason: 'missing_encounter_id' }
+  }
+
+  const connections = await prisma.ehrConnection.findMany({
+    where: { tenantId: practiceId, providerId: WRITEBACK_PROVIDER_ID },
+    orderBy: { updatedAt: 'desc' },
+  })
+  const connection = connections.find((candidate) => candidate.authFlow === 'backend_services')
+  if (!connection?.accessTokenEnc) {
+    return { status: 'skipped', reason: 'missing_connection' }
+  }
+
+  const refreshedConnection = await refreshBackendConnectionIfNeeded({ connection })
+  const tokenEndpoint = refreshedConnection.tokenEndpoint || undefined
+  const privateKeyConfig = tokenEndpoint ? getPrivateKeyJwtConfig(connection.providerId) : null
+  const audOverride = connection.providerId.startsWith('ecw')
+    ? process.env.EHR_ECW_CLIENT_ASSERTION_AUD || undefined
+    : undefined
+  const client = new FhirClient({
+    baseUrl: refreshedConnection.fhirBaseUrl,
+    tokenEndpoint,
+    clientId: refreshedConnection.clientId,
+    clientSecret:
+      !privateKeyConfig && refreshedConnection.clientSecretEnc
+        ? decryptString(refreshedConnection.clientSecretEnc)
+        : undefined,
+    clientAssertionProvider:
+      privateKeyConfig && tokenEndpoint
+        ? () =>
+            createClientAssertion({
+              clientId: refreshedConnection.clientId,
+              tokenEndpoint,
+              privateKeyPem: privateKeyConfig.privateKeyPem,
+              keyId: privateKeyConfig.keyId,
+              audience: audOverride,
+            })
+        : undefined,
+    tokenState: {
+      accessToken: decryptString(refreshedConnection.accessTokenEnc!),
+      refreshToken: refreshedConnection.refreshTokenEnc
+        ? decryptString(refreshedConnection.refreshTokenEnc)
+        : undefined,
+      tokenType: undefined,
+      expiresAt: refreshedConnection.expiresAt,
+      scopes: refreshedConnection.scopesGranted || undefined,
+    },
+    onTokenRefresh: async (tokenResponse) => {
+      await prisma.ehrConnection.update({
+        where: { id: refreshedConnection.id },
+        data: {
+          accessTokenEnc: encryptString(tokenResponse.access_token),
+          refreshTokenEnc: tokenResponse.refresh_token
+            ? encryptString(tokenResponse.refresh_token)
+            : refreshedConnection.refreshTokenEnc,
+          expiresAt: tokenResponse.expires_in
+            ? new Date(Date.now() + tokenResponse.expires_in * 1000)
+            : refreshedConnection.expiresAt,
+          scopesGranted: tokenResponse.scope || refreshedConnection.scopesGranted,
+        },
+      })
+      await logEhrAudit({
+        tenantId: practiceId,
+        actorUserId,
+        action: 'EHR_TOKEN_REFRESH',
+        providerId: connection.providerId,
+        entity: 'EhrConnection',
+        entityId: connection.id,
+      })
+    },
+  })
+
+  const startTime = new Date()
+  const endTime = new Date(startTime.getTime() + 15 * 60 * 1000)
+  const encounterBundle = buildTelephoneEncounterBundle({
+    patientId: patient.externalEhrId,
+    noteText: formatEncounterNote(noteType, content),
+    startTime,
+    endTime,
+    encounterId,
+    requestMethod: 'PUT',
+  })
+  const encounterResponse = (await client.request('/', {
+    method: 'POST',
+    body: JSON.stringify(encounterBundle),
+  })) as any
+  const encounterLocation = encounterResponse?.entry?.[0]?.response?.location as string | undefined
+  const persistedId = encounterLocation?.includes('/') ? encounterLocation.split('/')[1] : null
+  await logEhrAudit({
+    tenantId: practiceId,
+    actorUserId,
+    action: 'FHIR_WRITE',
+    providerId: connection.providerId,
+    entity: 'Encounter',
+    entityId: persistedId || encounterId || undefined,
+    metadata: {
+      patientId: patient.id,
+      noteType,
+    },
+  })
+  return { status: 'success', encounterId: persistedId || encounterId }
 }

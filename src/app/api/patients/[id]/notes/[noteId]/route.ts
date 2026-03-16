@@ -15,6 +15,9 @@ const NOTE_TYPES = [
   'allergy',
   'contact',
   'insurance',
+  'telephone_encounter',
+  'online_visit',
+  'onsite_visit',
   'other',
 ] as const
 
