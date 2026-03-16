@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { getEhrSettings, getPrivateKeyJwtConfig } from '@/lib/integrations/ehr/server'
+import {
+  getEhrSettings,
+  getPrivateKeyJwtConfig,
+  getEcwClientAssertionAud,
+} from '@/lib/integrations/ehr/server'
 import { getProvider } from '@/lib/integrations/ehr/providers'
 import { discoverSmartConfiguration } from '@/lib/integrations/ehr/discovery'
 import { createClientAssertion, exchangeClientCredentials } from '@/lib/integrations/ehr/smartEngine'
@@ -100,9 +104,10 @@ export async function POST(req: NextRequest) {
 
     const discovery = await discoverSmartConfiguration(issuer)
     const privateKeyConfig = getPrivateKeyJwtConfig(String(providerId))
-    const audOverride = String(providerId).startsWith('ecw') || isEcwIssuer(issuer)
-      ? process.env.EHR_ECW_CLIENT_ASSERTION_AUD || undefined
-      : undefined
+    const audOverride =
+      String(providerId).startsWith('ecw') || isEcwIssuer(issuer)
+        ? getEcwClientAssertionAud(issuer)
+        : undefined
     const clientAssertion = privateKeyConfig
       ? createClientAssertion({
           clientId,

@@ -2,7 +2,7 @@ import { prisma } from '@/lib/db'
 import { decryptString, encryptString } from '@/lib/integrations/ehr/crypto'
 import { discoverSmartConfiguration } from '@/lib/integrations/ehr/discovery'
 import { logEhrAudit } from '@/lib/integrations/ehr/audit'
-import { getPrivateKeyJwtConfig } from '@/lib/integrations/ehr/server'
+import { getPrivateKeyJwtConfig, getEcwClientAssertionAud } from '@/lib/integrations/ehr/server'
 import { createClientAssertion, exchangeClientCredentials } from '@/lib/integrations/ehr/smartEngine'
 import type { EhrConnection } from '@prisma/client'
 
@@ -44,7 +44,7 @@ export async function refreshBackendConnection(params: {
   const tokenEndpoint = discovery.tokenEndpoint
   const privateKeyConfig = getPrivateKeyJwtConfig(connection.providerId)
   const audOverride = connection.providerId.startsWith('ecw')
-    ? process.env.EHR_ECW_CLIENT_ASSERTION_AUD || undefined
+    ? getEcwClientAssertionAud(connection.issuer)
     : undefined
   const clientAssertion = privateKeyConfig
     ? createClientAssertion({

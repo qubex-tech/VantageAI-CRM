@@ -118,3 +118,18 @@ export function getPrivateKeyJwtConfig(providerId: string) {
     keyId: process.env.EHR_JWT_KEY_ID,
   }
 }
+
+export function getEcwClientAssertionAud(issuer?: string): string | undefined {
+  const defaultAud = process.env.EHR_ECW_CLIENT_ASSERTION_AUD || undefined
+  const prodAud = process.env.EHR_ECW_CLIENT_ASSERTION_AUD_PROD || undefined
+  const sandboxAud = process.env.EHR_ECW_CLIENT_ASSERTION_AUD_SANDBOX || undefined
+  if (!issuer) {
+    return defaultAud || prodAud || sandboxAud
+  }
+  const normalized = issuer.toLowerCase()
+  const isSandbox = normalized.includes('staging') || normalized.includes('ecwcloud.com')
+  const isProd = normalized.includes('eclinicalworks.com')
+  if (isProd && prodAud) return prodAud
+  if (isSandbox && sandboxAud) return sandboxAud
+  return defaultAud || (isProd ? prodAud : sandboxAud)
+}

@@ -5,7 +5,12 @@ import { prisma } from '@/lib/db'
 import { decryptString, encryptString } from '@/lib/integrations/ehr/crypto'
 import { discoverSmartConfiguration } from '@/lib/integrations/ehr/discovery'
 import { getProvider } from '@/lib/integrations/ehr/providers'
-import { resolveEhrPractice, getEhrSettings, getPrivateKeyJwtConfig } from '@/lib/integrations/ehr/server'
+import {
+  resolveEhrPractice,
+  getEhrSettings,
+  getPrivateKeyJwtConfig,
+  getEcwClientAssertionAud,
+} from '@/lib/integrations/ehr/server'
 import { createClientAssertion, exchangeClientCredentials } from '@/lib/integrations/ehr/smartEngine'
 import { logEhrAudit } from '@/lib/integrations/ehr/audit'
 
@@ -143,9 +148,10 @@ export async function POST(req: NextRequest) {
         : parsed.data.scopes
 
     const privateKeyConfig = getPrivateKeyJwtConfig(String(providerId))
-    const audOverride = String(providerId).startsWith('ecw') || isEcwIssuer(issuer)
-      ? process.env.EHR_ECW_CLIENT_ASSERTION_AUD || undefined
-      : undefined
+    const audOverride =
+      String(providerId).startsWith('ecw') || isEcwIssuer(issuer)
+        ? getEcwClientAssertionAud(issuer)
+        : undefined
     const clientAssertion = privateKeyConfig
       ? createClientAssertion({
           clientId: String(config.clientId),

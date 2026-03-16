@@ -1,6 +1,10 @@
 import { prisma } from '@/lib/db'
 import { decryptString, encryptString } from '@/lib/integrations/ehr/crypto'
-import { getEhrSettings, getPrivateKeyJwtConfig } from '@/lib/integrations/ehr/server'
+import {
+  getEhrSettings,
+  getPrivateKeyJwtConfig,
+  getEcwClientAssertionAud,
+} from '@/lib/integrations/ehr/server'
 import { createClientAssertion } from '@/lib/integrations/ehr/smartEngine'
 import { refreshBackendConnectionIfNeeded } from '@/lib/integrations/ehr/backendTokens'
 import { FhirClient } from '@/lib/integrations/fhir/fhirClient'
@@ -148,7 +152,7 @@ export async function syncPatientUpdateToEhr(params: {
   const tokenEndpoint = refreshedConnection.tokenEndpoint || undefined
   const privateKeyConfig = tokenEndpoint ? getPrivateKeyJwtConfig(connection.providerId) : null
   const audOverride = connection.providerId.startsWith('ecw')
-    ? process.env.EHR_ECW_CLIENT_ASSERTION_AUD || undefined
+    ? getEcwClientAssertionAud(connection.issuer)
     : undefined
   const client = new FhirClient({
     baseUrl: refreshedConnection.fhirBaseUrl,
@@ -342,7 +346,7 @@ export async function syncPatientCreateToEhr(params: {
   const tokenEndpoint = refreshedConnection.tokenEndpoint || undefined
   const privateKeyConfig = tokenEndpoint ? getPrivateKeyJwtConfig(connection.providerId) : null
   const audOverride = connection.providerId.startsWith('ecw')
-    ? process.env.EHR_ECW_CLIENT_ASSERTION_AUD || undefined
+    ? getEcwClientAssertionAud(connection.issuer)
     : undefined
   const client = new FhirClient({
     baseUrl: refreshedConnection.fhirBaseUrl,

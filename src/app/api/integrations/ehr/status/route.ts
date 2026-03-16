@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db'
 import { decryptString, encryptString } from '@/lib/integrations/ehr/crypto'
-import { resolveEhrPractice, getEhrSettings, getPrivateKeyJwtConfig } from '@/lib/integrations/ehr/server'
+import {
+  resolveEhrPractice,
+  getEhrSettings,
+  getPrivateKeyJwtConfig,
+  getEcwClientAssertionAud,
+} from '@/lib/integrations/ehr/server'
 import { FhirClient } from '@/lib/integrations/fhir/fhirClient'
 import { summarizeCapabilities } from '@/lib/integrations/fhir/capabilities'
 import { logEhrAudit } from '@/lib/integrations/ehr/audit'
@@ -66,7 +71,7 @@ export async function GET(req: NextRequest) {
           ? getPrivateKeyJwtConfig(refreshedConnection.providerId)
           : null
         const audOverride = connection.providerId.startsWith('ecw')
-          ? process.env.EHR_ECW_CLIENT_ASSERTION_AUD || undefined
+          ? getEcwClientAssertionAud(connection.issuer)
           : undefined
         const client = new FhirClient({
           baseUrl: refreshedConnection.fhirBaseUrl,
