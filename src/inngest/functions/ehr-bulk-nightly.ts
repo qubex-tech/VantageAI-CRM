@@ -4,6 +4,7 @@ import { decryptString } from '@/lib/integrations/ehr/crypto'
 import { refreshBackendConnectionIfNeeded } from '@/lib/integrations/ehr/backendTokens'
 import { logEhrAudit } from '@/lib/integrations/ehr/audit'
 import type { EhrSettings } from '@/lib/integrations/ehr/types'
+import { Prisma } from '@prisma/client'
 
 const PROVIDER_ID = 'ecw_bulk'
 const SCHEDULE_CRON = '0 * * * *'
@@ -164,7 +165,7 @@ export const runEhrBulkNightly = inngest.createFunction(
     }
     const settingsList = await step.run('load-ehr-settings', async () => {
       return prisma.practiceSettings.findMany({
-        where: { ehrIntegrations: { not: null } },
+        where: { ehrIntegrations: { not: Prisma.JsonNull } },
         select: { practiceId: true, ehrIntegrations: true },
       })
     })
