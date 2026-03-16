@@ -1,5 +1,3 @@
-import { format } from 'date-fns'
-
 type DateInput = Date | string | null | undefined
 
 export function normalizeDateOnly(input: DateInput): Date | null {
@@ -23,7 +21,19 @@ export function parseDateOnlyString(value: string | null | undefined): Date | nu
 export function formatDateOnly(input: DateInput, pattern: string): string {
   const normalized = normalizeDateOnly(input)
   if (!normalized) return ''
-  return format(normalized, pattern)
+  if (pattern === 'yyyy-MM-dd') {
+    return normalized.toISOString().slice(0, 10)
+  }
+  if (pattern === 'MMM d, yyyy' || pattern === 'MMMM d, yyyy') {
+    const month = pattern.startsWith('MMMM') ? 'long' : 'short'
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: 'UTC',
+      year: 'numeric',
+      month,
+      day: 'numeric',
+    }).format(normalized)
+  }
+  return normalized.toISOString().slice(0, 10)
 }
 
 export function formatDateOnlyForInput(input: DateInput): string {
