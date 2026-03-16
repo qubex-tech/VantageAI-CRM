@@ -706,9 +706,7 @@ export async function syncPatientNoteToEhrEncounter(params: {
       )
       .map((metadata) => (metadata?.ehrWritebackEncounterId as string | undefined) || null)
       .find(Boolean) || null
-  if (!encounterId) {
-    return { status: 'skipped', reason: 'missing_encounter_id' }
-  }
+  let resolvedEncounterId = encounterId
 
   const connections = await prisma.ehrConnection.findMany({
     where: { tenantId: practiceId, providerId: WRITEBACK_PROVIDER_ID },
@@ -780,17 +778,37 @@ export async function syncPatientNoteToEhrEncounter(params: {
 
   const startTime = new Date()
   const endTime = new Date(startTime.getTime() + 15 * 60 * 1000)
-  const encounterBundle = buildTelephoneEncounterBundle({
+  const noteText = formatEncounterNote(noteType, content)
+  if (!resolvedEncounterId) {
+    const createBundle = buildTelephoneEncounterBundle({
+      patientId: patient.externalEhrId,
+      noteText,
+      startTime,
+      endTime,
+    })
+    const createResponse = (await client.request('/', {
+      method: 'POST',
+      body: JSON.stringify(createBundle),
+    })) as any
+    const createLocation = createResponse?.entry?.[0]?.response?.location as string | undefined
+    resolvedEncounterId = createLocation?.includes('/') ? createLocation.split('/')[1] : null
+  }
+
+  if (!resolvedEncounterId) {
+    return { status: 'error', reason: 'missing_encounter_id' }
+  }
+
+  const updateBundle = buildTelephoneEncounterBundle({
     patientId: patient.externalEhrId,
-    noteText: formatEncounterNote(noteType, content),
+    noteText,
     startTime,
     endTime,
-    encounterId,
+    encounterId: resolvedEncounterId,
     requestMethod: 'PUT',
   })
   const encounterResponse = (await client.request('/', {
     method: 'POST',
-    body: JSON.stringify(encounterBundle),
+    body: JSON.stringify(updateBundle),
   })) as any
   const encounterLocation = encounterResponse?.entry?.[0]?.response?.location as string | undefined
   const persistedId = encounterLocation?.includes('/') ? encounterLocation.split('/')[1] : null
@@ -800,11 +818,11 @@ export async function syncPatientNoteToEhrEncounter(params: {
     action: 'FHIR_WRITE',
     providerId: connection.providerId,
     entity: 'Encounter',
-    entityId: persistedId || encounterId || undefined,
+    entityId: persistedId || resolvedEncounterId || undefined,
     metadata: {
       patientId: patient.id,
       noteType,
     },
   })
-  return { status: 'success', encounterId: persistedId || encounterId }
+  return { status: 'success', encounterId: persistedId || resolvedEncounterId }
 }
