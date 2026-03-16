@@ -45,7 +45,7 @@ import {
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { InsuranceTab } from './InsuranceTab'
-import { PreVisitChartTab } from './PreVisitChartTab'
+import { PreVisitChartAskSidebar, PreVisitChartTab } from './PreVisitChartTab'
 import { format, formatDistanceToNow } from 'date-fns'
 import { formatDateOnly, formatDateOnlyForInput, calculateAgeFromDateOnly } from '@/lib/date'
 import { Button } from '@/components/ui/button'
@@ -63,6 +63,7 @@ import {
 import { EditPatientForm } from './EditPatientForm'
 import { PatientTasks } from '@/components/tasks/PatientTasks'
 import { cn } from '@/lib/utils'
+import { useSidebar } from '@/components/layout/SidebarProvider'
 
 interface PatientDetailViewProps {
   patient: {
@@ -249,6 +250,7 @@ interface PatientNote {
 
 export function PatientDetailView({ patient, users = [], currentUserId = '' }: PatientDetailViewProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'activity' | 'appointments' | 'calls' | 'insurance' | 'previsit'>('overview')
+  const [preVisitChartType, setPreVisitChartType] = useState<'new_patient' | 'follow_up'>('new_patient')
   const router = useRouter()
   const [sidebarTab, setSidebarTab] = useState<'details' | 'comments'>('details')
   const [isEditing, setIsEditing] = useState(false)
@@ -262,6 +264,7 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
   const [patientNotes, setPatientNotes] = useState<PatientNote[]>([])
   const [notesLoading, setNotesLoading] = useState(false)
   const healixOpen = useHealixOpen()
+  const { setIsPreVisitFocus } = useSidebar()
   
   // Collapsible sections state
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
@@ -323,6 +326,14 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
     
     fetchNotes()
   }, [patient.id])
+
+  useEffect(() => {
+    const isFocusMode = activeTab === 'previsit'
+    setIsPreVisitFocus(isFocusMode)
+    return () => {
+      setIsPreVisitFocus(false)
+    }
+  }, [activeTab, setIsPreVisitFocus])
   
   // Refresh notes when dialog closes (after note is added/edited/deleted)
   const handleNotesChange = () => {
@@ -1007,7 +1018,12 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
             )}
 
             {activeTab === 'previsit' && (
-              <PreVisitChartTab patientId={patient.id} />
+              <PreVisitChartTab
+                patientId={patient.id}
+                chartType={preVisitChartType}
+                onChartTypeChange={setPreVisitChartType}
+                includeAskPanel={false}
+              />
             )}
           </div>
         </div>
@@ -1017,41 +1033,52 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
       <div className={cn(
         "border-l border-gray-200 bg-white flex flex-col overflow-hidden flex-shrink-0 transition-all duration-300",
         // Default width
-        "w-80",
+        activeTab === 'previsit' ? "w-[26rem]" : "w-80",
         // When Healix is open on desktop: reduce width significantly to fit
         // Healix panel takes 384px (md) or 420px (lg), so reduce sidebar proportionally
-        healixOpen && "md:w-56 lg:w-64"
+        healixOpen && activeTab !== 'previsit' && "md:w-56 lg:w-64"
       )}>
-        {/* Sidebar Header Tabs */}
-        <div className="border-b border-gray-200 px-4 flex-shrink-0">
-          <div className="flex gap-4">
-            <button
-              onClick={() => setSidebarTab('details')}
-              className={`px-1 py-3 text-sm font-medium border-b-2 transition-colors ${
-                sidebarTab === 'details'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Details
-            </button>
-            <button
-              onClick={() => setSidebarTab('comments')}
-              className={`px-1 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
-                sidebarTab === 'comments'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <MessageSquare className="h-4 w-4" />
-              Comments 0
-            </button>
+        {activeTab !== 'previsit' ? (
+          <div className="border-b border-gray-200 px-4 flex-shrink-0">
+            <div className="flex gap-4">
+              <button
+                onClick={() => setSidebarTab('details')}
+                className={`px-1 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  sidebarTab === 'details'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Details
+              </button>
+              <button
+                onClick={() => setSidebarTab('comments')}
+                className={`px-1 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+                  sidebarTab === 'comments'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <MessageSquare className="h-4 w-4" />
+                Comments 0
+              </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="border-b border-gray-200 px-4 py-3 flex-shrink-0">
+            <h3 className="text-sm font-semibold text-gray-900">Ask Healix</h3>
+          </div>
+        )}
 
         {/* Sidebar Content */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 min-w-0">
-          {sidebarTab === 'details' && (
+          {activeTab === 'previsit' ? (
+            <div className="h-full min-h-0">
+              <PreVisitChartAskSidebar patientId={patient.id} chartType={preVisitChartType} />
+            </div>
+          ) : null}
+
+          {activeTab !== 'previsit' && sidebarTab === 'details' && (
             <div className="space-y-4">
               {/* Basic Information Section */}
               <div className="min-w-0 border-b border-gray-200 pb-4">
@@ -1510,7 +1537,7 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
             </div>
           )}
 
-          {sidebarTab === 'comments' && (
+          {activeTab !== 'previsit' && sidebarTab === 'comments' && (
             <div className="text-center py-8 text-gray-500 text-sm">
               No comments yet
             </div>

@@ -7,7 +7,8 @@ import { cn } from '@/lib/utils'
 
 export function Header() {
   const pathname = usePathname()
-  const { isCollapsed } = useSidebar()
+  const { isCollapsed, isPreVisitFocus } = useSidebar()
+  const effectiveCollapsed = isCollapsed || isPreVisitFocus
 
   // Extract entity IDs from pathname if available
   const patientIdMatch = pathname.match(/\/patients\/([^/]+)/)
@@ -26,7 +27,7 @@ export function Header() {
       className={cn(
         "fixed top-0 right-0 z-40 flex items-center justify-end px-4 py-2 h-14 bg-white border-b border-gray-200 transition-all duration-300 ease-in-out max-w-full",
         // Responsive left margin based on sidebar state
-        isCollapsed ? "md:left-16" : "md:left-64"
+        effectiveCollapsed ? "md:left-16" : "md:left-64"
       )}
     >
       <div className="flex items-center gap-2">

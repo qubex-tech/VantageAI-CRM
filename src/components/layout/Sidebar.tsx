@@ -43,7 +43,7 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname()
-  const { isOpen, setIsOpen, isCollapsed, setIsCollapsed } = useSidebar()
+  const { isOpen, setIsOpen, isCollapsed, setIsCollapsed, isPreVisitFocus } = useSidebar()
   const [inboxUnread, setInboxUnread] = useState(0)
   const lastUnreadRef = useRef(0)
   const [practiceName, setPracticeName] = useState<string | null>(null)
@@ -57,10 +57,12 @@ export function Sidebar() {
   useEffect(() => {
     if (pathname.startsWith('/communications')) {
       setIsCollapsed(true)
-    } else {
+    } else if (!isPreVisitFocus) {
       setIsCollapsed(false)
     }
-  }, [pathname, setIsCollapsed])
+  }, [pathname, setIsCollapsed, isPreVisitFocus])
+
+  const effectiveCollapsed = isCollapsed || isPreVisitFocus
 
   // Prevent body scroll when mobile menu is open
   useEffect(() => {
@@ -191,7 +193,7 @@ export function Sidebar() {
           isOpen ? "translate-x-0" : "-translate-x-full",
           "md:translate-x-0", // Desktop: always visible
           // Collapsed state (desktop only)
-          isCollapsed ? "md:w-16" : "md:w-64",
+          effectiveCollapsed ? "md:w-16" : "md:w-64",
           "w-64" // Mobile width
         )}
       >
@@ -199,9 +201,9 @@ export function Sidebar() {
           {/* Logo/Header - padding aligned with nav for a clean, consistent inset */}
           <div className={cn(
             "flex items-center justify-between gap-3 border-b border-gray-200 px-4",
-            !isCollapsed && practiceName ? "h-auto min-h-14 py-3" : "h-14"
+            !effectiveCollapsed && practiceName ? "h-auto min-h-14 py-3" : "h-14"
           )}>
-            {!isCollapsed && (
+            {!effectiveCollapsed && (
               <Link
                 href="/dashboard"
                 className="flex flex-col gap-0.5 min-w-0 flex-1 py-1 -mx-1 rounded-md hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-200 focus:ring-inset"
@@ -217,7 +219,7 @@ export function Sidebar() {
                 )}
               </Link>
             )}
-            {isCollapsed && (
+            {effectiveCollapsed && (
               <div className="w-full flex justify-center flex-1">
                 <div className="w-8 h-8 rounded-lg bg-gray-900 flex items-center justify-center flex-shrink-0">
                   <span className="text-white text-xs font-semibold">V</span>
@@ -228,12 +230,13 @@ export function Sidebar() {
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
               className="hidden md:flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors flex-shrink-0"
-              aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-label={effectiveCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              disabled={isPreVisitFocus}
             >
               <ChevronLeft 
                 className={cn(
                   "h-4 w-4 transition-transform",
-                  isCollapsed && "rotate-180"
+                  effectiveCollapsed && "rotate-180"
                 )} 
               />
             </button>
@@ -256,19 +259,19 @@ export function Sidebar() {
                     isActive
                       ? "bg-gray-100 text-gray-900"
                       : "text-gray-700 hover:text-gray-900",
-                    isCollapsed && "justify-center"
+                    effectiveCollapsed && "justify-center"
                   )}
                 >
                   <Icon className={cn("h-5 w-5 flex-shrink-0", isActive && "text-gray-900")} />
-                  {!isCollapsed && <span>{item.label}</span>}
-                  {isCollapsed && (
+                  {!effectiveCollapsed && <span>{item.label}</span>}
+                  {effectiveCollapsed && (
                     <span className="sr-only">{item.label}</span>
                   )}
                   {item.href === '/communications' && inboxUnread > 0 && (
                     <span
                       className={cn(
                         "ml-auto inline-flex min-w-[20px] items-center justify-center rounded-full bg-slate-900 px-2 py-0.5 text-[11px] font-semibold text-white",
-                        isCollapsed &&
+                        effectiveCollapsed &&
                           "absolute -top-1 -right-1 ml-0 min-w-0 px-1.5 py-1 text-[10px] shadow"
                       )}
                     >
@@ -284,9 +287,9 @@ export function Sidebar() {
           <div className="px-4 py-4 border-t border-gray-200">
             <div className={cn(
               "flex items-center",
-              isCollapsed && "justify-center"
+              effectiveCollapsed && "justify-center"
             )}>
-              {isCollapsed ? (
+              {effectiveCollapsed ? (
                 <LogoutButton variant="icon" />
               ) : (
                 <LogoutButton />

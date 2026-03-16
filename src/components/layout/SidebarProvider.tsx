@@ -7,6 +7,8 @@ interface SidebarContextType {
   setIsOpen: (isOpen: boolean) => void
   isCollapsed: boolean
   setIsCollapsed: (isCollapsed: boolean) => void
+  isPreVisitFocus: boolean
+  setIsPreVisitFocus: (isPreVisitFocus: boolean) => void
 }
 
 const SidebarContext = createContext<SidebarContextType | undefined>(undefined)
@@ -14,9 +16,12 @@ const SidebarContext = createContext<SidebarContextType | undefined>(undefined)
 export function SidebarProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false) // For mobile sidebar
   const [isCollapsed, setIsCollapsed] = useState(false) // For desktop sidebar
+  const [isPreVisitFocus, setIsPreVisitFocus] = useState(false)
 
   return (
-    <SidebarContext.Provider value={{ isOpen, setIsOpen, isCollapsed, setIsCollapsed }}>
+    <SidebarContext.Provider
+      value={{ isOpen, setIsOpen, isCollapsed, setIsCollapsed, isPreVisitFocus, setIsPreVisitFocus }}
+    >
       {children}
     </SidebarContext.Provider>
   )
