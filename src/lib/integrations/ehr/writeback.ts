@@ -83,6 +83,15 @@ function buildCallNoteText(call: RetellCall, extractedData: ExtractedCallData): 
   return lines.filter(Boolean).join('\n')
 }
 
+function buildTelephoneEncounterNoteText(
+  call: RetellCall,
+  extractedData: ExtractedCallData
+): string | null {
+  const detailed = extractedData.detailed_call_summary || call.call_analysis?.call_summary
+  if (!detailed) return null
+  return ['Telephone encounter note', '', 'Detailed Call Summary:', detailed].join('\n')
+}
+
 async function markConversationMetadata(
   practiceId: string,
   callId: string,
@@ -396,6 +405,36 @@ export async function writeBackRetellCallToEhr(params: {
       useTransaction: connection.providerId.startsWith('ecw'),
     })
 
+    const telephoneNoteText = buildTelephoneEncounterNoteText(call, extractedData)
+    let telephoneNoteId: string | null = null
+    let telephoneNoteUrl: string | null = null
+    if (telephoneNoteText) {
+      const telephoneNote = await createDraftDocumentReference({
+        client,
+        patientId: ehrPatientId,
+        noteText: telephoneNoteText,
+        preferPreliminary: true,
+        capabilityStatement,
+        skipCapabilityCheck: connection.providerId.startsWith('ecw'),
+        useTransaction: connection.providerId.startsWith('ecw'),
+      })
+      telephoneNoteId = telephoneNote.id || null
+      telephoneNoteUrl = telephoneNote.reviewUrl || null
+      await logEhrAudit({
+        tenantId: practiceId,
+        actorUserId: null,
+        action: 'FHIR_WRITE',
+        providerId: connection.providerId,
+        entity: 'DocumentReference',
+        entityId: telephoneNote.id || undefined,
+        metadata: {
+          patientId: ehrPatientId,
+          callId: call.call_id,
+          noteType: 'telephone_encounter',
+        },
+      })
+    }
+
     await logEhrAudit({
       tenantId: practiceId,
       actorUserId: null,
@@ -414,6 +453,8 @@ export async function writeBackRetellCallToEhr(params: {
       ehrWritebackCompletedAt: new Date().toISOString(),
       ehrWritebackNoteId: created.id || null,
       ehrWritebackReviewUrl: created.reviewUrl || null,
+      ehrWritebackTelephoneNoteId: telephoneNoteId,
+      ehrWritebackTelephoneNoteUrl: telephoneNoteUrl,
       ehrWritebackPatientId: ehrPatientId,
       ehrWritebackError: null,
       ehrWritebackFailedAt: null,
