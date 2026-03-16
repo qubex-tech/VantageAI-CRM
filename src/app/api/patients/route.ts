@@ -6,6 +6,7 @@ import { createAuditLog, createTimelineEntry } from '@/lib/audit'
 import { tenantScope } from '@/lib/db'
 import { emitEvent } from '@/lib/outbox'
 import { syncPatientCreateToEhr } from '@/lib/integrations/ehr/patientUpdate'
+import { normalizeDateOnly, parseDateOnlyString } from '@/lib/date'
 
 export async function GET(req: NextRequest) {
   try {
@@ -73,6 +74,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
 
     const validated = patientSchema.parse(body)
+    const normalizedDob =
+      typeof body.dateOfBirth === 'string'
+        ? parseDateOnlyString(body.dateOfBirth)
+        : normalizeDateOnly(validated.dateOfBirth)
 
     // Ensure required fields are set for patient creation
     // Construct name from firstName/lastName if name is not provided
@@ -112,7 +117,7 @@ export async function POST(req: NextRequest) {
       firstName: validated.firstName ?? null,
       lastName: validated.lastName ?? null,
       preferredName: validated.preferredName ?? null,
-      dateOfBirth: validated.dateOfBirth ? new Date(validated.dateOfBirth) : null,
+      dateOfBirth: normalizedDob,
       // Contact Information
       primaryPhone: validated.primaryPhone || patientPhone || null,
       secondaryPhone: validated.secondaryPhone ?? null,

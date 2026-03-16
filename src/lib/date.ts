@@ -9,6 +9,17 @@ export function normalizeDateOnly(input: DateInput): Date | null {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
 }
 
+export function parseDateOnlyString(value: string | null | undefined): Date | null {
+  if (!value) return null
+  const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!match) return null
+  const year = Number(match[1])
+  const month = Number(match[2]) - 1
+  const day = Number(match[3])
+  if (!year || month < 0 || month > 11 || day < 1 || day > 31) return null
+  return new Date(Date.UTC(year, month, day))
+}
+
 export function formatDateOnly(input: DateInput, pattern: string): string {
   const normalized = normalizeDateOnly(input)
   if (!normalized) return ''

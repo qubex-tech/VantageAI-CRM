@@ -7,6 +7,7 @@ import { tenantScope } from '@/lib/db'
 import { logPatientChanges } from '@/lib/patient-activity'
 import { emitEvent } from '@/lib/outbox'
 import { syncPatientUpdateToEhr } from '@/lib/integrations/ehr/patientUpdate'
+import { normalizeDateOnly, parseDateOnlyString } from '@/lib/date'
 
 export const dynamic = 'force-dynamic'
 
@@ -96,6 +97,12 @@ export async function PATCH(
     const validated = patientSchema.partial().parse(body)
 
     const updateData: any = { ...validated }
+    if ('dateOfBirth' in body) {
+      updateData.dateOfBirth =
+        typeof body.dateOfBirth === 'string'
+          ? parseDateOnlyString(body.dateOfBirth)
+          : normalizeDateOnly(validated.dateOfBirth)
+    }
     delete updateData.tags
 
     // Ensure required fields are maintained if not provided
