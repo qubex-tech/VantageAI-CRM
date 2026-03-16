@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { format } from 'date-fns'
+import { calculateAgeFromDateOnly } from '@/lib/date'
 import { PatientFilters, FilterRule } from './PatientFilters'
 import { Phone, Mail, Calendar, Heart, User, CheckCircle2 } from 'lucide-react'
 
@@ -12,16 +13,7 @@ interface PatientsListProps {
 }
 
 function calculateAge(dateOfBirth: Date): number {
-  const today = new Date()
-  const birthDate = new Date(dateOfBirth)
-  let age = today.getFullYear() - birthDate.getFullYear()
-  const monthDiff = today.getMonth() - birthDate.getMonth()
-  
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-    age--
-  }
-  
-  return age
+  return calculateAgeFromDateOnly(dateOfBirth)
 }
 
 function getInitials(name: string): string {

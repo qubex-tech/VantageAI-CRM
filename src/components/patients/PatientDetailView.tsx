@@ -47,6 +47,7 @@ import { useRouter } from 'next/navigation'
 import { InsuranceTab } from './InsuranceTab'
 import { PreVisitChartTab } from './PreVisitChartTab'
 import { format, formatDistanceToNow } from 'date-fns'
+import { formatDateOnly, formatDateOnlyForInput, calculateAgeFromDateOnly } from '@/lib/date'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -163,16 +164,7 @@ interface PatientDetailViewProps {
 }
 
 function calculateAge(dateOfBirth: Date): number {
-  const today = new Date()
-  const birthDate = new Date(dateOfBirth)
-  let age = today.getFullYear() - birthDate.getFullYear()
-  const monthDiff = today.getMonth() - birthDate.getMonth()
-  
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-    age--
-  }
-  
-  return age
+  return calculateAgeFromDateOnly(dateOfBirth)
 }
 
 /** Format primary location from address fields (addressLine1, city, state, postalCode) or legacy address */
@@ -647,8 +639,8 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                             <>
                               <div className="text-xs text-gray-500 mt-2 mb-0.5">Date of Birth</div>
                               <CopyableValue
-                                value={format(new Date(patient.dateOfBirth), 'yyyy-MM-dd')}
-                                displayValue={format(new Date(patient.dateOfBirth), 'MMM d, yyyy')}
+                                value={formatDateOnlyForInput(patient.dateOfBirth)}
+                                displayValue={formatDateOnly(patient.dateOfBirth, 'MMM d, yyyy')}
                                 className="text-sm font-medium text-gray-900"
                                 title="Click to copy date of birth"
                               />
@@ -1120,7 +1112,7 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                       <div className="min-w-0">
                         <div className="text-xs text-gray-500 mb-1">Date of Birth</div>
                         <div className="text-sm font-medium text-gray-900 break-words">
-                          {format(new Date(patient.dateOfBirth), 'MMM d, yyyy')}
+                          {formatDateOnly(patient.dateOfBirth, 'MMM d, yyyy')}
                         </div>
                       </div>
                     )}

@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChevronDown, ChevronUp } from 'lucide-react'
+import { formatDateOnlyForInput } from '@/lib/date'
 
 interface Patient {
   id: string
@@ -83,10 +84,11 @@ export function EditPatientForm({ patient, onCancel, onSuccess }: EditPatientFor
 
   // Format date for input (YYYY-MM-DD)
   const formatDateForInput = (date: Date | string | null | undefined) => {
-    if (!date) return ''
-    const d = typeof date === 'string' ? new Date(date) : date
-    if (isNaN(d.getTime()) || d.getFullYear() < 1901) return ''
-    return d.toISOString().split('T')[0]
+    const formatted = formatDateOnlyForInput(date)
+    if (!formatted) return ''
+    const year = Number(formatted.split('-')[0] || 0)
+    if (!year || year < 1901) return ''
+    return formatted
   }
 
   // Format time for input (HH:mm)

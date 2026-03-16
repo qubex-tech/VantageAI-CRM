@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { format } from 'date-fns'
+import { calculateAgeFromDateOnly } from '@/lib/date'
 
 interface PatientCardProps {
   patient: {
@@ -21,7 +21,7 @@ interface PatientCardProps {
 }
 
 export function PatientCard({ patient }: PatientCardProps) {
-  const age = new Date().getFullYear() - new Date(patient.dateOfBirth).getFullYear()
+  const age = calculateAgeFromDateOnly(patient.dateOfBirth)
 
   return (
     <Link href={`/patients/${patient.id}`}>

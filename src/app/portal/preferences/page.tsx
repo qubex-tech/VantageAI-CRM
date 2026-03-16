@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getPatientSession } from '@/lib/portal-session'
 import { prisma } from '@/lib/db'
 import { format } from 'date-fns'
+import { formatDateOnly } from '@/lib/date'
 import Link from 'next/link'
 import { BackButton } from '@/components/portal/BackButton'
 import { PreferencesForm } from './preferences-form'
@@ -120,7 +121,7 @@ export default async function PortalPreferencesPage() {
                 <div>
                   <Label className="text-sm font-medium text-gray-700">Date of Birth</Label>
                   <p className="mt-1 text-gray-900">
-                    {format(new Date(patient.dateOfBirth), 'MMMM d, yyyy')}
+                    {formatDateOnly(patient.dateOfBirth, 'MMMM d, yyyy')}
                   </p>
                 </div>
               )}
