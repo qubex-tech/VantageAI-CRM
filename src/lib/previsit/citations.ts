@@ -28,7 +28,10 @@ export function validateAndNumberCitations({
   let nextNumber = 1
 
   const normalizedSections: PreVisitChartSectionOutput[] = sections.map((section) => {
-    const uniqueSourceIds = Array.from(new Set(section.sourceIds || []))
+    const normalizedSourceIds = (section.sourceIds || [])
+      .map((sourceId) => (typeof sourceId === 'string' ? sourceId.trim() : ''))
+      .filter(Boolean)
+    const uniqueSourceIds = Array.from(new Set(normalizedSourceIds))
     const validSourceIds = uniqueSourceIds.filter((sourceId) => evidenceIds.has(sourceId))
     const unknownSourceIds = uniqueSourceIds.filter((sourceId) => !evidenceIds.has(sourceId))
 

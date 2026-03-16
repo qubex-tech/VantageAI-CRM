@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
 import { canManagePractice, isVantageAdmin } from '@/lib/permissions'
@@ -26,6 +27,11 @@ function resolvePracticeId(req: NextRequest, user: Awaited<ReturnType<typeof req
   return user.practiceId
 }
 
+function isTemplateColumnMissing(error: unknown) {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false
+  return error.code === 'P2022' && error.message.includes('healixPreChartTemplate')
+}
+
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req)
@@ -44,6 +50,14 @@ export async function GET(req: NextRequest) {
       template: settings?.healixPreChartTemplate ?? DEFAULT_PREVISIT_TEMPLATE,
     })
   } catch (error) {
+    if (isTemplateColumnMissing(error)) {
+      return NextResponse.json({
+        template: DEFAULT_PREVISIT_TEMPLATE,
+        warning:
+          'Pre-Visit template column is not available yet. Run `npx prisma migrate deploy` in this environment.',
+      })
+    }
+
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to load pre-chart template' },
       { status: 500 }
@@ -82,6 +96,17 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ template: settings.healixPreChartTemplate })
   } catch (error) {
+    if (isTemplateColumnMissing(error)) {
+      return NextResponse.json(
+        {
+          error:
+            'Pre-Visit template migration has not been applied. Run `npx prisma migrate deploy` in this environment.',
+          code: 'MIGRATION_REQUIRED',
+        },
+        { status: 503 }
+      )
+    }
+
     if (error instanceof Error && error.name === 'ZodError') {
       return NextResponse.json({ error: 'Validation error', details: error }, { status: 400 })
     }

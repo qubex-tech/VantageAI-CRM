@@ -9,6 +9,25 @@ import { generatePreVisitChart } from '@/lib/previsit/generate'
 import { createAuditLog } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60
+
+function isPreVisitMigrationMissing(error: unknown) {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false
+  if (error.code === 'P2021' && error.message.includes('pre_visit_charts')) return true
+  if (error.code === 'P2022' && error.message.includes('healixPreChartTemplate')) return true
+  return false
+}
+
+function isLikelyTimeoutOrTermination(error: unknown) {
+  if (!(error instanceof Error)) return false
+  const message = error.message.toLowerCase()
+  return (
+    message.includes('terminated') ||
+    message.includes('abort') ||
+    message.includes('timed out') ||
+    message.includes('timeout')
+  )
+}
 
 export async function GET(
   req: NextRequest,
@@ -36,6 +55,16 @@ export async function GET(
 
     return NextResponse.json({ chart })
   } catch (error) {
+    if (isPreVisitMigrationMissing(error)) {
+      return NextResponse.json(
+        {
+          error:
+            'Pre-Visit Charting database migration has not been applied. Run `npx prisma migrate deploy` in this environment.',
+          code: 'MIGRATION_REQUIRED',
+        },
+        { status: 503 }
+      )
+    }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to load pre-visit chart' },
       { status: 500 }
@@ -157,6 +186,17 @@ export async function POST(
 
     return NextResponse.json({ chart })
   } catch (error) {
+    if (isPreVisitMigrationMissing(error)) {
+      return NextResponse.json(
+        {
+          error:
+            'Pre-Visit Charting database migration has not been applied. Run `npx prisma migrate deploy` in this environment.',
+          code: 'MIGRATION_REQUIRED',
+        },
+        { status: 503 }
+      )
+    }
+
     if (createdChartId) {
       await prisma.preVisitChart
         .update({
@@ -198,6 +238,17 @@ export async function POST(
 
     if (error instanceof Error && error.name === 'ZodError') {
       return NextResponse.json({ error: 'Validation error', details: error }, { status: 400 })
+    }
+
+    if (isLikelyTimeoutOrTermination(error)) {
+      return NextResponse.json(
+        {
+          error:
+            'Pre-visit chart generation timed out while contacting the AI model. Please retry once. If it continues, reduce context volume for this patient and try again.',
+          code: 'GENERATION_TIMEOUT',
+        },
+        { status: 504 }
+      )
     }
 
     return NextResponse.json(

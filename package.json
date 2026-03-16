@@ -13,6 +13,7 @@
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed:previsit-demo": "tsx scripts/seed-previsit-demo-patient.ts",
     "db:studio": "prisma studio",
     "db:verify": "node scripts/verify-migrations.js",
     "simulate:retell": "tsx scripts/simulate-retell.ts",
