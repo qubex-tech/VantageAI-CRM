@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { getSupabaseSession } from '@/lib/auth-supabase'
 import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
 import { prisma } from '@/lib/db'
-import { isVantageAdmin, canConfigureAPIs, canManageUsers } from '@/lib/permissions'
+import { isVantageAdmin, canConfigureAPIs, canManageUsers, canManagePractice } from '@/lib/permissions'
 import { CalSettings } from '@/components/settings/CalSettings'
 import { TeamManagement } from '@/components/settings/TeamManagement'
 import { RetellSettings } from '@/components/settings/RetellSettings'
@@ -10,6 +10,7 @@ import { SendgridSettings } from '@/components/settings/SendgridSettings'
 import { TwilioSettings } from '@/components/settings/TwilioSettings'
 import { PracticeManagement } from '@/components/settings/PracticeManagement'
 import { PracticeAPIConfiguration } from '@/components/settings/PracticeAPIConfiguration'
+import { PreChartTemplateSettings } from '@/components/settings/PreChartTemplateSettings'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 
 export const dynamic = 'force-dynamic'
@@ -96,15 +97,19 @@ export default async function SettingsPage() {
   }
 
   const hasTeamTab = !!user.practiceId && canManageUsers(userForPermissions, user.practiceId)
+  const hasAiConfigTab = !!user.practiceId && canManagePractice(userForPermissions, user.practiceId)
 
   // Determine default tab
   const hasVantageAdminTab = isVantageAdminUser
   const hasPracticeApiTab = isVantageAdminUser
   const hasApiTab = canConfigureAPI && user.practiceId
+  const hasAnyTab = hasVantageAdminTab || hasPracticeApiTab || hasApiTab || hasTeamTab || hasAiConfigTab
   const defaultTab = hasVantageAdminTab
     ? 'vantage-admin'
     : hasTeamTab
       ? 'team'
+      : hasAiConfigTab
+        ? 'ai-config'
       : hasPracticeApiTab
         ? 'practice-api'
         : hasApiTab
@@ -118,11 +123,14 @@ export default async function SettingsPage() {
         <p className="text-sm text-gray-500">Manage your practice settings</p>
       </div>
 
-      {(hasVantageAdminTab || hasPracticeApiTab || hasApiTab || hasTeamTab) ? (
+      {hasAnyTab ? (
         <Tabs defaultValue={defaultTab} className="w-full">
           <TabsList>
             {hasTeamTab && (
               <TabsTrigger value="team">Team</TabsTrigger>
+            )}
+            {hasAiConfigTab && (
+              <TabsTrigger value="ai-config">AI Configuration</TabsTrigger>
             )}
             {hasVantageAdminTab && (
               <TabsTrigger value="vantage-admin">Vantage Admin</TabsTrigger>
@@ -138,6 +146,12 @@ export default async function SettingsPage() {
           {hasTeamTab && (
             <TabsContent value="team" className="mt-6">
               <TeamManagement />
+            </TabsContent>
+          )}
+
+          {hasAiConfigTab && (
+            <TabsContent value="ai-config" className="mt-6">
+              <PreChartTemplateSettings />
             </TabsContent>
           )}
 

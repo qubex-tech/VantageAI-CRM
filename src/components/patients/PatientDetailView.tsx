@@ -45,6 +45,7 @@ import {
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { InsuranceTab } from './InsuranceTab'
+import { PreVisitChartTab } from './PreVisitChartTab'
 import { format, formatDistanceToNow } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import {
@@ -255,7 +256,7 @@ interface PatientNote {
 }
 
 export function PatientDetailView({ patient, users = [], currentUserId = '' }: PatientDetailViewProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'activity' | 'appointments' | 'calls' | 'insurance'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'activity' | 'appointments' | 'calls' | 'insurance' | 'previsit'>('overview')
   const router = useRouter()
   const [sidebarTab, setSidebarTab] = useState<'details' | 'comments'>('details')
   const [isEditing, setIsEditing] = useState(false)
@@ -606,6 +607,17 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
             >
               <Shield className="h-4 w-4" />
               Insurance {patient.insurancePolicies.length > 0 && `(${patient.insurancePolicies.length})`}
+            </button>
+            <button
+              onClick={() => setActiveTab('previsit')}
+              className={`px-1 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+                activeTab === 'previsit'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <FileText className="h-4 w-4" />
+              Pre-Visit Chart
             </button>
           </div>
         </div>
@@ -1000,6 +1012,10 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                 policies={patient.insurancePolicies}
                 onRefresh={() => router.refresh()}
               />
+            )}
+
+            {activeTab === 'previsit' && (
+              <PreVisitChartTab patientId={patient.id} />
             )}
           </div>
         </div>

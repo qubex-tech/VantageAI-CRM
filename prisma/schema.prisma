@@ -21,56 +21,56 @@ model Practice {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  users                    User[]
-  patients                 Patient[]
-  insurancePolicies        InsurancePolicy[]
-  appointments             Appointment[]
-  calIntegrations          CalIntegration[]
-  calEventTypeMappings     CalEventTypeMapping[]
-  retellIntegrations       RetellIntegration[]
-  sendgridIntegrations     SendgridIntegration[]
-  twilioIntegrations       TwilioIntegration[]
-  ehrConnections           EhrConnection[]
-  practiceSettings         PracticeSettings?
-  integrationAuditLogs     IntegrationAuditLog[]
-  voiceConversations       VoiceConversation[]
-  workflows                Workflow[]
-  auditLogs                AuditLog[]
-  healixConversations      HealixConversation[]
-  healixActionLogs         HealixActionLog[]
-  patientNotes             PatientNote[]
-  outboxEvents             OutboxEvent[]
-  automationRules          AutomationRule[]
-  automationRuns           AutomationRun[]
-  brandProfile             BrandProfile?
-  templates                MarketingTemplate[]
-  templateVersions         MarketingTemplateVersion[]
-  templateAssets           MarketingTemplateAsset[]
-  contentBlocks            MarketingContentBlock[]
-  marketingAuditLogs       MarketingAuditLog[]
+  users                      User[]
+  patients                   Patient[]
+  insurancePolicies          InsurancePolicy[]
+  appointments               Appointment[]
+  calIntegrations            CalIntegration[]
+  calEventTypeMappings       CalEventTypeMapping[]
+  retellIntegrations         RetellIntegration[]
+  sendgridIntegrations       SendgridIntegration[]
+  twilioIntegrations         TwilioIntegration[]
+  ehrConnections             EhrConnection[]
+  practiceSettings           PracticeSettings?
+  integrationAuditLogs       IntegrationAuditLog[]
+  voiceConversations         VoiceConversation[]
+  workflows                  Workflow[]
+  auditLogs                  AuditLog[]
+  healixConversations        HealixConversation[]
+  healixActionLogs           HealixActionLog[]
+  patientNotes               PatientNote[]
+  outboxEvents               OutboxEvent[]
+  automationRules            AutomationRule[]
+  automationRuns             AutomationRun[]
+  brandProfile               BrandProfile?
+  templates                  MarketingTemplate[]
+  templateVersions           MarketingTemplateVersion[]
+  templateAssets             MarketingTemplateAsset[]
+  contentBlocks              MarketingContentBlock[]
+  marketingAuditLogs         MarketingAuditLog[]
   // Patient Portal
-  patientAccounts          PatientAccount[]
-  consentRecords           ConsentRecord[]
-  communicationPreferences CommunicationPreference[]
-  conversationThreads      ConversationThread[]
-  portalMessages           PortalMessage[]
-  portalTasks              PatientTask[]
-  formTemplates            FormTemplate[]
-  formRequests             FormRequest[]
-  formSubmissions          FormSubmission[]
-  documentUploads          DocumentUpload[]
-  reviewRequests           ReviewRequest[]
-  feedbacks                Feedback[]
-  referralLinks            ReferralLink[]
-  referralAttributions     ReferralAttribution[]
-  portalAuditLogs          PortalAuditLog[]
-  analyticsEvents          AnalyticsEvent[]
-  campaigns                Campaign[]
-  campaignEnrollments      CampaignEnrollment[]
-  guardianRelationships    GuardianRelationship[]
-  tasks                    Task[]
-  taskComments             TaskComment[]
-  teams                    Team[]
+  patientAccounts            PatientAccount[]
+  consentRecords             ConsentRecord[]
+  communicationPreferences   CommunicationPreference[]
+  conversationThreads        ConversationThread[]
+  portalMessages             PortalMessage[]
+  portalTasks                PatientTask[]
+  formTemplates              FormTemplate[]
+  formRequests               FormRequest[]
+  formSubmissions            FormSubmission[]
+  documentUploads            DocumentUpload[]
+  reviewRequests             ReviewRequest[]
+  feedbacks                  Feedback[]
+  referralLinks              ReferralLink[]
+  referralAttributions       ReferralAttribution[]
+  portalAuditLogs            PortalAuditLog[]
+  analyticsEvents            AnalyticsEvent[]
+  campaigns                  Campaign[]
+  campaignEnrollments        CampaignEnrollment[]
+  guardianRelationships      GuardianRelationship[]
+  tasks                      Task[]
+  taskComments               TaskComment[]
+  teams                      Team[]
   communicationConversations CommunicationConversation[]
   communicationMessages      CommunicationMessage[]
   communicationAssignments   CommunicationAssignment[]
@@ -80,6 +80,7 @@ model Practice {
   knowledgeBaseChunks        KnowledgeBaseChunk[]
   callReviews                CallReview[]
   knowledgeBaseFaqs          KnowledgeBaseFaq[]
+  preVisitCharts             PreVisitChart[]
 
   @@index([slug])
   @@index([portalDomain])
@@ -114,9 +115,10 @@ model User {
   integrationAuditLogs             IntegrationAuditLog[]
   teamMemberships                  TeamMember[]
   communicationMessages            CommunicationMessage[]
-  communicationAssignments         CommunicationAssignment[] @relation("CommunicationAssignmentUser")
-  communicationAssignmentActions   CommunicationAssignment[] @relation("CommunicationAssignmentActor")
+  communicationAssignments         CommunicationAssignment[]  @relation("CommunicationAssignmentUser")
+  communicationAssignmentActions   CommunicationAssignment[]  @relation("CommunicationAssignmentActor")
   callReviews                      CallReview[]
+  preVisitChartsCreated            PreVisitChart[]            @relation("PreVisitChartCreator")
 
   @@index([practiceId])
   @@index([email])
@@ -171,32 +173,33 @@ model Patient {
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
-  practice                 Practice                  @relation(fields: [practiceId], references: [id], onDelete: Cascade)
-  insurancePolicies        InsurancePolicy[]
-  appointments             Appointment[]
-  voiceConversations       VoiceConversation[]
-  tags                     PatientTag[]
-  timelineEntries          PatientTimelineEntry[]
-  patientNotes             PatientNote[]
+  practice                   Practice                    @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  insurancePolicies          InsurancePolicy[]
+  appointments               Appointment[]
+  voiceConversations         VoiceConversation[]
+  tags                       PatientTag[]
+  timelineEntries            PatientTimelineEntry[]
+  patientNotes               PatientNote[]
   // Patient Portal
-  patientAccount           PatientAccount?
-  guardianships            GuardianRelationship[]    @relation("Guardian")
-  dependents               GuardianRelationship[]    @relation("Dependent")
-  consentRecords           ConsentRecord[]
-  communicationPreferences CommunicationPreference[]
-  conversationThreads      ConversationThread[]
-  portalMessages           PortalMessage[]
-  portalTasks              PatientTask[]
-  formRequests             FormRequest[]
-  tasks                    Task[]
+  patientAccount             PatientAccount?
+  guardianships              GuardianRelationship[]      @relation("Guardian")
+  dependents                 GuardianRelationship[]      @relation("Dependent")
+  consentRecords             ConsentRecord[]
+  communicationPreferences   CommunicationPreference[]
+  conversationThreads        ConversationThread[]
+  portalMessages             PortalMessage[]
+  portalTasks                PatientTask[]
+  formRequests               FormRequest[]
+  tasks                      Task[]
   communicationConversations CommunicationConversation[]
   communicationMessages      CommunicationMessage[]
-  formSubmissions          FormSubmission[]
-  documentUploads          DocumentUpload[]
-  reviewRequests           ReviewRequest[]
-  feedbacks                Feedback[]
-  referralAttributions     ReferralAttribution[]
-  campaignEnrollments      CampaignEnrollment[]
+  formSubmissions            FormSubmission[]
+  documentUploads            DocumentUpload[]
+  reviewRequests             ReviewRequest[]
+  feedbacks                  Feedback[]
+  referralAttributions       ReferralAttribution[]
+  campaignEnrollments        CampaignEnrollment[]
+  preVisitCharts             PreVisitChart[]
 
   @@index([practiceId])
   @@index([phone])
@@ -260,31 +263,31 @@ model PatientTimelineEntry {
 }
 
 model InsurancePolicy {
-  id                    String    @id @default(uuid())
-  practiceId            String
-  patientId             String
-  payerNameRaw          String    // Payer name (required)
-  insurerPhoneRaw       String?   // Carrier phone as entered by staff/agent
-  insurerPhoneNormalized String?  // E.164-like normalized number for dialing
-  memberId              String    // Member ID / Policy # (required)
-  groupNumber           String?   // Group # (optional)
-  planName              String?   // Plan name (optional)
-  planType              String?   // PPO, HMO, EPO, POS, Medicare, Medicaid, Other, Unknown
-  isPrimary             Boolean   @default(true)
+  id                     String    @id @default(uuid())
+  practiceId             String
+  patientId              String
+  payerNameRaw           String // Payer name (required)
+  insurerPhoneRaw        String? // Carrier phone as entered by staff/agent
+  insurerPhoneNormalized String? // E.164-like normalized number for dialing
+  memberId               String // Member ID / Policy # (required)
+  groupNumber            String? // Group # (optional)
+  planName               String? // Plan name (optional)
+  planType               String? // PPO, HMO, EPO, POS, Medicare, Medicaid, Other, Unknown
+  isPrimary              Boolean   @default(true)
   subscriberIsPatient    Boolean   @default(true)
   subscriberFirstName    String?
-  subscriberLastName    String?
-  subscriberDob         DateTime?
-  relationshipToPatient String?   // Spouse, Child, Other
-  bcbsAlphaPrefix       String?   // BCBS routing: alpha prefix
-  bcbsStatePlan         String?   // e.g. "BCBS of Texas"
-  rxBin                 String?
-  rxPcn                 String?
-  rxGroup               String?
-  cardFrontRef          String?   // Blob storage ref/URL only
-  cardBackRef           String?   // Blob storage ref/URL only
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  subscriberLastName     String?
+  subscriberDob          DateTime?
+  relationshipToPatient  String? // Spouse, Child, Other
+  bcbsAlphaPrefix        String? // BCBS routing: alpha prefix
+  bcbsStatePlan          String? // e.g. "BCBS of Texas"
+  rxBin                  String?
+  rxPcn                  String?
+  rxGroup                String?
+  cardFrontRef           String? // Blob storage ref/URL only
+  cardBackRef            String? // Blob storage ref/URL only
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
   practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
@@ -359,21 +362,21 @@ model CalEventTypeMapping {
 }
 
 model RetellIntegration {
-  id                 String   @id @default(uuid())
-  practiceId         String   @unique
-  apiKey             String // Encrypted in production
-  agentId            String? // Optional: default agent ID for this practice
+  id                           String   @id @default(uuid())
+  practiceId                   String   @unique
+  apiKey                       String // Encrypted in production
+  agentId                      String? // Optional: default agent ID for this practice
   insuranceVerificationAgentId String? // Agent ID dedicated to insurance verification outbound calls
-  curogramEscalationEnabled Boolean @default(false) // Opt-in toggle per practice
-  curogramEscalationUrl String? // Practice-specific Curogram AI escalation endpoint
-  mcpBaseUrl         String? // Base MCP endpoint used for outbound tool calls
-  mcpApiKey          String? // Optional header-based auth for MCP
-  mcpActorId         String? // Optional actor id for MCP calls
-  mcpRequestIdPrefix String? // Optional request id prefix for observability
-  outboundToolName   String? // Optional outbound tool name (defaults to create_outbound_call)
-  isActive           Boolean  @default(true)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  curogramEscalationEnabled    Boolean  @default(false) // Opt-in toggle per practice
+  curogramEscalationUrl        String? // Practice-specific Curogram AI escalation endpoint
+  mcpBaseUrl                   String? // Base MCP endpoint used for outbound tool calls
+  mcpApiKey                    String? // Optional header-based auth for MCP
+  mcpActorId                   String? // Optional actor id for MCP calls
+  mcpRequestIdPrefix           String? // Optional request id prefix for observability
+  outboundToolName             String? // Optional outbound tool name (defaults to create_outbound_call)
+  isActive                     Boolean  @default(true)
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
 
   practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
 
@@ -415,12 +418,13 @@ model TwilioIntegration {
 }
 
 model PracticeSettings {
-  id         String   @id @default(uuid())
-  practiceId String   @unique
-  smartFhir  Json?
-  ehrIntegrations Json?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                     String   @id @default(uuid())
+  practiceId             String   @unique
+  smartFhir              Json?
+  ehrIntegrations        Json?
+  healixPreChartTemplate Json?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
   practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
 
@@ -429,11 +433,11 @@ model PracticeSettings {
 }
 
 model EhrConnection {
-  id                    String   @id @default(uuid())
+  id                    String    @id @default(uuid())
   tenantId              String
   providerId            String
-  authFlow              String   @default("smart_launch")
-  status                String   @default("connected")
+  authFlow              String    @default("smart_launch")
+  status                String    @default("connected")
   issuer                String
   fhirBaseUrl           String
   authorizationEndpoint String?
@@ -448,10 +452,10 @@ model EhrConnection {
   expiresAt             DateTime?
   idTokenClaimsSummary  Json?
   vendorConfig          Json?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
-  practice Practice @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  practice     Practice         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   facilityMaps EhrFacilityMap[]
 
   @@unique([tenantId, providerId, issuer, authFlow])
@@ -463,13 +467,13 @@ model EhrConnection {
 }
 
 model EhrFacilityMap {
-  id               String   @id @default(uuid())
-  connectionId     String
+  id                 String   @id @default(uuid())
+  connectionId       String
   externalFacilityId String
-  name             String?
-  status           String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  name               String?
+  status             String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   connection EhrConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
 
@@ -524,7 +528,7 @@ model VoiceConversation {
 
 model CallReview {
   id         String   @id @default(uuid())
-  callId     String   // Retell call_id
+  callId     String // Retell call_id
   practiceId String
   userId     String
   reviewedAt DateTime @default(now())
@@ -616,14 +620,14 @@ model AuditLog {
 // MCP server: audit every tool call (PHI access)
 model McpAccessAuditLog {
   id                 String   @id @default(uuid())
-  requestId          String   // X-Request-Id
+  requestId          String // X-Request-Id
   actorId            String
-  actorType          String   // 'agent' | 'user' | 'system'
-  purpose            String   // must be insurance_verification
+  actorType          String // 'agent' | 'user' | 'system'
+  purpose            String // must be insurance_verification
   patientId          String?
   policyId           String?
   toolName           String
-  fieldsReturnedJson Json?    // array of field paths, NOT values
+  fieldsReturnedJson Json? // array of field paths, NOT values
   createdAt          DateTime @default(now())
 
   @@index([requestId])
@@ -639,10 +643,11 @@ model HealixConversation {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  practice   Practice          @relation(fields: [practiceId], references: [id], onDelete: Cascade)
-  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages   HealixMessage[]
-  actionLogs HealixActionLog[]
+  practice       Practice          @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages       HealixMessage[]
+  actionLogs     HealixActionLog[]
+  preVisitCharts PreVisitChart[]
 
   @@index([practiceId])
   @@index([userId])
@@ -684,6 +689,34 @@ model HealixActionLog {
   @@index([conversationId])
   @@index([createdAt])
   @@map("healix_action_logs")
+}
+
+model PreVisitChart {
+  id                   String   @id @default(uuid())
+  practiceId           String
+  patientId            String
+  chartType            String // 'new_patient' | 'follow_up'
+  status               String   @default("draft") // 'draft' | 'generated' | 'failed'
+  templateSnapshot     Json
+  generatedSections    Json
+  evidenceBundle       Json
+  generationMeta       Json?
+  healixConversationId String?
+  createdByUserId      String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  practice           Practice            @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient            Patient             @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  healixConversation HealixConversation? @relation(fields: [healixConversationId], references: [id], onDelete: SetNull)
+  createdBy          User?               @relation("PreVisitChartCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([practiceId])
+  @@index([patientId])
+  @@index([updatedAt])
+  @@index([chartType])
+  @@index([status])
+  @@map("pre_visit_charts")
 }
 
 model OutboxEvent {
@@ -1047,7 +1080,7 @@ model Team {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  practice    Practice       @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  practice    Practice                  @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   members     TeamMember[]
   assignments CommunicationAssignment[]
 
@@ -1073,23 +1106,23 @@ model TeamMember {
 }
 
 model CommunicationConversation {
-  id                 String   @id @default(uuid())
+  id                 String    @id @default(uuid())
   practiceId         String
   patientId          String
   channel            String // 'sms', 'secure', 'voice', 'video'
-  status             String   @default("open") // 'open', 'pending', 'resolved'
+  status             String    @default("open") // 'open', 'pending', 'resolved'
   subject            String?
   lastMessageAt      DateTime?
   lastMessagePreview String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  practice   Practice                     @relation(fields: [practiceId], references: [id], onDelete: Cascade)
-  patient    Patient                      @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  messages   CommunicationMessage[]
+  practice    Practice                          @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient     Patient                           @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  messages    CommunicationMessage[]
   assignments CommunicationAssignment[]
-  summary    CommunicationConversationSummary?
-  draftReply CommunicationDraftReply?
+  summary     CommunicationConversationSummary?
+  draftReply  CommunicationDraftReply?
 
   @@index([practiceId])
   @@index([practiceId, status])
@@ -1142,12 +1175,12 @@ model CommunicationMessage {
   type             String // 'message', 'note', 'system'
   body             String
   channel          String // 'sms', 'secure', 'voice', 'video'
-  deliveryStatus   String   @default("queued") // 'queued', 'sent', 'delivered', 'failed'
+  deliveryStatus   String    @default("queued") // 'queued', 'sent', 'delivered', 'failed'
   metadata         Json?
   intent           String?
   intentConfidence Float?
   readAt           DateTime?
-  createdAt        DateTime @default(now())
+  createdAt        DateTime  @default(now())
 
   practice     Practice                  @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   conversation CommunicationConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -1228,19 +1261,19 @@ model CommunicationTrigger {
 }
 
 model KnowledgeBaseArticle {
-  id         String   @id @default(uuid())
-  practiceId String
-  title      String
-  body       String
-  summary    String?
+  id               String    @id @default(uuid())
+  practiceId       String
+  title            String
+  body             String
+  summary          String?
   lastSummarizedAt DateTime?
-  url        String?
-  tags       String[]
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  url              String?
+  tags             String[]
+  isActive         Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  practice Practice             @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   chunks   KnowledgeBaseChunk[]
   faqs     KnowledgeBaseFaq[]
 
@@ -1259,7 +1292,7 @@ model KnowledgeBaseChunk {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  practice Practice             @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   article  KnowledgeBaseArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
 
   @@index([practiceId])
@@ -1276,7 +1309,7 @@ model KnowledgeBaseFaq {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  practice Practice             @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   article  KnowledgeBaseArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
 
   @@index([practiceId])
@@ -1346,9 +1379,9 @@ model FormTemplate {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  practice   Practice        @relation(fields: [practiceId], references: [id], onDelete: Cascade)
-  createdBy  User            @relation("FormTemplateCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
-  requests   FormRequest[]
+  practice    Practice         @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  createdBy   User             @relation("FormTemplateCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  requests    FormRequest[]
   submissions FormSubmission[]
 
   @@index([practiceId])
@@ -1372,11 +1405,11 @@ model FormRequest {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  practice    Practice     @relation(fields: [practiceId], references: [id], onDelete: Cascade)
-  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  template    FormTemplate @relation(fields: [formTemplateId], references: [id], onDelete: Cascade)
-  createdBy   User         @relation("FormRequestCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
-  submission  FormSubmission?
+  practice   Practice        @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient    Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  template   FormTemplate    @relation(fields: [formTemplateId], references: [id], onDelete: Cascade)
+  createdBy  User            @relation("FormRequestCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  submission FormSubmission?
 
   @@index([practiceId])
   @@index([practiceId, patientId])
@@ -1386,30 +1419,30 @@ model FormRequest {
 }
 
 model FormSubmission {
-  id          String    @id @default(uuid())
-  practiceId  String
-  patientId   String
+  id             String    @id @default(uuid())
+  practiceId     String
+  patientId      String
   formTemplateId String?
   formRequestId  String?
-  formType    String // 'intake', 'consent', 'registration', 'other'
-  formData    Json // Structured form response
-  status      String    @default("submitted") // 'submitted', 'reviewed', 'approved'
-  submittedAt DateTime  @default(now())
-  reviewedAt  DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  formType       String // 'intake', 'consent', 'registration', 'other'
+  formData       Json // Structured form response
+  status         String    @default("submitted") // 'submitted', 'reviewed', 'approved'
+  submittedAt    DateTime  @default(now())
+  reviewedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   practice Practice      @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   patient  Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
   template FormTemplate? @relation(fields: [formTemplateId], references: [id], onDelete: SetNull)
   request  FormRequest?  @relation(fields: [formRequestId], references: [id], onDelete: SetNull)
 
+  @@unique([formRequestId])
   @@index([practiceId, patientId])
   @@index([practiceId, submittedAt])
   @@index([formType])
   @@index([formTemplateId])
   @@index([formRequestId])
-  @@unique([formRequestId])
   @@map("form_submissions")
 }
 
@@ -1667,18 +1700,18 @@ model Task {
 }
 
 model TaskComment {
-  id        String    @id @default(uuid())
-  taskId    String
-  userId    String
+  id         String    @id @default(uuid())
+  taskId     String
+  userId     String
   practiceId String?
-  content   String
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  content    String
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
 
-  task      Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  practice  Practice? @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  task     Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  practice Practice? @relation(fields: [practiceId], references: [id], onDelete: Cascade)
 
   @@index([taskId])
   @@index([userId])

@@ -371,6 +371,47 @@ export const taskCommentSchema = z.object({
   content: z.string().min(1, 'Comment cannot be empty').max(2000, 'Comment must be less than 2000 characters'),
 })
 
+// Pre-Visit Charting schemas
+export const preVisitSectionSchema = z.object({
+  id: z.string().min(1, 'Section id is required'),
+  title: z.string().min(1, 'Section title is required'),
+  guidance: z.string().optional().nullable(),
+  required: z.boolean().optional().default(false),
+})
+
+export const preVisitTemplateVariantSchema = z.object({
+  label: z.string().min(1, 'Variant label is required'),
+  sections: z.array(preVisitSectionSchema).min(1, 'At least one section is required'),
+  smartPhrases: z.array(z.string().min(1)).default([]),
+})
+
+export const preVisitTemplateSchema = z.object({
+  formatStyle: z.enum(['soap', 'narrative', 'problem_oriented', 'custom']).optional().default('custom'),
+  formattingPreferences: z
+    .object({
+      includeBulletPoints: z.boolean().optional().default(true),
+      includeICDHints: z.boolean().optional().default(false),
+      includeMedicationTable: z.boolean().optional().default(false),
+      maxSectionLength: z.number().int().positive().max(5000).optional(),
+    })
+    .optional(),
+  variants: z.object({
+    new_patient: preVisitTemplateVariantSchema,
+    follow_up: preVisitTemplateVariantSchema,
+  }),
+})
+
+export const preVisitChartGenerateSchema = z.object({
+  chartType: z.enum(['new_patient', 'follow_up']),
+  forceRegenerate: z.boolean().optional().default(false),
+})
+
+export const preVisitChartQuestionSchema = z.object({
+  chartType: z.enum(['new_patient', 'follow_up']).optional(),
+  question: z.string().min(2, 'Question is required'),
+  conversationId: z.string().uuid().optional(),
+})
+
 // Communications schemas
 export const communicationMessageSendSchema = z.object({
   conversationId: z.string().uuid(),
