@@ -141,6 +141,9 @@ function buildTelephoneEncounterBundle(params: {
   const encounterId = params.encounterId || randomUUID()
   const requestMethod = params.requestMethod || 'POST'
   const requestUrl = requestMethod === 'PUT' ? `Encounter/${encounterId}` : 'Encounter'
+  const noteWithAttribution = `${params.noteText}\nThis encounter is created by VantageAI app at ${formatChicagoIso(
+    params.startTime
+  )}`
   return {
     resourceType: 'Bundle',
     id: bundleId,
@@ -158,11 +161,11 @@ function buildTelephoneEncounterBundle(params: {
           extension: [
             {
               url: 'http://eclinicalworks.com/supportingInfo/telephoneEncounter/messages',
-              valueString: params.noteText,
+              valueString: noteWithAttribution,
             },
             {
               url: 'http://eclinicalworks.com/supportingInfo/telephoneEncounter/notes',
-              valueString: params.noteText,
+              valueString: noteWithAttribution,
             },
           ],
           status: 'planned',
