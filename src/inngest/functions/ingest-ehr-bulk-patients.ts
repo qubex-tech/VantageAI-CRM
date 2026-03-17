@@ -2,6 +2,7 @@ import { inngest } from '../client'
 import { prisma } from '@/lib/db'
 import { decryptString } from '@/lib/integrations/ehr/crypto'
 import { refreshBackendConnectionIfNeeded } from '@/lib/integrations/ehr/backendTokens'
+import { logEhrAudit } from '@/lib/integrations/ehr/audit'
 
 type BulkImportEvent = {
   data: {
@@ -206,6 +207,21 @@ export const ingestEhrBulkPatients = inngest.createFunction(
         }
       }
     }
+
+    await logEhrAudit({
+      tenantId: practiceId,
+      actorUserId: null,
+      action: 'EHR_BULK_IMPORT_COMPLETE',
+      providerId,
+      entity: 'EhrConnection',
+      entityId: connection.id,
+      metadata: {
+        imported,
+        updated,
+        skipped,
+        files: patientUrls.length,
+      },
+    })
 
     return {
       imported,
