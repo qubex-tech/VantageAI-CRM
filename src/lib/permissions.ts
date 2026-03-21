@@ -34,7 +34,7 @@ export function isRegularUser(user: User): boolean {
 }
 
 /**
- * Check if user can configure API integrations (Cal.com, RetellAI, SendGrid/Twilio)
+ * Check if user can configure API integrations (Cal.com, RetellAI, Resend/Twilio)
  * Only Vantage Admins can configure APIs
  */
 export function canConfigureAPIs(user: User): boolean {

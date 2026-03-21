@@ -133,15 +133,14 @@ export async function POST(
       ? replaceVariables(template.subject, context)
       : 'Test Email'
     
-    // Send email via SendGrid using verified sender email
-    // SendGrid requires the fromEmail to be verified, otherwise emails won't send
-    // The SendgridApiClient from getSendgridClient() already has the verified fromEmail set
+    // Send email via Resend using verified sender email/domain
+    // The client from getSendgridClient() carries the verified default fromEmail for compatibility.
     let result: { success: boolean; messageId?: string; error?: string }
     
     try {
       const sendgridClient = await getSendgridClient(user.practiceId)
       
-      // Get SendGrid integration to access verified sender details
+      // Load integration to access verified sender details.
       const sendgridIntegration = await prisma.sendgridIntegration.findFirst({
         where: {
           practiceId: user.practiceId,
@@ -150,10 +149,10 @@ export async function POST(
       })
       
       if (!sendgridIntegration) {
-        throw new Error('SendGrid integration not configured or not active')
+        throw new Error('Resend integration not configured or not active')
       }
       
-      // Use verified fromName from SendGrid integration, fallback to brand profile
+      // Use verified fromName from integration, fallback to brand profile.
       const verifiedFromName = sendgridIntegration.fromName || brandProfile?.defaultFromName || user.name || 'Practice'
       const verifiedFromEmail = sendgridIntegration.fromEmail
       const replyTo = brandProfile?.defaultReplyToEmail || verifiedFromEmail
@@ -164,30 +163,29 @@ export async function POST(
         subject,
         htmlContent: html,
         textContent: text,
-        // Don't pass fromEmail - the SendgridApiClient uses its verified default fromEmail
-        // (set in constructor from SendGrid integration, which is verified and will actually send)
+        // Don't pass fromEmail - the client uses its verified default fromEmail from integration.
         fromName: verifiedFromName,
         replyTo: replyTo !== verifiedFromEmail ? replyTo : undefined,
       })
       
-      // Check if SendGrid returned an error
+      // Check if provider returned an error.
       if (!result.success) {
         return NextResponse.json(
           {
-            error: result.error || 'Failed to send email via SendGrid',
+            error: result.error || 'Failed to send email via Resend',
             rendered: { html, text, subject },
           },
           { status: 500 }
         )
       }
     } catch (sendgridError: any) {
-      // If SendGrid is not configured, return clear error message
+      // If provider is not configured, return clear error message.
       if (sendgridError.message?.includes('not configured') || 
           sendgridError.message?.includes('not found') ||
           sendgridError.message?.includes('not active')) {
         return NextResponse.json(
           {
-            error: 'SendGrid integration is not configured. Please configure it in Settings → SendGrid Integration.',
+            error: 'Resend integration is not configured. Please configure it in Settings -> Resend Integration.',
             rendered: { html, text, subject },
             requiresConfiguration: true,
           },
@@ -196,10 +194,10 @@ export async function POST(
       }
       
       // For other errors, return the error message
-      console.error('SendGrid error:', sendgridError)
+      console.error('Resend error:', sendgridError)
       return NextResponse.json(
         {
-          error: sendgridError.message || 'Failed to send email via SendGrid',
+          error: sendgridError.message || 'Failed to send email via Resend',
           rendered: { html, text, subject },
         },
         { status: 500 }

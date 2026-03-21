@@ -144,14 +144,14 @@ export function ComposeEmail({
         errorMessage = data?.error || 'Failed to send email'
         
         // Make error messages more user-friendly
-        if (errorMessage.includes('SendGrid integration not configured') || 
-            errorMessage.includes('SendGrid integration not found')) {
-          errorMessage = 'Email service is not configured. Please configure SendGrid in Settings → SendGrid Integration.'
+        if (errorMessage.includes('Resend integration not configured') || 
+            errorMessage.includes('Resend integration not found')) {
+          errorMessage = 'Email service is not configured. Please configure Resend in Settings -> Resend Integration.'
         } else if (errorMessage.includes('Invalid API key') || 
                    errorMessage.includes('Unauthorized') ||
                    errorMessage.includes('401') ||
                    errorMessage.includes('403')) {
-          errorMessage = 'Invalid email service configuration. Please check your SendGrid API key in Settings.'
+          errorMessage = 'Invalid email service configuration. Please check your Resend API key in Settings.'
         } else if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
           errorMessage = 'Network error. Please check your internet connection and try again.'
         }
@@ -229,7 +229,7 @@ export function ComposeEmail({
               className="bg-gray-50"
             />
             <p className="text-xs text-gray-500">
-              Configured in Settings → SendGrid Integration
+              Configured in Settings -> Resend Integration
             </p>
           </div>
 

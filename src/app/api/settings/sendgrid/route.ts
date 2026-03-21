@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
 import { isVantageAdmin } from '@/lib/permissions'
-import { sendgridIntegrationSchema } from '@/lib/validations'
-import { SendgridApiClient } from '@/lib/sendgrid'
+import { resendIntegrationSchema } from '@/lib/validations'
+import { ResendApiClient } from '@/lib/sendgrid'
 
 export const dynamic = 'force-dynamic'
 
 /**
- * Get SendGrid integration settings
+ * Get Resend integration settings
  */
 export async function GET(req: NextRequest) {
   try {
@@ -39,14 +39,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ integration })
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch SendGrid settings' },
+      { error: error instanceof Error ? error.message : 'Failed to fetch Resend settings' },
       { status: 500 }
     )
   }
 }
 
 /**
- * Create or update SendGrid integration
+ * Create or update Resend integration
  */
 export async function POST(req: NextRequest) {
   try {
@@ -74,10 +74,10 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const validated = sendgridIntegrationSchema.parse(body)
+    const validated = resendIntegrationSchema.parse(body)
 
     // Test connection
-    const testClient = new SendgridApiClient(
+    const testClient = new ResendApiClient(
       validated.apiKey,
       validated.fromEmail,
       validated.fromName || undefined
@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Validation error: ${errorMessage}` }, { status: 400 })
     }
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to save SendGrid settings' },
+      { error: error instanceof Error ? error.message : 'Failed to save Resend settings' },
       { status: 500 }
     )
   }

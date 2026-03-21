@@ -226,7 +226,7 @@ Most integration setup is admin-owned, but front desk should know where to point
 - **Settings -> API Configuration**
   - Cal.com Integration
   - RetellAI
-  - SendGrid
+  - Resend
   - Twilio
 
 Escalate to admin when you see repeated integration errors during:

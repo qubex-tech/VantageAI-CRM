@@ -361,7 +361,7 @@ async function createNote(
 }
 
 /**
- * Send SMS (via SendGrid SMS API or log if not configured)
+ * Send SMS (via Twilio or log if not configured)
  */
 async function sendSms(
   practiceId: string,
@@ -577,7 +577,7 @@ async function sendSms(
 }
 
 /**
- * Send email via SendGrid
+ * Send email via Resend
  */
 async function sendEmail(
   practiceId: string,
@@ -608,9 +608,9 @@ async function sendEmail(
     }
   }
 
-  // Actually send email via SendGrid
+  // Actually send email via Resend
   try {
-    console.log(`[AUTOMATION] Sending email via SendGrid:`, {
+    console.log(`[AUTOMATION] Sending email via Resend:`, {
       practiceId,
       toEmail,
       subject: args.subject,
@@ -792,10 +792,10 @@ async function sendEmail(
     })
 
     if (!result.success) {
-      console.error(`[AUTOMATION] SendGrid error:`, result.error)
+      console.error(`[AUTOMATION] Resend error:`, result.error)
       return {
         status: 'failed',
-        error: result.error || 'Failed to send email via SendGrid',
+        error: result.error || 'Failed to send email via Resend',
       }
     }
 

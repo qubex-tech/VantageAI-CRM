@@ -12,7 +12,7 @@ import {
 import { Loader2 } from 'lucide-react'
 import { CalSettings } from './CalSettings'
 import { RetellSettings } from './RetellSettings'
-import { SendgridSettings } from './SendgridSettings'
+import { ResendSettings } from './SendgridSettings'
 import { TwilioSettings } from './TwilioSettings'
 import { EhrIntegrationsSettings } from './EhrIntegrationsSettings'
 
@@ -28,7 +28,7 @@ export function PracticeAPIConfiguration() {
   const [loadingIntegrations, setLoadingIntegrations] = useState(false)
   const [calIntegration, setCalIntegration] = useState<any>(null)
   const [retellIntegration, setRetellIntegration] = useState<any>(null)
-  const [sendgridIntegration, setSendgridIntegration] = useState<any>(null)
+  const [resendIntegration, setResendIntegration] = useState<any>(null)
   const [twilioIntegration, setTwilioIntegration] = useState<any>(null)
   const [eventTypeMappings, setEventTypeMappings] = useState<any[]>([])
 
@@ -57,7 +57,7 @@ export function PracticeAPIConfiguration() {
     if (!selectedPracticeId) {
       setCalIntegration(null)
       setRetellIntegration(null)
-      setSendgridIntegration(null)
+      setResendIntegration(null)
       setTwilioIntegration(null)
       setEventTypeMappings([])
       return
@@ -87,11 +87,11 @@ export function PracticeAPIConfiguration() {
           setRetellIntegration(retellData.integration)
         }
 
-        // Fetch SendGrid integration
-        const sendgridResponse = await fetch(`/api/settings/sendgrid?practiceId=${selectedPracticeId}`)
-        if (sendgridResponse.ok) {
-          const sendgridData = await sendgridResponse.json()
-          setSendgridIntegration(sendgridData.integration)
+        // Fetch Resend integration
+        const resendResponse = await fetch(`/api/settings/resend?practiceId=${selectedPracticeId}`)
+        if (resendResponse.ok) {
+          const resendData = await resendResponse.json()
+          setResendIntegration(resendData.integration)
         }
 
         // Fetch Twilio integration
@@ -182,9 +182,9 @@ export function PracticeAPIConfiguration() {
                 practiceId={selectedPracticeId}
                 initialIntegration={retellIntegration}
               />
-              <SendgridSettingsWithPracticeId 
+              <ResendSettingsWithPracticeId 
                 practiceId={selectedPracticeId}
-                initialIntegration={sendgridIntegration}
+                initialIntegration={resendIntegration}
               />
               <TwilioSettingsWithPracticeId
                 practiceId={selectedPracticeId}
@@ -232,14 +232,14 @@ function RetellSettingsWithPracticeId({
   return <RetellSettings initialIntegration={initialIntegration} practiceId={practiceId} />
 }
 
-function SendgridSettingsWithPracticeId({ 
+function ResendSettingsWithPracticeId({ 
   practiceId, 
   initialIntegration 
 }: { 
   practiceId: string
   initialIntegration: any
 }) {
-  return <SendgridSettings initialIntegration={initialIntegration} practiceId={practiceId} />
+  return <ResendSettings initialIntegration={initialIntegration} practiceId={practiceId} />
 }
 
 function TwilioSettingsWithPracticeId({

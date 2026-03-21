@@ -242,7 +242,7 @@ export async function POST(req: NextRequest) {
       })
       if (!result.success) {
         return NextResponse.json(
-          { error: result.error || 'Failed to send email via SendGrid' },
+          { error: result.error || 'Failed to send email via Resend' },
           { status: 500 }
         )
       }

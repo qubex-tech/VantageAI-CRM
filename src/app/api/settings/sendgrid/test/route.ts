@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sendgridIntegrationSchema } from '@/lib/validations'
-import { SendgridApiClient } from '@/lib/sendgrid'
+import { resendIntegrationSchema } from '@/lib/validations'
+import { ResendApiClient } from '@/lib/sendgrid'
 
 export const dynamic = 'force-dynamic'
 
 /**
- * Test SendGrid connection
+ * Test Resend connection
  */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const validated = sendgridIntegrationSchema.parse(body)
+    const validated = resendIntegrationSchema.parse(body)
 
-    const client = new SendgridApiClient(
+    const client = new ResendApiClient(
       validated.apiKey,
       validated.fromEmail,
       validated.fromName || undefined
@@ -27,8 +27,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Optionally get user profile to show success message with account info
-    const profile = await client.getUserProfile()
+    const profile = await client.getAccountSummary()
 
     return NextResponse.json({
       success: true,

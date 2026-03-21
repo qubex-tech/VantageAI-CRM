@@ -203,7 +203,7 @@ export async function POST(req: NextRequest) {
           })
 
           if (!sendgridIntegration) {
-            throw new Error('SendGrid integration is not configured')
+            throw new Error('Resend integration is not configured')
           }
 
           let html = template.bodyHtml || ''

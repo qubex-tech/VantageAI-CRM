@@ -37,7 +37,7 @@ export async function sendOTP(
 ): Promise<boolean> {
   try {
     if (channel === 'email') {
-      // Send via SendGrid
+      // Send via Resend
       const sendgridClient = await getSendgridClient(practiceId)
       
       // Get practice info for personalized email

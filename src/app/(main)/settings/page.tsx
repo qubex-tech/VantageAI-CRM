@@ -6,7 +6,7 @@ import { isVantageAdmin, canConfigureAPIs, canManageUsers, canManagePractice } f
 import { CalSettings } from '@/components/settings/CalSettings'
 import { TeamManagement } from '@/components/settings/TeamManagement'
 import { RetellSettings } from '@/components/settings/RetellSettings'
-import { SendgridSettings } from '@/components/settings/SendgridSettings'
+import { ResendSettings } from '@/components/settings/SendgridSettings'
 import { TwilioSettings } from '@/components/settings/TwilioSettings'
 import { PracticeManagement } from '@/components/settings/PracticeManagement'
 import { PracticeAPIConfiguration } from '@/components/settings/PracticeAPIConfiguration'
@@ -54,7 +54,7 @@ export default async function SettingsPage() {
   // Only fetch integrations if user can configure APIs or has a practice
   let calIntegration = null
   let retellIntegration = null
-  let sendgridIntegration = null
+  let resendIntegration = null
   let twilioIntegration = null
 
   if (user.practiceId) {
@@ -75,14 +75,14 @@ export default async function SettingsPage() {
       console.error('Error fetching Retell integration (schema may be out of sync):', error)
     }
 
-    // Fetch SendGrid integration, handle gracefully if table doesn't exist yet
+    // Fetch Resend integration, handle gracefully if table doesn't exist yet
     try {
-      sendgridIntegration = await prisma.sendgridIntegration.findUnique({
+      resendIntegration = await prisma.sendgridIntegration.findUnique({
         where: { practiceId: practiceId },
       })
     } catch (error) {
       // Table might not exist if migration hasn't been run yet
-      console.error('Error fetching SendGrid integration (table may not exist):', error)
+      console.error('Error fetching Resend integration (table may not exist):', error)
     }
 
     // Fetch Twilio integration, handle gracefully if table doesn't exist yet
@@ -180,7 +180,7 @@ export default async function SettingsPage() {
 
                 <RetellSettings initialIntegration={retellIntegration} />
 
-                <SendgridSettings initialIntegration={sendgridIntegration} />
+                <ResendSettings initialIntegration={resendIntegration} />
 
                 <TwilioSettings initialIntegration={twilioIntegration} />
               </div>

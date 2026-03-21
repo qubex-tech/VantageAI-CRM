@@ -152,6 +152,9 @@ export const sendgridIntegrationSchema = z.object({
   fromName: z.string().optional(),
 })
 
+// Same shape; renamed for provider clarity while keeping backward compatibility.
+export const resendIntegrationSchema = sendgridIntegrationSchema
+
 export const twilioIntegrationSchema = z.object({
   accountSid: z.string().min(1, 'Account SID is required'),
   authToken: z.string().min(1, 'Auth token is required'),

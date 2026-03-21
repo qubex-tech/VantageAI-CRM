@@ -11,7 +11,7 @@ interface SendgridSettingsProps {
   practiceId?: string // Optional practiceId for Vantage Admins
 }
 
-export function SendgridSettings({ initialIntegration, practiceId }: SendgridSettingsProps) {
+export function ResendSettings({ initialIntegration, practiceId }: SendgridSettingsProps) {
   // Helper function to append practiceId to URLs if provided
   const apiUrl = (path: string) => {
     if (practiceId) {
@@ -35,7 +35,7 @@ export function SendgridSettings({ initialIntegration, practiceId }: SendgridSet
     setLoading(true)
 
     try {
-      const response = await fetch(apiUrl('/api/settings/sendgrid'), {
+      const response = await fetch(apiUrl('/api/settings/resend'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -50,7 +50,7 @@ export function SendgridSettings({ initialIntegration, practiceId }: SendgridSet
         throw new Error(error.error || 'Failed to save settings')
       }
 
-      setSuccess('SendGrid integration saved successfully')
+      setSuccess('Resend integration saved successfully')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save settings')
     } finally {
@@ -64,7 +64,7 @@ export function SendgridSettings({ initialIntegration, practiceId }: SendgridSet
     setTestingConnection(true)
 
     try {
-      const response = await fetch('/api/settings/sendgrid/test', {
+      const response = await fetch('/api/settings/resend/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -90,16 +90,16 @@ export function SendgridSettings({ initialIntegration, practiceId }: SendgridSet
   return (
     <Card>
       <CardHeader>
-        <CardTitle>SendGrid Email Integration</CardTitle>
+        <CardTitle>Resend Email Integration</CardTitle>
         <CardDescription>
-          Configure SendGrid to send emails to patients. Get your API key from{' '}
+          Configure Resend to send emails to patients. Get your API key from{' '}
           <a
-            href="https://app.sendgrid.com/settings/api_keys"
+            href="https://resend.com/api-keys"
             target="_blank"
             rel="noopener noreferrer"
             className="text-blue-600 hover:underline"
           >
-            SendGrid Settings
+            Resend Settings
           </a>
         </CardDescription>
       </CardHeader>
@@ -112,11 +112,11 @@ export function SendgridSettings({ initialIntegration, practiceId }: SendgridSet
               type="password"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder="SG.xxxxxxxxxxxxxxxxxxxxx"
+              placeholder="re_xxxxxxxxxxxxxxxxxxxxx"
               required
             />
             <p className="text-xs text-gray-500">
-              Create an API key with &quot;Mail Send&quot; permissions in SendGrid
+              Create an API key in Resend and use a verified sender/domain.
             </p>
           </div>
 
@@ -131,7 +131,7 @@ export function SendgridSettings({ initialIntegration, practiceId }: SendgridSet
               required
             />
             <p className="text-xs text-gray-500">
-              This email must be verified in SendGrid. Use a domain you own.
+              This email must be verified in Resend. Use a domain you own.
             </p>
           </div>
 
@@ -179,4 +179,7 @@ export function SendgridSettings({ initialIntegration, practiceId }: SendgridSet
     </Card>
   )
 }
+
+// Backward-compatible export name.
+export const SendgridSettings = ResendSettings
 

@@ -8,7 +8,7 @@ import { logOutboundCommunication } from '@/lib/communications/logging'
 export const dynamic = 'force-dynamic'
 
 /**
- * Send email to a patient via SendGrid
+ * Send email to a patient via Resend
  */
 export async function POST(req: NextRequest) {
   try {
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Get SendGrid client for this practice
+    // Get email client for this practice.
     if (!user.practiceId) {
       return NextResponse.json(
         { error: 'Practice ID is required for this operation' },
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     } catch (error) {
       const errorMessage = error instanceof Error 
         ? error.message 
-        : 'SendGrid integration is not configured. Please configure it in Settings → SendGrid Integration.'
+        : 'Resend integration is not configured. Please configure it in Settings -> Resend Integration.'
       return NextResponse.json(
         { error: errorMessage },
         { status: 400 }
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
 
     if (!result.success) {
       return NextResponse.json(
-        { error: result.error || 'Failed to send email via SendGrid' },
+        { error: result.error || 'Failed to send email via Resend' },
         { status: 500 }
       )
     }

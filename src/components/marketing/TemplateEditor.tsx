@@ -1208,7 +1208,7 @@ function TestSendForm({ templateId, channel }: { templateId: string; channel: 'e
       if (!response.ok) {
         // Check if this is a configuration error
         if (data.requiresConfiguration) {
-          throw new Error(data.error || 'SendGrid integration is not configured')
+          throw new Error(data.error || 'Resend integration is not configured')
         }
         throw new Error(data.error || 'Failed to send test message')
       }
@@ -1243,20 +1243,20 @@ function TestSendForm({ templateId, channel }: { templateId: string; channel: 'e
         <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 space-y-2">
           <div className="font-medium">Failed to send test message</div>
           <div>{error}</div>
-          {error.includes('SendGrid integration') && (
+          {error.includes('Resend integration') && (
             <div className="mt-2 text-xs">
-              <p>To send emails, please configure SendGrid:</p>
+              <p>To send emails, please configure Resend:</p>
               <ol className="list-decimal list-inside mt-1 space-y-1">
-                <li>Go to Settings → SendGrid Integration</li>
-                <li>Enter your SendGrid API key</li>
-                <li>Verify your sender email address in SendGrid</li>
+                <li>Go to Settings -> Resend Integration</li>
+                <li>Enter your Resend API key</li>
+                <li>Verify your sender email address/domain in Resend</li>
                 <li>Test the connection</li>
               </ol>
             </div>
           )}
           {error.includes('sender') && (
             <div className="mt-2 text-xs">
-              The sender email address must be verified in SendGrid. Please verify it in your SendGrid account or update it in Settings.
+              The sender email address must be verified in Resend. Please verify it in your Resend account or update it in Settings.
             </div>
           )}
         </div>
@@ -1267,7 +1267,7 @@ function TestSendForm({ templateId, channel }: { templateId: string; channel: 'e
           <div className="font-medium">Test {channel === 'email' ? 'email' : 'SMS'} sent successfully!</div>
           {channel === 'email' && (
             <div className="mt-1 text-xs text-green-600">
-              Check your inbox (and spam folder) for the test email. If you don't receive it, verify your sender email in SendGrid.
+              Check your inbox (and spam folder) for the test email. If you don't receive it, verify your sender email/domain in Resend.
             </div>
           )}
         </div>
