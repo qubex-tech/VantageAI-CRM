@@ -1,1 +1,1 @@
-export { POST, dynamic } from '@/app/api/webhooks/sendgrid/inbound/route'
+export { POST } from '@/app/api/webhooks/sendgrid/inbound/route'
