@@ -1247,7 +1247,7 @@ function TestSendForm({ templateId, channel }: { templateId: string; channel: 'e
             <div className="mt-2 text-xs">
               <p>To send emails, please configure Resend:</p>
               <ol className="list-decimal list-inside mt-1 space-y-1">
-                <li>Go to Settings -> Resend Integration</li>
+                <li>Go to Settings {'->'} Resend Integration</li>
                 <li>Enter your Resend API key</li>
                 <li>Verify your sender email address/domain in Resend</li>
                 <li>Test the connection</li>
