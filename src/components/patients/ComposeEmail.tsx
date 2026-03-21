@@ -229,7 +229,7 @@ export function ComposeEmail({
               className="bg-gray-50"
             />
             <p className="text-xs text-gray-500">
-              Configured in Settings -> Resend Integration
+              Configured in Settings {'->'} Resend Integration
             </p>
           </div>
 
