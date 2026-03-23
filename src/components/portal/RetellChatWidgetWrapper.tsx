@@ -2,6 +2,9 @@ import { getPatientSession } from '@/lib/portal-session'
 import { prisma } from '@/lib/db'
 import { RetellChatWidget } from './RetellChatWidget'
 
+/** Fallback when env + RetellIntegration.portalChatAgentId are unset (voice agentId is not used for portal chat). */
+const DEFAULT_PORTAL_RETELL_AGENT_ID = 'agent_7624a19359e021e2159ae5aa12'
+
 /**
  * Server component wrapper for Retell Chat Widget
  * Fetches practice-specific configuration and renders the widget
@@ -15,14 +18,14 @@ export async function RetellChatWidgetWrapper() {
   }
 
   // Get practice's Retell integration
-  let retellIntegration: { agentId: string | null } | null = null
+  let retellIntegration: { portalChatAgentId: string | null } | null = null
   try {
     retellIntegration = await prisma.retellIntegration.findUnique({
       where: {
         practiceId: session.practiceId,
       },
       select: {
-        agentId: true,
+        portalChatAgentId: true,
       },
     })
   } catch (error) {
@@ -34,8 +37,11 @@ export async function RetellChatWidgetWrapper() {
   // TODO: Add publicKey field to RetellIntegration schema
   const publicKey = process.env.NEXT_PUBLIC_RETELL_PUBLIC_KEY
 
-  // Use the provided agent ID (from user) as default, can be overridden by env var or integration
-  const agentId = process.env.NEXT_PUBLIC_RETELL_AGENT_ID || retellIntegration?.agentId || 'agent_9c98e3b0c1f058ba99fb135c39'
+  // Portal chat only: env → RetellIntegration.portalChatAgentId → code default (not voice agentId)
+  const agentId =
+    process.env.NEXT_PUBLIC_RETELL_AGENT_ID ||
+    retellIntegration?.portalChatAgentId ||
+    DEFAULT_PORTAL_RETELL_AGENT_ID
 
   // Only render if we have a public key
   if (!publicKey) {

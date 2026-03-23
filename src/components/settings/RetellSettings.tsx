@@ -22,6 +22,9 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
   }
   const [apiKey, setApiKey] = useState('')
   const [agentId, setAgentId] = useState(initialIntegration?.agentId || '')
+  const [portalChatAgentId, setPortalChatAgentId] = useState(
+    initialIntegration?.portalChatAgentId || ''
+  )
   const [insuranceVerificationAgentId, setInsuranceVerificationAgentId] = useState(initialIntegration?.insuranceVerificationAgentId || '')
   const [curogramEscalationEnabled, setCurogramEscalationEnabled] = useState(Boolean(initialIntegration?.curogramEscalationEnabled))
   const [curogramEscalationUrl, setCurogramEscalationUrl] = useState(initialIntegration?.curogramEscalationUrl || '')
@@ -40,6 +43,7 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
   useEffect(() => {
     setApiKey('')
     setAgentId(initialIntegration?.agentId || '')
+    setPortalChatAgentId(initialIntegration?.portalChatAgentId || '')
     setInsuranceVerificationAgentId(initialIntegration?.insuranceVerificationAgentId || '')
     setCurogramEscalationEnabled(Boolean(initialIntegration?.curogramEscalationEnabled))
     setCurogramEscalationUrl(initialIntegration?.curogramEscalationUrl || '')
@@ -63,6 +67,7 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
         body: JSON.stringify({
           apiKey: apiKey || undefined,
           agentId: agentId || undefined,
+          portalChatAgentId: portalChatAgentId || undefined,
           insuranceVerificationAgentId: insuranceVerificationAgentId || undefined,
           curogramEscalationEnabled,
           curogramEscalationUrl: curogramEscalationUrl || undefined,
@@ -153,18 +158,36 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
 
           <div className="space-y-2">
             <Label htmlFor="agentId" className="text-sm font-medium text-gray-700">
-              Agent ID (Optional)
+              Voice / default agent ID (Optional)
             </Label>
             <Input
               id="agentId"
               type="text"
               value={agentId}
               onChange={(e) => setAgentId(e.target.value)}
-              placeholder="Default agent ID for this practice"
+              placeholder="Default Retell agent for voice calls and call list filtering"
               className="text-sm"
             />
             <p className="text-xs text-gray-500">
-              Optionally specify a default agent ID to filter calls by agent
+              Used for voice/outbound flows and filtering calls in the CRM. Not used for the patient portal chat widget.
+            </p>
+          </div>
+
+          <div className="space-y-2 border-t border-gray-200 pt-4">
+            <Label htmlFor="portalChatAgentId" className="text-sm font-medium text-gray-700">
+              Patient portal chat agent ID (Optional)
+            </Label>
+            <Input
+              id="portalChatAgentId"
+              type="text"
+              value={portalChatAgentId}
+              onChange={(e) => setPortalChatAgentId(e.target.value)}
+              placeholder="Retell web chat agent for logged-in patients on the portal"
+              className="text-sm font-mono"
+            />
+            <p className="text-xs text-gray-500">
+              Separate from the voice agent. Leave blank to use the app default or{' '}
+              <code className="rounded bg-gray-100 px-1">NEXT_PUBLIC_RETELL_AGENT_ID</code> in environment (env wins).
             </p>
           </div>
 
