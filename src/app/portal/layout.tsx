@@ -2,6 +2,9 @@ import { ReactNode } from 'react'
 import { PortalSidebar } from '@/components/portal/PortalSidebar'
 import { RetellChatWidgetWrapper } from '@/components/portal/RetellChatWidgetWrapper'
 
+/** Always fresh session + Retell agent id from DB (no static cache of layout shell). */
+export const dynamic = 'force-dynamic'
+
 /**
  * Portal Layout
  * Separate layout for patient portal with sidebar navigation

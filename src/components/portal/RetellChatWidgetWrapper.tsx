@@ -1,3 +1,4 @@
+import { unstable_noStore as noStore } from 'next/cache'
 import { getPatientSession } from '@/lib/portal-session'
 import { prisma } from '@/lib/db'
 import { RetellChatWidget } from './RetellChatWidget'
@@ -10,6 +11,7 @@ const DEFAULT_PORTAL_RETELL_AGENT_ID = 'agent_7624a19359e021e2159ae5aa12'
  * Fetches practice-specific configuration and renders the widget
  */
 export async function RetellChatWidgetWrapper() {
+  noStore()
   const session = await getPatientSession()
   
   // If no session, don't render widget
@@ -37,10 +39,11 @@ export async function RetellChatWidgetWrapper() {
   // TODO: Add publicKey field to RetellIntegration schema
   const publicKey = process.env.NEXT_PUBLIC_RETELL_PUBLIC_KEY
 
-  // Portal chat only: env → RetellIntegration.portalChatAgentId → code default (not voice agentId)
+  // Portal chat: practice setting wins so CRM changes apply without redeploy.
+  // Env is fallback when portalChatAgentId is not set (e.g. single-tenant).
   const agentId =
+    retellIntegration?.portalChatAgentId?.trim() ||
     process.env.NEXT_PUBLIC_RETELL_AGENT_ID ||
-    retellIntegration?.portalChatAgentId ||
     DEFAULT_PORTAL_RETELL_AGENT_ID
 
   // Only render if we have a public key

@@ -186,8 +186,10 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
               className="text-sm font-mono"
             />
             <p className="text-xs text-gray-500">
-              Separate from the voice agent. Leave blank to use the app default or{' '}
-              <code className="rounded bg-gray-100 px-1">NEXT_PUBLIC_RETELL_AGENT_ID</code> in environment (env wins).
+              Separate from the voice agent. When set here, this value is used for the portal widget (overrides{' '}
+              <code className="rounded bg-gray-100 px-1">NEXT_PUBLIC_RETELL_AGENT_ID</code>). Leave blank to use env
+              or the built-in default. After saving, do a hard refresh on the portal (Cmd+Shift+R) so the chat script
+              reloads.
             </p>
           </div>
 

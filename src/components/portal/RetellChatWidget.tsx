@@ -33,10 +33,8 @@ export function RetellChatWidget({
       return
     }
 
-    // Check if script is already loaded
-    if (document.getElementById('retell-widget')) {
-      return
-    }
+    // Always remove prior script so agent-id / key updates apply (layout persists across navigations).
+    document.getElementById('retell-widget')?.remove()
 
     // Create and append the script tag
     const script = document.createElement('script')
