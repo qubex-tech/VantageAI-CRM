@@ -40,16 +40,28 @@ export async function POST(req: NextRequest) {
     if (!skipVerification && !secret) {
       return NextResponse.json({ error: 'Missing Retell API key for signature verification' }, { status: 401 })
     }
-    if (!skipVerification && secret && !verifyRetellSignature(body, signature, secret)) {
-      console.warn('[RetellAI webhook] Invalid signature', {
-        signatureHeaderPresent: Boolean(signature),
-        signatureLength: signature.length,
-        headerKeys: Array.from(req.headers.keys()).sort(),
-      })
-      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
-    }
-
     const event = JSON.parse(body)
+
+    if (!skipVerification && secret) {
+      const rawValid = verifyRetellSignature(body, signature, secret)
+      let normalizedValid = false
+      if (!rawValid) {
+        // Retell's SDK verifies against JSON.stringify(req.body)
+        const normalizedBody = JSON.stringify(event)
+        normalizedValid = verifyRetellSignature(normalizedBody, signature, secret)
+      }
+      if (!rawValid && !normalizedValid) {
+        console.warn('[RetellAI webhook] Invalid signature', {
+          signatureHeaderPresent: Boolean(signature),
+          signatureLength: signature.length,
+          signaturePreview: signature.slice(0, 16),
+          signatureHasTimestamp: signature.includes('t=') || signature.includes('timestamp='),
+          signatureHasV1: signature.includes('v1='),
+          headerKeys: Array.from(req.headers.keys()).sort(),
+        })
+        return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
+      }
+    }
 
     // Debug log (no PHI): confirms payload - per https://docs.retellai.com/features/webhook-overview
     console.log('[RetellAI webhook] Received', {
