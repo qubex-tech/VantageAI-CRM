@@ -36,21 +36,37 @@ export async function POST(req: NextRequest) {
     // Verify webhook signature (skip when RETELLAI_SKIP_SIGNATURE_VERIFICATION=1 for local testing)
     const skipVerification = process.env.RETELLAI_SKIP_SIGNATURE_VERIFICATION === '1'
     // Retell spec: signature verification uses the Retell API key.
-    const secret = process.env.RETELL_API_KEY || process.env.RETELLAI_WEBHOOK_SECRET
-    if (!skipVerification && !secret) {
+    const secrets = [
+      process.env.RETELL_API_KEY,
+      process.env.RETELLAI_WEBHOOK_SECRET,
+      ...(process.env.RETELL_API_KEYS || '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean),
+    ].filter(Boolean) as string[]
+
+    if (!skipVerification && secrets.length === 0) {
       return NextResponse.json({ error: 'Missing Retell API key for signature verification' }, { status: 401 })
     }
     const event = JSON.parse(body)
 
-    if (!skipVerification && secret) {
-      const rawValid = verifyRetellSignature(body, signature, secret)
-      let normalizedValid = false
-      if (!rawValid) {
+    if (!skipVerification && secrets.length > 0) {
+      let verified = false
+      for (const secret of secrets) {
+        const rawValid = verifyRetellSignature(body, signature, secret)
+        if (rawValid) {
+          verified = true
+          break
+        }
         // Retell's SDK verifies against JSON.stringify(req.body)
         const normalizedBody = JSON.stringify(event)
-        normalizedValid = verifyRetellSignature(normalizedBody, signature, secret)
+        const normalizedValid = verifyRetellSignature(normalizedBody, signature, secret)
+        if (normalizedValid) {
+          verified = true
+          break
+        }
       }
-      if (!rawValid && !normalizedValid) {
+      if (!verified) {
         console.warn('[RetellAI webhook] Invalid signature', {
           signatureHeaderPresent: Boolean(signature),
           signatureLength: signature.length,
@@ -58,6 +74,7 @@ export async function POST(req: NextRequest) {
           signatureHasTimestamp:
             signature.includes('t=') || signature.includes('timestamp=') || /(^|,)v=\d{10,}/.test(signature),
           signatureHasV1: signature.includes('v1='),
+          secretCount: secrets.length,
           headerKeys: Array.from(req.headers.keys()).sort(),
         })
         return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
