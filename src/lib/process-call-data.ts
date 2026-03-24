@@ -189,6 +189,16 @@ function firstDefined(...values: unknown[]): unknown {
   return undefined
 }
 
+function getCustomValue(customData: Record<string, any>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = customData[key]
+    if (value !== null && value !== undefined && String(value).trim() !== '') {
+      return String(value)
+    }
+  }
+  return undefined
+}
+
 function normalizeRetellKey(value: string): string {
   return value
     .trim()
@@ -251,6 +261,37 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
       if (!extracted.user_phone_number && customData.phone_number) extracted.user_phone_number = customData.phone_number
       if (!extracted.patient_phone_number && customData.patient_phone_number) {
         extracted.patient_phone_number = customData.patient_phone_number
+      }
+      if (!extracted.patient_dob) {
+        const dob = getCustomValue(customData, ['Patient DOB', 'patient_dob'])
+        if (dob) extracted.patient_dob = dob
+      }
+      if (!extracted.patient_phone_number) {
+        const phone = getCustomValue(customData, ['Patient Phone Number', 'Callback Number'])
+        if (phone) extracted.patient_phone_number = phone
+      }
+      if (!extracted.user_phone_number) {
+        const phone = getCustomValue(customData, ['Callback Number', 'Caller Phone Number'])
+        if (phone) extracted.user_phone_number = phone
+      }
+      if (!extracted.call_reason) {
+        const reason = getCustomValue(customData, ['Call Reason'])
+        if (reason) extracted.call_reason = reason
+      }
+      if (!extracted.patient_type) {
+        const type = getCustomValue(customData, ['Patient Type'])
+        if (type) extracted.patient_type = type
+      }
+      if (!extracted.patient_name) {
+        const first = getCustomValue(customData, ['Patient First Name'])
+        const last = getCustomValue(customData, ['Patient Last Name'])
+        if (first || last) {
+          extracted.patient_name = `${first || ''} ${last || ''}`.trim()
+        }
+      }
+      if (!extracted.patient_name) {
+        const callerName = getCustomValue(customData, ['Caller Name'])
+        if (callerName) extracted.patient_name = callerName
       }
 
       // Normalize Retell keys like "Patient First Name" or "Call Reason"
