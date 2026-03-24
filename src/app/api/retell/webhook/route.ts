@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
     // Process webhook
     const result = await processRetellWebhook(practiceId, event)
 
-    return NextResponse.json(result)
+    return new NextResponse(null, { status: 204 })
   } catch (error) {
     console.error('RetellAI webhook error:', error)
     return NextResponse.json(
