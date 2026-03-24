@@ -204,22 +204,31 @@ export function verifyRetellSignature(
       sigCandidates.push(part)
     }
 
-    const timestampPayload =
-      timestamp !== null ? `${timestamp}.${payload}` : null
-    const timestampPayloadAlt =
-      timestamp !== null ? `${timestamp}${payload}` : null
-    const expectedTimestampBuffer =
-      timestampPayload !== null
-        ? crypto.createHmac('sha256', secret).update(timestampPayload).digest()
-        : null
-    const expectedTimestampAltBuffer =
-      timestampPayloadAlt !== null
-        ? crypto.createHmac('sha256', secret).update(timestampPayloadAlt).digest()
-        : null
-    const expectedTimestampHex = expectedTimestampBuffer?.toString('hex') || null
-    const expectedTimestampBase64 = expectedTimestampBuffer?.toString('base64') || null
-    const expectedTimestampAltHex = expectedTimestampAltBuffer?.toString('hex') || null
-    const expectedTimestampAltBase64 = expectedTimestampAltBuffer?.toString('base64') || null
+    const expectedVariants: Array<{ buffer: Buffer; hex: string; base64: string }> = [
+      { buffer: expectedBuffer, hex: expectedHex, base64: expectedBase64 },
+    ]
+
+    if (timestamp !== null) {
+      const timestampPayloads = [
+        `${timestamp}.${payload}`,
+        `${timestamp}${payload}`,
+        `${payload}.${timestamp}`,
+        `${payload}${timestamp}`,
+        `${timestamp}:${payload}`,
+        `${timestamp}\n${payload}`,
+      ]
+      const seen = new Set<string>()
+      for (const candidatePayload of timestampPayloads) {
+        if (seen.has(candidatePayload)) continue
+        seen.add(candidatePayload)
+        const buffer = crypto.createHmac('sha256', secret).update(candidatePayload).digest()
+        expectedVariants.push({
+          buffer,
+          hex: buffer.toString('hex'),
+          base64: buffer.toString('base64'),
+        })
+      }
+    }
 
     const candidates = sigCandidates.length > 0 ? sigCandidates : parts
 
@@ -237,14 +246,10 @@ export function verifyRetellSignature(
 
       // Hex compare
       if (/^[a-fA-F0-9]+$/.test(normalized)) {
-        if (safeCompareHexSignatures(normalized, expectedHex)) {
-          return true
-        }
-        if (expectedTimestampHex && safeCompareHexSignatures(normalized, expectedTimestampHex)) {
-          return true
-        }
-        if (expectedTimestampAltHex && safeCompareHexSignatures(normalized, expectedTimestampAltHex)) {
-          return true
+        for (const variant of expectedVariants) {
+          if (safeCompareHexSignatures(normalized, variant.hex)) {
+            return true
+          }
         }
         continue
       }
@@ -252,25 +257,15 @@ export function verifyRetellSignature(
       // Base64 / base64url compare
       const base64Candidate = normalizeBase64Input(normalized)
       if (/^[A-Za-z0-9+/=]+$/.test(base64Candidate)) {
-        if (base64Candidate === expectedBase64) {
-          return true
-        }
-        if (expectedTimestampBase64 && base64Candidate === expectedTimestampBase64) {
-          return true
-        }
-        if (expectedTimestampAltBase64 && base64Candidate === expectedTimestampAltBase64) {
-          return true
-        }
         try {
           const decoded = Buffer.from(base64Candidate, 'base64')
-          if (safeCompareBuffers(decoded, expectedBuffer)) {
-            return true
-          }
-          if (expectedTimestampBuffer && safeCompareBuffers(decoded, expectedTimestampBuffer)) {
-            return true
-          }
-          if (expectedTimestampAltBuffer && safeCompareBuffers(decoded, expectedTimestampAltBuffer)) {
-            return true
+          for (const variant of expectedVariants) {
+            if (base64Candidate === variant.base64) {
+              return true
+            }
+            if (safeCompareBuffers(decoded, variant.buffer)) {
+              return true
+            }
           }
         } catch {
           // ignore malformed base64
