@@ -206,12 +206,20 @@ export function verifyRetellSignature(
 
     const timestampPayload =
       timestamp !== null ? `${timestamp}.${payload}` : null
+    const timestampPayloadAlt =
+      timestamp !== null ? `${timestamp}${payload}` : null
     const expectedTimestampBuffer =
       timestampPayload !== null
         ? crypto.createHmac('sha256', secret).update(timestampPayload).digest()
         : null
+    const expectedTimestampAltBuffer =
+      timestampPayloadAlt !== null
+        ? crypto.createHmac('sha256', secret).update(timestampPayloadAlt).digest()
+        : null
     const expectedTimestampHex = expectedTimestampBuffer?.toString('hex') || null
     const expectedTimestampBase64 = expectedTimestampBuffer?.toString('base64') || null
+    const expectedTimestampAltHex = expectedTimestampAltBuffer?.toString('hex') || null
+    const expectedTimestampAltBase64 = expectedTimestampAltBuffer?.toString('base64') || null
 
     const candidates = sigCandidates.length > 0 ? sigCandidates : parts
 
@@ -235,6 +243,9 @@ export function verifyRetellSignature(
         if (expectedTimestampHex && safeCompareHexSignatures(normalized, expectedTimestampHex)) {
           return true
         }
+        if (expectedTimestampAltHex && safeCompareHexSignatures(normalized, expectedTimestampAltHex)) {
+          return true
+        }
         continue
       }
 
@@ -247,12 +258,18 @@ export function verifyRetellSignature(
         if (expectedTimestampBase64 && base64Candidate === expectedTimestampBase64) {
           return true
         }
+        if (expectedTimestampAltBase64 && base64Candidate === expectedTimestampAltBase64) {
+          return true
+        }
         try {
           const decoded = Buffer.from(base64Candidate, 'base64')
           if (safeCompareBuffers(decoded, expectedBuffer)) {
             return true
           }
           if (expectedTimestampBuffer && safeCompareBuffers(decoded, expectedTimestampBuffer)) {
+            return true
+          }
+          if (expectedTimestampAltBuffer && safeCompareBuffers(decoded, expectedTimestampAltBuffer)) {
             return true
           }
         } catch {
