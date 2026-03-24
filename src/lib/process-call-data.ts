@@ -187,6 +187,24 @@ function firstDefined(...values: unknown[]): unknown {
   return undefined
 }
 
+function normalizeRetellKey(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+}
+
+function normalizeRetellRecord(input: Record<string, unknown>): Record<string, unknown> {
+  const output: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(input)) {
+    const normalized = normalizeRetellKey(key)
+    if (!normalized) continue
+    output[normalized] = value
+  }
+  return output
+}
+
 /**
  * Extract post-call data from RetellAI call response
  */
@@ -205,6 +223,7 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
     // Check for custom_analysis_data which often contains extracted fields
     if (call.call_analysis.custom_analysis_data) {
       const customData = call.call_analysis.custom_analysis_data as Record<string, any>
+      const normalizedCustomData = normalizeRetellRecord(customData)
       
       console.log('[extractCallData] Found custom_analysis_data:', customData)
       
@@ -227,6 +246,33 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
       if (!extracted.patient_name && customData.name) extracted.patient_name = customData.name
       if (!extracted.user_phone_number && customData.phone) extracted.user_phone_number = customData.phone
       if (!extracted.user_phone_number && customData.phone_number) extracted.user_phone_number = customData.phone_number
+
+      // Normalize Retell keys like "Patient First Name" or "Call Reason"
+      if (!extracted.patient_type && normalizedCustomData.patient_type) {
+        extracted.patient_type = normalizedCustomData.patient_type as string
+      }
+      if (!extracted.patient_dob && normalizedCustomData.patient_dob) {
+        extracted.patient_dob = normalizedCustomData.patient_dob as string
+      }
+      if (!extracted.call_reason && normalizedCustomData.call_reason) {
+        extracted.call_reason = normalizedCustomData.call_reason as string
+      }
+      if (!extracted.user_phone_number) {
+        extracted.user_phone_number =
+          (normalizedCustomData.patient_phone_number as string) ||
+          (normalizedCustomData.user_phone_number as string) ||
+          (normalizedCustomData.phone_number as string) ||
+          (normalizedCustomData.callback_number as string) ||
+          (normalizedCustomData.caller_number as string) ||
+          (normalizedCustomData.caller_phone_number as string)
+      }
+      if (!extracted.patient_name) {
+        const first = normalizedCustomData.patient_first_name as string | undefined
+        const last = normalizedCustomData.patient_last_name as string | undefined
+        if (first || last) {
+          extracted.patient_name = `${first || ''} ${last || ''}`.trim()
+        }
+      }
     }
     
     // Also check call_analysis root level for extracted fields (some APIs return them here)
@@ -250,6 +296,7 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
   // Check metadata field as fallback
   if (call.metadata) {
     const metadata = call.metadata as Record<string, any>
+    const normalizedMetadata = normalizeRetellRecord(metadata)
     
     console.log('[extractCallData] Found metadata:', metadata)
     
@@ -269,6 +316,62 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
     if (!extracted.patient_name && metadata.name) extracted.patient_name = metadata.name
     if (!extracted.user_phone_number && metadata.phone) extracted.user_phone_number = metadata.phone
     if (!extracted.user_phone_number && metadata.phone_number) extracted.user_phone_number = metadata.phone_number
+
+    if (!extracted.patient_type && normalizedMetadata.patient_type) {
+      extracted.patient_type = normalizedMetadata.patient_type as string
+    }
+    if (!extracted.patient_dob && normalizedMetadata.patient_dob) {
+      extracted.patient_dob = normalizedMetadata.patient_dob as string
+    }
+    if (!extracted.call_reason && normalizedMetadata.call_reason) {
+      extracted.call_reason = normalizedMetadata.call_reason as string
+    }
+    if (!extracted.user_phone_number) {
+      extracted.user_phone_number =
+        (normalizedMetadata.patient_phone_number as string) ||
+        (normalizedMetadata.user_phone_number as string) ||
+        (normalizedMetadata.phone_number as string) ||
+        (normalizedMetadata.callback_number as string) ||
+        (normalizedMetadata.caller_number as string) ||
+        (normalizedMetadata.caller_phone_number as string)
+    }
+    if (!extracted.patient_name) {
+      const first = normalizedMetadata.patient_first_name as string | undefined
+      const last = normalizedMetadata.patient_last_name as string | undefined
+      if (first || last) {
+        extracted.patient_name = `${first || ''} ${last || ''}`.trim()
+      }
+    }
+  }
+
+  const collectedDynamic = (call as any).collected_dynamic_variables as Record<string, unknown> | undefined
+  if (collectedDynamic) {
+    const normalizedCollected = normalizeRetellRecord(collectedDynamic)
+    if (!extracted.patient_type && normalizedCollected.patient_type) {
+      extracted.patient_type = normalizedCollected.patient_type as string
+    }
+    if (!extracted.patient_dob && normalizedCollected.patient_dob) {
+      extracted.patient_dob = normalizedCollected.patient_dob as string
+    }
+    if (!extracted.call_reason && normalizedCollected.call_reason) {
+      extracted.call_reason = normalizedCollected.call_reason as string
+    }
+    if (!extracted.user_phone_number) {
+      extracted.user_phone_number =
+        (normalizedCollected.patient_phone_number as string) ||
+        (normalizedCollected.user_phone_number as string) ||
+        (normalizedCollected.phone_number as string) ||
+        (normalizedCollected.callback_number as string) ||
+        (normalizedCollected.caller_number as string) ||
+        (normalizedCollected.caller_phone_number as string)
+    }
+    if (!extracted.patient_name) {
+      const first = normalizedCollected.patient_first_name as string | undefined
+      const last = normalizedCollected.patient_last_name as string | undefined
+      if (first || last) {
+        extracted.patient_name = `${first || ''} ${last || ''}`.trim()
+      }
+    }
   }
   
   // Also check root level of call object (some APIs return extracted data here)

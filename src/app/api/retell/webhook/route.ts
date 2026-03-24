@@ -45,11 +45,31 @@ export async function POST(req: NextRequest) {
 
     // Extract practiceId: query param (for RetellAI URL config), header, event payload, or env default
     const url = new URL(req.url)
-    const practiceId =
+    let practiceId =
       url.searchParams.get('practiceId') ||
       req.headers.get('x-practice-id') ||
       event.practiceId ||
       process.env.RETELLAI_DEFAULT_PRACTICE_ID
+
+    if (!practiceId) {
+      const agentId = event.call?.agent_id || event.call?.agentId
+      if (agentId) {
+        const integration = await prisma.retellIntegration.findFirst({
+          where: {
+            OR: [
+              { agentId },
+              { portalChatAgentId: agentId },
+              { insuranceVerificationAgentId: agentId },
+            ],
+            isActive: true,
+          },
+          select: { practiceId: true },
+        })
+        if (integration?.practiceId) {
+          practiceId = integration.practiceId
+        }
+      }
+    }
 
     if (!practiceId) {
       return NextResponse.json(

@@ -70,15 +70,28 @@ export async function processRetellWebhook(
         retellCallId: callId,
         startedAt: call?.start_timestamp ? new Date(call.start_timestamp) : new Date(),
         transcript: transcriptText ? redactPHI(transcriptText) : undefined,
+        metadata: {
+          retellWebhookEvent: eventType,
+          retellWebhookReceivedAt: new Date().toISOString(),
+        },
       },
     })
   } else if (conversation && transcriptText) {
+    const existingMetadata =
+      conversation.metadata && typeof conversation.metadata === 'object'
+        ? (conversation.metadata as Record<string, unknown>)
+        : {}
     conversation = await prisma.voiceConversation.update({
       where: { id: conversation.id },
       data: {
         transcript: redactPHI(transcriptText),
         endedAt: call?.end_timestamp ? new Date(call.end_timestamp) : undefined,
         updatedAt: new Date(),
+        metadata: {
+          ...existingMetadata,
+          retellWebhookEvent: eventType,
+          retellWebhookReceivedAt: new Date().toISOString(),
+        },
       },
     })
   }
