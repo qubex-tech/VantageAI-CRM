@@ -20,6 +20,7 @@ export interface ExtractedCallData {
   call_successful?: boolean | string
   user_age?: string | number
   user_phone_number?: string
+  patient_phone_number?: string
   detailed_call_summary?: string
   patient_name?: string
   patient_dob?: string
@@ -102,7 +103,7 @@ async function triggerCurogramAfterRetellProcessing(
 
   const requestId = `retell-curogram-post-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const callerNumber = normalizePhoneToE164(
-    extractedData.user_phone_number || call.from_number || call.to_number || conversation.callerPhone
+    extractedData.patient_phone_number || extractedData.user_phone_number
   )
 
   if (!callerNumber) {
@@ -139,6 +140,7 @@ async function triggerCurogramAfterRetellProcessing(
     {
       callerNumber,
       intentTopic,
+      patientData: extractedData as Record<string, unknown>,
     },
     {
       endpointUrl: retellIntegration?.curogramEscalationUrl,
@@ -230,6 +232,7 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
       // Map common field names - check both exact match and common variations
       if (customData.user_age !== undefined) extracted.user_age = customData.user_age
       if (customData.user_phone_number) extracted.user_phone_number = customData.user_phone_number
+      if (customData.patient_phone_number) extracted.patient_phone_number = customData.patient_phone_number
       if (customData.detailed_call_summary) extracted.detailed_call_summary = customData.detailed_call_summary
       if (customData.patient_name) extracted.patient_name = customData.patient_name
       if (customData.patient_dob) extracted.patient_dob = customData.patient_dob
@@ -246,6 +249,9 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
       if (!extracted.patient_name && customData.name) extracted.patient_name = customData.name
       if (!extracted.user_phone_number && customData.phone) extracted.user_phone_number = customData.phone
       if (!extracted.user_phone_number && customData.phone_number) extracted.user_phone_number = customData.phone_number
+      if (!extracted.patient_phone_number && customData.patient_phone_number) {
+        extracted.patient_phone_number = customData.patient_phone_number
+      }
 
       // Normalize Retell keys like "Patient First Name" or "Call Reason"
       if (!extracted.patient_type && normalizedCustomData.patient_type) {
@@ -257,9 +263,11 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
       if (!extracted.call_reason && normalizedCustomData.call_reason) {
         extracted.call_reason = normalizedCustomData.call_reason as string
       }
+      if (!extracted.patient_phone_number && normalizedCustomData.patient_phone_number) {
+        extracted.patient_phone_number = normalizedCustomData.patient_phone_number as string
+      }
       if (!extracted.user_phone_number) {
         extracted.user_phone_number =
-          (normalizedCustomData.patient_phone_number as string) ||
           (normalizedCustomData.user_phone_number as string) ||
           (normalizedCustomData.phone_number as string) ||
           (normalizedCustomData.callback_number as string) ||
@@ -302,6 +310,9 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
     
     if (!extracted.user_age && metadata.user_age !== undefined) extracted.user_age = metadata.user_age
     if (!extracted.user_phone_number && metadata.user_phone_number) extracted.user_phone_number = metadata.user_phone_number
+    if (!extracted.patient_phone_number && metadata.patient_phone_number) {
+      extracted.patient_phone_number = metadata.patient_phone_number
+    }
     if (!extracted.detailed_call_summary && metadata.detailed_call_summary) extracted.detailed_call_summary = metadata.detailed_call_summary
     if (!extracted.patient_name && metadata.patient_name) extracted.patient_name = metadata.patient_name
     if (!extracted.selected_time && metadata.selected_time) extracted.selected_time = metadata.selected_time
@@ -316,9 +327,15 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
     if (!extracted.patient_name && metadata.name) extracted.patient_name = metadata.name
     if (!extracted.user_phone_number && metadata.phone) extracted.user_phone_number = metadata.phone
     if (!extracted.user_phone_number && metadata.phone_number) extracted.user_phone_number = metadata.phone_number
+    if (!extracted.patient_phone_number && metadata.patient_phone_number) {
+      extracted.patient_phone_number = metadata.patient_phone_number
+    }
 
     if (!extracted.patient_type && normalizedMetadata.patient_type) {
       extracted.patient_type = normalizedMetadata.patient_type as string
+    }
+    if (!extracted.patient_phone_number && normalizedMetadata.patient_phone_number) {
+      extracted.patient_phone_number = normalizedMetadata.patient_phone_number as string
     }
     if (!extracted.patient_dob && normalizedMetadata.patient_dob) {
       extracted.patient_dob = normalizedMetadata.patient_dob as string
@@ -328,7 +345,6 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
     }
     if (!extracted.user_phone_number) {
       extracted.user_phone_number =
-        (normalizedMetadata.patient_phone_number as string) ||
         (normalizedMetadata.user_phone_number as string) ||
         (normalizedMetadata.phone_number as string) ||
         (normalizedMetadata.callback_number as string) ||
@@ -356,9 +372,11 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
     if (!extracted.call_reason && normalizedCollected.call_reason) {
       extracted.call_reason = normalizedCollected.call_reason as string
     }
+    if (!extracted.patient_phone_number && normalizedCollected.patient_phone_number) {
+      extracted.patient_phone_number = normalizedCollected.patient_phone_number as string
+    }
     if (!extracted.user_phone_number) {
       extracted.user_phone_number =
-        (normalizedCollected.patient_phone_number as string) ||
         (normalizedCollected.user_phone_number as string) ||
         (normalizedCollected.phone_number as string) ||
         (normalizedCollected.callback_number as string) ||

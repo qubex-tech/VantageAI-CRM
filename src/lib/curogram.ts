@@ -1,6 +1,7 @@
 export interface CurogramEscalationPayload {
   callerNumber: string
   intentTopic?: string
+  patientData?: Record<string, unknown>
 }
 
 interface CurogramEscalationOptions {
