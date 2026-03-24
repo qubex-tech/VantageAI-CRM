@@ -21,6 +21,9 @@ export async function POST(req: NextRequest) {
       req.headers.get('x-retell-signature') ||
       req.headers.get('x-retell-signature-256') ||
       req.headers.get('x-retell-signature-v1') ||
+      req.headers.get('retell-signature') ||
+      req.headers.get('retell-signature-256') ||
+      req.headers.get('retell-signature-v1') ||
       req.headers.get('x-signature') ||
       req.headers.get('x-hub-signature-256') ||
       ''

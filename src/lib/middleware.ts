@@ -33,6 +33,10 @@ function safeCompareBuffers(received: Buffer, expected: Buffer): boolean {
   return crypto.timingSafeEqual(received, expected)
 }
 
+function normalizeBase64Input(value: string): string {
+  return value.replace(/-/g, '+').replace(/_/g, '/')
+}
+
 /**
  * Get the current user's session with practiceId
  */
@@ -185,13 +189,14 @@ export function verifyRetellSignature(
         continue
       }
 
-      // Base64 compare
-      if (/^[A-Za-z0-9+/=]+$/.test(normalized)) {
-        if (normalized === expectedBase64) {
+      // Base64 / base64url compare
+      const base64Candidate = normalizeBase64Input(normalized)
+      if (/^[A-Za-z0-9+/=]+$/.test(base64Candidate)) {
+        if (base64Candidate === expectedBase64) {
           return true
         }
         try {
-          const decoded = Buffer.from(normalized, 'base64')
+          const decoded = Buffer.from(base64Candidate, 'base64')
           if (safeCompareBuffers(decoded, expectedBuffer)) {
             return true
           }
