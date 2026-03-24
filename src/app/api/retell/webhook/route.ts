@@ -103,3 +103,8 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// Retell "Test webhook" can issue a GET request; respond with a simple 200.
+export async function GET() {
+  return NextResponse.json({ status: 'ok' })
+}
+
