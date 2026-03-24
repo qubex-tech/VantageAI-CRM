@@ -114,3 +114,12 @@ export async function GET() {
   return NextResponse.json({ status: 'ok' })
 }
 
+// Some webhook testers issue HEAD/OPTIONS; return 200 for those too.
+export async function HEAD() {
+  return new NextResponse(null, { status: 200 })
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 200 })
+}
+
