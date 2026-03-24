@@ -22,6 +22,8 @@ export interface ExtractedCallData {
   user_phone_number?: string
   detailed_call_summary?: string
   patient_name?: string
+  patient_dob?: string
+  patient_type?: string
   selected_time?: string
   selected_date?: string
   preferred_dentist?: string
@@ -211,10 +213,15 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
       if (customData.user_phone_number) extracted.user_phone_number = customData.user_phone_number
       if (customData.detailed_call_summary) extracted.detailed_call_summary = customData.detailed_call_summary
       if (customData.patient_name) extracted.patient_name = customData.patient_name
+      if (customData.patient_dob) extracted.patient_dob = customData.patient_dob
+      if (customData.patient_type) extracted.patient_type = customData.patient_type
       if (customData.selected_time) extracted.selected_time = customData.selected_time
       if (customData.selected_date) extracted.selected_date = customData.selected_date
       if (customData.preferred_dentist) extracted.preferred_dentist = customData.preferred_dentist
       if (customData.call_reason) extracted.call_reason = customData.call_reason
+      if (!extracted.patient_type && customData.patientType) extracted.patient_type = customData.patientType
+      if (!extracted.patient_type && customData.patient_status) extracted.patient_type = customData.patient_status
+      if (!extracted.patient_dob && customData.dob) extracted.patient_dob = customData.dob
       
       // Also check for common variations
       if (!extracted.patient_name && customData.name) extracted.patient_name = customData.name
@@ -224,9 +231,9 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
     
     // Also check call_analysis root level for extracted fields (some APIs return them here)
     const analysisData = call.call_analysis as Record<string, any>
-    const extractedFields = ['user_age', 'user_phone_number', 'detailed_call_summary', 'patient_name', 
-                             'selected_time', 'selected_date', 'preferred_dentist', 'call_reason',
-                             'name', 'phone', 'phone_number']
+    const extractedFields = ['user_age', 'user_phone_number', 'detailed_call_summary', 'patient_name',
+                             'patient_dob', 'patient_type', 'selected_time', 'selected_date',
+                             'preferred_dentist', 'call_reason', 'name', 'phone', 'phone_number']
     
     for (const field of extractedFields) {
       if (analysisData[field] !== undefined && analysisData[field] !== null && analysisData[field] !== '') {
@@ -254,6 +261,9 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
     if (!extracted.selected_date && metadata.selected_date) extracted.selected_date = metadata.selected_date
     if (!extracted.preferred_dentist && metadata.preferred_dentist) extracted.preferred_dentist = metadata.preferred_dentist
     if (!extracted.call_reason && metadata.call_reason) extracted.call_reason = metadata.call_reason
+    if (!extracted.patient_dob && metadata.patient_dob) extracted.patient_dob = metadata.patient_dob
+    if (!extracted.patient_type && metadata.patient_type) extracted.patient_type = metadata.patient_type
+    if (!extracted.patient_type && metadata.patientType) extracted.patient_type = metadata.patientType
     
     // Also check for common variations in metadata
     if (!extracted.patient_name && metadata.name) extracted.patient_name = metadata.name
@@ -484,6 +494,18 @@ export async function processCallDataForPatient(
       const currentYear = new Date().getFullYear()
       const estimatedBirthYear = currentYear - age
       updateData.dateOfBirth = new Date(estimatedBirthYear, 0, 1)
+    }
+  }
+
+  if (callData.patient_dob && !updateData.dateOfBirth) {
+    const match = String(callData.patient_dob).trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
+    if (match) {
+      const month = Number(match[1]) - 1
+      const day = Number(match[2])
+      const year = Number(match[3])
+      if (year > 1900 && month >= 0 && month <= 11 && day > 0 && day <= 31) {
+        updateData.dateOfBirth = new Date(Date.UTC(year, month, day))
+      }
     }
   }
 

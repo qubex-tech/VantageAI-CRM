@@ -93,6 +93,68 @@ function formatChicagoIso(date: Date): string {
   }
 }
 
+function normalizePatientType(value: string | undefined) {
+  if (!value) return null
+  const normalized = value.toLowerCase().trim()
+  if (normalized.includes('new')) return 'new'
+  if (normalized.includes('existing')) return 'existing'
+  return normalized
+}
+
+function parseDobToIso(dateText: string | undefined) {
+  if (!dateText) return null
+  const match = dateText.trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
+  if (!match) return null
+  const month = Number(match[1])
+  const day = Number(match[2])
+  const year = Number(match[3])
+  if (!year || month < 1 || month > 12 || day < 1 || day > 31) return null
+  return `${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-${day
+    .toString()
+    .padStart(2, '0')}`
+}
+
+async function findEhrPatientId(params: {
+  client: FhirClient
+  fullName?: string | null
+  birthDate?: string | null
+}) {
+  const { client, fullName, birthDate } = params
+  if (!fullName || !birthDate) return null
+  const name = fullName.trim()
+  if (!name) return null
+
+  const queries = [
+    `/Patient?name=${encodeURIComponent(name)}&birthdate=${encodeURIComponent(birthDate)}`,
+  ]
+
+  const parts = name.split(/\s+/)
+  if (parts.length >= 2) {
+    const family = parts[parts.length - 1]
+    const given = parts.slice(0, -1).join(' ')
+    queries.push(
+      `/Patient?family=${encodeURIComponent(family)}&given=${encodeURIComponent(
+        given
+      )}&birthdate=${encodeURIComponent(birthDate)}`
+    )
+  }
+
+  for (const query of queries) {
+    try {
+      const result = (await client.request(query)) as any
+      const entry = Array.isArray(result?.entry) ? result.entry[0] : null
+      const id = entry?.resource?.id as string | undefined
+      if (id) {
+        return id
+      }
+    } catch (error) {
+      console.warn('[EHR Writeback] Patient lookup failed', { query })
+    }
+  }
+
+  return null
+}
+
 function buildCallNoteText(call: RetellCall, extractedData: ExtractedCallData): string {
   const lines: string[] = []
   lines.push('Vantage AI call summary (draft)')
@@ -430,7 +492,41 @@ export async function writeBackRetellCallToEhr(params: {
       ehrPatientId = patientRecord?.externalEhrId || null
     }
 
-    if (!ehrPatientId && settings.enablePatientCreate && patientRecord) {
+    const patientType = normalizePatientType(extractedData.patient_type)
+    const lookupBirthDate =
+      parseDobToIso(extractedData.patient_dob) ||
+      (patientRecord?.dateOfBirth
+        ? patientRecord.dateOfBirth.toISOString().split('T')[0]
+        : null)
+    const lookupName = patientRecord?.name || extractedData.patient_name || null
+
+    if (!ehrPatientId && lookupName && lookupBirthDate) {
+      const matchedId = await findEhrPatientId({
+        client,
+        fullName: lookupName,
+        birthDate: lookupBirthDate,
+      })
+      if (matchedId) {
+        ehrPatientId = matchedId
+        if (patientRecord && patientRecord.externalEhrId !== matchedId) {
+          await prisma.patient.update({
+            where: { id: patientRecord.id },
+            data: { externalEhrId: matchedId },
+          })
+        }
+      }
+    }
+
+    if (!ehrPatientId && patientType === 'existing') {
+      console.warn('[EHR Writeback] Existing patient missing EHR match', {
+        practiceId,
+        callId: call.call_id,
+        patientId,
+      })
+      return { status: 'error', reason: 'missing_patient_id' }
+    }
+
+    if (!ehrPatientId && settings.enablePatientCreate && patientRecord && patientType !== 'existing') {
         const name =
           parsePatientName(patientRecord.name) || parsePatientName(extractedData.patient_name)
       if (name) {
