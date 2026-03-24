@@ -180,11 +180,13 @@ export function verifyRetellSignature(
     const sigCandidates: string[] = []
 
     for (const part of parts) {
-      const [rawKey, rawValue] = part.split('=')
-      if (!rawValue) {
+      const eqIndex = part.indexOf('=')
+      if (eqIndex === -1) {
         sigCandidates.push(part)
         continue
       }
+      const rawKey = part.slice(0, eqIndex)
+      const rawValue = part.slice(eqIndex + 1)
       const key = rawKey.trim().toLowerCase()
       const value = rawValue.trim()
       if (key === 't' || key === 'timestamp') {
