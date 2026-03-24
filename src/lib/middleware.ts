@@ -170,12 +170,44 @@ export function verifyRetellSignature(
     const expectedHex = expectedBuffer.toString('hex')
     const expectedBase64 = expectedBuffer.toString('base64')
 
-    // RetellAI may send signature in formats like:
-    // sha256=<hex>, sha256:<hex>, v1=<hex|base64>, or raw hex/base64.
-    const candidates = signature
+    // Some providers prefix a timestamp (e.g., t=...).
+    const parts = signature
       .split(',')
       .map((value) => value.trim())
       .filter(Boolean)
+
+    let timestamp: string | null = null
+    const sigCandidates: string[] = []
+
+    for (const part of parts) {
+      const [rawKey, rawValue] = part.split('=')
+      if (!rawValue) {
+        sigCandidates.push(part)
+        continue
+      }
+      const key = rawKey.trim().toLowerCase()
+      const value = rawValue.trim()
+      if (key === 't' || key === 'timestamp') {
+        timestamp = value
+        continue
+      }
+      if (key === 'v1' || key === 'sig' || key === 'signature') {
+        sigCandidates.push(`${key}=${value}`)
+        continue
+      }
+      sigCandidates.push(part)
+    }
+
+    const timestampPayload =
+      timestamp !== null ? `${timestamp}.${payload}` : null
+    const expectedTimestampBuffer =
+      timestampPayload !== null
+        ? crypto.createHmac('sha256', secret).update(timestampPayload).digest()
+        : null
+    const expectedTimestampHex = expectedTimestampBuffer?.toString('hex') || null
+    const expectedTimestampBase64 = expectedTimestampBuffer?.toString('base64') || null
+
+    const candidates = sigCandidates.length > 0 ? sigCandidates : parts
 
     for (const candidate of candidates) {
       const normalized = normalizeHexSignature(candidate, ['sha256=', 'sha256:', 'v1=', 'v1:'])
@@ -184,6 +216,9 @@ export function verifyRetellSignature(
       // Hex compare
       if (/^[a-fA-F0-9]+$/.test(normalized)) {
         if (safeCompareHexSignatures(normalized, expectedHex)) {
+          return true
+        }
+        if (expectedTimestampHex && safeCompareHexSignatures(normalized, expectedTimestampHex)) {
           return true
         }
         continue
@@ -195,9 +230,15 @@ export function verifyRetellSignature(
         if (base64Candidate === expectedBase64) {
           return true
         }
+        if (expectedTimestampBase64 && base64Candidate === expectedTimestampBase64) {
+          return true
+        }
         try {
           const decoded = Buffer.from(base64Candidate, 'base64')
           if (safeCompareBuffers(decoded, expectedBuffer)) {
+            return true
+          }
+          if (expectedTimestampBuffer && safeCompareBuffers(decoded, expectedTimestampBuffer)) {
             return true
           }
         } catch {

@@ -35,8 +35,17 @@ export async function POST(req: NextRequest) {
 
     // Verify webhook signature (skip when RETELLAI_SKIP_SIGNATURE_VERIFICATION=1 for local testing)
     const skipVerification = process.env.RETELLAI_SKIP_SIGNATURE_VERIFICATION === '1'
-    const secret = process.env.RETELLAI_WEBHOOK_SECRET
+    // Retell spec: signature verification uses the Retell API key.
+    const secret = process.env.RETELL_API_KEY || process.env.RETELLAI_WEBHOOK_SECRET
+    if (!skipVerification && !secret) {
+      return NextResponse.json({ error: 'Missing Retell API key for signature verification' }, { status: 401 })
+    }
     if (!skipVerification && secret && !verifyRetellSignature(body, signature, secret)) {
+      console.warn('[RetellAI webhook] Invalid signature', {
+        signatureHeaderPresent: Boolean(signature),
+        signatureLength: signature.length,
+        headerKeys: Array.from(req.headers.keys()).sort(),
+      })
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
     }
 
