@@ -815,6 +815,38 @@ export async function processRetellCallData(
   if (call.call_analysis?.custom_analysis_data) {
     enrichFromCustomAnalysis(extractedData, call.call_analysis.custom_analysis_data as Record<string, any>)
   }
+  // Final safety net in case earlier extraction missed custom_analysis_data fields.
+  if (call.call_analysis?.custom_analysis_data) {
+    const normalizedCustomData = normalizeRetellRecord(
+      call.call_analysis.custom_analysis_data as Record<string, unknown>
+    )
+    if (!extractedData.patient_name) {
+      const first = normalizedCustomData.patient_first_name as string | undefined
+      const last = normalizedCustomData.patient_last_name as string | undefined
+      const caller = normalizedCustomData.caller_name as string | undefined
+      if (first || last) {
+        extractedData.patient_name = `${first || ''} ${last || ''}`.trim()
+      } else if (caller) {
+        extractedData.patient_name = caller
+      }
+    }
+    if (!extractedData.patient_phone_number) {
+      extractedData.patient_phone_number =
+        (normalizedCustomData.patient_phone_number as string) ||
+        (normalizedCustomData.callback_number as string) ||
+        (normalizedCustomData.caller_number as string) ||
+        (normalizedCustomData.caller_phone_number as string)
+    }
+    if (!extractedData.patient_dob) {
+      extractedData.patient_dob = normalizedCustomData.patient_dob as string | undefined
+    }
+    if (!extractedData.patient_type) {
+      extractedData.patient_type = normalizedCustomData.patient_type as string | undefined
+    }
+    if (!extractedData.call_reason) {
+      extractedData.call_reason = normalizedCustomData.call_reason as string | undefined
+    }
+  }
   
   // Log extracted data for debugging
   console.log('[processRetellCallData] Extracted data from call:', {
