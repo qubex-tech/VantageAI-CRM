@@ -214,7 +214,15 @@ export function verifyRetellSignature(
     const candidates = sigCandidates.length > 0 ? sigCandidates : parts
 
     for (const candidate of candidates) {
-      const normalized = normalizeHexSignature(candidate, ['sha256=', 'sha256:', 'v1=', 'v1:'])
+      const normalized = normalizeHexSignature(candidate, [
+        'sha256=',
+        'sha256:',
+        'v1=',
+        'v1:',
+        's=',
+        'sig=',
+        'signature=',
+      ])
       if (!normalized) continue
 
       // Hex compare
