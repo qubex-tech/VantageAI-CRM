@@ -21,6 +21,7 @@ export interface ExtractedCallData {
   user_age?: string | number
   user_phone_number?: string
   patient_phone_number?: string
+  patient_email?: string
   detailed_call_summary?: string
   patient_name?: string
   patient_dob?: string
@@ -197,6 +198,48 @@ function getCustomValue(customData: Record<string, any>, keys: string[]): string
     }
   }
   return undefined
+}
+
+function enrichFromCustomAnalysis(
+  extracted: ExtractedCallData,
+  customData: Record<string, any>
+): ExtractedCallData {
+  if (!extracted.patient_dob) {
+    const dob = getCustomValue(customData, ['Patient DOB', 'patient_dob'])
+    if (dob) extracted.patient_dob = dob
+  }
+  if (!extracted.patient_phone_number) {
+    const phone = getCustomValue(customData, ['Patient Phone Number', 'Callback Number'])
+    if (phone) extracted.patient_phone_number = phone
+  }
+  if (!extracted.user_phone_number) {
+    const phone = getCustomValue(customData, ['Callback Number', 'Caller Phone Number'])
+    if (phone) extracted.user_phone_number = phone
+  }
+  if (!extracted.patient_email) {
+    const email = getCustomValue(customData, ['Patient Email', 'Caller Email'])
+    if (email) extracted.patient_email = email
+  }
+  if (!extracted.call_reason) {
+    const reason = getCustomValue(customData, ['Call Reason'])
+    if (reason) extracted.call_reason = reason
+  }
+  if (!extracted.patient_type) {
+    const type = getCustomValue(customData, ['Patient Type'])
+    if (type) extracted.patient_type = type
+  }
+  if (!extracted.patient_name) {
+    const first = getCustomValue(customData, ['Patient First Name'])
+    const last = getCustomValue(customData, ['Patient Last Name'])
+    if (first || last) {
+      extracted.patient_name = `${first || ''} ${last || ''}`.trim()
+    }
+  }
+  if (!extracted.patient_name) {
+    const callerName = getCustomValue(customData, ['Caller Name'])
+    if (callerName) extracted.patient_name = callerName
+  }
+  return extracted
 }
 
 function normalizeRetellKey(value: string): string {
@@ -576,7 +619,7 @@ export async function processCallDataForPatient(
   callId?: string
 ): Promise<{ patientId: string | null; isNew: boolean }> {
   // Need phone number or patient name to identify/create patient
-  const phoneNumber = callData.user_phone_number
+  const phoneNumber = callData.patient_phone_number || callData.user_phone_number
   const patientName = callData.patient_name
 
   // Log extracted data for debugging
@@ -769,6 +812,9 @@ export async function processRetellCallData(
 ): Promise<{ patientId: string | null; extractedData: ExtractedCallData }> {
   // Extract data from call
   const extractedData = extractCallData(call)
+  if (call.call_analysis?.custom_analysis_data) {
+    enrichFromCustomAnalysis(extractedData, call.call_analysis.custom_analysis_data as Record<string, any>)
+  }
   
   // Log extracted data for debugging
   console.log('[processRetellCallData] Extracted data from call:', {
