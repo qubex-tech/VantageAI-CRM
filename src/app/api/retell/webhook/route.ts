@@ -55,7 +55,8 @@ export async function POST(req: NextRequest) {
           signatureHeaderPresent: Boolean(signature),
           signatureLength: signature.length,
           signaturePreview: signature.slice(0, 16),
-          signatureHasTimestamp: signature.includes('t=') || signature.includes('timestamp='),
+          signatureHasTimestamp:
+            signature.includes('t=') || signature.includes('timestamp=') || /(^|,)v=\d{10,}/.test(signature),
           signatureHasV1: signature.includes('v1='),
           headerKeys: Array.from(req.headers.keys()).sort(),
         })

@@ -191,7 +191,11 @@ export function verifyRetellSignature(
         timestamp = value
         continue
       }
-      if (key === 'v1' || key === 'sig' || key === 'signature') {
+      if (key === 'v' && /^\d{10,}$/.test(value)) {
+        timestamp = value
+        continue
+      }
+      if (key === 'v1' || key === 'sig' || key === 'signature' || key === 's') {
         sigCandidates.push(`${key}=${value}`)
         continue
       }
