@@ -266,6 +266,12 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
       if (!extracted.patient_phone_number && normalizedCustomData.patient_phone_number) {
         extracted.patient_phone_number = normalizedCustomData.patient_phone_number as string
       }
+      if (!extracted.patient_phone_number && normalizedCustomData.callback_number) {
+        extracted.patient_phone_number = normalizedCustomData.callback_number as string
+      }
+      if (!extracted.patient_phone_number && normalizedCustomData.caller_number) {
+        extracted.patient_phone_number = normalizedCustomData.caller_number as string
+      }
       if (!extracted.user_phone_number) {
         extracted.user_phone_number =
           (normalizedCustomData.user_phone_number as string) ||

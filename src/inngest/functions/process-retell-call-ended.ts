@@ -34,8 +34,17 @@ export const processRetellCallEnded = inngest.createFunction(
     let fullCall: RetellCall | null
 
     if (webhookCall && eventType === 'call_analyzed') {
-      fullCall = webhookCall as RetellCall
+      const hasAnalysis = Boolean((webhookCall as RetellCall).call_analysis)
+      if (hasAnalysis) {
+        fullCall = webhookCall as RetellCall
+      } else {
+        fullCall = null
+      }
     } else {
+      fullCall = null
+    }
+
+    if (!fullCall) {
       await step.sleep('wait-for-analysis', 30_000)
       fullCall = await step.run('fetch-call', async () => {
         const retellClient = await getRetellClient(practiceId)
