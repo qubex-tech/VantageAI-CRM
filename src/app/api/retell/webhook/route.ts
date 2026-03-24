@@ -17,7 +17,13 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.text()
-    const signature = req.headers.get('x-retell-signature') || ''
+    const signature =
+      req.headers.get('x-retell-signature') ||
+      req.headers.get('x-retell-signature-256') ||
+      req.headers.get('x-retell-signature-v1') ||
+      req.headers.get('x-signature') ||
+      req.headers.get('x-hub-signature-256') ||
+      ''
 
     if (!body?.trim()) {
       console.warn('[RetellAI webhook] Empty request body received')

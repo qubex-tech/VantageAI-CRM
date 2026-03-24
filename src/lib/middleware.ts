@@ -28,6 +28,11 @@ function safeCompareHexSignatures(receivedHex: string, expectedHex: string): boo
   return crypto.timingSafeEqual(Buffer.from(receivedHex, 'hex'), Buffer.from(expectedHex, 'hex'))
 }
 
+function safeCompareBuffers(received: Buffer, expected: Buffer): boolean {
+  if (received.length !== expected.length) return false
+  return crypto.timingSafeEqual(received, expected)
+}
+
 /**
  * Get the current user's session with practiceId
  */
@@ -157,17 +162,46 @@ export function verifyRetellSignature(
   }
 
   try {
-    // RetellAI typically sends signature in format: sha256=<hex_hash>
-    const receivedHash = normalizeHexSignature(signature, ['sha256='])
-    
-    // Compute expected HMAC-SHA256
-    const expectedHash = crypto
-      .createHmac('sha256', secret)
-      .update(payload)
-      .digest('hex')
+    const expectedBuffer = crypto.createHmac('sha256', secret).update(payload).digest()
+    const expectedHex = expectedBuffer.toString('hex')
+    const expectedBase64 = expectedBuffer.toString('base64')
 
-    // Constant-time comparison to prevent timing attacks
-    return safeCompareHexSignatures(receivedHash, expectedHash)
+    // RetellAI may send signature in formats like:
+    // sha256=<hex>, sha256:<hex>, v1=<hex|base64>, or raw hex/base64.
+    const candidates = signature
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean)
+
+    for (const candidate of candidates) {
+      const normalized = normalizeHexSignature(candidate, ['sha256=', 'sha256:', 'v1=', 'v1:'])
+      if (!normalized) continue
+
+      // Hex compare
+      if (/^[a-fA-F0-9]+$/.test(normalized)) {
+        if (safeCompareHexSignatures(normalized, expectedHex)) {
+          return true
+        }
+        continue
+      }
+
+      // Base64 compare
+      if (/^[A-Za-z0-9+/=]+$/.test(normalized)) {
+        if (normalized === expectedBase64) {
+          return true
+        }
+        try {
+          const decoded = Buffer.from(normalized, 'base64')
+          if (safeCompareBuffers(decoded, expectedBuffer)) {
+            return true
+          }
+        } catch {
+          // ignore malformed base64
+        }
+      }
+    }
+
+    return false
   } catch (error) {
     console.error('RetellAI signature verification error:', error)
     return false
