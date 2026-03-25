@@ -938,6 +938,14 @@ export async function processRetellCallData(
   }
   
   // Log extracted data for debugging
+  console.log('[processRetellCallData] Extracted patient fields', {
+    callId: call.call_id,
+    patient_name: extractedData.patient_name,
+    patient_phone_number: extractedData.patient_phone_number,
+    patient_dob: extractedData.patient_dob,
+    patient_type: extractedData.patient_type,
+    has_custom_data: Boolean(extractedData.retell_custom_data),
+  })
   console.log('[processRetellCallData] Extracted data from call:', {
     callId: call.call_id,
     extractedData,
