@@ -219,6 +219,7 @@ export async function PATCH(
         patientId: patient.id,
         email: patient.email,
         phone: patient.primaryPhone || patient.phone,
+        dateOfBirth: patient.dateOfBirth,
         actorUserId: user.id,
       })
     } catch (err) {

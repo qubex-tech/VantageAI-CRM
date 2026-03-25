@@ -10,6 +10,7 @@ import { refreshBackendConnectionIfNeeded } from '@/lib/integrations/ehr/backend
 import { FhirClient } from '@/lib/integrations/fhir/fhirClient'
 import { logEhrAudit } from '@/lib/integrations/ehr/audit'
 import { createPatient } from '@/lib/integrations/fhir/resources/patient'
+import { formatDateOnlyForInput } from '@/lib/date'
 
 const UPDATE_PROVIDER_ID = 'ecw_write'
 const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.326070'
@@ -39,7 +40,7 @@ function mergeTelecom(base: TelecomEntry[] | undefined, updates: TelecomEntry[])
 
 function buildUpdatePayload(
   basePatient: any,
-  updates: { email?: string | null; phone?: string | null },
+  updates: { email?: string | null; phone?: string | null; dateOfBirth?: Date | string | null },
   requestUrl: string,
   options?: { formatEcwPhone?: boolean }
 ) {
@@ -68,6 +69,10 @@ function buildUpdatePayload(
         },
     telecom: mergeTelecom(basePatient?.telecom, telecomUpdates),
   }
+  const birthDate = updates.dateOfBirth ? formatDateOnlyForInput(updates.dateOfBirth) : ''
+  if (birthDate) {
+    resource.birthDate = birthDate
+  }
 
   return {
     resourceType: 'Bundle',
@@ -93,10 +98,11 @@ export async function syncPatientUpdateToEhr(params: {
   patientId: string
   email?: string | null
   phone?: string | null
+  dateOfBirth?: Date | string | null
   actorUserId: string
 }) {
-  const { practiceId, patientId, email, phone, actorUserId } = params
-  if (!email && !phone) {
+  const { practiceId, patientId, email, phone, dateOfBirth, actorUserId } = params
+  if (!email && !phone && !dateOfBirth) {
     return { status: 'skipped', reason: 'no_fields' }
   }
 
@@ -105,6 +111,7 @@ export async function syncPatientUpdateToEhr(params: {
     patientId,
     hasEmail: Boolean(email),
     hasPhone: Boolean(phone),
+    hasDob: Boolean(dateOfBirth),
   })
 
   const settings = await getEhrSettings(practiceId)
@@ -225,7 +232,7 @@ export async function syncPatientUpdateToEhr(params: {
       generalPractitioner?: any
       communication?: any
     }
-    const bundle = buildUpdatePayload(basePatient, { email, phone }, 'Patient', {
+    const bundle = buildUpdatePayload(basePatient, { email, phone, dateOfBirth }, 'Patient', {
       formatEcwPhone: connection.providerId.startsWith('ecw'),
     })
     console.log('[EHR Patient Update] Payload', {
@@ -246,7 +253,7 @@ export async function syncPatientUpdateToEhr(params: {
         ehrPatientId: basePatient.id,
         status,
       })
-      const retryBundle = buildUpdatePayload(basePatient, { email, phone }, `Patient/${basePatient.id}`, {
+      const retryBundle = buildUpdatePayload(basePatient, { email, phone, dateOfBirth }, `Patient/${basePatient.id}`, {
         formatEcwPhone: connection.providerId.startsWith('ecw'),
       })
       updated = await client.request('/', {
