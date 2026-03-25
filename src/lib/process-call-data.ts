@@ -30,6 +30,7 @@ export interface ExtractedCallData {
   selected_date?: string
   preferred_dentist?: string
   call_reason?: string
+  retell_custom_data?: Record<string, unknown>
   insurance_verification?: {
     provider_name?: string
     npi?: string
@@ -299,6 +300,7 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
       const normalizedCustomData = normalizeRetellRecord(customData)
       
       console.log('[extractCallData] Found custom_analysis_data:', customData)
+      extracted.retell_custom_data = customData
 
       // Always enrich from custom analysis first.
       enrichFromCustomAnalysis(extracted, customData)
@@ -641,10 +643,32 @@ export async function processCallDataForPatient(
 ): Promise<{ patientId: string | null; isNew: boolean }> {
   // Need phone number or patient name to identify/create patient.
   // Never derive patient identity from summary text.
-  const phoneNumber = callData.patient_phone_number || callData.user_phone_number
+  let phoneNumber = callData.patient_phone_number || callData.user_phone_number
   let patientName = callData.patient_name
   if (patientName && /^the caller\b/i.test(patientName.trim())) {
     patientName = undefined
+  }
+  if ((!phoneNumber || !patientName) && callData.retell_custom_data) {
+    const customData = callData.retell_custom_data as Record<string, unknown>
+    const first = customData['Patient First Name']
+    const last = customData['Patient Last Name']
+    const callerName = customData['Caller Name']
+    if (!patientName) {
+      if (first || last) {
+        patientName = `${first || ''} ${last || ''}`.trim()
+      } else if (callerName) {
+        patientName = String(callerName).trim()
+      }
+    }
+    if (!phoneNumber) {
+      const phone =
+        customData['Patient Phone Number'] ||
+        customData['Callback Number'] ||
+        customData['Caller Phone Number']
+      if (phone) {
+        phoneNumber = String(phone).trim()
+      }
+    }
   }
 
   // Log extracted data for debugging
@@ -659,6 +683,7 @@ export async function processCallDataForPatient(
     console.warn('[processCallDataForPatient] No phone number or patient name in extracted call data, skipping patient creation.', {
       callId,
       extractedKeys: Object.keys(callData),
+      customDataKeys: callData.retell_custom_data ? Object.keys(callData.retell_custom_data) : [],
       extractedData: callData,
     })
     return { patientId: null, isNew: false }
