@@ -337,6 +337,9 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
         if (callerName) extracted.patient_name = callerName
       }
 
+      // Ensure title-cased custom_analysis_data always populates missing fields.
+      enrichFromCustomAnalysis(extracted, customData)
+
       // Normalize Retell keys like "Patient First Name" or "Call Reason"
       if (!extracted.patient_type && normalizedCustomData.patient_type) {
         extracted.patient_type = normalizedCustomData.patient_type as string
@@ -618,9 +621,13 @@ export async function processCallDataForPatient(
   userId: string | null,
   callId?: string
 ): Promise<{ patientId: string | null; isNew: boolean }> {
-  // Need phone number or patient name to identify/create patient
+  // Need phone number or patient name to identify/create patient.
+  // Never derive patient identity from summary text.
   const phoneNumber = callData.patient_phone_number || callData.user_phone_number
-  const patientName = callData.patient_name
+  let patientName = callData.patient_name
+  if (patientName && /^the caller\b/i.test(patientName.trim())) {
+    patientName = undefined
+  }
 
   // Log extracted data for debugging
   console.log('[processCallDataForPatient] Extracted call data:', {
@@ -631,7 +638,11 @@ export async function processCallDataForPatient(
   })
 
   if (!phoneNumber && !patientName) {
-    console.warn('[processCallDataForPatient] No phone number or patient name in extracted call data, skipping patient creation. Full callData:', callData)
+    console.warn('[processCallDataForPatient] No phone number or patient name in extracted call data, skipping patient creation.', {
+      callId,
+      extractedKeys: Object.keys(callData),
+      extractedData: callData,
+    })
     return { patientId: null, isNew: false }
   }
 
