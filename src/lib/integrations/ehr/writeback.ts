@@ -677,7 +677,7 @@ export async function writeBackRetellCallToEhr(params: {
         client,
         patientId: ehrPatientId,
         noteText: telephoneNoteText,
-        preferPreliminary: true,
+        preferPreliminary: false,
         capabilityStatement,
         skipCapabilityCheck: connection.providerId.startsWith('ecw'),
         useTransaction: connection.providerId.startsWith('ecw'),
