@@ -492,7 +492,7 @@ export async function writeBackRetellCallToEhr(params: {
       return { status: 'error', reason: 'missing_patient_id' }
     }
 
-    if (!ehrPatientId && settings.enablePatientCreate && patientRecord && patientType !== 'existing') {
+    if (!ehrPatientId && settings?.enablePatientCreate && patientRecord && patientType !== 'existing') {
         const name =
           parsePatientName(patientRecord.name) || parsePatientName(extractedData.patient_name)
       if (name) {
