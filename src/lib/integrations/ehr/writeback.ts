@@ -331,7 +331,7 @@ export async function writeBackRetellCallToEhr(params: {
     hasExtractedPhone: Boolean(extractedData.user_phone_number),
   })
 
-  await getEhrSettings(practiceId)
+  const settings = await getEhrSettings(practiceId)
 
   await markConversationMetadata(practiceId, call.call_id, {
     ehrWritebackStatus: 'in_progress',
