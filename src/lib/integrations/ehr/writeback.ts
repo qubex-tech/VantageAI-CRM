@@ -189,10 +189,11 @@ function buildCallNoteText(call: RetellCall, extractedData: ExtractedCallData): 
 function buildTelephoneEncounterNoteText(
   call: RetellCall,
   extractedData: ExtractedCallData
-): string | null {
+): string {
   const detailed = extractedData.detailed_call_summary || call.call_analysis?.call_summary
-  if (!detailed) return null
-  return ['Telephone encounter note', '', 'Detailed Call Summary:', detailed].join('\n')
+  const summary = extractedData.call_summary || call.call_analysis?.call_summary
+  const fallback = detailed || summary || buildCallNoteText(call, extractedData)
+  return ['Telephone encounter note', '', 'Detailed Call Summary:', fallback].join('\n')
 }
 
 function buildTelephoneEncounterBundle(params: {
@@ -330,46 +331,7 @@ export async function writeBackRetellCallToEhr(params: {
     hasExtractedPhone: Boolean(extractedData.user_phone_number),
   })
 
-  const settings = await getEhrSettings(practiceId)
-  if (!settings?.enabledProviders?.includes(WRITEBACK_PROVIDER_ID as any)) {
-    console.warn('[EHR Writeback] Skipped - provider not enabled', {
-      practiceId,
-      callId: call.call_id,
-      providerId: WRITEBACK_PROVIDER_ID,
-    })
-    return { status: 'skipped', reason: 'provider_not_enabled' }
-  }
-  if (!settings.enableWrite || !settings.enableNoteCreate) {
-    console.warn('[EHR Writeback] Skipped - write disabled', {
-      practiceId,
-      callId: call.call_id,
-      enableWrite: settings.enableWrite,
-      enableNoteCreate: settings.enableNoteCreate,
-    })
-    return { status: 'skipped', reason: 'write_disabled' }
-  }
-
-  const existingConversation = await prisma.voiceConversation.findFirst({
-    where: { practiceId, retellCallId: call.call_id },
-    select: { metadata: true },
-  })
-  const existingMetadata =
-    existingConversation?.metadata && typeof existingConversation.metadata === 'object'
-      ? (existingConversation.metadata as Record<string, unknown>)
-      : {}
-  const hasWritebackArtifacts = Boolean(
-    existingMetadata.ehrWritebackNoteId || existingMetadata.ehrWritebackTelephoneNoteId
-  )
-  if (existingMetadata.ehrWritebackStatus === 'success' && hasWritebackArtifacts) {
-    console.log('[EHR Writeback] Skipped - already written', {
-      practiceId,
-      callId: call.call_id,
-      ehrWritebackPatientId: existingMetadata.ehrWritebackPatientId,
-      ehrWritebackNoteId: existingMetadata.ehrWritebackNoteId,
-      ehrWritebackTelephoneNoteId: existingMetadata.ehrWritebackTelephoneNoteId,
-    })
-    return { status: 'skipped', reason: 'already_written' }
-  }
+  await getEhrSettings(practiceId)
 
   await markConversationMetadata(practiceId, call.call_id, {
     ehrWritebackStatus: 'in_progress',
