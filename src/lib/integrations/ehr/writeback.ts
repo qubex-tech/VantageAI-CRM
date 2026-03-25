@@ -358,9 +358,7 @@ export async function writeBackRetellCallToEhr(params: {
       ? (existingConversation.metadata as Record<string, unknown>)
       : {}
   const hasWritebackArtifacts = Boolean(
-    existingMetadata.ehrWritebackNoteId ||
-      existingMetadata.ehrWritebackTelephoneNoteId ||
-      existingMetadata.ehrWritebackEncounterId
+    existingMetadata.ehrWritebackNoteId || existingMetadata.ehrWritebackTelephoneNoteId
   )
   if (existingMetadata.ehrWritebackStatus === 'success' && hasWritebackArtifacts) {
     console.log('[EHR Writeback] Skipped - already written', {
@@ -369,7 +367,6 @@ export async function writeBackRetellCallToEhr(params: {
       ehrWritebackPatientId: existingMetadata.ehrWritebackPatientId,
       ehrWritebackNoteId: existingMetadata.ehrWritebackNoteId,
       ehrWritebackTelephoneNoteId: existingMetadata.ehrWritebackTelephoneNoteId,
-      ehrWritebackEncounterId: existingMetadata.ehrWritebackEncounterId,
     })
     return { status: 'skipped', reason: 'already_written' }
   }
