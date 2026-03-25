@@ -876,6 +876,41 @@ export async function processRetellCallData(
       extractedData.call_reason = normalizedCustomData.call_reason as string | undefined
     }
   }
+  // Absolute fallback using exact Retell key casing.
+  if (call.call_analysis?.custom_analysis_data) {
+    const customData = call.call_analysis.custom_analysis_data as Record<string, any>
+    if (!extractedData.patient_name) {
+      const first = customData['Patient First Name']
+      const last = customData['Patient Last Name']
+      const caller = customData['Caller Name']
+      if (first || last) {
+        extractedData.patient_name = `${first || ''} ${last || ''}`.trim()
+      } else if (caller) {
+        extractedData.patient_name = String(caller).trim()
+      }
+    }
+    if (!extractedData.patient_phone_number) {
+      const phone = customData['Patient Phone Number'] || customData['Callback Number']
+      if (phone) extractedData.patient_phone_number = String(phone).trim()
+    }
+    if (!extractedData.user_phone_number) {
+      const phone = customData['Callback Number']
+      if (phone) extractedData.user_phone_number = String(phone).trim()
+    }
+    if (!extractedData.patient_dob && customData['Patient DOB']) {
+      extractedData.patient_dob = String(customData['Patient DOB']).trim()
+    }
+    if (!extractedData.patient_type && customData['Patient Type']) {
+      extractedData.patient_type = String(customData['Patient Type']).trim()
+    }
+    if (!extractedData.call_reason && customData['Call Reason']) {
+      extractedData.call_reason = String(customData['Call Reason']).trim()
+    }
+    if (!extractedData.patient_email) {
+      const email = customData['Patient Email'] || customData['Caller Email']
+      if (email) extractedData.patient_email = String(email).trim()
+    }
+  }
   
   // Log extracted data for debugging
   console.log('[processRetellCallData] Extracted data from call:', {
