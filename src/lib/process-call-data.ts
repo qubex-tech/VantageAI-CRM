@@ -204,40 +204,58 @@ function enrichFromCustomAnalysis(
   extracted: ExtractedCallData,
   customData: Record<string, any>
 ): ExtractedCallData {
+  const normalized = normalizeRetellRecord(customData)
+
   if (!extracted.patient_dob) {
     const dob = getCustomValue(customData, ['Patient DOB', 'patient_dob'])
-    if (dob) extracted.patient_dob = dob
+    extracted.patient_dob = dob || (normalized.patient_dob as string | undefined)
   }
   if (!extracted.patient_phone_number) {
     const phone = getCustomValue(customData, ['Patient Phone Number', 'Callback Number'])
-    if (phone) extracted.patient_phone_number = phone
+    extracted.patient_phone_number =
+      phone ||
+      (normalized.patient_phone_number as string | undefined) ||
+      (normalized.callback_number as string | undefined) ||
+      (normalized.caller_number as string | undefined) ||
+      (normalized.caller_phone_number as string | undefined)
   }
   if (!extracted.user_phone_number) {
     const phone = getCustomValue(customData, ['Callback Number', 'Caller Phone Number'])
-    if (phone) extracted.user_phone_number = phone
+    extracted.user_phone_number =
+      phone ||
+      (normalized.callback_number as string | undefined) ||
+      (normalized.caller_phone_number as string | undefined)
   }
   if (!extracted.patient_email) {
     const email = getCustomValue(customData, ['Patient Email', 'Caller Email'])
-    if (email) extracted.patient_email = email
+    extracted.patient_email =
+      email ||
+      (normalized.patient_email as string | undefined) ||
+      (normalized.caller_email as string | undefined)
   }
   if (!extracted.call_reason) {
     const reason = getCustomValue(customData, ['Call Reason'])
-    if (reason) extracted.call_reason = reason
+    extracted.call_reason = reason || (normalized.call_reason as string | undefined)
   }
   if (!extracted.patient_type) {
     const type = getCustomValue(customData, ['Patient Type'])
-    if (type) extracted.patient_type = type
+    extracted.patient_type = type || (normalized.patient_type as string | undefined)
   }
   if (!extracted.patient_name) {
     const first = getCustomValue(customData, ['Patient First Name'])
     const last = getCustomValue(customData, ['Patient Last Name'])
-    if (first || last) {
-      extracted.patient_name = `${first || ''} ${last || ''}`.trim()
+    const normalizedFirst = normalized.patient_first_name as string | undefined
+    const normalizedLast = normalized.patient_last_name as string | undefined
+    const resolvedFirst = first || normalizedFirst
+    const resolvedLast = last || normalizedLast
+    if (resolvedFirst || resolvedLast) {
+      extracted.patient_name = `${resolvedFirst || ''} ${resolvedLast || ''}`.trim()
     }
   }
   if (!extracted.patient_name) {
     const callerName = getCustomValue(customData, ['Caller Name'])
-    if (callerName) extracted.patient_name = callerName
+    extracted.patient_name =
+      callerName || (normalized.caller_name as string | undefined) || extracted.patient_name
   }
   return extracted
 }
@@ -281,6 +299,9 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
       const normalizedCustomData = normalizeRetellRecord(customData)
       
       console.log('[extractCallData] Found custom_analysis_data:', customData)
+
+      // Always enrich from custom analysis first.
+      enrichFromCustomAnalysis(extracted, customData)
       
       // Map common field names - check both exact match and common variations
       if (customData.user_age !== undefined) extracted.user_age = customData.user_age
@@ -336,9 +357,6 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
         const callerName = getCustomValue(customData, ['Caller Name'])
         if (callerName) extracted.patient_name = callerName
       }
-
-      // Ensure title-cased custom_analysis_data always populates missing fields.
-      enrichFromCustomAnalysis(extracted, customData)
 
       // Normalize Retell keys like "Patient First Name" or "Call Reason"
       if (!extracted.patient_type && normalizedCustomData.patient_type) {
