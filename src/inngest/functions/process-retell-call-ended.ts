@@ -11,12 +11,12 @@ import type { RetellCall } from '@/lib/retell-api'
  * - call_analyzed: full call data including call_analysis - use directly, no fetch
  * - call_ended: excludes call_analysis - fetch via API after 30s delay
  */
-const RETELL_PROCESS_VERSION = 'retell_extraction_v3'
+const RETELL_PROCESS_VERSION = 'retell_extraction_v4'
 
 export const processRetellCallEnded = inngest.createFunction(
   {
-    id: 'process-retell-call-ended',
-    name: 'Process RetellAI Call Ended',
+    id: 'process-retell-call-ended-v2',
+    name: 'Process RetellAI Call Ended v2',
     retries: 3,
   },
   { event: 'retell/call.ended' },

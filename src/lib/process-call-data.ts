@@ -864,15 +864,20 @@ export async function processRetellCallData(
   call: RetellCall,
   userId: string | null
 ): Promise<{ patientId: string | null; extractedData: ExtractedCallData }> {
+  const RETELL_EXTRACT_VERSION = 'retell_extraction_v4'
   // Extract data from call
   const extractedData = extractCallData(call)
-  if (call.call_analysis?.custom_analysis_data) {
-    enrichFromCustomAnalysis(extractedData, call.call_analysis.custom_analysis_data as Record<string, any>)
+  const customAnalysis = call.call_analysis?.custom_analysis_data as Record<string, any> | undefined
+  if (customAnalysis) {
+    if (!extractedData.retell_custom_data) {
+      extractedData.retell_custom_data = customAnalysis
+    }
+    enrichFromCustomAnalysis(extractedData, customAnalysis)
   }
   // Final safety net in case earlier extraction missed custom_analysis_data fields.
-  if (call.call_analysis?.custom_analysis_data) {
+  if (customAnalysis) {
     const normalizedCustomData = normalizeRetellRecord(
-      call.call_analysis.custom_analysis_data as Record<string, unknown>
+      customAnalysis as Record<string, unknown>
     )
     if (!extractedData.patient_name) {
       const first = normalizedCustomData.patient_first_name as string | undefined
@@ -939,6 +944,7 @@ export async function processRetellCallData(
   
   // Log extracted data for debugging
   console.log('[processRetellCallData] Extracted patient fields', {
+    version: RETELL_EXTRACT_VERSION,
     callId: call.call_id,
     patient_name: extractedData.patient_name,
     patient_phone_number: extractedData.patient_phone_number,
