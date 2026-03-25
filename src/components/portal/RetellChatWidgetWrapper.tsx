@@ -13,14 +13,13 @@ const DEFAULT_PORTAL_RETELL_AGENT_ID = 'agent_7624a19359e021e2159ae5aa12'
 export async function RetellChatWidgetWrapper() {
   noStore()
   const session = await getPatientSession()
-  
-  // If no session, don't render widget
+
   if (!session) {
     return null
   }
 
-  // Get practice's Retell integration
-  let retellIntegration: { portalChatAgentId: string | null } | null = null
+  let retellIntegration: { portalChatAgentId: string | null; portalChatPublicKey: string | null } | null =
+    null
   try {
     retellIntegration = await prisma.retellIntegration.findUnique({
       where: {
@@ -28,34 +27,39 @@ export async function RetellChatWidgetWrapper() {
       },
       select: {
         portalChatAgentId: true,
+        portalChatPublicKey: true,
       },
     })
   } catch (error) {
     console.error('Failed to load Retell integration for portal widget:', error)
   }
 
-  // Get public key from environment variable or integration
-  // For now, we'll use an environment variable
-  // TODO: Add publicKey field to RetellIntegration schema
-  const publicKey = process.env.NEXT_PUBLIC_RETELL_PUBLIC_KEY
+  // Public key: per-practice (Settings) first, then hosting env
+  const publicKey =
+    retellIntegration?.portalChatPublicKey?.trim() ||
+    process.env.NEXT_PUBLIC_RETELL_PUBLIC_KEY?.trim() ||
+    null
 
-  // Portal chat: practice setting wins so CRM changes apply without redeploy.
-  // Env is fallback when portalChatAgentId is not set (e.g. single-tenant).
+  const recaptchaSiteKey = process.env.NEXT_PUBLIC_RETELL_RECAPTCHA_SITE_KEY?.trim() || undefined
+
   const agentId =
     retellIntegration?.portalChatAgentId?.trim() ||
     process.env.NEXT_PUBLIC_RETELL_AGENT_ID ||
     DEFAULT_PORTAL_RETELL_AGENT_ID
 
-  // Only render if we have a public key
   if (!publicKey) {
-    console.warn('Retell public key not configured. Chat widget will not be displayed.')
+    console.warn(
+      '[Retell portal] No public key: add it in Settings → Retell → Patient portal chat public key, or set NEXT_PUBLIC_RETELL_PUBLIC_KEY.'
+    )
     return null
   }
 
   return (
     <RetellChatWidget
+      key={`${publicKey}:${agentId}:${recaptchaSiteKey ?? ''}`}
       publicKey={publicKey}
       agentId={agentId}
+      recaptchaSiteKey={recaptchaSiteKey}
       title="Chat with us"
       color="#0056b3"
       botName="Assistant"

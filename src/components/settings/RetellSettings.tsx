@@ -25,6 +25,7 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
   const [portalChatAgentId, setPortalChatAgentId] = useState(
     initialIntegration?.portalChatAgentId || ''
   )
+  const [portalChatPublicKey, setPortalChatPublicKey] = useState('')
   const [insuranceVerificationAgentId, setInsuranceVerificationAgentId] = useState(initialIntegration?.insuranceVerificationAgentId || '')
   const [curogramEscalationEnabled, setCurogramEscalationEnabled] = useState(Boolean(initialIntegration?.curogramEscalationEnabled))
   const [curogramEscalationUrl, setCurogramEscalationUrl] = useState(initialIntegration?.curogramEscalationUrl || '')
@@ -39,11 +40,13 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
   const [testing, setTesting] = useState(false)
 
   const hasSavedApiKey = Boolean(initialIntegration?.hasApiKey || initialIntegration?.apiKey)
+  const hasPortalChatPublicKey = Boolean(initialIntegration?.hasPortalChatPublicKey)
 
   useEffect(() => {
     setApiKey('')
     setAgentId(initialIntegration?.agentId || '')
     setPortalChatAgentId(initialIntegration?.portalChatAgentId || '')
+    setPortalChatPublicKey('')
     setInsuranceVerificationAgentId(initialIntegration?.insuranceVerificationAgentId || '')
     setCurogramEscalationEnabled(Boolean(initialIntegration?.curogramEscalationEnabled))
     setCurogramEscalationUrl(initialIntegration?.curogramEscalationUrl || '')
@@ -68,6 +71,9 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
           apiKey: apiKey || undefined,
           agentId: agentId || undefined,
           portalChatAgentId: portalChatAgentId || undefined,
+          ...(portalChatPublicKey.trim()
+            ? { portalChatPublicKey: portalChatPublicKey.trim() }
+            : {}),
           insuranceVerificationAgentId: insuranceVerificationAgentId || undefined,
           curogramEscalationEnabled,
           curogramEscalationUrl: curogramEscalationUrl || undefined,
@@ -188,8 +194,50 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
             <p className="text-xs text-gray-500">
               Separate from the voice agent. When set here, this value is used for the portal widget (overrides{' '}
               <code className="rounded bg-gray-100 px-1">NEXT_PUBLIC_RETELL_AGENT_ID</code>). Leave blank to use env
-              or the built-in default. After saving, do a hard refresh on the portal (Cmd+Shift+R) so the chat script
-              reloads.
+              or the built-in default. Use a{' '}
+              <a
+                href="https://docs.retellai.com/build/create-chat-agent"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:underline"
+              >
+                chat agent
+              </a>
+              , not a voice-only agent. After saving, hard-refresh the portal (Cmd+Shift+R).
+            </p>
+          </div>
+
+          <div className="space-y-2 border-t border-gray-200 pt-4">
+            <Label htmlFor="portalChatPublicKey" className="text-sm font-medium text-gray-700">
+              Patient portal chat public key (Optional)
+            </Label>
+            <Input
+              id="portalChatPublicKey"
+              type="password"
+              autoComplete="off"
+              value={portalChatPublicKey}
+              onChange={(e) => setPortalChatPublicKey(e.target.value)}
+              placeholder={
+                hasPortalChatPublicKey
+                  ? 'Key on file — enter a new key to replace'
+                  : 'key_… from Retell → Public keys'
+              }
+              className="text-sm font-mono"
+            />
+            <p className="text-xs text-gray-500">
+              Required for the portal chat widget unless{' '}
+              <code className="rounded bg-gray-100 px-1">NEXT_PUBLIC_RETELL_PUBLIC_KEY</code> is set on the server.
+              This field overrides the env when set. Same key as in{' '}
+              <a
+                href="https://docs.retellai.com/accounts/public-keys"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:underline"
+              >
+                Retell public keys
+              </a>
+              ; allow your portal domains in that key&apos;s settings. If reCAPTCHA is enabled for the key, set{' '}
+              <code className="rounded bg-gray-100 px-1">NEXT_PUBLIC_RETELL_RECAPTCHA_SITE_KEY</code> in Vercel too.
             </p>
           </div>
 

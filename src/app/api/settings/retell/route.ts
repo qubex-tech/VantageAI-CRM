@@ -16,6 +16,7 @@ const retellIntegrationSchema = z.object({
   apiKey: z.string().optional().or(z.literal('')),
   agentId: z.string().optional(),
   portalChatAgentId: z.string().optional(),
+  portalChatPublicKey: z.string().optional(),
   insuranceVerificationAgentId: z.string().optional(),
   curogramEscalationEnabled: z.boolean().optional(),
   curogramEscalationUrl: z.string().url().optional().or(z.literal('')),
@@ -34,6 +35,8 @@ function redactIntegration(integration: any) {
     hasApiKey: Boolean(integration.apiKey),
     mcpApiKey: integration.mcpApiKey ? '********' : null,
     hasMcpApiKey: Boolean(integration.mcpApiKey),
+    portalChatPublicKey: integration.portalChatPublicKey ? '********' : null,
+    hasPortalChatPublicKey: Boolean(integration.portalChatPublicKey),
   }
 }
 
@@ -77,6 +80,7 @@ export async function GET(req: NextRequest) {
           apiKey: true,
           agentId: true,
           portalChatAgentId: true,
+          portalChatPublicKey: true,
           insuranceVerificationAgentId: true,
           mcpBaseUrl: true,
           mcpApiKey: true,
@@ -139,8 +143,12 @@ export async function POST(req: NextRequest) {
     const portalChatAgentId = validated.portalChatAgentId?.trim() || null
     const existingIntegration = await prisma.retellIntegration.findUnique({
       where: { practiceId: practiceId },
-      select: { apiKey: true },
+      select: { apiKey: true, portalChatPublicKey: true },
     })
+    const portalChatPublicKey =
+      validated.portalChatPublicKey === undefined
+        ? existingIntegration?.portalChatPublicKey ?? null
+        : validated.portalChatPublicKey.trim() || null
     const resolvedApiKey = validated.apiKey?.trim() || existingIntegration?.apiKey
     const curogramEscalationEnabled = Boolean(validated.curogramEscalationEnabled)
     const curogramEscalationUrl = validated.curogramEscalationUrl?.trim() || null
@@ -185,6 +193,7 @@ export async function POST(req: NextRequest) {
           apiKey: resolvedApiKey,
           agentId: validated.agentId,
           portalChatAgentId,
+          portalChatPublicKey,
           insuranceVerificationAgentId: validated.insuranceVerificationAgentId || null,
           curogramEscalationEnabled,
           curogramEscalationUrl,
@@ -199,6 +208,7 @@ export async function POST(req: NextRequest) {
           apiKey: resolvedApiKey,
           agentId: validated.agentId,
           portalChatAgentId,
+          portalChatPublicKey,
           insuranceVerificationAgentId: validated.insuranceVerificationAgentId || null,
           curogramEscalationEnabled,
           curogramEscalationUrl,
@@ -218,6 +228,7 @@ export async function POST(req: NextRequest) {
           apiKey: resolvedApiKey,
           agentId: validated.agentId,
           portalChatAgentId,
+          portalChatPublicKey,
           insuranceVerificationAgentId: validated.insuranceVerificationAgentId || null,
           mcpBaseUrl: validated.mcpBaseUrl || null,
           mcpApiKey: validated.mcpApiKey || null,
@@ -230,6 +241,7 @@ export async function POST(req: NextRequest) {
           apiKey: resolvedApiKey,
           agentId: validated.agentId,
           portalChatAgentId,
+          portalChatPublicKey,
           insuranceVerificationAgentId: validated.insuranceVerificationAgentId || null,
           mcpBaseUrl: validated.mcpBaseUrl || null,
           mcpApiKey: validated.mcpApiKey || null,

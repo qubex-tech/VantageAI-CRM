@@ -367,6 +367,7 @@ model RetellIntegration {
   apiKey                       String // Encrypted in production
   agentId                      String? // Optional: default voice / calls agent ID for this practice
   portalChatAgentId            String? // Optional: Retell web chat widget agent for patient portal (separate from voice)
+  portalChatPublicKey          String? // Optional: Retell *public* key for portal widget (key_...); allows portal without NEXT_PUBLIC_RETELL_PUBLIC_KEY
   insuranceVerificationAgentId String? // Agent ID dedicated to insurance verification outbound calls
   curogramEscalationEnabled    Boolean  @default(false) // Opt-in toggle per practice
   curogramEscalationUrl        String? // Practice-specific Curogram AI escalation endpoint
