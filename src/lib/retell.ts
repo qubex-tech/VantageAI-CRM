@@ -8,6 +8,8 @@ import { prisma } from './db'
 import { findOrCreatePatientByPhone, getAvailableSlots, bookAppointment, cancelAppointment } from './agentActions'
 import { redactPHI } from './phi'
 import { createAuditLog } from './audit'
+import { processRetellCallData } from './process-call-data'
+import { writeBackRetellCallToEhr } from './integrations/ehr/writeback'
 
 /**
  * RetellAI webhook payload - matches https://docs.retellai.com/features/webhook-overview
@@ -124,12 +126,23 @@ export async function processRetellWebhook(
     (eventType === 'call_ended' || eventType === 'call_analyzed') && call?.call_id
 
   if (shouldEmitInngest) {
+    const conversationMetadata =
+      conversation?.metadata && typeof conversation.metadata === 'object'
+        ? (conversation.metadata as Record<string, unknown>)
+        : {}
+    const emitAttemptedAt = new Date().toISOString()
     if (conversation) {
       await prisma.voiceConversation.update({
         where: { id: conversation.id },
         data: {
           endedAt: call?.end_timestamp ? new Date(call.end_timestamp) : new Date(),
           transcript: transcriptText ? redactPHI(transcriptText) : undefined,
+          metadata: {
+            ...conversationMetadata,
+            retellInngestEventName: 'retell/call.ended',
+            retellInngestEmitAttemptedAt: emitAttemptedAt,
+            retellInngestEmitError: null,
+          },
         },
       })
     }
@@ -147,8 +160,106 @@ export async function processRetellWebhook(
           call: eventType === 'call_analyzed' ? call : undefined,
         },
       })
+      if (conversation) {
+        const refreshed = await prisma.voiceConversation.findUnique({
+          where: { id: conversation.id },
+          select: { metadata: true },
+        })
+        const refreshedMetadata =
+          refreshed?.metadata && typeof refreshed.metadata === 'object'
+            ? (refreshed.metadata as Record<string, unknown>)
+            : {}
+        await prisma.voiceConversation.update({
+          where: { id: conversation.id },
+          data: {
+            metadata: {
+              ...refreshedMetadata,
+              retellInngestEmitSucceededAt: new Date().toISOString(),
+              retellInngestEmitError: null,
+            },
+          },
+        })
+      }
     } catch (err) {
       console.error('[RetellAI] Failed to emit Inngest event:', err)
+      const emitError = err instanceof Error ? err.message : String(err)
+      if (conversation) {
+        const refreshed = await prisma.voiceConversation.findUnique({
+          where: { id: conversation.id },
+          select: { metadata: true },
+        })
+        const refreshedMetadata =
+          refreshed?.metadata && typeof refreshed.metadata === 'object'
+            ? (refreshed.metadata as Record<string, unknown>)
+            : {}
+        await prisma.voiceConversation.update({
+          where: { id: conversation.id },
+          data: {
+            metadata: {
+              ...refreshedMetadata,
+              retellInngestEmitError: emitError,
+              retellInngestEmitFailedAt: new Date().toISOString(),
+            },
+          },
+        })
+      }
+
+      // Safety net: process inline when call_analyzed payload already has analysis.
+      // This prevents silent post-call drops when Inngest event delivery fails.
+      if (eventType === 'call_analyzed' && call?.call_id) {
+        try {
+          const fullCall = call as any
+          const { patientId, extractedData } = await processRetellCallData(practiceId, fullCall, null)
+          await writeBackRetellCallToEhr({
+            practiceId,
+            patientId,
+            call: fullCall,
+            extractedData,
+          })
+          if (conversation) {
+            const refreshed = await prisma.voiceConversation.findUnique({
+              where: { id: conversation.id },
+              select: { metadata: true },
+            })
+            const refreshedMetadata =
+              refreshed?.metadata && typeof refreshed.metadata === 'object'
+                ? (refreshed.metadata as Record<string, unknown>)
+                : {}
+            await prisma.voiceConversation.update({
+              where: { id: conversation.id },
+              data: {
+                metadata: {
+                  ...refreshedMetadata,
+                  retellInngestFallbackRanAt: new Date().toISOString(),
+                },
+              },
+            })
+          }
+        } catch (fallbackError) {
+          console.error('[RetellAI] Fallback processing failed:', fallbackError)
+          if (conversation) {
+            const refreshed = await prisma.voiceConversation.findUnique({
+              where: { id: conversation.id },
+              select: { metadata: true },
+            })
+            const refreshedMetadata =
+              refreshed?.metadata && typeof refreshed.metadata === 'object'
+                ? (refreshed.metadata as Record<string, unknown>)
+                : {}
+            await prisma.voiceConversation.update({
+              where: { id: conversation.id },
+              data: {
+                metadata: {
+                  ...refreshedMetadata,
+                  retellInngestFallbackError:
+                    fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+                  retellInngestFallbackFailedAt: new Date().toISOString(),
+                },
+              },
+            })
+          }
+        }
+      }
     }
   }
 
