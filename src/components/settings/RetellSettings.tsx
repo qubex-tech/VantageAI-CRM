@@ -242,8 +242,13 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
               >
                 Retell public keys
               </a>
-              ; allow your portal domains in that key&apos;s settings. If the chat window opens but stays empty,
-              enable reCAPTCHA below or in Vercel when Retell requires it.
+              . In Retell → Public keys → Allowed domains, include every hostname patients use:{' '}
+              <code className="rounded bg-gray-100 px-1">portal.getvantage.tech</code> and each practice subdomain{' '}
+              <code className="rounded bg-gray-100 px-1">{'{slug}'}.portal.getvantage.tech</code> (or add a wildcard
+              if Retell supports it, e.g. <code className="rounded bg-gray-100 px-1">*.portal.getvantage.tech</code>
+              ). Listing only <code className="rounded bg-gray-100 px-1">portal.getvantage.tech</code> often breaks
+              chat on <code className="rounded bg-gray-100 px-1">lonestar.portal.getvantage.tech</code>-style URLs. If
+              the window opens but stays empty, add reCAPTCHA below when Retell requires it.
             </p>
           </div>
 
