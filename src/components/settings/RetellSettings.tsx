@@ -26,6 +26,7 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
     initialIntegration?.portalChatAgentId || ''
   )
   const [portalChatPublicKey, setPortalChatPublicKey] = useState('')
+  const [portalChatRecaptchaSiteKey, setPortalChatRecaptchaSiteKey] = useState('')
   const [insuranceVerificationAgentId, setInsuranceVerificationAgentId] = useState(initialIntegration?.insuranceVerificationAgentId || '')
   const [curogramEscalationEnabled, setCurogramEscalationEnabled] = useState(Boolean(initialIntegration?.curogramEscalationEnabled))
   const [curogramEscalationUrl, setCurogramEscalationUrl] = useState(initialIntegration?.curogramEscalationUrl || '')
@@ -41,12 +42,14 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
 
   const hasSavedApiKey = Boolean(initialIntegration?.hasApiKey || initialIntegration?.apiKey)
   const hasPortalChatPublicKey = Boolean(initialIntegration?.hasPortalChatPublicKey)
+  const hasPortalChatRecaptchaSiteKey = Boolean(initialIntegration?.hasPortalChatRecaptchaSiteKey)
 
   useEffect(() => {
     setApiKey('')
     setAgentId(initialIntegration?.agentId || '')
     setPortalChatAgentId(initialIntegration?.portalChatAgentId || '')
     setPortalChatPublicKey('')
+    setPortalChatRecaptchaSiteKey('')
     setInsuranceVerificationAgentId(initialIntegration?.insuranceVerificationAgentId || '')
     setCurogramEscalationEnabled(Boolean(initialIntegration?.curogramEscalationEnabled))
     setCurogramEscalationUrl(initialIntegration?.curogramEscalationUrl || '')
@@ -73,6 +76,9 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
           portalChatAgentId: portalChatAgentId || undefined,
           ...(portalChatPublicKey.trim()
             ? { portalChatPublicKey: portalChatPublicKey.trim() }
+            : {}),
+          ...(portalChatRecaptchaSiteKey.trim()
+            ? { portalChatRecaptchaSiteKey: portalChatRecaptchaSiteKey.trim() }
             : {}),
           insuranceVerificationAgentId: insuranceVerificationAgentId || undefined,
           curogramEscalationEnabled,
@@ -236,8 +242,32 @@ export function RetellSettings({ initialIntegration, practiceId }: RetellSetting
               >
                 Retell public keys
               </a>
-              ; allow your portal domains in that key&apos;s settings. If reCAPTCHA is enabled for the key, set{' '}
-              <code className="rounded bg-gray-100 px-1">NEXT_PUBLIC_RETELL_RECAPTCHA_SITE_KEY</code> in Vercel too.
+              ; allow your portal domains in that key&apos;s settings. If the chat window opens but stays empty,
+              enable reCAPTCHA below or in Vercel when Retell requires it.
+            </p>
+          </div>
+
+          <div className="space-y-2 border-t border-gray-200 pt-4">
+            <Label htmlFor="portalChatRecaptchaSiteKey" className="text-sm font-medium text-gray-700">
+              Portal chat reCAPTCHA v3 site key (Optional)
+            </Label>
+            <Input
+              id="portalChatRecaptchaSiteKey"
+              type="password"
+              autoComplete="off"
+              value={portalChatRecaptchaSiteKey}
+              onChange={(e) => setPortalChatRecaptchaSiteKey(e.target.value)}
+              placeholder={
+                hasPortalChatRecaptchaSiteKey
+                  ? 'Key on file — enter a new site key to replace'
+                  : 'Google reCAPTCHA v3 site key (if Retell public key uses bot protection)'
+              }
+              className="text-sm font-mono"
+            />
+            <p className="text-xs text-gray-500">
+              Required when your Retell public key has reCAPTCHA enabled. The widget loads this script before Retell so
+              sessions can start. Alternatively set{' '}
+              <code className="rounded bg-gray-100 px-1">NEXT_PUBLIC_RETELL_RECAPTCHA_SITE_KEY</code> on the server.
             </p>
           </div>
 
