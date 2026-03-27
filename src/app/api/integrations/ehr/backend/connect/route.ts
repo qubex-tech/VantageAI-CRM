@@ -254,6 +254,19 @@ export async function POST(req: NextRequest) {
       },
     })
 
+    // Keep a single active backend connection per provider/practice to avoid
+    // writeback/status selecting a stale issuer during cutovers.
+    await prisma.ehrConnection.updateMany({
+      where: {
+        tenantId: practiceId,
+        providerId: String(providerId),
+        authFlow,
+        id: { not: connection.id },
+        status: { not: 'disconnected' },
+      },
+      data: { status: 'disconnected' },
+    })
+
     await logEhrAudit({
       tenantId: practiceId,
       actorUserId: isApiKeyAuth ? null : user.id,

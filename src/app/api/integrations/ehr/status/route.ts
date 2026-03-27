@@ -53,7 +53,13 @@ export async function GET(req: NextRequest) {
     const expectedAuthFlow = parsed.data.providerId.startsWith('ecw_')
       ? 'backend_services'
       : 'smart_launch'
-    const connection = connections.find((candidate) => candidate.authFlow === expectedAuthFlow)
+    const connection =
+      connections.find(
+        (candidate) =>
+          candidate.authFlow === expectedAuthFlow &&
+          candidate.status === 'connected' &&
+          Boolean(candidate.accessTokenEnc)
+      ) || connections.find((candidate) => candidate.authFlow === expectedAuthFlow)
 
     if (!connection) {
       return NextResponse.json({ connected: false })

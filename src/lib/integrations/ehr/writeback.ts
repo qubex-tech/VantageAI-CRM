@@ -377,10 +377,12 @@ export async function writeBackRetellCallToEhr(params: {
       where: {
         tenantId: practiceId,
         providerId: WRITEBACK_PROVIDER_ID,
+        authFlow: 'backend_services',
+        status: 'connected',
       },
       orderBy: { updatedAt: 'desc' },
     })
-    const connection = connections.find((candidate) => candidate.authFlow === 'backend_services')
+    const connection = connections[0]
     if (!connection?.accessTokenEnc) {
       console.error('[EHR Writeback] Missing backend connection', {
         practiceId,
@@ -847,10 +849,15 @@ export async function syncPatientNoteToEhrEncounter(params: {
   let resolvedEncounterId = encounterId
 
   const connections = await prisma.ehrConnection.findMany({
-    where: { tenantId: practiceId, providerId: WRITEBACK_PROVIDER_ID },
+    where: {
+      tenantId: practiceId,
+      providerId: WRITEBACK_PROVIDER_ID,
+      authFlow: 'backend_services',
+      status: 'connected',
+    },
     orderBy: { updatedAt: 'desc' },
   })
-  const connection = connections.find((candidate) => candidate.authFlow === 'backend_services')
+  const connection = connections[0]
   if (!connection?.accessTokenEnc) {
     return { status: 'skipped', reason: 'missing_connection' }
   }
