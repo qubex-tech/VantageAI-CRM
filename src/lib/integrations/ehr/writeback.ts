@@ -101,6 +101,36 @@ function normalizePatientType(value: string | undefined) {
   return normalized
 }
 
+function parseBooleanLike(value: unknown): boolean | null {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'boolean') return value
+  const normalized = String(value).trim().toLowerCase()
+  if (!normalized) return null
+  if (['true', 'yes', 'y', '1'].includes(normalized)) return true
+  if (['false', 'no', 'n', '0'].includes(normalized)) return false
+  return null
+}
+
+function resolvePatientMode(params: {
+  patientType: string | null
+  extractedData: ExtractedCallData
+}): 'new' | 'existing' | null {
+  const customData = (params.extractedData.retell_custom_data || {}) as Record<string, unknown>
+  const newPatientAdd = parseBooleanLike(
+    customData['New Patient Add'] ?? customData['new patient add'] ?? params.extractedData.new_patient_add
+  )
+  const existingPatientUpdate = parseBooleanLike(
+    customData['Existing Patient Update'] ??
+      customData['existing patient update'] ??
+      params.extractedData.existing_patient_update
+  )
+  if (existingPatientUpdate === true) return 'existing'
+  if (newPatientAdd === true) return 'new'
+  if (params.patientType === 'existing') return 'existing'
+  if (params.patientType === 'new') return 'new'
+  return null
+}
+
 function parseDobToIso(dateText: string | undefined) {
   if (!dateText) return null
   const match = dateText.trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
@@ -118,25 +148,37 @@ async function findEhrPatientId(params: {
   client: FhirClient
   fullName?: string | null
   birthDate?: string | null
+  phone?: string | null
 }) {
-  const { client, fullName, birthDate } = params
-  if (!fullName || !birthDate) return null
-  const name = fullName.trim()
-  if (!name) return null
+  const { client, fullName, birthDate, phone } = params
+  const name = fullName?.trim() || ''
+  const normalizedPhone = phone ? phone.replace(/\D/g, '') : ''
+  if (!name && !normalizedPhone) return null
 
-  const queries = [
-    `/Patient?name=${encodeURIComponent(name)}&birthdate=${encodeURIComponent(birthDate)}`,
-  ]
-
-  const parts = name.split(/\s+/)
-  if (parts.length >= 2) {
-    const family = parts[parts.length - 1]
-    const given = parts.slice(0, -1).join(' ')
+  const queries: string[] = []
+  if (name && birthDate) {
+    queries.push(`/Patient?name=${encodeURIComponent(name)}&birthdate=${encodeURIComponent(birthDate)}`)
+    const parts = name.split(/\s+/)
+    if (parts.length >= 2) {
+      const family = parts[parts.length - 1]
+      const given = parts.slice(0, -1).join(' ')
+      queries.push(
+        `/Patient?family=${encodeURIComponent(family)}&given=${encodeURIComponent(
+          given
+        )}&birthdate=${encodeURIComponent(birthDate)}`
+      )
+    }
+  }
+  if (normalizedPhone && birthDate) {
     queries.push(
-      `/Patient?family=${encodeURIComponent(family)}&given=${encodeURIComponent(
-        given
-      )}&birthdate=${encodeURIComponent(birthDate)}`
+      `/Patient?phone=${encodeURIComponent(normalizedPhone)}&birthdate=${encodeURIComponent(birthDate)}`
     )
+  }
+  if (name && normalizedPhone) {
+    queries.push(`/Patient?name=${encodeURIComponent(name)}&phone=${encodeURIComponent(normalizedPhone)}`)
+  }
+  if (queries.length === 0 && name) {
+    queries.push(`/Patient?name=${encodeURIComponent(name)}`)
   }
 
   for (const query of queries) {
@@ -459,18 +501,26 @@ export async function writeBackRetellCallToEhr(params: {
     }
 
     const patientType = normalizePatientType(extractedData.patient_type)
+    const patientMode = resolvePatientMode({ patientType, extractedData })
     const lookupBirthDate =
       parseDobToIso(extractedData.patient_dob) ||
       (patientRecord?.dateOfBirth
         ? patientRecord.dateOfBirth.toISOString().split('T')[0]
         : null)
     const lookupName = patientRecord?.name || extractedData.patient_name || null
+    const lookupPhone =
+      patientRecord?.primaryPhone ||
+      patientRecord?.phone ||
+      extractedData.patient_phone_number ||
+      extractedData.user_phone_number ||
+      null
 
-    if (!ehrPatientId && lookupName && lookupBirthDate) {
+    if (!ehrPatientId && (lookupName || lookupPhone)) {
       const matchedId = await findEhrPatientId({
         client,
         fullName: lookupName,
         birthDate: lookupBirthDate,
+        phone: lookupPhone,
       })
       if (matchedId) {
         ehrPatientId = matchedId
@@ -483,7 +533,7 @@ export async function writeBackRetellCallToEhr(params: {
       }
     }
 
-    if (!ehrPatientId && patientType === 'existing') {
+    if (!ehrPatientId && patientMode === 'existing') {
       console.warn('[EHR Writeback] Existing patient missing EHR match', {
         practiceId,
         callId: call.call_id,
@@ -492,7 +542,7 @@ export async function writeBackRetellCallToEhr(params: {
       return { status: 'error', reason: 'missing_patient_id' }
     }
 
-    if (!ehrPatientId && settings?.enablePatientCreate && patientRecord && patientType !== 'existing') {
+    if (!ehrPatientId && settings?.enablePatientCreate && patientRecord && patientMode !== 'existing') {
         const name =
           parsePatientName(patientRecord.name) || parsePatientName(extractedData.patient_name)
       if (name) {

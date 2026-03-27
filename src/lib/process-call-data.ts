@@ -30,6 +30,8 @@ export interface ExtractedCallData {
   selected_date?: string
   preferred_dentist?: string
   call_reason?: string
+  new_patient_add?: boolean
+  existing_patient_update?: boolean
   retell_custom_data?: Record<string, unknown>
   insurance_verification?: {
     provider_name?: string
@@ -191,6 +193,16 @@ function firstDefined(...values: unknown[]): unknown {
   return undefined
 }
 
+function parseBooleanLike(value: unknown): boolean | undefined {
+  if (value === null || value === undefined) return undefined
+  if (typeof value === 'boolean') return value
+  const normalized = String(value).trim().toLowerCase()
+  if (!normalized) return undefined
+  if (['true', 'yes', 'y', '1'].includes(normalized)) return true
+  if (['false', 'no', 'n', '0'].includes(normalized)) return false
+  return undefined
+}
+
 function getCustomValue(customData: Record<string, any>, keys: string[]): string | undefined {
   for (const key of keys) {
     const value = customData[key]
@@ -206,6 +218,22 @@ function enrichFromCustomAnalysis(
   customData: Record<string, any>
 ): ExtractedCallData {
   const normalized = normalizeRetellRecord(customData)
+  if (extracted.new_patient_add === undefined) {
+    extracted.new_patient_add = parseBooleanLike(
+      customData['New Patient Add'] ??
+        customData['new patient add'] ??
+        customData.new_patient_add ??
+        normalized.new_patient_add
+    )
+  }
+  if (extracted.existing_patient_update === undefined) {
+    extracted.existing_patient_update = parseBooleanLike(
+      customData['Existing Patient Update'] ??
+        customData['existing patient update'] ??
+        customData.existing_patient_update ??
+        normalized.existing_patient_update
+    )
+  }
 
   if (!extracted.patient_dob) {
     const dob = getCustomValue(customData, ['Patient DOB', 'patient_dob'])
@@ -527,6 +555,49 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
   const metadata = (call.metadata || {}) as Record<string, unknown>
   const root = call as unknown as Record<string, unknown>
   const analysisRoot = (call.call_analysis || {}) as Record<string, unknown>
+  const normalizedCustom = normalizeRetellRecord(customData)
+  const normalizedMetadata = normalizeRetellRecord(metadata)
+  const normalizedRoot = normalizeRetellRecord(root)
+  const normalizedAnalysisRoot = normalizeRetellRecord(analysisRoot)
+
+  if (extracted.new_patient_add === undefined) {
+    extracted.new_patient_add = parseBooleanLike(
+      firstDefined(
+        customData['New Patient Add'],
+        customData['new patient add'],
+        customData.new_patient_add,
+        metadata['New Patient Add'],
+        metadata['new patient add'],
+        metadata.new_patient_add,
+        root['New Patient Add'],
+        root['new patient add'],
+        root.new_patient_add,
+        normalizedCustom.new_patient_add,
+        normalizedMetadata.new_patient_add,
+        normalizedRoot.new_patient_add,
+        normalizedAnalysisRoot.new_patient_add
+      )
+    )
+  }
+  if (extracted.existing_patient_update === undefined) {
+    extracted.existing_patient_update = parseBooleanLike(
+      firstDefined(
+        customData['Existing Patient Update'],
+        customData['existing patient update'],
+        customData.existing_patient_update,
+        metadata['Existing Patient Update'],
+        metadata['existing patient update'],
+        metadata.existing_patient_update,
+        root['Existing Patient Update'],
+        root['existing patient update'],
+        root.existing_patient_update,
+        normalizedCustom.existing_patient_update,
+        normalizedMetadata.existing_patient_update,
+        normalizedRoot.existing_patient_update,
+        normalizedAnalysisRoot.existing_patient_update
+      )
+    )
+  }
 
   const insuranceVerification = {
     provider_name: firstNonEmptyString(
