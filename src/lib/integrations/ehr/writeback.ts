@@ -93,14 +93,6 @@ function formatChicagoIso(date: Date): string {
   }
 }
 
-function normalizePatientType(value: string | undefined) {
-  if (!value) return null
-  const normalized = value.toLowerCase().trim()
-  if (normalized.includes('new')) return 'new'
-  if (normalized.includes('existing')) return 'existing'
-  return normalized
-}
-
 function parseBooleanLike(value: unknown): boolean | null {
   if (value === null || value === undefined) return null
   if (typeof value === 'boolean') return value
@@ -112,9 +104,8 @@ function parseBooleanLike(value: unknown): boolean | null {
 }
 
 function resolvePatientMode(params: {
-  patientType: string | null
   extractedData: ExtractedCallData
-}): 'new' | 'existing' | 'check_only' | null {
+}): 'new' | 'existing' | 'check_only' | 'conflict' {
   const customData = (params.extractedData.retell_custom_data || {}) as Record<string, unknown>
   const newPatientAdd = parseBooleanLike(
     customData['New Patient Add'] ?? customData['new patient add'] ?? params.extractedData.new_patient_add
@@ -124,14 +115,11 @@ function resolvePatientMode(params: {
       customData['existing patient update'] ??
       params.extractedData.existing_patient_update
   )
+  if (existingPatientUpdate === true && newPatientAdd === true) return 'conflict'
   if (existingPatientUpdate === true) return 'existing'
   if (newPatientAdd === true) return 'new'
-  // If caller explicitly says "not new" or "not existing", only perform demographic lookup.
-  // Do not create a new EHR profile from fallback heuristics in this case.
-  if (existingPatientUpdate === false || newPatientAdd === false) return 'check_only'
-  if (params.patientType === 'existing') return 'existing'
-  if (params.patientType === 'new') return 'new'
-  return null
+  // Strict mode: if booleans are not true, only perform demographic checks.
+  return 'check_only'
 }
 
 function parseDobToIso(dateText: string | undefined) {
@@ -503,8 +491,7 @@ export async function writeBackRetellCallToEhr(params: {
       ehrPatientId = patientRecord?.externalEhrId || null
     }
 
-    const patientType = normalizePatientType(extractedData.patient_type)
-    const patientMode = resolvePatientMode({ patientType, extractedData })
+    const patientMode = resolvePatientMode({ extractedData })
     const lookupBirthDate =
       parseDobToIso(extractedData.patient_dob) ||
       (patientRecord?.dateOfBirth
@@ -536,6 +523,20 @@ export async function writeBackRetellCallToEhr(params: {
       }
     }
 
+    if (patientMode === 'conflict') {
+      console.warn('[EHR Writeback] Conflicting patient profile flags', {
+        practiceId,
+        callId: call.call_id,
+        patientId,
+      })
+      await markConversationMetadata(practiceId, call.call_id, {
+        ehrWritebackStatus: 'error',
+        ehrWritebackError: 'Conflicting profile flags: both new patient add and existing patient update are true.',
+        ehrWritebackFailedAt: new Date().toISOString(),
+      })
+      return { status: 'error', reason: 'conflicting_patient_flags' }
+    }
+
     if (!ehrPatientId && patientMode === 'existing') {
       console.warn('[EHR Writeback] Existing patient missing EHR match', {
         practiceId,
@@ -553,13 +554,14 @@ export async function writeBackRetellCallToEhr(params: {
       })
       await markConversationMetadata(practiceId, call.call_id, {
         ehrWritebackStatus: 'skipped',
-        ehrWritebackError: 'No matching EHR patient found and new patient add is false.',
+        ehrWritebackError:
+          'No matching EHR patient found and profile create/update was not requested by extracted booleans.',
         ehrWritebackFailedAt: new Date().toISOString(),
       })
       return { status: 'skipped', reason: 'create_not_requested' }
     }
 
-    if (!ehrPatientId && settings?.enablePatientCreate && patientRecord && (patientMode === 'new' || patientMode === null)) {
+    if (!ehrPatientId && settings?.enablePatientCreate && patientRecord && patientMode === 'new') {
         const name =
           parsePatientName(patientRecord.name) || parsePatientName(extractedData.patient_name)
       if (name) {
