@@ -114,7 +114,7 @@ function parseBooleanLike(value: unknown): boolean | null {
 function resolvePatientMode(params: {
   patientType: string | null
   extractedData: ExtractedCallData
-}): 'new' | 'existing' | null {
+}): 'new' | 'existing' | 'check_only' | null {
   const customData = (params.extractedData.retell_custom_data || {}) as Record<string, unknown>
   const newPatientAdd = parseBooleanLike(
     customData['New Patient Add'] ?? customData['new patient add'] ?? params.extractedData.new_patient_add
@@ -126,6 +126,9 @@ function resolvePatientMode(params: {
   )
   if (existingPatientUpdate === true) return 'existing'
   if (newPatientAdd === true) return 'new'
+  // If caller explicitly says "not new" or "not existing", only perform demographic lookup.
+  // Do not create a new EHR profile from fallback heuristics in this case.
+  if (existingPatientUpdate === false || newPatientAdd === false) return 'check_only'
   if (params.patientType === 'existing') return 'existing'
   if (params.patientType === 'new') return 'new'
   return null
@@ -542,7 +545,21 @@ export async function writeBackRetellCallToEhr(params: {
       return { status: 'error', reason: 'missing_patient_id' }
     }
 
-    if (!ehrPatientId && settings?.enablePatientCreate && patientRecord && patientMode !== 'existing') {
+    if (!ehrPatientId && patientMode === 'check_only') {
+      console.warn('[EHR Writeback] No EHR match and creation not requested', {
+        practiceId,
+        callId: call.call_id,
+        patientId,
+      })
+      await markConversationMetadata(practiceId, call.call_id, {
+        ehrWritebackStatus: 'skipped',
+        ehrWritebackError: 'No matching EHR patient found and new patient add is false.',
+        ehrWritebackFailedAt: new Date().toISOString(),
+      })
+      return { status: 'skipped', reason: 'create_not_requested' }
+    }
+
+    if (!ehrPatientId && settings?.enablePatientCreate && patientRecord && (patientMode === 'new' || patientMode === null)) {
         const name =
           parsePatientName(patientRecord.name) || parsePatientName(extractedData.patient_name)
       if (name) {
