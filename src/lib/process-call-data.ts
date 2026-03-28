@@ -223,6 +223,44 @@ function parseBooleanLike(value: unknown): boolean | undefined {
   return undefined
 }
 
+function parsePatientDob(value: unknown): Date | undefined {
+  if (!value) return undefined
+  const raw = String(value).trim()
+  if (!raw) return undefined
+
+  // Prefer explicit numeric formats to avoid locale ambiguity.
+  const mdy = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
+  if (mdy) {
+    const month = Number(mdy[1]) - 1
+    const day = Number(mdy[2])
+    const year = Number(mdy[3])
+    if (year > 1900 && month >= 0 && month <= 11 && day > 0 && day <= 31) {
+      return new Date(Date.UTC(year, month, day))
+    }
+    return undefined
+  }
+
+  const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+  if (iso) {
+    const year = Number(iso[1])
+    const month = Number(iso[2]) - 1
+    const day = Number(iso[3])
+    if (year > 1900 && month >= 0 && month <= 11 && day > 0 && day <= 31) {
+      return new Date(Date.UTC(year, month, day))
+    }
+    return undefined
+  }
+
+  // Support natural language forms from Retell, e.g. "April 12, 1986".
+  const parsed = new Date(raw)
+  if (Number.isNaN(parsed.getTime())) return undefined
+  const year = parsed.getUTCFullYear()
+  const month = parsed.getUTCMonth()
+  const day = parsed.getUTCDate()
+  if (year <= 1900) return undefined
+  return new Date(Date.UTC(year, month, day))
+}
+
 function getCustomValue(customData: Record<string, any>, keys: string[]): string | undefined {
   for (const key of keys) {
     const value = customData[key]
@@ -854,14 +892,9 @@ export async function processCallDataForPatient(
   }
 
   if (callData.patient_dob && !updateData.dateOfBirth) {
-    const match = String(callData.patient_dob).trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
-    if (match) {
-      const month = Number(match[1]) - 1
-      const day = Number(match[2])
-      const year = Number(match[3])
-      if (year > 1900 && month >= 0 && month <= 11 && day > 0 && day <= 31) {
-        updateData.dateOfBirth = new Date(Date.UTC(year, month, day))
-      }
+    const parsedDob = parsePatientDob(callData.patient_dob)
+    if (parsedDob) {
+      updateData.dateOfBirth = parsedDob
     }
   }
 

@@ -124,12 +124,36 @@ function resolvePatientMode(params: {
 
 function parseDobToIso(dateText: string | undefined) {
   if (!dateText) return null
-  const match = dateText.trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
-  if (!match) return null
-  const month = Number(match[1])
-  const day = Number(match[2])
-  const year = Number(match[3])
-  if (!year || month < 1 || month > 12 || day < 1 || day > 31) return null
+  const raw = dateText.trim()
+  const mdy = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
+  if (mdy) {
+    const month = Number(mdy[1])
+    const day = Number(mdy[2])
+    const year = Number(mdy[3])
+    if (!year || month < 1 || month > 12 || day < 1 || day > 31) return null
+    return `${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-${day
+      .toString()
+      .padStart(2, '0')}`
+  }
+
+  const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+  if (iso) {
+    const year = Number(iso[1])
+    const month = Number(iso[2])
+    const day = Number(iso[3])
+    if (!year || month < 1 || month > 12 || day < 1 || day > 31) return null
+    return `${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-${day
+      .toString()
+      .padStart(2, '0')}`
+  }
+
+  // Retell often provides natural-language DOB (e.g. "April 12, 1986").
+  const parsed = new Date(raw)
+  if (Number.isNaN(parsed.getTime())) return null
+  const year = parsed.getUTCFullYear()
+  const month = parsed.getUTCMonth() + 1
+  const day = parsed.getUTCDate()
+  if (year <= 1900) return null
   return `${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-${day
     .toString()
     .padStart(2, '0')}`
@@ -319,6 +343,11 @@ function formatEncounterNote(type: string, content: string) {
           ? 'Onsite Visit Notes'
           : 'Note'
   return `${label}\n\n${content}`
+}
+
+function isPlaceholderDob(date: Date | null | undefined) {
+  if (!date) return true
+  return date.toISOString().startsWith('1900-01-01')
 }
 
 async function markConversationMetadata(
@@ -577,9 +606,11 @@ export async function writeBackRetellCallToEhr(params: {
           })
         }
         if (patientRecord.email) telecom.push({ system: 'email', value: patientRecord.email })
-        const birthDate = patientRecord.dateOfBirth
-          ? patientRecord.dateOfBirth.toISOString().split('T')[0]
-          : undefined
+        const extractedBirthDate = parseDobToIso(extractedData.patient_dob)
+        const birthDate =
+          !isPlaceholderDob(patientRecord.dateOfBirth) && patientRecord.dateOfBirth
+            ? patientRecord.dateOfBirth.toISOString().split('T')[0]
+            : extractedBirthDate || undefined
           if (connection.providerId.startsWith('ecw') && name.text) {
             name.text = undefined
           }
