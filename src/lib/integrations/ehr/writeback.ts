@@ -40,8 +40,9 @@ type WritebackResult = {
 
 function isSuccessfulTransactionStatus(status: string | undefined): boolean {
   if (!status) return false
+  const normalized = status.trim()
   // eCW transaction responses can return "1" for success instead of HTTP-like 2xx.
-  return status === '1' || status.startsWith('2')
+  return normalized === '1' || normalized.startsWith('2')
 }
 
 function extractResourceIdFromLocation(
@@ -279,7 +280,16 @@ function buildTelephoneEncounterNoteText(
   const detailed = extractedData.detailed_call_summary || call.call_analysis?.call_summary
   const summary = extractedData.call_summary || call.call_analysis?.call_summary
   const fallback = detailed || summary || buildCallNoteText(call, extractedData)
-  return ['Telephone encounter note', '', 'Detailed Call Summary:', fallback].join('\n')
+  const extractedJson = JSON.stringify(extractedData, null, 2)
+  return [
+    'Telephone encounter note',
+    '',
+    'Detailed Call Summary:',
+    fallback,
+    '',
+    'Full Retell Extracted Payload:',
+    truncateText(extractedJson || '{}', 12000),
+  ].join('\n')
 }
 
 function buildTelephoneEncounterBundle(params: {
@@ -1007,6 +1017,10 @@ export async function syncPatientNoteToEhrEncounter(params: {
       method: 'POST',
       body: JSON.stringify(createBundle),
     })) as any
+    const createStatus = createResponse?.entry?.[0]?.response?.status as string | undefined
+    if (!isSuccessfulTransactionStatus(createStatus)) {
+      return { status: 'error', reason: `encounter_create_failed_${createStatus || 'missing_status'}` }
+    }
     const createLocation = createResponse?.entry?.[0]?.response?.location as string | undefined
     resolvedEncounterId = extractResourceIdFromLocation(createLocation, 'Encounter') || null
   }
@@ -1027,6 +1041,10 @@ export async function syncPatientNoteToEhrEncounter(params: {
     method: 'POST',
     body: JSON.stringify(updateBundle),
   })) as any
+  const updateStatus = encounterResponse?.entry?.[0]?.response?.status as string | undefined
+  if (!isSuccessfulTransactionStatus(updateStatus)) {
+    return { status: 'error', reason: `encounter_update_failed_${updateStatus || 'missing_status'}` }
+  }
   const encounterLocation = encounterResponse?.entry?.[0]?.response?.location as string | undefined
   const persistedId = extractResourceIdFromLocation(encounterLocation, 'Encounter') || null
   await logEhrAudit({
