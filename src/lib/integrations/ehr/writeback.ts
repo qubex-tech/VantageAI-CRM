@@ -38,6 +38,12 @@ type WritebackResult = {
   reviewUrl?: string
 }
 
+function isSuccessfulTransactionStatus(status: string | undefined): boolean {
+  if (!status) return false
+  // eCW transaction responses can return "1" for success instead of HTTP-like 2xx.
+  return status === '1' || status.startsWith('2')
+}
+
 function extractResourceIdFromLocation(
   location: string | undefined,
   resourceType: 'Patient' | 'Encounter' | 'DocumentReference'
@@ -738,7 +744,7 @@ export async function writeBackRetellCallToEhr(params: {
         body: JSON.stringify(encounterBundle),
       })) as any
       const encounterStatus = encounterResponse?.entry?.[0]?.response?.status as string | undefined
-      if (!encounterStatus || !encounterStatus.startsWith('2')) {
+      if (!isSuccessfulTransactionStatus(encounterStatus)) {
         throw new Error(
           `Encounter transaction failed: ${encounterStatus || 'missing_status'}`
         )
