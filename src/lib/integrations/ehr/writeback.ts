@@ -36,6 +36,27 @@ type WritebackResult = {
   reviewUrl?: string
 }
 
+function extractResourceIdFromLocation(
+  location: string | undefined,
+  resourceType: 'Patient' | 'Encounter' | 'DocumentReference'
+): string | undefined {
+  if (!location) return undefined
+  const marker = `/${resourceType}/`
+  const markerIndex = location.indexOf(marker)
+  if (markerIndex >= 0) {
+    const remainder = location.slice(markerIndex + marker.length)
+    const id = remainder.split('/')[0]
+    return id || undefined
+  }
+  const trimmed = location.replace(/^\/+/, '')
+  const segments = trimmed.split('/').filter(Boolean)
+  const typeIndex = segments.findIndex((segment) => segment === resourceType)
+  if (typeIndex >= 0 && segments[typeIndex + 1]) {
+    return segments[typeIndex + 1]
+  }
+  return undefined
+}
+
 function parsePatientName(fullName: string | null | undefined): {
   given: string[]
   family?: string
@@ -642,7 +663,7 @@ export async function writeBackRetellCallToEhr(params: {
           location: responseLocation,
         })
         const location = (created as any)?.entry?.[0]?.response?.location as string | undefined
-        const createdId = location?.includes('/') ? location.split('/')[1] : undefined
+        const createdId = extractResourceIdFromLocation(location, 'Patient')
         if (!createdId) {
           console.error('[EHR Writeback] Missing created patient id', {
             practiceId,
@@ -708,10 +729,16 @@ export async function writeBackRetellCallToEhr(params: {
         method: 'POST',
         body: JSON.stringify(encounterBundle),
       })) as any
+      const encounterStatus = encounterResponse?.entry?.[0]?.response?.status as string | undefined
+      if (!encounterStatus || !encounterStatus.startsWith('2')) {
+        throw new Error(
+          `Encounter transaction failed: ${encounterStatus || 'missing_status'}`
+        )
+      }
       const encounterLocation = encounterResponse?.entry?.[0]?.response?.location as
         | string
         | undefined
-      encounterId = encounterLocation?.includes('/') ? encounterLocation.split('/')[1] : null
+      encounterId = extractResourceIdFromLocation(encounterLocation, 'Encounter') || null
       encounterUrl = encounterId ? `${client.getBaseUrl()}/Encounter/${encounterId}` : null
       await logEhrAudit({
         tenantId: practiceId,
@@ -967,7 +994,7 @@ export async function syncPatientNoteToEhrEncounter(params: {
       body: JSON.stringify(createBundle),
     })) as any
     const createLocation = createResponse?.entry?.[0]?.response?.location as string | undefined
-    resolvedEncounterId = createLocation?.includes('/') ? createLocation.split('/')[1] : null
+    resolvedEncounterId = extractResourceIdFromLocation(createLocation, 'Encounter') || null
   }
 
   if (!resolvedEncounterId) {
@@ -987,7 +1014,7 @@ export async function syncPatientNoteToEhrEncounter(params: {
     body: JSON.stringify(updateBundle),
   })) as any
   const encounterLocation = encounterResponse?.entry?.[0]?.response?.location as string | undefined
-  const persistedId = encounterLocation?.includes('/') ? encounterLocation.split('/')[1] : null
+  const persistedId = extractResourceIdFromLocation(encounterLocation, 'Encounter') || null
   await logEhrAudit({
     tenantId: practiceId,
     actorUserId,

@@ -2,6 +2,27 @@ import { FhirClient, WriteNotSupportedError } from '../fhirClient'
 import { supportsResourceInteraction } from '../capabilities'
 import { createBinary } from './binary'
 
+function extractResourceIdFromLocation(
+  location: string | undefined,
+  resourceType: 'DocumentReference'
+): string | undefined {
+  if (!location) return undefined
+  const marker = `/${resourceType}/`
+  const markerIndex = location.indexOf(marker)
+  if (markerIndex >= 0) {
+    const remainder = location.slice(markerIndex + marker.length)
+    const id = remainder.split('/')[0]
+    return id || undefined
+  }
+  const trimmed = location.replace(/^\/+/, '')
+  const segments = trimmed.split('/').filter(Boolean)
+  const typeIndex = segments.findIndex((segment) => segment === resourceType)
+  if (typeIndex >= 0 && segments[typeIndex + 1]) {
+    return segments[typeIndex + 1]
+  }
+  return undefined
+}
+
 export async function createDraftDocumentReference(params: {
   client: FhirClient
   patientId: string
@@ -82,7 +103,7 @@ export async function createDraftDocumentReference(params: {
       body: JSON.stringify(bundle),
     })) as any
     const location = response?.entry?.[0]?.response?.location as string | undefined
-    const id = location ? location.split('/')[1] : undefined
+    const id = extractResourceIdFromLocation(location, 'DocumentReference')
     const reviewUrl = id ? `${params.client.getBaseUrl()}/DocumentReference/${id}` : undefined
     return { id, reviewUrl, resource: response }
   }
