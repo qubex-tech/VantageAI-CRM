@@ -21,6 +21,8 @@ const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.326070'
 const ECW_PATIENT_IDENTIFIER_VALUE = '15455'
 const ECW_TELEPHONE_PRACTITIONER =
   'Practitioner/Lt2IFR5Ah76n4d8TFP5gBPiX1g1-Q2P9s8IYoGZvbFM'
+const ECW_TELEPHONE_ASSIGNED_TO_PRACTITIONER =
+  'Practitioner/Lt2IFR5Ah76n4d8TFP5gBAfrwqxiesg83cejztPkOEI'
 const ECW_TELEPHONE_LOCATION =
   'Location/Lt2IFR5Ah76n4d8TFP5gBFO4aIYpuamqju2XjvYx6Ik'
 const ENCOUNTER_NOTE_TYPES = [
@@ -311,6 +313,12 @@ function buildTelephoneEncounterBundle(params: {
             {
               url: 'http://eclinicalworks.com/supportingInfo/telephoneEncounter/notes',
               valueString: noteWithAttribution,
+            },
+            {
+              url: 'http://eclinicalworks.com/supportingInfo/telephoneEncounter/assignedTo',
+              valueReference: {
+                reference: ECW_TELEPHONE_ASSIGNED_TO_PRACTITIONER,
+              },
             },
           ],
           status: 'planned',
