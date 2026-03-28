@@ -61,6 +61,26 @@ type EscalationConversation = {
   retellCallId: string | null
 }
 
+function shouldTriggerCurogramEscalation(params: {
+  extractedData: ExtractedCallData
+  isNewPatient: boolean
+}): boolean {
+  if (!params.isNewPatient) return false
+  const customData = (params.extractedData.retell_custom_data || {}) as Record<string, unknown>
+  const newPatientAdd = parseBooleanLike(
+    customData['New Patient Add'] ??
+      customData['new patient add'] ??
+      params.extractedData.new_patient_add
+  )
+  const existingPatientUpdate = parseBooleanLike(
+    customData['Existing Patient Update'] ??
+      customData['existing patient update'] ??
+      params.extractedData.existing_patient_update
+  )
+  if (existingPatientUpdate === true) return false
+  return newPatientAdd === true
+}
+
 async function triggerCurogramAfterRetellProcessing(
   practiceId: string,
   call: RetellCall,
@@ -1126,7 +1146,22 @@ export async function processRetellCallData(
       conversationId: conversationForEscalation.id,
     })
 
-    await triggerCurogramAfterRetellProcessing(practiceId, call, extractedData, conversationForEscalation)
+    const shouldEscalate = shouldTriggerCurogramEscalation({
+      extractedData,
+      isNewPatient: isNew,
+    })
+
+    if (shouldEscalate) {
+      await triggerCurogramAfterRetellProcessing(practiceId, call, extractedData, conversationForEscalation)
+    } else {
+      console.log('[Curogram Escalation] Skipped - patient creation criteria not met', {
+        practiceId,
+        callId: call.call_id,
+        isNewPatient: isNew,
+        newPatientAdd: extractedData.new_patient_add,
+        existingPatientUpdate: extractedData.existing_patient_update,
+      })
+    }
   }
 
   return { patientId, extractedData }
