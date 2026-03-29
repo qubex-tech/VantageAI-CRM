@@ -1002,7 +1002,25 @@ export async function syncPatientNoteToEhrEncounter(params: {
       )
       .map((metadata) => (metadata?.ehrWritebackEncounterId as string | undefined) || null)
       .find(Boolean) || null
+  const hasRecentCallManagedWriteback = conversations.some((conversation) => {
+    if (!conversation.metadata || typeof conversation.metadata !== 'object') return false
+    const metadata = conversation.metadata as Record<string, unknown>
+    if (metadata.ehrWritebackProviderId !== WRITEBACK_PROVIDER_ID) return false
+    const status = metadata.ehrWritebackStatus
+    if (status !== 'in_progress' && status !== 'success') return false
+    const startedAtRaw = metadata.ehrWritebackStartedAt
+    if (typeof startedAtRaw !== 'string' || !startedAtRaw) return true
+    const startedAt = new Date(startedAtRaw).getTime()
+    if (Number.isNaN(startedAt)) return true
+    // Guard against race conditions where manual note sync runs before
+    // call writeback has persisted the canonical encounter/message content.
+    return Date.now() - startedAt < 2 * 60 * 60 * 1000
+  })
   let resolvedEncounterId = encounterId
+
+  if (noteType === 'telephone_encounter' && hasRecentCallManagedWriteback) {
+    return { status: 'skipped', reason: 'telephone_encounter_managed_by_call_writeback' }
+  }
 
   const connections = await prisma.ehrConnection.findMany({
     where: {
