@@ -35,7 +35,7 @@ const ECW_TELEPHONE_REFS_FFBJCD: EcwTelephoneEncounterRefs = {
 
 const ECW_TELEPHONE_REFS_FACGCD: EcwTelephoneEncounterRefs = {
   participantPractitionerRef: 'Practitioner/W6s8TGka96L4tHbCRoQU8YMH.WUkwA2pU9wsHWwur0c',
-  assignedToPractitionerRef: 'Practitioner/W6s8TGka96L4tHbCRoQU8YMH.WUkwA2pU9wsHWwur0c',
+  assignedToPractitionerRef: 'Practitioner/W6s8TGka96L4tHbCRoQU8WSi9xbr9U1rukOaVW6NHLo',
   locationRef: 'Location/W6s8TGka96L4tHbCRoQU8V1DmHBjAJrx9h-SsrKuRnA',
   organizationRef: 'Organization/W6s8TGka96L4tHbCRoQU8ZfnvLnRYQ9519x5HFoW2uFnSuQOQi-FoYA2O2oMawcO',
 }
@@ -338,17 +338,9 @@ function buildTelephoneEncounterNoteText(
 ): string {
   const detailed = extractedData.detailed_call_summary || call.call_analysis?.call_summary
   const summary = extractedData.call_summary || call.call_analysis?.call_summary
-  const fallback = detailed || summary || buildCallNoteText(call, extractedData)
-  const extractedJson = JSON.stringify(extractedData, null, 2)
-  return [
-    'Telephone encounter note',
-    '',
-    'Detailed Call Summary:',
-    fallback,
-    '',
-    'Full Retell Extracted Payload:',
-    truncateText(extractedJson || '{}', 12000),
-  ].join('\n')
+  const fallback = (detailed || summary || buildCallNoteText(call, extractedData)).trim()
+  // eCW is more reliable when encounter extension text stays concise.
+  return truncateText(fallback || 'Telephone encounter note', 1800)
 }
 
 function buildTelephoneEncounterBundle(params: {
@@ -360,13 +352,17 @@ function buildTelephoneEncounterBundle(params: {
   encounterId?: string
   requestMethod?: 'POST' | 'PUT'
 }) {
+  const ecwMaxMessageLength = 2000
+  const ecwMaxNotesLength = 2000
   const bundleId = randomUUID()
-  const encounterId = params.encounterId || randomUUID()
   const requestMethod = params.requestMethod || 'POST'
+  const encounterId = requestMethod === 'PUT' ? params.encounterId || randomUUID() : undefined
   const requestUrl = requestMethod === 'PUT' ? `Encounter/${encounterId}` : 'Encounter'
-  const noteWithAttribution = `${params.noteText}\nThis encounter is created by VantageAI app at ${formatChicagoIso(
-    params.startTime
-  )}`
+  const attribution = `This encounter is created by VantageAI app at ${formatChicagoIso(params.startTime)}`
+  const normalizedNoteText = params.noteText.trim()
+  const baseText = normalizedNoteText || 'Telephone encounter note'
+  const messageText = truncateText(baseText, ecwMaxMessageLength)
+  const notesText = truncateText(`${baseText}\n${attribution}`, ecwMaxNotesLength)
   return {
     resourceType: 'Bundle',
     id: bundleId,
@@ -376,7 +372,7 @@ function buildTelephoneEncounterBundle(params: {
       {
         resource: {
           resourceType: 'Encounter',
-          id: encounterId,
+          ...(requestMethod === 'PUT' && encounterId ? { id: encounterId } : {}),
           meta: {
             lastUpdated: formatChicagoIso(new Date()),
             profile: ['http://hl7.org/fhir/us/core/StructureDefinition/us-core-encounter'],
@@ -384,11 +380,11 @@ function buildTelephoneEncounterBundle(params: {
           extension: [
             {
               url: 'http://eclinicalworks.com/supportingInfo/telephoneEncounter/messages',
-              valueString: noteWithAttribution,
+              valueString: messageText,
             },
             {
               url: 'http://eclinicalworks.com/supportingInfo/telephoneEncounter/notes',
-              valueString: noteWithAttribution,
+              valueString: notesText,
             },
             {
               url: 'http://eclinicalworks.com/supportingInfo/telephoneEncounter/assignedTo',

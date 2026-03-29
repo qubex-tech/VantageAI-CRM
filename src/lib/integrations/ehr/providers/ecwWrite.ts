@@ -57,6 +57,7 @@ export const ecwWriteProvider: EhrProvider = {
   defaultScopes: ({ enableWrite, enablePatientCreate, enableNoteCreate }) => {
     const scopes = new Set(['system/Patient.read', 'system/DocumentReference.read'])
     if (enableWrite) {
+      scopes.add('system/Encounter.write')
       if (enablePatientCreate) scopes.add('system/Patient.write')
       if (enableNoteCreate) scopes.add('system/DocumentReference.write')
     }
