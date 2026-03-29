@@ -502,6 +502,31 @@ export async function writeBackRetellCallToEhr(params: {
   })
 
   const settings = await getEhrSettings(practiceId)
+  const existingConversation = await prisma.voiceConversation.findFirst({
+    where: { practiceId, retellCallId: call.call_id },
+  })
+  const existingMetadata =
+    existingConversation?.metadata && typeof existingConversation.metadata === 'object'
+      ? (existingConversation.metadata as Record<string, unknown>)
+      : {}
+  const existingWritebackStatus = existingMetadata.ehrWritebackStatus
+  const existingEncounterId =
+    typeof existingMetadata.ehrWritebackEncounterId === 'string'
+      ? existingMetadata.ehrWritebackEncounterId
+      : null
+  if (existingWritebackStatus === 'success' && existingEncounterId) {
+    return { status: 'skipped', reason: 'already_written' }
+  }
+  if (existingWritebackStatus === 'in_progress') {
+    const startedAtRaw = existingMetadata.ehrWritebackStartedAt
+    const startedAtMs =
+      typeof startedAtRaw === 'string' && startedAtRaw
+        ? new Date(startedAtRaw).getTime()
+        : Number.NaN
+    if (Number.isNaN(startedAtMs) || Date.now() - startedAtMs < 30 * 60 * 1000) {
+      return { status: 'skipped', reason: 'duplicate_in_progress' }
+    }
+  }
 
   await markConversationMetadata(practiceId, call.call_id, {
     ehrWritebackStatus: 'in_progress',
@@ -801,6 +826,7 @@ export async function writeBackRetellCallToEhr(params: {
 
     const noteText = buildCallNoteText(call, extractedData)
     const encounterNoteText = buildTelephoneEncounterNoteText(call, extractedData)
+    const encounterNotePreview = truncateText(encounterNoteText, 400)
     const encounterRefs = resolveEcwTelephoneEncounterRefs(settings, refreshedConnection.issuer)
     const missingRefs = missingEncounterRefs(encounterRefs)
     if (missingRefs.length > 0) {
@@ -914,6 +940,8 @@ export async function writeBackRetellCallToEhr(params: {
       ehrWritebackTelephoneNoteUrl: telephoneNoteUrl,
       ehrWritebackEncounterId: encounterId,
       ehrWritebackEncounterUrl: encounterUrl,
+      ehrWritebackEncounterNoteLength: encounterNoteText.length,
+      ehrWritebackEncounterNotePreview: encounterNotePreview,
       ehrWritebackPatientId: ehrPatientId,
       ehrWritebackError: null,
       ehrWritebackFailedAt: null,
