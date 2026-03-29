@@ -5,6 +5,7 @@ import { prisma } from './db'
 import crypto from 'crypto'
 import { getSupabaseSessionFromRequest } from './auth-supabase'
 import { syncSupabaseUserToPrisma } from './sync-supabase-user'
+import { decode } from 'next-auth/jwt'
 
 function normalizeHexSignature(raw: string, allowedPrefixes: string[] = []): string {
   let value = raw.trim()
@@ -51,7 +52,32 @@ export async function getSession() {
  * @param req Optional NextRequest for API routes. If provided, will try Supabase auth first.
  */
 export async function requireAuth(req?: NextRequest) {
-  // Try Supabase first if we have a request (API route)
+  // Try Bearer token first (mobile app auth)
+  if (req) {
+    const authHeader = req.headers.get('authorization')
+    if (authHeader?.startsWith('Bearer ')) {
+      const bearerToken = authHeader.slice(7)
+      try {
+        const decoded = await decode({
+          token: bearerToken,
+          secret: process.env.NEXTAUTH_SECRET!,
+        })
+        if (decoded?.sub) {
+          return {
+            id: decoded.sub as string,
+            email: decoded.email as string,
+            name: (decoded.name ?? null) as string | null,
+            practiceId: (decoded.practiceId ?? null) as string | null,
+            role: decoded.role as string,
+          }
+        }
+      } catch {
+        // Invalid token — fall through to other auth methods
+      }
+    }
+  }
+
+  // Try Supabase if we have a request (API route)
   if (req) {
     try {
       const { data: { session: supabaseSession }, error } = await getSupabaseSessionFromRequest(req)

@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "VantageAI",
+    "slug": "vantageai-crm",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "vantageai",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.vantageai.crm"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#4F46E5"
+      },
+      "package": "com.vantageai.crm"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
