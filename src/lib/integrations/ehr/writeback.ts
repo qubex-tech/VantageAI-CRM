@@ -19,12 +19,26 @@ import { refreshBackendConnectionIfNeeded } from '@/lib/integrations/ehr/backend
 const WRITEBACK_PROVIDER_ID = 'ecw_write'
 const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.326070'
 const ECW_PATIENT_IDENTIFIER_VALUE = '15455'
-const ECW_TELEPHONE_PRACTITIONER =
-  'Practitioner/Lt2IFR5Ah76n4d8TFP5gBPiX1g1-Q2P9s8IYoGZvbFM'
-const ECW_TELEPHONE_ASSIGNED_TO_PRACTITIONER =
-  'Practitioner/Lt2IFR5Ah76n4d8TFP5gBAfrwqxiesg83cejztPkOEI'
-const ECW_TELEPHONE_LOCATION =
-  'Location/Lt2IFR5Ah76n4d8TFP5gBFO4aIYpuamqju2XjvYx6Ik'
+type EcwTelephoneEncounterRefs = {
+  participantPractitionerRef: string
+  assignedToPractitionerRef: string
+  locationRef: string
+  organizationRef?: string
+}
+
+const ECW_TELEPHONE_REFS_FFBJCD: EcwTelephoneEncounterRefs = {
+  participantPractitionerRef: 'Practitioner/Lt2IFR5Ah76n4d8TFP5gBPiX1g1-Q2P9s8IYoGZvbFM',
+  assignedToPractitionerRef: 'Practitioner/Lt2IFR5Ah76n4d8TFP5gBAfrwqxiesg83cejztPkOEI',
+  locationRef: 'Location/Lt2IFR5Ah76n4d8TFP5gBFO4aIYpuamqju2XjvYx6Ik',
+  organizationRef: 'Organization/Lt2IFR5Ah76n4d8TFP5gBPMFWGL8HhxnxooU.mnA.n5.Xl5yXZN1TQgZByeKFIIZ',
+}
+
+const ECW_TELEPHONE_REFS_FACGCD: EcwTelephoneEncounterRefs = {
+  participantPractitionerRef: 'Practitioner/W6s8TGka96L4tHbCRoQU8YMH.WUkwA2pU9wsHWwur0c',
+  assignedToPractitionerRef: 'Practitioner/W6s8TGka96L4tHbCRoQU8YMH.WUkwA2pU9wsHWwur0c',
+  locationRef: 'Location/W6s8TGka96L4tHbCRoQU8V1DmHBjAJrx9h-SsrKuRnA',
+  organizationRef: 'Organization/W6s8TGka96L4tHbCRoQU8ZfnvLnRYQ9519x5HFoW2uFnSuQOQi-FoYA2O2oMawcO',
+}
 const ENCOUNTER_NOTE_TYPES = [
   'telephone_encounter',
   'online_visit',
@@ -131,6 +145,51 @@ function parseBooleanLike(value: unknown): boolean | null {
   if (['true', 'yes', 'y', '1'].includes(normalized)) return true
   if (['false', 'no', 'n', '0'].includes(normalized)) return false
   return null
+}
+
+function normalizeFhirReference(value: unknown, resourceType: 'Practitioner' | 'Location' | 'Organization') {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  if (trimmed.startsWith(`${resourceType}/`)) return trimmed
+  if (trimmed.includes('/')) return null
+  return `${resourceType}/${trimmed}`
+}
+
+function resolveEcwTelephoneEncounterRefs(
+  settings: Awaited<ReturnType<typeof getEhrSettings>>,
+  issuer?: string | null
+): EcwTelephoneEncounterRefs {
+  const normalizedIssuer = (issuer || '').toLowerCase()
+  const defaults = normalizedIssuer.includes('/facgcd')
+    ? ECW_TELEPHONE_REFS_FACGCD
+    : normalizedIssuer.includes('/ffbjcd')
+      ? ECW_TELEPHONE_REFS_FFBJCD
+      : ECW_TELEPHONE_REFS_FFBJCD
+  const writeConfig =
+    (settings?.providerConfigs?.[WRITEBACK_PROVIDER_ID] as Record<string, unknown> | undefined) || {}
+
+  return {
+    participantPractitionerRef:
+      normalizeFhirReference(writeConfig.ecwTelephoneParticipantPractitionerRef, 'Practitioner') ||
+      defaults.participantPractitionerRef,
+    assignedToPractitionerRef:
+      normalizeFhirReference(writeConfig.ecwTelephoneAssignedToPractitionerRef, 'Practitioner') ||
+      defaults.assignedToPractitionerRef,
+    locationRef:
+      normalizeFhirReference(writeConfig.ecwTelephoneLocationRef, 'Location') || defaults.locationRef,
+    organizationRef:
+      normalizeFhirReference(writeConfig.ecwTelephoneOrganizationRef, 'Organization') ||
+      defaults.organizationRef,
+  }
+}
+
+function missingEncounterRefs(refs: EcwTelephoneEncounterRefs) {
+  const missing: string[] = []
+  if (!refs.participantPractitionerRef) missing.push('participantPractitionerRef')
+  if (!refs.assignedToPractitionerRef) missing.push('assignedToPractitionerRef')
+  if (!refs.locationRef) missing.push('locationRef')
+  return missing
 }
 
 function resolvePatientMode(params: {
@@ -297,6 +356,7 @@ function buildTelephoneEncounterBundle(params: {
   noteText: string
   startTime: Date
   endTime: Date
+  refs: EcwTelephoneEncounterRefs
   encounterId?: string
   requestMethod?: 'POST' | 'PUT'
 }) {
@@ -333,7 +393,7 @@ function buildTelephoneEncounterBundle(params: {
             {
               url: 'http://eclinicalworks.com/supportingInfo/telephoneEncounter/assignedTo',
               valueReference: {
-                reference: ECW_TELEPHONE_ASSIGNED_TO_PRACTITIONER,
+                reference: params.refs.assignedToPractitionerRef,
               },
             },
           ],
@@ -358,7 +418,7 @@ function buildTelephoneEncounterBundle(params: {
           subject: { reference: `Patient/${params.patientId}` },
           participant: [
             {
-              individual: { reference: ECW_TELEPHONE_PRACTITIONER, type: 'Practitioner' },
+              individual: { reference: params.refs.participantPractitionerRef, type: 'Practitioner' },
             },
           ],
           period: {
@@ -368,9 +428,12 @@ function buildTelephoneEncounterBundle(params: {
           reasonCode: [{ text: 'Telephone encounter' }],
           location: [
             {
-              location: { reference: ECW_TELEPHONE_LOCATION, type: 'Location' },
+              location: { reference: params.refs.locationRef, type: 'Location' },
             },
           ],
+          serviceProvider: params.refs.organizationRef
+            ? { reference: params.refs.organizationRef, type: 'Organization' }
+            : undefined,
         },
         request: { method: requestMethod, url: requestUrl },
       },
@@ -738,6 +801,16 @@ export async function writeBackRetellCallToEhr(params: {
 
     const noteText = buildCallNoteText(call, extractedData)
     const encounterNoteText = buildTelephoneEncounterNoteText(call, extractedData)
+    const encounterRefs = resolveEcwTelephoneEncounterRefs(settings, refreshedConnection.issuer)
+    const missingRefs = missingEncounterRefs(encounterRefs)
+    if (missingRefs.length > 0) {
+      await markConversationMetadata(practiceId, call.call_id, {
+        ehrWritebackStatus: 'error',
+        ehrWritebackError: `Missing encounter reference configuration: ${missingRefs.join(', ')}`,
+        ehrWritebackFailedAt: new Date().toISOString(),
+      })
+      return { status: 'error', reason: 'missing_encounter_refs' }
+    }
     let encounterId: string | null = null
     let encounterUrl: string | null = null
     if (encounterNoteText) {
@@ -748,6 +821,7 @@ export async function writeBackRetellCallToEhr(params: {
         noteText: encounterNoteText,
         startTime,
         endTime,
+        refs: encounterRefs,
       })
       const encounterResponse = (await client.request('/', {
         method: 'POST',
@@ -1006,12 +1080,18 @@ export async function syncPatientNoteToEhrEncounter(params: {
   const startTime = new Date()
   const endTime = new Date(startTime.getTime() + 15 * 60 * 1000)
   const noteText = formatEncounterNote(noteType, content)
+  const encounterRefs = resolveEcwTelephoneEncounterRefs(settings, refreshedConnection.issuer)
+  const missingRefs = missingEncounterRefs(encounterRefs)
+  if (missingRefs.length > 0) {
+    return { status: 'error', reason: `missing_encounter_refs_${missingRefs.join('_')}` }
+  }
   if (!resolvedEncounterId) {
     const createBundle = buildTelephoneEncounterBundle({
       patientId: patient.externalEhrId,
       noteText,
       startTime,
       endTime,
+      refs: encounterRefs,
     })
     const createResponse = (await client.request('/', {
       method: 'POST',
@@ -1034,6 +1114,7 @@ export async function syncPatientNoteToEhrEncounter(params: {
     noteText,
     startTime,
     endTime,
+    refs: encounterRefs,
     encounterId: resolvedEncounterId,
     requestMethod: 'PUT',
   })
