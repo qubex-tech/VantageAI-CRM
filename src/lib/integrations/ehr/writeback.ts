@@ -860,6 +860,30 @@ export async function writeBackRetellCallToEhr(params: {
         | undefined
       encounterId = extractResourceIdFromLocation(encounterLocation, 'Encounter') || null
       encounterUrl = encounterId ? `${client.getBaseUrl()}/Encounter/${encounterId}` : null
+      if (encounterId) {
+        const putBundle = buildTelephoneEncounterBundle({
+          patientId: ehrPatientId,
+          noteText: encounterNoteText,
+          startTime,
+          endTime,
+          refs: encounterRefs,
+          encounterId,
+          requestMethod: 'PUT',
+        })
+        const putResponse = (await client.request('/', {
+          method: 'POST',
+          body: JSON.stringify(putBundle),
+        })) as any
+        const putStatus = putResponse?.entry?.[0]?.response?.status as string | undefined
+        if (!isSuccessfulTransactionStatus(putStatus)) {
+          console.warn('[EHR Writeback] Encounter extension PUT failed', {
+            practiceId,
+            callId: call.call_id,
+            encounterId,
+            putStatus,
+          })
+        }
+      }
       await logEhrAudit({
         tenantId: practiceId,
         actorUserId: null,
