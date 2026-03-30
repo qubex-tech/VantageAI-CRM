@@ -6,9 +6,14 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const user = await requireAuth(req)
+    if (!user.practiceId) {
+      return NextResponse.json({ error: 'No practice associated with this account' }, { status: 403 })
+    }
     const { getRetellClient } = await import('@/lib/retell-api')
-    const retell = await getRetellClient(user.practiceId)
-    if (!retell) {
+    let retell: any
+    try {
+      retell = await getRetellClient(user.practiceId)
+    } catch {
       return NextResponse.json({ error: 'Voice integration not configured' }, { status: 404 })
     }
     const call = await retell.call.retrieve(params.id)
