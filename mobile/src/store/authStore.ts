@@ -28,8 +28,11 @@ export const useAuthStore = create<AuthStore>((set) => ({
       const token = await getStoredToken()
       set({ user, token, isLoading: false })
     } catch (err: any) {
+      const raw = err?.response?.data?.error
       const message =
-        err?.response?.data?.error ?? err?.message ?? 'Login failed. Please try again.'
+        (typeof raw === 'string' ? raw : raw?.message)
+        ?? err?.message
+        ?? 'Login failed. Please try again.'
       set({ error: message, isLoading: false })
       throw err
     }

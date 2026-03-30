@@ -1,147 +1,77 @@
 import React from 'react'
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { formatDistanceToNowStrict } from 'date-fns'
-import { Ionicons } from '@expo/vector-icons'
 import { Avatar } from '@/components/common/Avatar'
-import { ChannelBadge, UnreadBadge } from '@/components/common/Badge'
-import { colors, spacing, fontSize, fontWeight, radius } from '@/constants/theme'
+import { ChannelBadge } from '@/components/common/Badge'
+import { colors, spacing, fontSize, fontWeight } from '@/constants/theme'
 import type { MobileNotification } from '@/types'
 
 interface Props {
   notification: MobileNotification
-  onPress: (notification: MobileNotification) => void
-}
-
-const CHANNEL_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
-  sms: 'chatbubble-outline',
-  email: 'mail-outline',
-  secure: 'lock-closed-outline',
-  voice: 'call-outline',
-  video: 'videocam-outline',
+  onPress: () => void
 }
 
 export function NotificationItem({ notification, onPress }: Props) {
-  const { patientName, channel, unreadCount, preview, latestMessageAt } = notification
+  const { patientName, channel, preview, latestMessageAt, unreadCount } = notification
   const hasUnread = unreadCount > 0
-
-  const timeAgo = latestMessageAt
-    ? formatDistanceToNowStrict(new Date(latestMessageAt), { addSuffix: true })
+  const time = latestMessageAt
+    ? formatDistanceToNowStrict(new Date(latestMessageAt), { addSuffix: false })
     : ''
 
-  const channelIcon = CHANNEL_ICONS[channel] ?? 'chatbubble-outline'
-
   return (
-    <TouchableOpacity
-      style={[styles.container, hasUnread && styles.unread]}
-      onPress={() => onPress(notification)}
-      activeOpacity={0.7}
-    >
-      {/* Unread indicator stripe */}
-      {hasUnread && <View style={styles.stripe} />}
-
-      <View style={styles.avatarWrap}>
-        <Avatar name={patientName} size={44} />
-        <View style={styles.channelIcon}>
-          <Ionicons name={channelIcon} size={12} color={colors.white} />
+    <TouchableOpacity onPress={onPress} activeOpacity={0.6} style={styles.row}>
+      <View style={[styles.unreadBar, hasUnread && styles.unreadBarActive]} />
+      <Avatar name={patientName} size={42} />
+      <View style={styles.content}>
+        <View style={styles.topRow}>
+          <Text style={[styles.name, hasUnread && styles.nameUnread]} numberOfLines={1}>{patientName}</Text>
+          <Text style={styles.time}>{time}</Text>
         </View>
-      </View>
-
-      <View style={styles.body}>
-        <View style={styles.headerRow}>
-          <Text style={[styles.name, hasUnread && styles.nameBold]} numberOfLines={1}>
-            {patientName}
+        <View style={styles.bottomRow}>
+          <Text style={[styles.preview, hasUnread && styles.previewUnread]} numberOfLines={1}>
+            {preview ?? 'New message'}
           </Text>
-          <Text style={styles.time}>{timeAgo}</Text>
-        </View>
-
-        <View style={styles.subRow}>
           <ChannelBadge channel={channel} />
-          {hasUnread && <UnreadBadge count={unreadCount} size="sm" />}
         </View>
-
-        {preview ? (
-          <Text style={[styles.preview, hasUnread && styles.previewBold]} numberOfLines={2}>
-            {preview}
-          </Text>
-        ) : null}
       </View>
     </TouchableOpacity>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
+  row: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
     paddingVertical: spacing.md,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.divider,
+    paddingRight: spacing.lg,
+    paddingLeft: spacing.lg,
+    backgroundColor: colors.bg,
+    gap: spacing.md,
   },
-  unread: {
-    backgroundColor: '#EFF6FF',
-  },
-  stripe: {
+  unreadBar: {
     position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
+    left: 0, top: 0, bottom: 0,
     width: 3,
-    backgroundColor: colors.accent,
-    borderRadius: radius.sm,
+    borderRadius: 99,
+    backgroundColor: 'transparent',
   },
-  avatarWrap: {
-    marginRight: spacing.md,
-    position: 'relative',
-  },
-  channelIcon: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: colors.accent,
-    borderRadius: radius.full,
-    width: 18,
-    height: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  body: {
-    flex: 1,
-    gap: 4,
-  },
-  headerRow: {
+  unreadBarActive: { backgroundColor: colors.accent },
+  content: { flex: 1, gap: 4 },
+  topRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
     gap: spacing.sm,
   },
-  subRow: {
+  name: { flex: 1, fontSize: fontSize.base, fontWeight: fontWeight.medium, color: colors.text },
+  nameUnread: { fontWeight: fontWeight.semibold },
+  time: { fontSize: fontSize.xs, color: colors.textMuted },
+  bottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: spacing.sm,
   },
-  name: {
-    flex: 1,
-    fontSize: fontSize.base,
-    color: colors.textPrimary,
-    fontWeight: fontWeight.medium,
-  },
-  nameBold: {
-    fontWeight: fontWeight.bold,
-  },
-  time: {
-    fontSize: fontSize.xs,
-    color: colors.textMuted,
-    flexShrink: 0,
-  },
-  preview: {
-    fontSize: fontSize.sm,
-    color: colors.textSecondary,
-    lineHeight: 18,
-  },
-  previewBold: {
-    color: colors.textPrimary,
-    fontWeight: fontWeight.medium,
-  },
+  preview: { flex: 1, fontSize: fontSize.sm, color: colors.textSecondary },
+  previewUnread: { fontWeight: fontWeight.medium },
 })

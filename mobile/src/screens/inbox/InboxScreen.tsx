@@ -1,185 +1,205 @@
-import React, { useCallback } from 'react'
+import React, { useCallback, useState } from 'react'
 import {
-  View,
-  FlatList,
-  TextInput,
-  ActivityIndicator,
-  StyleSheet,
-  RefreshControl,
-  Text,
+  View, FlatList, TextInput, StyleSheet, Text,
+  RefreshControl, TouchableOpacity, useWindowDimensions,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useNavigation } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
+import { useNavigation } from '@react-navigation/native'
+import { NativeStackNavigationProp } from '@react-navigation/native-stack'
+
 import { ConversationItem } from '@/components/inbox/ConversationItem'
-import { StatusTabs, ChannelFilter } from '@/components/inbox/FilterBar'
+import { FilterBar } from '@/components/inbox/FilterBar'
 import { EmptyState } from '@/components/common/EmptyState'
-import { UnreadBadge } from '@/components/common/Badge'
 import { useConversations, useUnreadCount } from '@/hooks/useConversations'
 import { useInboxStore } from '@/store/inboxStore'
-import { colors, spacing, fontSize, fontWeight } from '@/constants/theme'
-import type { Conversation } from '@/types'
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import { useAuthStore } from '@/store/authStore'
+import { colors, spacing, radius, fontSize, fontWeight } from '@/constants/theme'
 import type { InboxStackParamList } from '@/navigation/types'
+import type { ConversationStatus, Channel } from '@/types'
 
 type Nav = NativeStackNavigationProp<InboxStackParamList, 'InboxList'>
+type StatusFilter = 'all' | ConversationStatus
+type ChannelFilter = 'all' | Channel
 
 export function InboxScreen() {
   const navigation = useNavigation<Nav>()
+  const { width } = useWindowDimensions()
+  const isTablet = width >= 768
+
   const { filters, setFilter } = useInboxStore()
+  const [search, setSearch] = useState('')
+  const [searchFocused, setSearchFocused] = useState(false)
 
-  const { data: conversations = [], isLoading, isFetching, refetch } = useConversations({
-    status: filters.status,
-    channel: filters.channel,
-    assignee: filters.assignee,
-    search: filters.search || undefined,
-  })
+  const { user } = useAuthStore()
+  const practiceName = user?.practiceName ?? null
 
+  const queryFilters = {
+    status: filters.status !== 'all' ? filters.status : undefined,
+    channel: filters.channel !== 'all' ? filters.channel : undefined,
+    search: search.trim() || undefined,
+  }
+
+  const { data, isLoading, refetch, isRefetching } = useConversations(queryFilters)
   const { data: unreadCount = 0 } = useUnreadCount()
+  const conversations = data?.conversations ?? []
 
-  const handleConversationPress = useCallback(
-    (conversation: Conversation) => {
-      navigation.navigate('ConversationDetail', { conversationId: conversation.id })
-    },
-    [navigation]
-  )
-
-  const renderItem = useCallback(
-    ({ item }: { item: Conversation }) => (
-      <ConversationItem conversation={item} onPress={handleConversationPress} />
-    ),
-    [handleConversationPress]
-  )
-
-  const keyExtractor = useCallback((item: Conversation) => item.id, [])
+  const handleConversation = useCallback((id: string) => {
+    navigation.navigate('ConversationDetail', { conversationId: id })
+  }, [navigation])
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.title}>Inbox</Text>
-          {unreadCount > 0 && <UnreadBadge count={unreadCount} />}
+      <View style={[styles.header, isTablet && styles.headerTablet]}>
+        <View style={styles.headerTop}>
+          <View>
+            {practiceName && <Text style={styles.practiceName}>{practiceName}</Text>}
+            <View style={styles.titleRow}>
+              <Text style={styles.title}>Inbox</Text>
+              {unreadCount > 0 && (
+                <View style={styles.countBadge}>
+                  <Text style={styles.countText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7}>
+            <Ionicons name="options-outline" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
         </View>
-      </View>
 
-      {/* Search bar */}
-      <View style={styles.searchWrap}>
-        <View style={styles.searchBar}>
-          <Ionicons name="search-outline" size={16} color={colors.textMuted} style={styles.searchIcon} />
+        {/* Search */}
+        <View style={[styles.searchBar, searchFocused && styles.searchBarFocused]}>
+          <Ionicons name="search-outline" size={16} color={colors.textMuted} />
           <TextInput
             style={styles.searchInput}
-            value={filters.search}
-            onChangeText={(v) => setFilter('search', v)}
+            value={search}
+            onChangeText={setSearch}
             placeholder="Search patients, messages…"
             placeholderTextColor={colors.textMuted}
-            clearButtonMode="while-editing"
             returnKeyType="search"
+            autoCapitalize="none"
+            autoCorrect={false}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
           />
+          {search.length > 0 && (
+            <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top:8, bottom:8, left:8, right:8 }}>
+              <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
-      {/* Status tabs */}
-      <StatusTabs
-        selected={filters.status}
-        onChange={(s) => setFilter('status', s)}
+      {/* Filters */}
+      <FilterBar
+        status={filters.status as StatusFilter}
+        channel={filters.channel as ChannelFilter}
+        onStatusChange={(s) => setFilter('status', s)}
+        onChannelChange={(c) => setFilter('channel', c)}
       />
 
-      {/* Channel filter */}
-      <ChannelFilter
-        selected={filters.channel}
-        onChange={(c) => setFilter('channel', c)}
-      />
+      {/* Divider */}
+      <View style={styles.divider} />
 
       {/* List */}
-      {isLoading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.accent} />
-        </View>
-      ) : (
-        <FlatList
-          data={conversations}
-          renderItem={renderItem}
-          keyExtractor={keyExtractor}
-          contentContainerStyle={conversations.length === 0 ? styles.emptyContent : undefined}
-          ListEmptyComponent={
+      <FlatList
+        data={conversations}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <ConversationItem conversation={item} onPress={() => handleConversation(item.id)} />
+        )}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        refreshControl={
+          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.accent} />
+        }
+        ListEmptyComponent={
+          !isLoading ? (
             <EmptyState
               icon="chatbubbles-outline"
-              title="No conversations"
-              subtitle={
-                filters.status
-                  ? `No ${filters.status} conversations match your filters.`
-                  : 'Your inbox is empty.'
-              }
+              title={search ? 'No results' : 'Inbox is empty'}
+              subtitle={search ? 'Try a different search term.' : 'New conversations will appear here.'}
             />
-          }
-          refreshControl={
-            <RefreshControl
-              refreshing={isFetching && !isLoading}
-              onRefresh={refetch}
-              tintColor={colors.accent}
-            />
-          }
-        />
-      )}
+          ) : null
+        }
+        contentContainerStyle={conversations.length === 0 ? styles.emptyContainer : undefined}
+        style={[styles.list, isTablet && styles.listTablet]}
+      />
     </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
+  safe:  { flex: 1, backgroundColor: colors.bg },
+
   header: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+    backgroundColor: colors.bg,
+    gap: spacing.md,
+  },
+  headerTablet: { paddingHorizontal: spacing.xxl },
+
+  headerTop: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.divider,
   },
-  headerLeft: {
-    flexDirection: 'row',
+  practiceName: {
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.medium,
+    color: colors.accent,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 2,
+  },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  title:    { fontSize: fontSize.xxl, fontWeight: fontWeight.bold, color: colors.text },
+  countBadge: {
+    backgroundColor: colors.accent,
+    borderRadius: radius.full,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    minWidth: 22,
     alignItems: 'center',
-    gap: spacing.sm,
   },
-  title: {
-    fontSize: fontSize.xl,
-    fontWeight: fontWeight.bold,
-    color: colors.textPrimary,
-  },
-  searchWrap: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.surface,
-  },
-  searchBar: {
-    flexDirection: 'row',
+  countText: { fontSize: fontSize.xs, fontWeight: fontWeight.bold, color: colors.white },
+
+  iconBtn: {
+    width: 36, height: 36,
+    borderRadius: radius.md,
+    backgroundColor: colors.bgSubtle,
     alignItems: 'center',
-    backgroundColor: colors.background,
-    borderRadius: 10,
-    paddingHorizontal: spacing.md,
-    height: 40,
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.border,
   },
-  searchIcon: {
-    marginRight: spacing.sm,
+
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.bgSubtle,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    height: 42,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: spacing.sm,
   },
+  searchBarFocused: { borderColor: colors.accent, backgroundColor: colors.bg },
   searchInput: {
     flex: 1,
     fontSize: fontSize.sm,
-    color: colors.textPrimary,
+    color: colors.text,
+    height: '100%',
   },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyContent: {
-    flexGrow: 1,
-  },
+
+  divider:   { height: 1, backgroundColor: colors.border },
+  separator: { height: 1, backgroundColor: colors.bgSubtle, marginLeft: 74 },
+
+  list:       { flex: 1, backgroundColor: colors.bg },
+  listTablet: { maxWidth: 720, alignSelf: 'center', width: '100%' },
+  emptyContainer: { flexGrow: 1 },
 })

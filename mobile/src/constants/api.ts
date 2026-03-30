@@ -16,4 +16,9 @@ export const ENDPOINTS = {
   conversationMessages: (id: string) => `/api/conversations/${id}/messages`,
   unreadCount: '/api/conversations/unread-count',
   sendMessage: '/api/messages/send',
+
+  // Calls
+  mobileCalls: '/api/mobile/calls',
+  mobileCallById: (id: string) => `/api/mobile/calls/${id}`,
+  mobileCallReview: (id: string) => `/api/mobile/calls/${id}/review`,
 } as const

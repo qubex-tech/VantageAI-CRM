@@ -12,6 +12,7 @@ export interface AuthUser {
   email: string
   name: string | null
   practiceId: string | null
+  practiceName: string | null
   role: string
 }
 
@@ -122,4 +123,40 @@ export interface SendMessagePayload {
   channel: Channel
   body: string
   subject?: string
+}
+
+// ─── Calls ───────────────────────────────────────────────────────────────────
+
+export interface CallAnalysis {
+  call_summary?: string
+  user_sentiment?: string
+  call_successful?: boolean
+  in_voicemail?: boolean
+  custom_analysis_data?: Record<string, unknown>
+}
+
+export type CallStatus = 'ended' | 'completed' | 'in-progress' | 'registered' | 'error'
+
+export interface RetellCall {
+  call_id: string
+  call_type: 'phone_call' | 'web_call'
+  agent_id: string
+  call_status: CallStatus
+  start_timestamp?: number
+  end_timestamp?: number
+  duration_ms?: number
+  transcript?: string
+  recording_url?: string
+  public_log_url?: string
+  call_analysis?: CallAnalysis
+  metadata?: Record<string, unknown>
+}
+
+export interface CallsResponse {
+  calls: RetellCall[]
+  reviewedCallIds: string[]
+}
+
+export interface CallDetailResponse {
+  call: RetellCall
 }

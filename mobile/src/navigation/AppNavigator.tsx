@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { Ionicons } from '@expo/vector-icons'
-import { View, ActivityIndicator, StyleSheet } from 'react-native'
+import { View, ActivityIndicator, StyleSheet, Text } from 'react-native'
 
 import { LoginScreen } from '@/screens/auth/LoginScreen'
 import { InboxNavigator } from './InboxNavigator'
+import { CallsNavigator } from './CallsNavigator'
 import { NotificationsScreen } from '@/screens/notifications/NotificationsScreen'
 
 import { useAuthStore } from '@/store/authStore'
@@ -39,20 +40,21 @@ function MainTabs() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
+        tabBarStyle: {
+          backgroundColor: colors.bg,
+          borderTopWidth: 1,
+          borderTopColor: colors.border,
+          elevation: 0,
+          shadowOpacity: 0,
+        },
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.textMuted,
-        tabBarStyle: {
-          backgroundColor: colors.surface,
-          borderTopColor: colors.divider,
-        },
-        tabBarLabelStyle: {
-          fontSize: fontSize.xs,
-          fontWeight: fontWeight.medium,
-        },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '500', marginBottom: 2 },
         tabBarIcon: ({ focused, color, size }) => {
           const icons: Record<keyof RootTabParamList, [string, string]> = {
-            Inbox: ['chatbubbles', 'chatbubbles-outline'],
-            Notifications: ['notifications', 'notifications-outline'],
+            Inbox:         ['chatbubbles',    'chatbubbles-outline'],
+            Calls:         ['call',           'call-outline'],
+            Notifications: ['notifications',  'notifications-outline'],
           }
           const [active, inactive] = icons[route.name as keyof RootTabParamList] ?? ['ellipse', 'ellipse-outline']
           const name = focused ? active : inactive
@@ -68,6 +70,7 @@ function MainTabs() {
           tabBarBadgeStyle: { backgroundColor: colors.error, fontSize: 10 },
         }}
       />
+      <Tab.Screen name="Calls" component={CallsNavigator} />
       <Tab.Screen name="Notifications" component={NotificationsScreen} />
     </Tab.Navigator>
   )
@@ -107,6 +110,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.background,
+    backgroundColor: colors.bg,
   },
 })

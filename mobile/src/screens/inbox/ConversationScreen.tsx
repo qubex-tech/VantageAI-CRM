@@ -1,164 +1,130 @@
 import React, { useRef, useCallback, useState } from 'react'
 import {
-  View,
-  FlatList,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Text,
+  View, FlatList, TextInput, TouchableOpacity, StyleSheet,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Text,
+  useWindowDimensions,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useRoute, useNavigation, RouteProp } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
+
 import { MessageBubble } from '@/components/inbox/MessageBubble'
-import { ChannelBadge, StatusDot } from '@/components/common/Badge'
 import { Avatar } from '@/components/common/Avatar'
+import { ChannelBadge, StatusPill } from '@/components/common/Badge'
 import { EmptyState } from '@/components/common/EmptyState'
 import { useConversation, useMessages, useSendMessage } from '@/hooks/useConversations'
-import { useAuthStore } from '@/store/authStore'
-import { colors, spacing, fontSize, fontWeight, radius } from '@/constants/theme'
-import type { Message } from '@/types'
+import { colors, spacing, radius, fontSize, fontWeight, shadow } from '@/constants/theme'
 import type { InboxStackParamList } from '@/navigation/types'
 
 type RouteT = RouteProp<InboxStackParamList, 'ConversationDetail'>
 
 export function ConversationScreen() {
-  const route = useRoute<RouteT>()
   const navigation = useNavigation()
+  const route = useRoute<RouteT>()
   const { conversationId } = route.params
+  const { width } = useWindowDimensions()
+  const isTablet = width >= 768
 
-  const [replyText, setReplyText] = useState('')
-  const listRef = useRef<FlatList<Message>>(null)
+  const listRef = useRef<FlatList>(null)
+  const [draft, setDraft] = useState('')
 
-  const user = useAuthStore((s) => s.user)
-  const { data: conversation } = useConversation(conversationId)
-  const { data: messages = [], isLoading } = useMessages(conversationId)
-  const sendMessage = useSendMessage()
+  const { data: conversation, isLoading: convLoading } = useConversation(conversationId)
+  const { data, isLoading: msgsLoading }               = useMessages(conversationId)
+  const sendMutation = useSendMessage()
 
-  const patientName = conversation?.patient
-    ? [conversation.patient.firstName, conversation.patient.lastName].filter(Boolean).join(' ') ||
-      conversation.patient.name ||
-      'Patient'
-    : 'Patient'
+  const messages = data?.messages ?? []
+  const patient  = conversation?.patient
+  const name = patient
+    ? `${patient.firstName ?? ''} ${patient.lastName ?? ''}`.trim() || 'Unknown'
+    : 'Unknown Patient'
 
   const handleSend = useCallback(async () => {
-    const body = replyText.trim()
+    const body = draft.trim()
     if (!body || !conversation) return
-
-    setReplyText('')
-    await sendMessage.mutateAsync({
+    setDraft('')
+    await sendMutation.mutateAsync({
       conversationId,
       patientId: conversation.patient?.id ?? '',
       channel: conversation.channel,
       body,
     })
-
-    // Scroll to bottom after send
-    setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 200)
-  }, [replyText, conversation, conversationId, sendMessage])
-
-  const renderItem = useCallback(
-    ({ item }: { item: Message }) => (
-      <MessageBubble message={item} currentUserId={user?.id ?? ''} />
-    ),
-    [user?.id]
-  )
-
-  const keyExtractor = useCallback((item: Message) => item.id, [])
+    setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100)
+  }, [draft, conversation, conversationId, sendMutation])
 
   return (
-    <SafeAreaView style={styles.safe} edges={['bottom']}>
-      {/* Custom header */}
-      <View style={styles.header}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      {/* Header */}
+      <View style={[styles.header, isTablet && styles.headerTablet]}>
         <TouchableOpacity
-          style={styles.backBtn}
           onPress={() => navigation.goBack()}
+          style={styles.backBtn}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+          <Ionicons name="chevron-back" size={22} color={colors.text} />
         </TouchableOpacity>
 
-        <View style={styles.headerCenter}>
-          {conversation ? (
-            <>
-              <Avatar name={patientName} size={34} />
-              <View style={styles.headerMeta}>
-                <Text style={styles.headerName} numberOfLines={1}>{patientName}</Text>
-                <View style={styles.headerSub}>
-                  <StatusDot status={conversation.status} />
-                  <ChannelBadge channel={conversation.channel} />
-                </View>
-              </View>
-            </>
-          ) : (
-            <ActivityIndicator size="small" color={colors.accent} />
+        {patient && <Avatar name={name} size={36} />}
+
+        <View style={styles.headerInfo}>
+          <Text style={styles.headerName} numberOfLines={1}>{name}</Text>
+          {conversation && (
+            <View style={styles.headerMeta}>
+              <ChannelBadge channel={conversation.channel} />
+              <StatusPill status={conversation.status} />
+            </View>
           )}
         </View>
 
-        <View style={styles.headerRight} />
+        <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7}>
+          <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
+        </TouchableOpacity>
       </View>
+      <View style={styles.headerBorder} />
 
+      {/* Messages */}
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={0}
       >
-        {/* Messages list */}
-        {isLoading ? (
-          <View style={styles.center}>
-            <ActivityIndicator size="large" color={colors.accent} />
-          </View>
+        {msgsLoading ? (
+          <ActivityIndicator style={styles.loader} color={colors.accent} />
         ) : (
           <FlatList
             ref={listRef}
             data={messages}
-            renderItem={renderItem}
-            keyExtractor={keyExtractor}
-            contentContainerStyle={[
-              styles.messageList,
-              messages.length === 0 && styles.emptyContent,
-            ]}
+            keyExtractor={(m) => m.id}
+            renderItem={({ item }) => <MessageBubble message={item} />}
+            contentContainerStyle={[styles.msgList, messages.length === 0 && styles.msgListEmpty]}
+            onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
             ListEmptyComponent={
-              <EmptyState
-                icon="chatbubble-ellipses-outline"
-                title="No messages yet"
-                subtitle="Send the first message to start the conversation."
-              />
-            }
-            onContentSizeChange={() =>
-              messages.length > 0 && listRef.current?.scrollToEnd({ animated: false })
+              <EmptyState icon="chatbubble-outline" title="No messages yet" subtitle="Start the conversation below." />
             }
           />
         )}
 
-        {/* Reply composer */}
-        <View style={styles.composer}>
+        {/* Composer */}
+        <View style={[styles.composer, isTablet && styles.composerTablet, shadow.sm]}>
           <TextInput
             style={styles.composerInput}
-            value={replyText}
-            onChangeText={setReplyText}
+            value={draft}
+            onChangeText={setDraft}
             placeholder="Type a message…"
             placeholderTextColor={colors.textMuted}
             multiline
-            maxLength={1600}
+            maxLength={2000}
+            returnKeyType="default"
           />
           <TouchableOpacity
-            style={[
-              styles.sendBtn,
-              (!replyText.trim() || sendMessage.isPending) && styles.sendBtnDisabled,
-            ]}
+            style={[styles.sendBtn, (!draft.trim() || sendMutation.isPending) && styles.sendBtnDisabled]}
             onPress={handleSend}
-            disabled={!replyText.trim() || sendMessage.isPending}
+            disabled={!draft.trim() || sendMutation.isPending}
             activeOpacity={0.8}
           >
-            {sendMessage.isPending ? (
-              <ActivityIndicator size="small" color={colors.white} />
-            ) : (
-              <Ionicons name="send" size={18} color={colors.white} />
-            )}
+            {sendMutation.isPending
+              ? <ActivityIndicator size="small" color={colors.white} />
+              : <Ionicons name="arrow-up" size={18} color={colors.white} />
+            }
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -167,96 +133,69 @@ export function ConversationScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  flex: {
-    flex: 1,
-  },
+  safe: { flex: 1, backgroundColor: colors.bg },
+  flex: { flex: 1 },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.divider,
-    minHeight: 56,
-  },
-  backBtn: {
-    width: 36,
-    alignItems: 'flex-start',
-  },
-  headerCenter: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    paddingVertical: spacing.md,
+    backgroundColor: colors.bg,
     gap: spacing.sm,
   },
-  headerMeta: {
-    flex: 1,
-    gap: 2,
-  },
-  headerName: {
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.semibold,
-    color: colors.textPrimary,
-  },
-  headerSub: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  headerRight: {
-    width: 36,
-  },
-  center: {
-    flex: 1,
+  headerTablet: { paddingHorizontal: spacing.xxl },
+  headerBorder: { height: 1, backgroundColor: colors.border },
+
+  backBtn: { padding: spacing.xs },
+  headerInfo: { flex: 1, gap: 2 },
+  headerName: { fontSize: fontSize.base, fontWeight: fontWeight.semibold, color: colors.text },
+  headerMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  iconBtn: {
+    width: 34, height: 34,
+    borderRadius: radius.md,
+    backgroundColor: colors.bgSubtle,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  messageList: {
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
-  },
-  emptyContent: {
-    flexGrow: 1,
-  },
+
+  loader: { flex: 1 },
+  msgList: { paddingVertical: spacing.lg },
+  msgListEmpty: { flex: 1 },
+
   composer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.bg,
     borderTopWidth: 1,
-    borderTopColor: colors.divider,
+    borderTopColor: colors.border,
     gap: spacing.sm,
   },
+  composerTablet: { paddingHorizontal: spacing.xxl },
   composerInput: {
     flex: 1,
-    minHeight: 40,
-    maxHeight: 120,
-    backgroundColor: colors.background,
-    borderRadius: radius.lg,
+    fontSize: fontSize.base,
+    color: colors.text,
+    backgroundColor: colors.bgSubtle,
     borderWidth: 1,
     borderColor: colors.border,
+    borderRadius: radius.xl,
     paddingHorizontal: spacing.md,
-    paddingTop: Platform.OS === 'ios' ? 10 : 8,
-    paddingBottom: Platform.OS === 'ios' ? 10 : 8,
-    fontSize: fontSize.base,
-    color: colors.textPrimary,
+    paddingVertical: spacing.sm + 2,
+    maxHeight: 120,
+    lineHeight: 22,
   },
   sendBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 0,
   },
-  sendBtnDisabled: {
-    opacity: 0.4,
-  },
+  sendBtnDisabled: { opacity: 0.4 },
 })

@@ -2,101 +2,81 @@ import React from 'react'
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { formatDistanceToNowStrict } from 'date-fns'
 import { Avatar } from '@/components/common/Avatar'
-import { UnreadBadge, ChannelBadge, StatusDot } from '@/components/common/Badge'
+import { ChannelBadge } from '@/components/common/Badge'
 import { colors, spacing, fontSize, fontWeight, radius } from '@/constants/theme'
 import type { Conversation } from '@/types'
 
 interface Props {
   conversation: Conversation
-  onPress: (conversation: Conversation) => void
+  onPress: () => void
 }
 
 export function ConversationItem({ conversation, onPress }: Props) {
-  const { patient, latestMessage, unreadCount, channel, status } = conversation
+  const { patient, latestMessage, unreadCount, channel, lastMessageAt, status } = conversation
+  const name = patient
+    ? `${patient.firstName ?? ''} ${patient.lastName ?? ''}`.trim() || patient.name || 'Unknown'
+    : 'Unknown Patient'
+  const preview = latestMessage?.body ?? 'No messages yet'
+  const time = lastMessageAt
+    ? formatDistanceToNowStrict(new Date(lastMessageAt), { addSuffix: false })
+    : ''
   const hasUnread = unreadCount > 0
 
-  const patientName = patient
-    ? [patient.firstName, patient.lastName].filter(Boolean).join(' ') || patient.name || 'Unknown'
-    : 'Unknown Patient'
-
-  const timeAgo = conversation.lastMessageAt
-    ? formatDistanceToNowStrict(new Date(conversation.lastMessageAt), { addSuffix: true })
-    : ''
-
-  const preview = latestMessage?.body
-    ? latestMessage.body.length > 100
-      ? latestMessage.body.slice(0, 97) + '…'
-      : latestMessage.body
-    : 'No messages yet'
-
   return (
-    <TouchableOpacity
-      style={[styles.container, hasUnread && styles.unreadContainer]}
-      onPress={() => onPress(conversation)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.avatarCol}>
-        <Avatar name={patientName} size={44} />
-        <View style={styles.statusDotWrap}>
-          <StatusDot status={status} />
-        </View>
-      </View>
+    <TouchableOpacity onPress={onPress} activeOpacity={0.6} style={styles.row}>
+      {/* Unread indicator */}
+      <View style={[styles.unreadBar, hasUnread && styles.unreadBarActive]} />
+
+      <Avatar name={name} size={42} />
 
       <View style={styles.content}>
-        <View style={styles.row}>
-          <Text style={[styles.name, hasUnread && styles.nameUnread]} numberOfLines={1}>
-            {patientName}
+        <View style={styles.topRow}>
+          <Text style={[styles.name, hasUnread && styles.nameUnread]} numberOfLines={1}>{name}</Text>
+          <Text style={styles.time}>{time}</Text>
+        </View>
+        <View style={styles.bottomRow}>
+          <Text style={[styles.preview, hasUnread && styles.previewUnread]} numberOfLines={1}>
+            {preview}
           </Text>
-          <Text style={styles.time}>{timeAgo}</Text>
+          <View style={styles.badges}>
+            {hasUnread && (
+              <View style={styles.dot} />
+            )}
+            <ChannelBadge channel={channel} />
+          </View>
         </View>
-
-        <View style={styles.row}>
-          <ChannelBadge channel={channel} />
-          {hasUnread && <UnreadBadge count={unreadCount} size="sm" />}
-        </View>
-
-        <Text
-          style={[styles.preview, hasUnread && styles.previewUnread]}
-          numberOfLines={2}
-        >
-          {latestMessage?.direction === 'outbound' ? 'You: ' : ''}
-          {preview}
-        </Text>
       </View>
     </TouchableOpacity>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
+  row: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
     paddingVertical: spacing.md,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.divider,
+    paddingRight: spacing.lg,
+    paddingLeft: spacing.lg,
+    backgroundColor: colors.bg,
+    gap: spacing.md,
   },
-  unreadContainer: {
-    backgroundColor: '#EFF6FF',
-  },
-  avatarCol: {
-    marginRight: spacing.md,
-    position: 'relative',
-  },
-  statusDotWrap: {
+  unreadBar: {
     position: 'absolute',
+    left: 0,
+    top: 0,
     bottom: 0,
-    right: 0,
-    backgroundColor: colors.surface,
+    width: 3,
     borderRadius: radius.full,
-    padding: 1,
+    backgroundColor: 'transparent',
+  },
+  unreadBarActive: {
+    backgroundColor: colors.accent,
   },
   content: {
     flex: 1,
     gap: 4,
   },
-  row: {
+  topRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -105,24 +85,41 @@ const styles = StyleSheet.create({
   name: {
     flex: 1,
     fontSize: fontSize.base,
-    color: colors.textPrimary,
     fontWeight: fontWeight.medium,
+    color: colors.text,
   },
   nameUnread: {
-    fontWeight: fontWeight.bold,
+    fontWeight: fontWeight.semibold,
+    color: colors.text,
   },
   time: {
     fontSize: fontSize.xs,
     color: colors.textMuted,
-    flexShrink: 0,
+  },
+  bottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
   },
   preview: {
+    flex: 1,
     fontSize: fontSize.sm,
     color: colors.textSecondary,
-    lineHeight: 18,
   },
   previewUnread: {
-    color: colors.textPrimary,
+    color: colors.textSecondary,
     fontWeight: fontWeight.medium,
+  },
+  badges: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.accent,
   },
 })

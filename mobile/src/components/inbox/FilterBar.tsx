@@ -3,126 +3,113 @@ import { ScrollView, TouchableOpacity, Text, StyleSheet, View } from 'react-nati
 import { colors, spacing, radius, fontSize, fontWeight } from '@/constants/theme'
 import type { ConversationStatus, Channel } from '@/types'
 
-interface StatusTabsProps {
-  selected: ConversationStatus | undefined
-  onChange: (status: ConversationStatus | undefined) => void
+type StatusFilter = 'all' | ConversationStatus
+type ChannelFilter = 'all' | Channel
+
+interface FilterBarProps {
+  status: StatusFilter
+  channel: ChannelFilter
+  onStatusChange: (s: StatusFilter) => void
+  onChannelChange: (c: ChannelFilter) => void
 }
 
-const STATUS_OPTIONS: Array<{ label: string; value: ConversationStatus | undefined }> = [
-  { label: 'All', value: undefined },
-  { label: 'Open', value: 'open' },
-  { label: 'Pending', value: 'pending' },
-  { label: 'Resolved', value: 'resolved' },
+const STATUS_TABS: { key: StatusFilter; label: string }[] = [
+  { key: 'all',      label: 'All' },
+  { key: 'open',     label: 'Open' },
+  { key: 'pending',  label: 'Pending' },
+  { key: 'resolved', label: 'Resolved' },
 ]
 
-export function StatusTabs({ selected, onChange }: StatusTabsProps) {
-  return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.tabRow}
-    >
-      {STATUS_OPTIONS.map((opt) => {
-        const active = selected === opt.value
-        return (
-          <TouchableOpacity
-            key={String(opt.value)}
-            style={[styles.tab, active && styles.tabActive]}
-            onPress={() => onChange(opt.value)}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
-              {opt.label}
-            </Text>
-          </TouchableOpacity>
-        )
-      })}
-    </ScrollView>
-  )
-}
-
-interface ChannelFilterProps {
-  selected: Channel | undefined
-  onChange: (channel: Channel | undefined) => void
-}
-
-const CHANNEL_OPTIONS: Array<{ label: string; value: Channel | undefined }> = [
-  { label: 'All', value: undefined },
-  { label: 'SMS', value: 'sms' },
-  { label: 'Email', value: 'email' },
-  { label: 'Secure', value: 'secure' },
-  { label: 'Voice', value: 'voice' },
+const CHANNEL_TABS: { key: ChannelFilter; label: string }[] = [
+  { key: 'all',    label: 'All channels' },
+  { key: 'sms',    label: 'SMS' },
+  { key: 'email',  label: 'Email' },
+  { key: 'secure', label: 'Secure' },
+  { key: 'voice',  label: 'Voice' },
 ]
 
-export function ChannelFilter({ selected, onChange }: ChannelFilterProps) {
+export function FilterBar({ status, channel, onStatusChange, onChannelChange }: FilterBarProps) {
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.tabRow}
-    >
-      {CHANNEL_OPTIONS.map((opt) => {
-        const active = selected === opt.value
-        return (
-          <TouchableOpacity
-            key={String(opt.value)}
-            style={[styles.chip, active && styles.chipActive]}
-            onPress={() => onChange(opt.value)}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>
-              {opt.label}
-            </Text>
-          </TouchableOpacity>
-        )
-      })}
-    </ScrollView>
+    <View style={styles.wrapper}>
+      {/* Status row */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.row}
+      >
+        {STATUS_TABS.map((t) => {
+          const active = status === t.key
+          return (
+            <TouchableOpacity
+              key={t.key}
+              onPress={() => onStatusChange(t.key)}
+              style={[styles.pill, active && styles.pillActive]}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.pillText, active && styles.pillTextActive]}>{t.label}</Text>
+            </TouchableOpacity>
+          )
+        })}
+      </ScrollView>
+
+      {/* Channel row */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.row}
+      >
+        {CHANNEL_TABS.map((t) => {
+          const active = channel === t.key
+          return (
+            <TouchableOpacity
+              key={t.key}
+              onPress={() => onChannelChange(t.key)}
+              style={[styles.pill, active && styles.pillChannelActive]}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.pillText, active && styles.pillTextActive]}>{t.label}</Text>
+            </TouchableOpacity>
+          )
+        })}
+      </ScrollView>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  tabRow: {
+  wrapper: {
+    backgroundColor: colors.bg,
+    gap: 0,
+  },
+  row: {
+    flexDirection: 'row',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     gap: spacing.sm,
-    flexDirection: 'row',
+    alignItems: 'center',
   },
-  tab: {
+  pill: {
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: 6,
     borderRadius: radius.full,
-    backgroundColor: colors.divider,
+    backgroundColor: colors.bgSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  tabActive: {
-    backgroundColor: colors.primary,
+  pillActive: {
+    backgroundColor: colors.text,
+    borderColor: colors.text,
   },
-  tabLabel: {
+  pillChannelActive: {
+    backgroundColor: colors.accentSurface,
+    borderColor: colors.accent,
+  },
+  pillText: {
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
     color: colors.textSecondary,
   },
-  tabLabelActive: {
+  pillTextActive: {
     color: colors.white,
-    fontWeight: fontWeight.semibold,
-  },
-  chip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: 5,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  chipActive: {
-    backgroundColor: colors.accentLight,
-    borderColor: colors.accent,
-  },
-  chipLabel: {
-    fontSize: fontSize.sm,
-    color: colors.textSecondary,
-  },
-  chipLabelActive: {
-    color: colors.accent,
-    fontWeight: fontWeight.semibold,
   },
 })

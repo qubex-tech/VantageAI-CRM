@@ -4,16 +4,16 @@ import { Ionicons } from '@expo/vector-icons'
 import { colors, spacing, fontSize, fontWeight } from '@/constants/theme'
 
 interface EmptyStateProps {
-  icon: keyof typeof Ionicons.glyphMap
+  icon?: string
   title: string
   subtitle?: string
 }
 
-export function EmptyState({ icon, title, subtitle }: EmptyStateProps) {
+export function EmptyState({ icon = 'chatbubbles-outline', title, subtitle }: EmptyStateProps) {
   return (
     <View style={styles.container}>
       <View style={styles.iconWrap}>
-        <Ionicons name={icon} size={40} color={colors.textMuted} />
+        <Ionicons name={icon as any} size={28} color={colors.textMuted} />
       </View>
       <Text style={styles.title}>{title}</Text>
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
@@ -27,13 +27,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.xxxl,
-    paddingVertical: spacing.xxxl * 2,
+    paddingBottom: spacing.xxxl * 2,
   },
   iconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: colors.divider,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.bgMuted,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.lg,
@@ -41,9 +41,9 @@ const styles = StyleSheet.create({
   title: {
     fontSize: fontSize.md,
     fontWeight: fontWeight.semibold,
-    color: colors.textPrimary,
+    color: colors.text,
     textAlign: 'center',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
   subtitle: {
     fontSize: fontSize.sm,

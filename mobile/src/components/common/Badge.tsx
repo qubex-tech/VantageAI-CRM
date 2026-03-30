@@ -1,110 +1,93 @@
 import React from 'react'
 import { View, Text, StyleSheet } from 'react-native'
-import { colors, fontSize, radius, spacing } from '@/constants/theme'
+import { colors, fontSize, radius, fontWeight } from '@/constants/theme'
+import type { Channel, ConversationStatus } from '@/types'
 
-interface BadgeProps {
-  count: number
-  max?: number
-  size?: 'sm' | 'md'
+const CHANNEL_CONFIG: Record<Channel, { label: string; bg: string; color: string }> = {
+  sms:    { label: 'SMS',    bg: colors.smsLight,    color: colors.sms },
+  email:  { label: 'Email',  bg: colors.emailLight,  color: colors.email },
+  secure: { label: 'Secure', bg: colors.secureLight, color: colors.secure },
+  voice:  { label: 'Voice',  bg: colors.voiceLight,  color: colors.voice },
+  video:  { label: 'Video',  bg: colors.videoLight,  color: colors.video },
 }
 
-export function UnreadBadge({ count, max = 99, size = 'md' }: BadgeProps) {
+const STATUS_CONFIG: Record<ConversationStatus, { label: string; color: string }> = {
+  open:     { label: 'Open',     color: colors.statusOpen },
+  pending:  { label: 'Pending',  color: colors.statusPending },
+  resolved: { label: 'Resolved', color: colors.statusResolved },
+}
+
+export function ChannelBadge({ channel }: { channel: Channel }) {
+  const cfg = CHANNEL_CONFIG[channel] ?? CHANNEL_CONFIG.sms
+  return (
+    <View style={[styles.pill, { backgroundColor: cfg.bg }]}>
+      <Text style={[styles.pillText, { color: cfg.color }]}>{cfg.label}</Text>
+    </View>
+  )
+}
+
+export function UnreadBadge({ count }: { count: number }) {
   if (count <= 0) return null
-  const label = count > max ? `${max}+` : String(count)
-  const isSmall = size === 'sm'
-
   return (
-    <View style={[styles.badge, isSmall && styles.badgeSm]}>
-      <Text style={[styles.text, isSmall && styles.textSm]}>{label}</Text>
+    <View style={styles.unread}>
+      <Text style={styles.unreadText}>{count > 99 ? '99+' : count}</Text>
     </View>
   )
 }
 
-interface ChannelBadgeProps {
-  channel: string
+export function StatusDot({ status }: { status: ConversationStatus }) {
+  return <View style={[styles.dot, { backgroundColor: STATUS_CONFIG[status]?.color ?? colors.textMuted }]} />
 }
 
-const CHANNEL_LABELS: Record<string, string> = {
-  sms: 'SMS',
-  email: 'Email',
-  secure: 'Secure',
-  voice: 'Voice',
-  video: 'Video',
-}
-
-const CHANNEL_COLORS: Record<string, string> = {
-  sms: colors.sms,
-  email: colors.email,
-  secure: colors.secure,
-  voice: colors.voice,
-  video: colors.video,
-}
-
-export function ChannelBadge({ channel }: ChannelBadgeProps) {
-  const bg = CHANNEL_COLORS[channel] ?? colors.textMuted
-  const label = CHANNEL_LABELS[channel] ?? channel
-
+export function StatusPill({ status }: { status: ConversationStatus }) {
+  const cfg = STATUS_CONFIG[status]
   return (
-    <View style={[styles.channelBadge, { backgroundColor: bg + '20' }]}>
-      <Text style={[styles.channelText, { color: bg }]}>{label}</Text>
+    <View style={[styles.statusPill, { backgroundColor: cfg.color + '18' }]}>
+      <View style={[styles.dot, { backgroundColor: cfg.color, marginRight: 4 }]} />
+      <Text style={[styles.statusText, { color: cfg.color }]}>{cfg.label}</Text>
     </View>
   )
-}
-
-interface StatusDotProps {
-  status: 'open' | 'pending' | 'resolved'
-}
-
-const STATUS_COLORS: Record<string, string> = {
-  open: colors.success,
-  pending: colors.warning,
-  resolved: colors.textMuted,
-}
-
-export function StatusDot({ status }: StatusDotProps) {
-  return <View style={[styles.dot, { backgroundColor: STATUS_COLORS[status] ?? colors.textMuted }]} />
 }
 
 const styles = StyleSheet.create({
-  badge: {
-    backgroundColor: colors.error,
+  pill: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
     borderRadius: radius.full,
-    minWidth: 20,
-    height: 20,
-    paddingHorizontal: spacing.xs,
+  },
+  pillText: {
+    fontSize: fontSize.xxs,
+    fontWeight: fontWeight.semibold,
+    letterSpacing: 0.3,
+  },
+  unread: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 5,
   },
-  badgeSm: {
-    minWidth: 16,
-    height: 16,
-    paddingHorizontal: 3,
-  },
-  text: {
+  unreadText: {
     color: colors.white,
-    fontSize: fontSize.xs,
-    fontWeight: '700',
-    lineHeight: 14,
-  },
-  textSm: {
-    fontSize: 10,
-    lineHeight: 12,
-  },
-  channelBadge: {
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    alignSelf: 'flex-start',
-  },
-  channelText: {
-    fontSize: fontSize.xs,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    fontSize: fontSize.xxs,
+    fontWeight: fontWeight.bold,
   },
   dot: {
-    width: 8,
-    height: 8,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
     borderRadius: radius.full,
+  },
+  statusText: {
+    fontSize: fontSize.xxs,
+    fontWeight: fontWeight.semibold,
   },
 })

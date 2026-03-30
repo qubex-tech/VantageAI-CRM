@@ -51,12 +51,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
     }
 
+    const practice = user.practiceId
+      ? await prisma.practice.findUnique({ where: { id: user.practiceId }, select: { name: true } })
+      : null
+
     // Issue a JWT with 90-day expiry for mobile (refresh on re-auth)
     const token = await new SignJWT({
       sub: user.id,
       email: user.email,
       name: user.name,
       practiceId: user.practiceId,
+      practiceName: practice?.name ?? null,
       role: user.role,
     })
       .setProtectedHeader({ alg: 'HS256' })
@@ -71,6 +76,7 @@ export async function POST(req: NextRequest) {
         email: user.email,
         name: user.name,
         practiceId: user.practiceId,
+        practiceName: practice?.name ?? null,
         role: user.role,
       },
     })
