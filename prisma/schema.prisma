@@ -119,6 +119,7 @@ model User {
   communicationAssignmentActions   CommunicationAssignment[]  @relation("CommunicationAssignmentActor")
   callReviews                      CallReview[]
   preVisitChartsCreated            PreVisitChart[]            @relation("PreVisitChartCreator")
+  devicePushTokens                 DevicePushToken[]
 
   @@index([practiceId])
   @@index([email])
@@ -1721,4 +1722,24 @@ model TaskComment {
   @@index([practiceId])
   @@index([createdAt])
   @@map("task_comments")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Mobile App – Push Notification Tokens
+// ─────────────────────────────────────────────────────────────
+
+model DevicePushToken {
+  id         String   @id @default(uuid())
+  userId     String
+  token      String
+  platform   String   // 'ios' | 'android'
+  appVersion String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, token])
+  @@index([userId])
+  @@map("device_push_tokens")
 }
