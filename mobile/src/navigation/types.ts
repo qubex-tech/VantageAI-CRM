@@ -14,6 +14,7 @@ export type RootTabParamList = {
   Inbox: { screen?: string; params?: object }
   Calls: undefined
   Notifications: undefined
+  Profile: undefined
 }
 
 export type InboxStackParamList = {

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { AuthUser } from '@/types'
-import { login as loginService, logout as logoutService, getStoredToken } from '@/services/auth'
+import { login as loginService, logout as logoutService, getStoredToken, getStoredUser } from '@/services/auth'
 
 interface AuthStore {
   user: AuthUser | null
@@ -8,7 +8,6 @@ interface AuthStore {
   isLoading: boolean
   error: string | null
 
-  // Actions
   login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
   restoreSession: () => Promise<boolean>
@@ -48,12 +47,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
 
   restoreSession: async () => {
-    const token = await getStoredToken()
+    const [token, user] = await Promise.all([getStoredToken(), getStoredUser()])
     if (!token) return false
-    // Token exists — trust it (JWT expiry is 90 days)
-    // We don't store user in SecureStore to avoid stale data; the first API call
-    // will 401 if the token is expired and the interceptor clears it.
-    set({ token })
+    set({ token, user })
     return true
   },
 

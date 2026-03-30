@@ -2,28 +2,35 @@ import React, { useEffect, useState } from 'react'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { Ionicons } from '@expo/vector-icons'
-import { View, ActivityIndicator, StyleSheet, Text } from 'react-native'
+import { View, ActivityIndicator, StyleSheet } from 'react-native'
 
 import { AuthNavigator } from './AuthNavigator'
 import { InboxNavigator } from './InboxNavigator'
 import { CallsNavigator } from './CallsNavigator'
 import { NotificationsScreen } from '@/screens/notifications/NotificationsScreen'
+import { ProfileScreen } from '@/screens/profile/ProfileScreen'
 
 import { useAuthStore } from '@/store/authStore'
 import { useUnreadCount } from '@/hooks/useConversations'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { useNavigation } from '@react-navigation/native'
-import { colors, fontSize, fontWeight } from '@/constants/theme'
+import { colors } from '@/constants/theme'
 import type { RootStackParamList, RootTabParamList } from './types'
 
 const RootStack = createNativeStackNavigator<RootStackParamList>()
 const Tab = createBottomTabNavigator<RootTabParamList>()
 
+const TAB_ICONS: Record<keyof RootTabParamList, [string, string]> = {
+  Inbox:         ['chatbubbles',   'chatbubbles-outline'],
+  Calls:         ['call',          'call-outline'],
+  Notifications: ['notifications', 'notifications-outline'],
+  Profile:       ['person',        'person-outline'],
+}
+
 function MainTabs() {
   const { data: unreadCount = 0 } = useUnreadCount()
   const navigation = useNavigation<any>()
 
-  // Register push notifications and wire up navigation on tap
   usePushNotifications({
     onResponse: (response) => {
       const data = response.notification.request.content.data
@@ -51,14 +58,8 @@ function MainTabs() {
         tabBarInactiveTintColor: colors.textMuted,
         tabBarLabelStyle: { fontSize: 11, fontWeight: '500', marginBottom: 2 },
         tabBarIcon: ({ focused, color, size }) => {
-          const icons: Record<keyof RootTabParamList, [string, string]> = {
-            Inbox:         ['chatbubbles',    'chatbubbles-outline'],
-            Calls:         ['call',           'call-outline'],
-            Notifications: ['notifications',  'notifications-outline'],
-          }
-          const [active, inactive] = icons[route.name as keyof RootTabParamList] ?? ['ellipse', 'ellipse-outline']
-          const name = focused ? active : inactive
-          return <Ionicons name={name as any} size={size} color={color} />
+          const [active, inactive] = TAB_ICONS[route.name as keyof RootTabParamList] ?? ['ellipse', 'ellipse-outline']
+          return <Ionicons name={(focused ? active : inactive) as any} size={size} color={color} />
         },
       })}
     >
@@ -72,6 +73,7 @@ function MainTabs() {
       />
       <Tab.Screen name="Calls" component={CallsNavigator} />
       <Tab.Screen name="Notifications" component={NotificationsScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   )
 }
