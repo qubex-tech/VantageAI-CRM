@@ -8,6 +8,7 @@ import {
   Alert,
   SafeAreaView,
   Platform,
+  ActivityIndicator,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useAuthStore } from '@/store/authStore'
@@ -16,10 +17,11 @@ import { colors, fontSize, fontWeight, radius, spacing, shadow, rs } from '@/con
 function InitialAvatar({ name }: { name: string }) {
   const initials = name
     .split(' ')
+    .filter(Boolean)
     .map((w) => w[0])
     .join('')
     .toUpperCase()
-    .slice(0, 2)
+    .slice(0, 2) || '?'
 
   return (
     <View style={styles.avatar}>
@@ -34,10 +36,9 @@ interface MenuRowProps {
   value?: string
   onPress?: () => void
   destructive?: boolean
-  showChevron?: boolean
 }
 
-function MenuRow({ icon, label, value, onPress, destructive, showChevron }: MenuRowProps) {
+function MenuRow({ icon, label, value, onPress, destructive }: MenuRowProps) {
   return (
     <TouchableOpacity
       style={styles.menuRow}
@@ -54,17 +55,14 @@ function MenuRow({ icon, label, value, onPress, destructive, showChevron }: Menu
       </View>
       <View style={styles.menuContent}>
         <Text style={[styles.menuLabel, destructive && styles.menuLabelDestructive]}>{label}</Text>
-        {value ? <Text style={styles.menuValue}>{value}</Text> : null}
+        {value ? <Text style={styles.menuValue} numberOfLines={1}>{value}</Text> : null}
       </View>
-      {showChevron && (
-        <Ionicons name="chevron-forward" size={rs(16)} color={colors.textMuted} />
-      )}
     </TouchableOpacity>
   )
 }
 
 export function ProfileScreen() {
-  const { user, logout } = useAuthStore()
+  const { user, logout, isLoading } = useAuthStore()
   const [loggingOut, setLoggingOut] = useState(false)
 
   const handleLogout = () => {
@@ -89,7 +87,40 @@ export function ProfileScreen() {
     )
   }
 
-  if (!user) return null
+  // Show spinner while auth is initialising
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={colors.accent} />
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  // No user at all — show a minimal logout-only screen
+  if (!user) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <ScrollView contentContainerStyle={styles.content}>
+          <View style={styles.header}>
+            <Text style={styles.title}>Profile</Text>
+          </View>
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>SESSION</Text>
+            <View style={styles.card}>
+              <MenuRow
+                icon="log-out-outline"
+                label={loggingOut ? 'Logging out…' : 'Log out'}
+                onPress={loggingOut ? undefined : handleLogout}
+                destructive
+              />
+            </View>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    )
+  }
 
   const displayName = user.name || user.email
   const roleLabel = user.role
@@ -112,8 +143,8 @@ export function ProfileScreen() {
         <View style={[styles.card, styles.userCard]}>
           <InitialAvatar name={displayName} />
           <View style={styles.userInfo}>
-            <Text style={styles.userName}>{displayName}</Text>
-            <Text style={styles.userEmail}>{user.email}</Text>
+            <Text style={styles.userName} numberOfLines={1}>{displayName}</Text>
+            <Text style={styles.userEmail} numberOfLines={1}>{user.email}</Text>
             <View style={styles.roleBadge}>
               <Text style={styles.roleText}>{roleLabel}</Text>
             </View>
@@ -138,17 +169,9 @@ export function ProfileScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>ACCOUNT</Text>
           <View style={styles.card}>
-            <MenuRow
-              icon="mail-outline"
-              label="Email"
-              value={user.email}
-            />
+            <MenuRow icon="mail-outline" label="Email" value={user.email} />
             <View style={styles.divider} />
-            <MenuRow
-              icon="shield-checkmark-outline"
-              label="Role"
-              value={roleLabel}
-            />
+            <MenuRow icon="shield-checkmark-outline" label="Role" value={roleLabel} />
           </View>
         </View>
 
@@ -171,17 +194,22 @@ export function ProfileScreen() {
   )
 }
 
+const ICON_SIZE = rs(34)
+
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.bgSubtle,
   },
-  scroll: {
-    flex: 1,
-  },
+  scroll: { flex: 1 },
   content: {
     padding: spacing.lg,
     paddingBottom: spacing.xxxl,
+  },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   header: {
     marginBottom: spacing.xl,
@@ -199,6 +227,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
     marginBottom: spacing.xxl,
+    padding: spacing.md,
   },
   avatar: {
     width: rs(60),
@@ -207,15 +236,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   avatarText: {
     fontSize: fontSize.lg,
     fontWeight: fontWeight.bold,
     color: colors.white,
   },
-  userInfo: {
-    flex: 1,
-  },
+  userInfo: { flex: 1 },
   userName: {
     fontSize: fontSize.md,
     fontWeight: fontWeight.semibold,
@@ -243,9 +271,7 @@ const styles = StyleSheet.create({
   },
 
   // Sections
-  section: {
-    marginBottom: spacing.xl,
-  },
+  section: { marginBottom: spacing.xl },
   sectionLabel: {
     fontSize: fontSize.xxs,
     fontWeight: fontWeight.semibold,
@@ -267,32 +293,30 @@ const styles = StyleSheet.create({
   menuRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
     gap: spacing.md,
     minHeight: rs(52),
   },
   menuIcon: {
-    width: rs(34),
-    height: rs(34),
+    width: ICON_SIZE,
+    height: ICON_SIZE,
     borderRadius: radius.md,
     backgroundColor: colors.accentLight,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   menuIconDestructive: {
     backgroundColor: colors.errorLight,
   },
-  menuContent: {
-    flex: 1,
-  },
+  menuContent: { flex: 1 },
   menuLabel: {
     fontSize: fontSize.base,
     fontWeight: fontWeight.medium,
     color: colors.text,
   },
-  menuLabelDestructive: {
-    color: colors.error,
-  },
+  menuLabelDestructive: { color: colors.error },
   menuValue: {
     fontSize: fontSize.sm,
     color: colors.textSecondary,
@@ -301,7 +325,7 @@ const styles = StyleSheet.create({
   divider: {
     height: 1,
     backgroundColor: colors.border,
-    marginLeft: rs(34) + spacing.md * 2,
+    marginLeft: ICON_SIZE + spacing.md * 2,
   },
 
   appVersion: {

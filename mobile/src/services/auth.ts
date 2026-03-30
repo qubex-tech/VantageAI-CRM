@@ -27,10 +27,45 @@ export async function getStoredToken(): Promise<string | null> {
   return SecureStore.getItemAsync(TOKEN_KEY)
 }
 
+/** Decode JWT payload without verifying signature (client-side, for display only). */
+function decodeJwtPayload(token: string): Record<string, any> | null {
+  try {
+    const parts = token.split('.')
+    if (parts.length !== 3) return null
+    // Base64url → base64 → decode
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const json = atob(base64)
+    return JSON.parse(json)
+  } catch {
+    return null
+  }
+}
+
 export async function getStoredUser(): Promise<AuthUser | null> {
   try {
+    // Try the persisted user object first
     const raw = await SecureStore.getItemAsync(USER_KEY)
-    return raw ? JSON.parse(raw) : null
+    if (raw) return JSON.parse(raw)
+
+    // Fallback: decode from the JWT payload (handles sessions from before user persistence)
+    const token = await SecureStore.getItemAsync(TOKEN_KEY)
+    if (!token) return null
+
+    const payload = decodeJwtPayload(token)
+    if (!payload) return null
+
+    const user: AuthUser = {
+      id: payload.sub ?? '',
+      email: payload.email ?? '',
+      name: payload.name ?? null,
+      practiceId: payload.practiceId ?? null,
+      practiceName: payload.practiceName ?? null,
+      role: payload.role ?? 'user',
+    }
+
+    // Persist it so next cold-start skips the decode
+    await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user))
+    return user
   } catch {
     return null
   }
