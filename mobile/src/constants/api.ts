@@ -7,6 +7,8 @@ export const API_BASE_URL =
 export const ENDPOINTS = {
   // Mobile-specific
   mobileAuth: '/api/mobile/auth',
+  mobileForgotPassword: '/api/mobile/forgot-password',
+  mobileResetPassword: '/api/mobile/reset-password',
   pushTokens: '/api/mobile/push-tokens',
   mobileNotifications: '/api/mobile/notifications',
 

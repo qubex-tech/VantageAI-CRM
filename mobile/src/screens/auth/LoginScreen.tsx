@@ -6,6 +6,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
+import { useNavigation } from '@react-navigation/native'
 import { useAuthStore } from '@/store/authStore'
 import { colors, spacing, radius, fontSize, fontWeight, shadow } from '@/constants/theme'
 
@@ -16,6 +17,7 @@ export function LoginScreen() {
   const { login, isLoading, error, clearError } = useAuthStore()
   const { width } = useWindowDimensions()
   const isTablet = width >= 768
+  const navigation = useNavigation()
 
   const handleLogin = async () => {
     if (!email.trim() || !password) return
@@ -103,6 +105,14 @@ export function LoginScreen() {
                 ? <ActivityIndicator color={colors.white} size="small" />
                 : <Text style={styles.btnText}>Sign in</Text>
               }
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => (navigation as any).navigate('ForgotPassword')}
+              style={styles.forgotBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.forgotText}>Forgot password?</Text>
             </TouchableOpacity>
           </View>
 
@@ -195,6 +205,9 @@ const styles = StyleSheet.create({
   },
   btnDisabled: { opacity: 0.5 },
   btnText: { color: colors.white, fontSize: fontSize.base, fontWeight: fontWeight.semibold },
+
+  forgotBtn: { alignItems: 'center', marginTop: spacing.xs },
+  forgotText: { fontSize: fontSize.sm, color: colors.accent, fontWeight: fontWeight.medium },
 
   footer: { fontSize: fontSize.xs, color: colors.textMuted, textAlign: 'center' },
 })

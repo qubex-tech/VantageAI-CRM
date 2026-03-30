@@ -4,7 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { Ionicons } from '@expo/vector-icons'
 import { View, ActivityIndicator, StyleSheet, Text } from 'react-native'
 
-import { LoginScreen } from '@/screens/auth/LoginScreen'
+import { AuthNavigator } from './AuthNavigator'
 import { InboxNavigator } from './InboxNavigator'
 import { CallsNavigator } from './CallsNavigator'
 import { NotificationsScreen } from '@/screens/notifications/NotificationsScreen'
@@ -99,7 +99,7 @@ export function AppNavigator() {
       {token ? (
         <RootStack.Screen name="Main" component={MainTabs} />
       ) : (
-        <RootStack.Screen name="Auth" component={LoginScreen} />
+        <RootStack.Screen name="Auth" component={AuthNavigator} />
       )}
     </RootStack.Navigator>
   )
