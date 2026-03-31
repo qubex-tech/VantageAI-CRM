@@ -22,8 +22,13 @@ const MOBILE_JWT_SECRET = new TextEncoder().encode(
  * then falls back to bcrypt for users with a local passwordHash.
  */
 async function verifyCredentials(email: string, password: string): Promise<boolean> {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  // Support both NEXT_PUBLIC_ prefix (client-exposed) and plain names (all Vercel envs)
+  const supabaseUrl =
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.SUPABASE_URL
+  const supabaseAnonKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_ANON_KEY
 
   if (supabaseUrl && supabaseAnonKey) {
     try {
@@ -32,9 +37,12 @@ async function verifyCredentials(email: string, password: string): Promise<boole
       })
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (!error) return true
-    } catch {
-      // Supabase unavailable — fall through to bcrypt
+      console.log('[mobile/auth] Supabase signIn error:', error.message)
+    } catch (e) {
+      console.error('[mobile/auth] Supabase client error:', e)
     }
+  } else {
+    console.warn('[mobile/auth] Supabase env vars not set — skipping Supabase auth')
   }
 
   return false
@@ -69,11 +77,15 @@ export async function POST(req: NextRequest) {
     }
 
     // 1. Try Supabase Auth (all production users created via the web CRM)
-    // 2. Fall back to bcrypt for accounts with a local passwordHash
     const supabaseValid = await verifyCredentials(email, password)
-    const bcryptValid = !supabaseValid && user.passwordHash
+
+    // 2. Fall back to bcrypt only for accounts that have a real hash (not empty string)
+    const hasLocalHash = user.passwordHash && user.passwordHash.length > 0
+    const bcryptValid = !supabaseValid && hasLocalHash
       ? await bcrypt.compare(password, user.passwordHash)
       : false
+
+    console.log(`[mobile/auth] user=${user.email} supabase=${supabaseValid} bcrypt=${bcryptValid} hasHash=${hasLocalHash}`)
 
     if (!supabaseValid && !bcryptValid) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
