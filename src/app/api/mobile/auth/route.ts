@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { rateLimit } from '@/lib/middleware'
 import bcrypt from 'bcryptjs'
 import { SignJWT } from 'jose'
+import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,13 +18,34 @@ const MOBILE_JWT_SECRET = new TextEncoder().encode(
 )
 
 /**
+ * Verify credentials. Tries Supabase Auth first (primary for production users),
+ * then falls back to bcrypt for users with a local passwordHash.
+ */
+async function verifyCredentials(email: string, password: string): Promise<boolean> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (supabaseUrl && supabaseAnonKey) {
+    try {
+      const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+        auth: { autoRefreshToken: false, persistSession: false },
+      })
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (!error) return true
+    } catch {
+      // Supabase unavailable — fall through to bcrypt
+    }
+  }
+
+  return false
+}
+
+/**
  * POST /api/mobile/auth
  *
- * Mobile-specific login endpoint. Validates credentials and returns a
- * long-lived JWT that mobile clients store in SecureStore.
- *
- * The token carries the same claims as the NextAuth JWT so all existing
- * requireAuth() middleware continues to work seamlessly with Bearer tokens.
+ * Mobile-specific login endpoint. Validates credentials against Supabase Auth
+ * (production users) with a bcrypt fallback for locally-hashed accounts.
+ * Returns a long-lived JWT stored in SecureStore on the device.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -41,13 +63,19 @@ export async function POST(req: NextRequest) {
 
     const { email, password } = parsed.data
 
-    const user = await prisma.user.findUnique({ where: { email } })
+    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } })
     if (!user) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
     }
 
-    const valid = await bcrypt.compare(password, user.passwordHash)
-    if (!valid) {
+    // 1. Try Supabase Auth (all production users created via the web CRM)
+    // 2. Fall back to bcrypt for accounts with a local passwordHash
+    const supabaseValid = await verifyCredentials(email, password)
+    const bcryptValid = !supabaseValid && user.passwordHash
+      ? await bcrypt.compare(password, user.passwordHash)
+      : false
+
+    if (!supabaseValid && !bcryptValid) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
     }
 
