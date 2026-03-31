@@ -29,10 +29,23 @@
       "bundler": "metro"
     },
     "plugins": [
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "color": "#3B82F6",
+          "defaultChannel": "default"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "7fc52a22-fa78-4cd4-83c7-5a342ab8377e"
+      }
+    },
+    "owner": "saqibnasir"
   }
 }
