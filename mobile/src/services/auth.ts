@@ -144,3 +144,10 @@ export async function verifyEmailOtp(loginToken: string, otp: string): Promise<E
   if (!ok) throw new Error(data.error ?? 'Invalid code')
   return data
 }
+
+/** Store a token + user directly (used after email-OTP login). */
+export async function storeSession(token: string, user: AuthUser): Promise<void> {
+  const { TOKEN_KEY } = await import('./apiClient')
+  await SecureStore.setItemAsync(TOKEN_KEY, token)
+  await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user))
+}

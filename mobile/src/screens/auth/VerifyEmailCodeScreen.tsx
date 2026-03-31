@@ -6,14 +6,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
-import * as SecureStore from 'expo-secure-store'
 import { useAuthStore } from '@/store/authStore'
-import { verifyEmailOtp, sendEmailOtp } from '@/services/auth'
+import { verifyEmailOtp, sendEmailOtp, storeSession } from '@/services/auth'
 import { colors, spacing, radius, fontSize, fontWeight, shadow } from '@/constants/theme'
 import type { AuthStackParamList } from '@/navigation/types'
-
-const TOKEN_KEY = 'auth_token'
-const USER_KEY = 'auth_user'
 
 type RouteT = RouteProp<AuthStackParamList, 'VerifyEmailCode'>
 
@@ -78,9 +74,7 @@ export function VerifyEmailCodeScreen() {
     setError('')
     try {
       const result = await verifyEmailOtp(currentLoginToken, code)
-      // Persist token + user then restore session state
-      await SecureStore.setItemAsync(TOKEN_KEY, result.token)
-      await SecureStore.setItemAsync(USER_KEY, JSON.stringify(result.user))
+      await storeSession(result.token, result.user)
       await restoreSession()
     } catch (err: any) {
       setError(err.message ?? 'Invalid code. Please try again.')
