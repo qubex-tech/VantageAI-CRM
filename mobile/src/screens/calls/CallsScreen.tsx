@@ -22,9 +22,10 @@ export function CallsScreen() {
   const { user } = useAuthStore()
   const practiceName = user?.practiceName ?? null
 
-  const { data, isLoading, refetch, isRefetching } = useCalls()
+  const { data, isLoading, refetch, isRefetching, isError, error } = useCalls()
   const calls = data?.calls ?? []
   const reviewedIds = new Set(data?.reviewedCallIds ?? [])
+  const debugMsg = (data as any)?.debug ?? null
   const unreviewed = calls.filter((c) => !reviewedIds.has(c.call_id)).length
 
   const handlePress = useCallback((id: string) => {
@@ -66,8 +67,14 @@ export function CallsScreen() {
           !isLoading ? (
             <EmptyState
               icon="call-outline"
-              title="No calls yet"
-              subtitle="AI-agent call recordings will appear here."
+              title={isError ? 'Could not load calls' : 'No calls yet'}
+              subtitle={
+                isError
+                  ? String((error as any)?.message ?? 'Unknown error')
+                  : debugMsg
+                  ? debugMsg
+                  : 'AI-agent call recordings will appear here.'
+              }
             />
           ) : null
         }

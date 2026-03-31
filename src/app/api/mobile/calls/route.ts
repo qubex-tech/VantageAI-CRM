@@ -22,9 +22,10 @@ export async function GET(req: NextRequest) {
     let retell: any = null
     try {
       retell = await getRetellClient(user.practiceId)
-    } catch {
-      // Practice has no RetellAI integration configured — return empty list
-      return NextResponse.json({ calls: [], reviewedCallIds: [] })
+    } catch (e: any) {
+      // Practice has no RetellAI integration configured
+      console.log('[mobile/calls] No Retell integration:', e?.message)
+      return NextResponse.json({ calls: [], reviewedCallIds: [], debug: e?.message })
     }
 
     // Fetch reviewed call IDs for this practice
@@ -34,9 +35,16 @@ export async function GET(req: NextRequest) {
     })
     const reviewedCallIds = reviews.map((r) => r.callId)
 
-    // listCalls matches the web /api/calls route which uses retellClient.listCalls()
-    const result = await retell.listCalls({ limit, offset })
-    const calls: any[] = result?.calls ?? []
+    // listCalls matches the web /api/calls route
+    let calls: any[] = []
+    try {
+      const result = await retell.listCalls({ limit, offset })
+      calls = result?.calls ?? []
+      console.log(`[mobile/calls] fetched ${calls.length} calls for practice ${user.practiceId}`)
+    } catch (e: any) {
+      console.error('[mobile/calls] listCalls failed:', e?.message)
+      return NextResponse.json({ calls: [], reviewedCallIds: [], debug: `listCalls error: ${e?.message}` })
+    }
 
     return NextResponse.json({ calls, reviewedCallIds })
   } catch (err: any) {
