@@ -33,8 +33,17 @@ function MainTabs() {
 
   usePushNotifications({
     onResponse: (response) => {
-      const data = response.notification.request.content.data
-      if (data?.conversationId) {
+      const data = response.notification.request.content.data as Record<string, any> | undefined
+      if (!data) return
+
+      if (data.type === 'call' && data.callId) {
+        // Deep-link to call detail screen
+        navigation.navigate('Calls', {
+          screen: 'CallDetail',
+          params: { callId: data.callId },
+        })
+      } else if (data.conversationId) {
+        // Deep-link to inbox conversation
         navigation.navigate('Inbox', {
           screen: 'ConversationDetail',
           params: { conversationId: data.conversationId },
