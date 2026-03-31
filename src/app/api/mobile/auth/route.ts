@@ -4,7 +4,6 @@ import { prisma } from '@/lib/db'
 import { rateLimit } from '@/lib/middleware'
 import bcrypt from 'bcryptjs'
 import { SignJWT } from 'jose'
-import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,11 +17,10 @@ const MOBILE_JWT_SECRET = new TextEncoder().encode(
 )
 
 /**
- * Verify credentials. Tries Supabase Auth first (primary for production users),
- * then falls back to bcrypt for users with a local passwordHash.
+ * Verify via Supabase REST API (no client library — works in all serverless envs).
+ * POST /auth/v1/token?grant_type=password
  */
-async function verifyCredentials(email: string, password: string): Promise<boolean> {
-  // Support both NEXT_PUBLIC_ prefix (client-exposed) and plain names (all Vercel envs)
+async function verifyWithSupabase(email: string, password: string): Promise<boolean> {
   const supabaseUrl =
     process.env.NEXT_PUBLIC_SUPABASE_URL ||
     process.env.SUPABASE_URL
@@ -30,22 +28,28 @@ async function verifyCredentials(email: string, password: string): Promise<boole
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     process.env.SUPABASE_ANON_KEY
 
-  if (supabaseUrl && supabaseAnonKey) {
-    try {
-      const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-        auth: { autoRefreshToken: false, persistSession: false },
-      })
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (!error) return true
-      console.log('[mobile/auth] Supabase signIn error:', error.message)
-    } catch (e) {
-      console.error('[mobile/auth] Supabase client error:', e)
-    }
-  } else {
-    console.warn('[mobile/auth] Supabase env vars not set — skipping Supabase auth')
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.warn('[mobile/auth] Supabase env vars not set')
+    return false
   }
 
-  return false
+  try {
+    const res = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseAnonKey,
+      },
+      body: JSON.stringify({ email, password }),
+    })
+    if (res.ok) return true
+    const body = await res.json().catch(() => ({}))
+    console.log('[mobile/auth] Supabase REST error:', res.status, body?.error_description ?? body?.msg)
+    return false
+  } catch (e) {
+    console.error('[mobile/auth] Supabase fetch error:', e)
+    return false
+  }
 }
 
 /**
@@ -77,7 +81,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 1. Try Supabase Auth (all production users created via the web CRM)
-    const supabaseValid = await verifyCredentials(email, password)
+    const supabaseValid = await verifyWithSupabase(email, password)
 
     // 2. Fall back to bcrypt only for accounts that have a real hash (not empty string)
     const hasLocalHash = user.passwordHash && user.passwordHash.length > 0
