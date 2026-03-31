@@ -28,6 +28,13 @@ export function CallsScreen() {
   const debugMsg = (data as any)?.debug ?? null
   const unreviewed = calls.filter((c) => !reviewedIds.has(c.call_id)).length
 
+  // Debug: log when data changes
+  React.useEffect(() => {
+    if (data !== undefined) {
+      console.log('[CallsScreen] data received:', JSON.stringify({ callCount: calls.length, debug: debugMsg, isError }))
+    }
+  }, [data])
+
   const handlePress = useCallback((id: string) => {
     navigation.navigate('CallDetail', { callId: id })
   }, [navigation])
