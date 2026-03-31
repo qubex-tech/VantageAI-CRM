@@ -34,11 +34,9 @@ export async function GET(req: NextRequest) {
     })
     const reviewedCallIds = reviews.map((r) => r.callId)
 
-    let calls: any[] = []
-    if (retell) {
-      const response = await retell.call.list({ limit, offset })
-      calls = response ?? []
-    }
+    // listCalls matches the web /api/calls route which uses retellClient.listCalls()
+    const result = await retell.listCalls({ limit, offset })
+    const calls: any[] = result?.calls ?? []
 
     return NextResponse.json({ calls, reviewedCallIds })
   } catch (err: any) {
