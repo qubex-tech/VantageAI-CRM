@@ -108,15 +108,24 @@ export interface EmailOtpResponse {
   message: string
 }
 
+async function safeJsonFetch(url: string, options: RequestInit): Promise<{ ok: boolean; status: number; data: any }> {
+  const res = await fetch(url, options)
+  const text = await res.text()
+  let data: any = {}
+  try { data = JSON.parse(text) } catch {
+    if (!res.ok) throw new Error(`Server error ${res.status}: endpoint not available. Check Vercel deployment is live.`)
+  }
+  return { ok: res.ok, status: res.status, data }
+}
+
 export async function sendEmailOtp(email: string): Promise<EmailOtpResponse> {
   const { API_BASE_URL, ENDPOINTS } = await import('@/constants/api')
-  const res = await fetch(`${API_BASE_URL}${ENDPOINTS.mobileEmailOtp}`, {
+  const { ok, data } = await safeJsonFetch(`${API_BASE_URL}${ENDPOINTS.mobileEmailOtp}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email }),
   })
-  const data = await res.json()
-  if (!res.ok) throw new Error(data.error ?? 'Failed to send sign-in code')
+  if (!ok) throw new Error(data.error ?? 'Failed to send sign-in code')
   return data
 }
 
@@ -127,12 +136,11 @@ export interface EmailOtpVerifyResponse {
 
 export async function verifyEmailOtp(loginToken: string, otp: string): Promise<EmailOtpVerifyResponse> {
   const { API_BASE_URL, ENDPOINTS } = await import('@/constants/api')
-  const res = await fetch(`${API_BASE_URL}${ENDPOINTS.mobileEmailOtpVerify}`, {
+  const { ok, data } = await safeJsonFetch(`${API_BASE_URL}${ENDPOINTS.mobileEmailOtpVerify}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ loginToken, otp }),
   })
-  const data = await res.json()
-  if (!res.ok) throw new Error(data.error ?? 'Invalid code')
+  if (!ok) throw new Error(data.error ?? 'Invalid code')
   return data
 }
