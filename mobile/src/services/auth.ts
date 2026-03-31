@@ -102,3 +102,37 @@ export async function resetPassword(
   const data = await res.json()
   if (!res.ok) throw new Error(data.error ?? 'Failed to reset password')
 }
+
+export interface EmailOtpResponse {
+  loginToken: string
+  message: string
+}
+
+export async function sendEmailOtp(email: string): Promise<EmailOtpResponse> {
+  const { API_BASE_URL, ENDPOINTS } = await import('@/constants/api')
+  const res = await fetch(`${API_BASE_URL}${ENDPOINTS.mobileEmailOtp}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error ?? 'Failed to send sign-in code')
+  return data
+}
+
+export interface EmailOtpVerifyResponse {
+  token: string
+  user: AuthUser
+}
+
+export async function verifyEmailOtp(loginToken: string, otp: string): Promise<EmailOtpVerifyResponse> {
+  const { API_BASE_URL, ENDPOINTS } = await import('@/constants/api')
+  const res = await fetch(`${API_BASE_URL}${ENDPOINTS.mobileEmailOtpVerify}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ loginToken, otp }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error ?? 'Invalid code')
+  return data
+}

@@ -3,6 +3,7 @@ export type AuthStackParamList = {
   ForgotPassword: undefined
   VerifyOTP: { resetToken: string; email: string }
   NewPassword: { resetToken: string; otp: string }
+  VerifyEmailCode: { loginToken: string; email: string }
 }
 
 export type RootStackParamList = {
