@@ -16,7 +16,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     } catch {
       return NextResponse.json({ error: 'Voice integration not configured' }, { status: 404 })
     }
-    const call = await retell.call.retrieve(params.id)
+    const call = await retell.getCall(params.id)
     return NextResponse.json({ call })
   } catch (err: any) {
     if (err?.message === 'Unauthorized') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

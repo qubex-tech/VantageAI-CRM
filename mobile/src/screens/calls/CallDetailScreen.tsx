@@ -50,7 +50,8 @@ export function CallDetailScreen() {
   const startTime = call?.start_timestamp ? format(new Date(call.start_timestamp), 'MMM d, yyyy · h:mm a') : '—'
   const duration = formatDuration(call?.duration_ms)
   const statusColor = STATUS_COLOR[call?.call_status ?? ''] ?? colors.textMuted
-  const callerId = (call?.metadata as any)?.from_number
+  const callerId = call?.from_number
+    ?? (call?.metadata as any)?.from_number
     ?? (call?.metadata as any)?.caller_id
     ?? (call?.call_type === 'web_call' ? 'Web call' : 'Unknown caller')
 
