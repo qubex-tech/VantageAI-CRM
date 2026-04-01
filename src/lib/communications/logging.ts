@@ -112,6 +112,9 @@ export async function logInboundCommunication({
   subject,
   metadata,
 }: LogInboundInput) {
+  // Capture assignedUserId outside transaction so we can use it for push notifications
+  let assignedUserIdForPush: string | null = null
+
   const result = await prisma.$transaction(async (tx) => {
     const existing = await tx.communicationConversation.findFirst({
       where: {
@@ -171,6 +174,7 @@ export async function logInboundCommunication({
     })
 
     if (assignment?.assignedUserId) {
+      assignedUserIdForPush = assignment.assignedUserId
       await tx.auditLog.create({
         data: {
           practiceId,
@@ -194,5 +198,60 @@ export async function logInboundCommunication({
     conversationId: result.conversationId,
   })
 
+  // Fire push notification — never blocks or throws
+  void sendInboundMessagePush({
+    practiceId,
+    patientId,
+    conversationId: result.conversationId,
+    messagePreview: body.slice(0, 100),
+    assignedUserId: assignedUserIdForPush,
+  }).catch((err) => console.error('[push] inbound message notification failed:', err))
+
   return result
+}
+
+/**
+ * Send a push notification when an inbound message arrives.
+ * Notifies the assigned user if there is one, otherwise all practice users.
+ */
+async function sendInboundMessagePush({
+  practiceId,
+  patientId,
+  conversationId,
+  messagePreview,
+  assignedUserId,
+}: {
+  practiceId: string
+  patientId: string
+  conversationId: string
+  messagePreview: string
+  assignedUserId: string | null
+}): Promise<void> {
+  const { notifyUsers, notifyPractice } = await import('@/lib/push-notifications')
+
+  // Look up patient name for a friendly notification body
+  const patient = await prisma.patient.findUnique({
+    where: { id: patientId },
+    select: { name: true, firstName: true, lastName: true },
+  }).catch(() => null)
+
+  const patientName =
+    patient?.name ??
+    (patient?.firstName && patient?.lastName
+      ? `${patient.firstName} ${patient.lastName}`
+      : null) ??
+    'A patient'
+
+  const message = {
+    title: '💬 New Message',
+    body: `${patientName}: ${messagePreview}`,
+    data: { type: 'message', conversationId },
+  }
+
+  if (assignedUserId) {
+    await notifyUsers([assignedUserId], message)
+  } else {
+    // Unassigned — notify everyone in the practice
+    await notifyPractice(practiceId, message)
+  }
 }

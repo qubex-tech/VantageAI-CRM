@@ -263,7 +263,91 @@ export async function processRetellWebhook(
     }
   }
 
+  // Send push notification for call_analyzed — fire-and-forget, never blocks webhook response
+  if (eventType === 'call_analyzed' && call?.call_id) {
+    void sendCallPushNotification(practiceId, call).catch((err) =>
+      console.error('[push] call notification failed:', err)
+    )
+  }
+
   return { status: 'ok' }
+}
+
+/**
+ * Extract a human-readable patient type label from Retell call analysis.
+ * Checks all known field name variations across custom_analysis_data, metadata, etc.
+ */
+function extractPatientType(call: any): 'New Patient' | 'Existing Patient' | null {
+  const analysis = call?.call_analysis ?? {}
+  const custom = analysis?.custom_analysis_data ?? {}
+  const meta = call?.metadata ?? {}
+  const dynVars = call?.retell_llm_dynamic_variables ?? call?.collected_dynamic_variables ?? {}
+
+  const raw =
+    custom?.patient_type ??
+    custom?.patientType ??
+    custom?.patient_status ??
+    custom?.['Patient Type'] ??
+    custom?.['patient type'] ??
+    analysis?.patient_type ??
+    meta?.patient_type ??
+    meta?.['Patient Type'] ??
+    dynVars?.patient_type ??
+    dynVars?.['Patient Type'] ??
+    null
+
+  if (!raw) return null
+  const lower = String(raw).toLowerCase()
+  if (lower.includes('new')) return 'New Patient'
+  if (lower.includes('exist') || lower.includes('return') || lower.includes('establish')) return 'Existing Patient'
+  return null
+}
+
+/**
+ * Build and dispatch a push notification when a Retell call is fully analyzed.
+ */
+async function sendCallPushNotification(practiceId: string, call: any): Promise<void> {
+  const { notifyPractice } = await import('./push-notifications')
+
+  const patientType = extractPatientType(call)
+
+  // Title: distinguish new vs existing patient when known
+  let title = '📞 New Call Completed'
+  if (patientType === 'New Patient') title = '📞 New Patient Call'
+  else if (patientType === 'Existing Patient') title = '📞 Returning Patient Call'
+
+  // Body: duration + AI summary (if present)
+  const durationMs =
+    call?.end_timestamp && call?.start_timestamp
+      ? call.end_timestamp - call.start_timestamp
+      : call?.duration_ms ?? 0
+  const durationSec = Math.floor(durationMs / 1000)
+  const durationStr =
+    durationSec >= 60
+      ? `${Math.floor(durationSec / 60)}m ${durationSec % 60}s`
+      : durationSec > 0
+      ? `${durationSec}s`
+      : null
+
+  const summary: string | null =
+    call?.call_analysis?.call_summary ??
+    call?.call_analysis?.custom_analysis_data?.call_summary ??
+    null
+
+  const bodyParts: string[] = []
+  if (durationStr) bodyParts.push(durationStr)
+  if (summary) bodyParts.push(summary.slice(0, 100))
+  const body = bodyParts.length > 0 ? bodyParts.join(' · ') : 'Tap to review the call'
+
+  await notifyPractice(practiceId, {
+    title,
+    body,
+    data: {
+      type: 'call',
+      callId: call.call_id,
+      patientType: patientType ?? undefined,
+    },
+  })
 }
 
 /**

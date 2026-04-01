@@ -5,6 +5,7 @@ import { prisma } from './db'
 import crypto from 'crypto'
 import { getSupabaseSessionFromRequest } from './auth-supabase'
 import { syncSupabaseUserToPrisma } from './sync-supabase-user'
+import { jwtVerify } from 'jose'
 
 function normalizeHexSignature(raw: string, allowedPrefixes: string[] = []): string {
   let value = raw.trim()
@@ -50,7 +51,37 @@ export async function getSession() {
  * 
  * @param req Optional NextRequest for API routes. If provided, will try Supabase auth first.
  */
+const MOBILE_JWT_SECRET = new TextEncoder().encode(
+  process.env.NEXTAUTH_SECRET ?? 'fallback-dev-secret'
+)
+
 export async function requireAuth(req?: NextRequest) {
+  // Mobile: check for Bearer JWT issued by /api/mobile/auth
+  if (req) {
+    const authHeader = req.headers.get('authorization')
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.slice(7)
+      try {
+        const { payload } = await jwtVerify(token, MOBILE_JWT_SECRET)
+        const userId = payload.sub as string
+        const practiceId = (payload.practiceId as string | null) ?? null
+        const role = (payload.role as string) ?? 'regular_user'
+        if (userId) {
+          if (role !== 'vantage_admin' && !practiceId) throw new Error('Unauthorized')
+          return {
+            id: userId,
+            email: (payload.email as string) ?? '',
+            name: (payload.name as string | null) ?? null,
+            practiceId,
+            role,
+          }
+        }
+      } catch {
+        // Invalid or expired mobile token — fall through to Supabase / NextAuth
+      }
+    }
+  }
+
   // Try Supabase first if we have a request (API route)
   if (req) {
     try {
