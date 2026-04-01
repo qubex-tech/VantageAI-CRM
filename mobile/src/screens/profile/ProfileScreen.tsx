@@ -64,6 +64,26 @@ function MenuRow({ icon, label, value, onPress, destructive }: MenuRowProps) {
 export function ProfileScreen() {
   const { user, logout, isLoading } = useAuthStore()
   const [loggingOut, setLoggingOut] = useState(false)
+  const [testingPush, setTestingPush] = useState(false)
+
+  const handleTestNotification = async () => {
+    setTestingPush(true)
+    try {
+      const { apiPost } = await import('@/services/apiClient')
+      const res = await apiPost<{ success: boolean; tokenCount: number }>(
+        '/api/mobile/push-tokens/test'
+      )
+      Alert.alert(
+        '✅ Notification sent',
+        `Sent to ${res.tokenCount} device${res.tokenCount !== 1 ? 's' : ''}. Background the app to see the banner.`
+      )
+    } catch (err: any) {
+      const msg = err?.response?.data?.error ?? err?.message ?? 'Unknown error'
+      Alert.alert('❌ Failed', msg)
+    } finally {
+      setTestingPush(false)
+    }
+  }
 
   const handleLogout = () => {
     Alert.alert(
@@ -179,6 +199,12 @@ export function ProfileScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>SESSION</Text>
           <View style={styles.card}>
+            <MenuRow
+              icon="notifications-outline"
+              label={testingPush ? 'Sending…' : 'Test Push Notification'}
+              onPress={testingPush ? undefined : handleTestNotification}
+            />
+            <View style={styles.divider} />
             <MenuRow
               icon="log-out-outline"
               label={loggingOut ? 'Logging out…' : 'Log out'}
