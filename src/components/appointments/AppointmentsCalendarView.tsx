@@ -279,6 +279,7 @@ export function AppointmentsCalendarView({
                 const isCurrentMonth = isSameMonth(day, currentMonth)
                 const isSelected = selectedDate && isSameDay(day, selectedDate)
                 const isTodayDate = isToday(day)
+                const isTodayOnly = isTodayDate && !isSelected
 
                 return (
                   <button
@@ -287,8 +288,8 @@ export function AppointmentsCalendarView({
                     className={`
                       relative aspect-square p-1 rounded-lg border transition-all text-xs
                       ${!isCurrentMonth ? 'text-gray-300 bg-gray-50' : 'text-gray-900 bg-white'}
-                      ${isTodayDate ? 'border-blue-500 border-2 font-semibold' : 'border-gray-200'}
-                      ${isSelected ? 'bg-blue-50 border-blue-500' : ''}
+                      ${isTodayOnly ? 'border-blue-500 border-2 font-semibold' : 'border-gray-200'}
+                      ${isSelected ? 'bg-blue-50 border-blue-500 border-2' : ''}
                       hover:bg-gray-50 cursor-pointer
                       ${!isCurrentMonth ? 'opacity-50' : ''}
                       active:scale-95 transition-transform
@@ -297,24 +298,6 @@ export function AppointmentsCalendarView({
                     <div className="text-[11px] font-medium mb-0.5">
                       {format(day, 'd')}
                     </div>
-                    
-                    {/* Appointment indicators */}
-                    {isCurrentMonth && dayAppointments.length > 0 && (
-                      <div className="flex flex-wrap gap-0.5 justify-center">
-                        {dayAppointments.slice(0, 3).map((apt) => (
-                          <div
-                            key={apt.id}
-                            className={`w-1.5 h-1.5 rounded-full ${getStatusColor(apt.status)}`}
-                            title={`${format(new Date(apt.startTime), 'h:mm a')} - ${apt.patient.name}`}
-                          />
-                        ))}
-                        {dayAppointments.length > 3 && (
-                          <div className="text-[8px] text-gray-500 font-medium">
-                            +{dayAppointments.length - 3}
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </button>
                 )
               })}

@@ -96,8 +96,8 @@ export function AppointmentsView({ initialAppointments, practitioners }: Appoint
       filtered = filtered.filter(apt => apt.status === statusFilter)
     }
 
-    // Date filter
-    if (dateFilter) {
+    // Date filter (list view only). Calendar handles selected date internally.
+    if (dateFilter && viewMode === 'list') {
       const filterDate = parseLocalDateInput(dateFilter)
       const startOfDay = new Date(filterDate)
       startOfDay.setHours(0, 0, 0, 0)
@@ -119,7 +119,7 @@ export function AppointmentsView({ initialAppointments, practitioners }: Appoint
     }
 
     setAppointments(filtered)
-  }, [initialAppointments, searchQuery, statusFilter, dateFilter, selectedPractitionerRefs])
+  }, [initialAppointments, searchQuery, statusFilter, dateFilter, selectedPractitionerRefs, viewMode])
 
   const clearFilters = () => {
     setSearchQuery('')
