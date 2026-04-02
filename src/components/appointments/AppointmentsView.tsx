@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { Calendar, List, Search, X, Plus } from 'lucide-react'
+import { Calendar, List, Search, X, Plus, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -24,15 +24,22 @@ interface Appointment {
   status: string
   reason: string | null
   isCalBooking?: boolean
+  providerReference?: string | null
+  providerName?: string | null
 }
 
 interface AppointmentsViewProps {
   initialAppointments: Appointment[]
+  practitioners: Array<{
+    id: string
+    reference: string
+    name: string
+  }>
 }
 
 type ViewMode = 'list' | 'calendar'
 
-export function AppointmentsView({ initialAppointments }: AppointmentsViewProps) {
+export function AppointmentsView({ initialAppointments, practitioners }: AppointmentsViewProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [viewMode, setViewMode] = useState<ViewMode>((searchParams?.get('view') as ViewMode) || 'list')
@@ -40,6 +47,9 @@ export function AppointmentsView({ initialAppointments }: AppointmentsViewProps)
   const [searchQuery, setSearchQuery] = useState(searchParams?.get('search') || '')
   const [statusFilter, setStatusFilter] = useState(searchParams?.get('status') || 'all')
   const [dateFilter, setDateFilter] = useState(searchParams?.get('date') || '')
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [syncMessage, setSyncMessage] = useState<string | null>(null)
+  const [selectedPractitionerRefs, setSelectedPractitionerRefs] = useState<string[]>([])
 
   // Update URL when filters change
   useEffect(() => {
@@ -88,16 +98,62 @@ export function AppointmentsView({ initialAppointments }: AppointmentsViewProps)
       })
     }
 
+    // Practitioner filter
+    if (selectedPractitionerRefs.length > 0) {
+      filtered = filtered.filter((apt) => {
+        if (!apt.providerReference) return false
+        return selectedPractitionerRefs.includes(apt.providerReference)
+      })
+    }
+
     setAppointments(filtered)
-  }, [initialAppointments, searchQuery, statusFilter, dateFilter])
+  }, [initialAppointments, searchQuery, statusFilter, dateFilter, selectedPractitionerRefs])
 
   const clearFilters = () => {
     setSearchQuery('')
     setStatusFilter('all')
     setDateFilter('')
+    setSelectedPractitionerRefs([])
   }
 
-  const hasActiveFilters = searchQuery || statusFilter !== 'all' || dateFilter
+  const togglePractitioner = (reference: string) => {
+    setSelectedPractitionerRefs((current) =>
+      current.includes(reference)
+        ? current.filter((item) => item !== reference)
+        : [...current, reference]
+    )
+  }
+
+  const setAllPractitioners = () => {
+    setSelectedPractitionerRefs([])
+  }
+
+  const handleManualSync = async () => {
+    if (isSyncing) return
+    setIsSyncing(true)
+    setSyncMessage(null)
+
+    try {
+      const response = await fetch('/api/appointments/sync-ehr', {
+        method: 'POST',
+      })
+      const payload = await response.json()
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Sync failed')
+      }
+      const syncedCount = Number(payload?.result?.synced || 0)
+      setSyncMessage(`EHR sync complete. Updated ${syncedCount} appointment(s).`)
+      router.refresh()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to sync EHR schedule'
+      setSyncMessage(message)
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+
+  const hasActiveFilters =
+    searchQuery || statusFilter !== 'all' || dateFilter || selectedPractitionerRefs.length > 0
 
   return (
     <div className="space-y-4">
@@ -125,13 +181,56 @@ export function AppointmentsView({ initialAppointments }: AppointmentsViewProps)
             </Button>
           </div>
 
-          <Link href="/appointments/new">
-            <Button size="sm" className="gap-2 w-full sm:w-auto">
-              <Plus className="h-4 w-4" />
-              New Appointment
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleManualSync}
+              disabled={isSyncing}
+              className="gap-2 w-full sm:w-auto"
+            >
+              <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
+              {isSyncing ? 'Syncing...' : 'Sync EHR'}
             </Button>
-          </Link>
+            <Link href="/appointments/new" className="w-full sm:w-auto">
+              <Button size="sm" className="gap-2 w-full sm:w-auto">
+                <Plus className="h-4 w-4" />
+                New Appointment
+              </Button>
+            </Link>
+          </div>
         </div>
+
+        {practitioners.length > 0 && (
+          <div className="border border-gray-200 rounded-lg p-3">
+            <p className="text-sm font-medium text-gray-700 mb-2">Practitioners</p>
+            <div className="flex flex-wrap gap-3">
+              <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedPractitionerRefs.length === 0}
+                  onChange={setAllPractitioners}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                All practitioners
+              </label>
+              {practitioners.map((practitioner) => (
+                <label
+                  key={practitioner.reference}
+                  className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedPractitionerRefs.includes(practitioner.reference)}
+                    onChange={() => togglePractitioner(practitioner.reference)}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  {practitioner.name}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Search and Filters */}
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
@@ -199,7 +298,16 @@ export function AppointmentsView({ initialAppointments }: AppointmentsViewProps)
               Date: {new Date(dateFilter).toLocaleDateString()}
             </span>
           )}
+          {selectedPractitionerRefs.length > 0 && (
+            <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded-lg">
+              Practitioners: {selectedPractitionerRefs.length}
+            </span>
+          )}
         </div>
+      )}
+
+      {syncMessage && (
+        <div className="text-sm text-gray-600">{syncMessage}</div>
       )}
 
       {/* View Content */}

@@ -19,6 +19,7 @@ interface Appointment {
   status: string
   reason: string | null
   isCalBooking?: boolean
+  providerName?: string | null
 }
 
 interface AppointmentsListViewProps {
@@ -95,6 +96,13 @@ export function AppointmentsListView({ appointments }: AppointmentsListViewProps
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <User className="h-4 w-4 text-gray-400" />
                     <span>{apt.visitType}</span>
+                  </div>
+                )}
+
+                {apt.providerName && (
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <User className="h-4 w-4 text-gray-400" />
+                    <span>Provider: {apt.providerName}</span>
                   </div>
                 )}
 

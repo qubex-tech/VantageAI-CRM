@@ -7,6 +7,10 @@ import { getCalClient } from '@/lib/cal'
 import { syncBookingToPatient } from '@/lib/sync-booking-to-patient'
 import { AppointmentsView } from '@/components/appointments/AppointmentsView'
 import { Card, CardContent } from '@/components/ui/card'
+import {
+  listEhrPractitionersForPractice,
+  syncEhrAppointmentsForPractice,
+} from '@/lib/integrations/ehr/scheduleSync'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,6 +68,13 @@ export default async function AppointmentsPage({
   }
   const practiceId = user.practiceId
 
+  // Keep ECW schedule fresh for this practice without syncing on every page refresh.
+  try {
+    await syncEhrAppointmentsForPractice(practiceId)
+  } catch (error) {
+    console.error('[AppointmentsPage] Failed to sync EHR appointments:', error)
+  }
+
   // Fetch local appointments from database
   const where: any = {
     practiceId: practiceId,
@@ -109,6 +120,16 @@ export default async function AppointmentsPage({
       startTime: 'asc',
     },
   })
+
+  let practitioners: Array<{ id: string; reference: string; name: string }> = []
+  try {
+    practitioners = await listEhrPractitionersForPractice(practiceId)
+  } catch (error) {
+    console.error('[AppointmentsPage] Failed to load EHR practitioners:', error)
+  }
+  const practitionerNameByReference = new Map(
+    practitioners.map((practitioner) => [practitioner.reference, practitioner.name] as const)
+  )
 
   // Fetch Cal.com bookings and merge with local appointments
   let calBookings: any[] = []
@@ -234,6 +255,8 @@ export default async function AppointmentsPage({
         status: booking.status === 'accepted' ? 'confirmed' : booking.status === 'cancelled' ? 'cancelled' : 'scheduled',
         reason: booking.description || null,
         isCalBooking: true, // Flag to identify Cal.com bookings
+        providerReference: null,
+        providerName: null,
         // Store full booking data for detail page
         rawBookingData: booking,
       }
@@ -262,6 +285,13 @@ export default async function AppointmentsPage({
     status: apt.status || 'scheduled',
     reason: apt.reason || null,
     isCalBooking: apt.isCalBooking || false,
+    providerReference: apt.providerReference || apt.providerId || null,
+    providerName: (() => {
+      const providerReference = apt.providerReference || apt.providerId || null
+      if (apt.providerName) return apt.providerName
+      if (!providerReference) return null
+      return practitionerNameByReference.get(String(providerReference)) || null
+    })(),
   }))
 
   return (
@@ -273,7 +303,7 @@ export default async function AppointmentsPage({
         </p>
       </div>
 
-      <AppointmentsView initialAppointments={transformedAppointments} />
+      <AppointmentsView initialAppointments={transformedAppointments} practitioners={practitioners} />
     </div>
   )
 }

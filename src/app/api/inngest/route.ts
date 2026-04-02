@@ -4,6 +4,7 @@ import {
   runAutomationsForEvent,
   emitUpcomingAppointmentEvents,
   processRetellCallEnded,
+  syncEhrAppointmentsDaily,
 } from '@/inngest/functions'
 
 // Export runtime configuration for Edge/Serverless
@@ -15,7 +16,12 @@ export const dynamic = 'force-dynamic'
 // This endpoint must be accessible without authentication (handled in middleware.ts)
 const handler = serve({
   client: inngest,
-  functions: [runAutomationsForEvent, emitUpcomingAppointmentEvents, processRetellCallEnded],
+  functions: [
+    runAutomationsForEvent,
+    emitUpcomingAppointmentEvents,
+    processRetellCallEnded,
+    syncEhrAppointmentsDaily,
+  ],
 })
 
 export const { GET, POST, PUT } = handler

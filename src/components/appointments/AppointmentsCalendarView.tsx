@@ -21,6 +21,7 @@ interface Appointment {
   status: string
   reason: string | null
   isCalBooking?: boolean
+  providerName?: string | null
 }
 
 interface AppointmentsCalendarViewProps {
@@ -186,6 +187,12 @@ export function AppointmentsCalendarView({
                             <div className="flex items-center gap-2 text-sm text-gray-600 mt-1">
                               <User className="h-4 w-4 text-gray-400 flex-shrink-0" />
                               <span>{apt.visitType}</span>
+                            </div>
+                          )}
+                          {apt.providerName && (
+                            <div className="flex items-center gap-2 text-sm text-gray-600 mt-1">
+                              <User className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                              <span>Provider: {apt.providerName}</span>
                             </div>
                           )}
                           {(apt.patient.phone || apt.patient.primaryPhone) && (
