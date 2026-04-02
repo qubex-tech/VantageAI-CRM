@@ -177,13 +177,13 @@ async function fetchEncounterPages(client: FhirClient, initialPath: string) {
   let nextPath: string | undefined = initialPath
 
   while (nextPath) {
-    const bundle = await client.request<FhirBundle<FhirEncounter>>(nextPath)
-    for (const entry of bundle.entry || []) {
+    const responseBundle: FhirBundle<FhirEncounter> = await client.request(nextPath)
+    for (const entry of responseBundle.entry || []) {
       if (entry.resource?.id) {
         encounters.push(entry.resource)
       }
     }
-    const nextLink = bundle.link?.find((link) => link.relation === 'next')?.url
+    const nextLink = responseBundle.link?.find((link) => link.relation === 'next')?.url
     nextPath = nextLink || undefined
   }
 
@@ -203,13 +203,13 @@ async function fetchPractitionerPages(client: FhirClient, initialPath: string) {
   let nextPath: string | undefined = initialPath
 
   while (nextPath) {
-    const bundle = await client.request<FhirBundle<FhirPractitioner>>(nextPath)
-    for (const entry of bundle.entry || []) {
+    const responseBundle: FhirBundle<FhirPractitioner> = await client.request(nextPath)
+    for (const entry of responseBundle.entry || []) {
       if (entry.resource?.id) {
         practitioners.push(entry.resource)
       }
     }
-    const nextLink = bundle.link?.find((link) => link.relation === 'next')?.url
+    const nextLink = responseBundle.link?.find((link) => link.relation === 'next')?.url
     nextPath = nextLink || undefined
   }
 
@@ -295,6 +295,9 @@ async function createEhrClientForPractice(practiceId: string) {
   }
 
   const refreshedConnection = await refreshBackendConnectionIfNeeded({ connection })
+  if (!refreshedConnection.accessTokenEnc) {
+    return null
+  }
   const tokenEndpoint = refreshedConnection.tokenEndpoint || undefined
   const privateKeyConfig = tokenEndpoint ? getPrivateKeyJwtConfig(connection.providerId) : null
   const audOverride = connection.providerId.startsWith('ecw')
@@ -357,7 +360,6 @@ export async function syncEhrAppointmentsForPractice(practiceId: string, options
     const latestSync = await prisma.integrationAuditLog.findFirst({
       where: {
         tenantId: practiceId,
-        providerId: WRITEBACK_PROVIDER_ID,
         action: 'EHR_APPOINTMENT_SYNC_COMPLETE',
       },
       orderBy: { createdAt: 'desc' },
