@@ -39,6 +39,18 @@ interface AppointmentsViewProps {
 
 type ViewMode = 'list' | 'calendar'
 
+function parseLocalDateInput(value: string): Date {
+  const [year, month, day] = value.split('-').map(Number)
+  return new Date(year, (month || 1) - 1, day || 1, 0, 0, 0, 0)
+}
+
+function toLocalDateInputValue(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 export function AppointmentsView({ initialAppointments, practitioners }: AppointmentsViewProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -86,7 +98,7 @@ export function AppointmentsView({ initialAppointments, practitioners }: Appoint
 
     // Date filter
     if (dateFilter) {
-      const filterDate = new Date(dateFilter)
+      const filterDate = parseLocalDateInput(dateFilter)
       const startOfDay = new Date(filterDate)
       startOfDay.setHours(0, 0, 0, 0)
       const endOfDay = new Date(filterDate)
@@ -295,7 +307,7 @@ export function AppointmentsView({ initialAppointments, practitioners }: Appoint
           )}
           {dateFilter && (
             <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded-lg">
-              Date: {new Date(dateFilter).toLocaleDateString()}
+              Date: {parseLocalDateInput(dateFilter).toLocaleDateString()}
             </span>
           )}
           {selectedPractitionerRefs.length > 0 && (
@@ -316,8 +328,8 @@ export function AppointmentsView({ initialAppointments, practitioners }: Appoint
       ) : (
         <AppointmentsCalendarView 
           appointments={appointments}
-          selectedDate={dateFilter ? new Date(dateFilter) : undefined}
-          onDateSelect={(date) => setDateFilter(date ? date.toISOString().split('T')[0] : '')}
+          selectedDate={dateFilter ? parseLocalDateInput(dateFilter) : undefined}
+          onDateSelect={(date) => setDateFilter(date ? toLocalDateInputValue(date) : '')}
         />
       )}
     </div>

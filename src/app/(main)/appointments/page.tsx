@@ -9,10 +9,16 @@ import { AppointmentsView } from '@/components/appointments/AppointmentsView'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   listEhrPractitionersForPractice,
-  syncEhrAppointmentsForPractice,
 } from '@/lib/integrations/ehr/scheduleSync'
 
 export const dynamic = 'force-dynamic'
+
+function parseDateParam(value?: string) {
+  if (!value) return null
+  const [year, month, day] = value.split('-').map(Number)
+  if (!year || !month || !day) return null
+  return new Date(year, month - 1, day, 0, 0, 0, 0)
+}
 
 export default async function AppointmentsPage({
   searchParams,
@@ -44,7 +50,7 @@ export default async function AppointmentsPage({
     redirect('/login?error=User account not found.')
   }
 
-  const date = params.date ? new Date(params.date) : null
+  const date = parseDateParam(params.date)
   const status = params.status
 
   // Practice-specific feature - require practiceId
@@ -67,13 +73,6 @@ export default async function AppointmentsPage({
     )
   }
   const practiceId = user.practiceId
-
-  // Keep ECW schedule fresh for this practice without syncing on every page refresh.
-  try {
-    await syncEhrAppointmentsForPractice(practiceId)
-  } catch (error) {
-    console.error('[AppointmentsPage] Failed to sync EHR appointments:', error)
-  }
 
   // Fetch local appointments from database
   const where: any = {
