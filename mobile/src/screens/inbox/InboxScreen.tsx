@@ -64,8 +64,12 @@ export function InboxScreen() {
               )}
             </View>
           </View>
-          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7}>
-            <Ionicons name="options-outline" size={20} color={colors.textSecondary} />
+          <TouchableOpacity
+            style={styles.iconBtn}
+            activeOpacity={0.7}
+            onPress={() => navigation.navigate('NewConversation')}
+          >
+            <Ionicons name="compose-outline" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
 
