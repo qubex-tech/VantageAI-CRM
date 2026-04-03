@@ -130,10 +130,38 @@ function addUtcDay(dateString: string) {
   return date.toISOString().slice(0, 10)
 }
 
+function normalizeEhrPatientId(value: string | undefined | null) {
+  if (!value) return null
+  let normalized = value.trim()
+  if (!normalized) return null
+  try {
+    normalized = decodeURIComponent(normalized)
+  } catch {
+    // Keep raw value when decoding fails.
+  }
+  normalized = normalized.split('?')[0].split('#')[0].replace(/^\/+/, '')
+
+  if (normalized.startsWith('Patient/')) {
+    normalized = normalized.slice('Patient/'.length)
+  } else {
+    const marker = '/Patient/'
+    const markerIndex = normalized.lastIndexOf(marker)
+    if (markerIndex >= 0) {
+      normalized = normalized.slice(markerIndex + marker.length)
+    }
+  }
+
+  const historyIndex = normalized.indexOf('/_history/')
+  if (historyIndex >= 0) {
+    normalized = normalized.slice(0, historyIndex)
+  }
+
+  normalized = normalized.split('/')[0].trim()
+  return normalized || null
+}
+
 function parsePatientIdFromReference(reference: string | undefined) {
-  if (!reference) return null
-  const match = reference.match(/^Patient\/(.+)$/i)
-  return match?.[1] || null
+  return normalizeEhrPatientId(reference)
 }
 
 function formatPatientName(patient: FhirPatient) {
@@ -222,7 +250,12 @@ async function upsertPatientFromEhr(params: {
   patientId: string
   cache: Map<string, string>
 }) {
-  const cached = params.cache.get(params.patientId)
+  const normalizedPatientId = normalizeEhrPatientId(params.patientId)
+  if (!normalizedPatientId) {
+    throw new Error('Invalid EHR patient identifier')
+  }
+
+  const cached = params.cache.get(normalizedPatientId)
   if (cached) {
     return cached
   }
@@ -230,37 +263,97 @@ async function upsertPatientFromEhr(params: {
   const existing = await prisma.patient.findFirst({
     where: {
       practiceId: params.practiceId,
-      externalEhrId: params.patientId,
       deletedAt: null,
+      OR: [
+        { externalEhrId: normalizedPatientId },
+        { externalEhrId: `Patient/${normalizedPatientId}` },
+        { externalEhrId: { endsWith: `/Patient/${normalizedPatientId}` } },
+        { externalEhrId: { startsWith: `Patient/${normalizedPatientId}/_history/` } },
+      ],
     },
   })
   if (existing) {
-    params.cache.set(params.patientId, existing.id)
+    if (existing.externalEhrId !== normalizedPatientId) {
+      await prisma.patient.update({
+        where: { id: existing.id },
+        data: { externalEhrId: normalizedPatientId },
+      })
+    }
+    params.cache.set(normalizedPatientId, existing.id)
     return existing.id
   }
 
   let patient: FhirPatient | null = null
   try {
-    patient = await params.client.request<FhirPatient>(`/Patient/${params.patientId}`)
+    patient = await params.client.request<FhirPatient>(`/Patient/${normalizedPatientId}`)
   } catch {
     patient = null
   }
 
-  const fullName = formatPatientName(patient || {}) || `EHR Patient ${params.patientId.slice(0, 8)}`
+  const fullName = formatPatientName(patient || {}) || `EHR Patient ${normalizedPatientId.slice(0, 8)}`
   const primaryPhone =
     patient?.telecom?.find((entry) => entry.system === 'phone')?.value?.trim() || null
   const email = patient?.telecom?.find((entry) => entry.system === 'email')?.value?.trim() || null
   const firstName = patient?.name?.[0]?.given?.[0] || null
   const lastName = patient?.name?.[0]?.family || null
+  const birthDate = patient?.birthDate ? new Date(patient.birthDate) : null
+
+  // Before creating a new profile, merge with an existing local patient match and attach EHR ID.
+  const mergeOrConditions: Array<Record<string, unknown>> = []
+  if (email) {
+    mergeOrConditions.push({ email: { equals: email, mode: 'insensitive' } })
+  }
+  if (primaryPhone) {
+    mergeOrConditions.push({ primaryPhone })
+    mergeOrConditions.push({ phone: primaryPhone })
+  }
+  if (fullName && birthDate) {
+    mergeOrConditions.push({
+      AND: [{ name: { equals: fullName, mode: 'insensitive' } }, { dateOfBirth: birthDate }],
+    })
+  }
+
+  if (mergeOrConditions.length > 0) {
+    const mergeCandidate = await prisma.patient.findFirst({
+      where: {
+        practiceId: params.practiceId,
+        deletedAt: null,
+        externalEhrId: null,
+        OR: mergeOrConditions as any,
+      },
+      orderBy: { updatedAt: 'desc' },
+    })
+
+    if (mergeCandidate) {
+      const merged = await prisma.patient.update({
+        where: { id: mergeCandidate.id },
+        data: {
+          externalEhrId: normalizedPatientId,
+          firstName: mergeCandidate.firstName || firstName,
+          lastName: mergeCandidate.lastName || lastName,
+          name: mergeCandidate.name || fullName,
+          dateOfBirth: mergeCandidate.dateOfBirth || birthDate,
+          gender: mergeCandidate.gender || patient?.gender || null,
+          primaryPhone: mergeCandidate.primaryPhone || primaryPhone,
+          phone: mergeCandidate.phone || primaryPhone || mergeCandidate.phone,
+          email: mergeCandidate.email || email,
+          consentSource: mergeCandidate.consentSource || 'import',
+        },
+      })
+
+      params.cache.set(normalizedPatientId, merged.id)
+      return merged.id
+    }
+  }
 
   const created = await prisma.patient.create({
     data: {
       practiceId: params.practiceId,
-      externalEhrId: params.patientId,
+      externalEhrId: normalizedPatientId,
       name: fullName,
       firstName,
       lastName,
-      dateOfBirth: patient?.birthDate ? new Date(patient.birthDate) : null,
+      dateOfBirth: birthDate,
       gender: patient?.gender || null,
       primaryPhone,
       phone: primaryPhone || 'unknown',
@@ -270,7 +363,7 @@ async function upsertPatientFromEhr(params: {
     },
   })
 
-  params.cache.set(params.patientId, created.id)
+  params.cache.set(normalizedPatientId, created.id)
   return created.id
 }
 
