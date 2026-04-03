@@ -39,6 +39,7 @@ export type EhrConnectionStatus = 'connected' | 'expired' | 'disconnected' | 'er
 export type EhrSettings = {
   enabledProviders: EhrProviderId[]
   providerConfigs: Record<string, EhrProviderConfig>
+  ehrTimeZone?: string
   enableWrite?: boolean
   enablePatientCreate?: boolean
   enableNoteCreate?: boolean

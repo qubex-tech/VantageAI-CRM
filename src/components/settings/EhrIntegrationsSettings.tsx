@@ -26,6 +26,7 @@ type Provider = {
 type EhrSettings = {
   enabledProviders: string[]
   providerConfigs: Record<string, Record<string, any>>
+  ehrTimeZone?: string
   enableWrite?: boolean
   enablePatientCreate?: boolean
   enableNoteCreate?: boolean
@@ -128,6 +129,7 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
   const [settings, setSettings] = useState<EhrSettings>({
     enabledProviders: [],
     providerConfigs: {},
+    ehrTimeZone: '',
     enableWrite: false,
     enablePatientCreate: false,
     enableNoteCreate: false,
@@ -184,6 +186,7 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
         setSettings({
           enabledProviders: data.settings.enabledProviders || [],
           providerConfigs: data.settings.providerConfigs || {},
+          ehrTimeZone: data.settings.ehrTimeZone || '',
           enableWrite: data.settings.enableWrite ?? false,
           enablePatientCreate: data.settings.enablePatientCreate ?? false,
           enableNoteCreate: data.settings.enableNoteCreate ?? false,
@@ -607,6 +610,20 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
                 className="shrink-0"
               />
             </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-gray-700">EHR timezone</label>
+            <Input
+              type="text"
+              placeholder="e.g. America/New_York"
+              value={settings.ehrTimeZone || ''}
+              onChange={(event) =>
+                setSettings((prev) => ({ ...prev, ehrTimeZone: event.target.value }))
+              }
+            />
+            <p className="text-xs text-gray-500">
+              Used for encounter timestamps. Provide an IANA timezone (e.g. America/Chicago).
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button onClick={saveSettings} disabled={saving || requiresEcwKey}>

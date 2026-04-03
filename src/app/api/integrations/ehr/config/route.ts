@@ -12,6 +12,7 @@ import { EhrProviderConfig, EhrSettings } from '@/lib/integrations/ehr/types'
 const settingsSchema = z.object({
   enabledProviders: z.array(z.string()).default([]),
   providerConfigs: z.record(z.any()).default({}),
+  ehrTimeZone: z.string().optional(),
   enableWrite: z.boolean().optional(),
   enablePatientCreate: z.boolean().optional(),
   enableNoteCreate: z.boolean().optional(),
@@ -76,6 +77,7 @@ export async function POST(req: NextRequest) {
     const settings: EhrSettings = {
       enabledProviders: parsed.data.enabledProviders as any,
       providerConfigs,
+      ehrTimeZone: parsed.data.ehrTimeZone,
       enableWrite: parsed.data.enableWrite,
       enablePatientCreate: parsed.data.enablePatientCreate,
       enableNoteCreate: parsed.data.enableNoteCreate,

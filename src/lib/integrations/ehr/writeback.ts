@@ -110,10 +110,11 @@ function formatEcwPhone(value: string): string {
   return value
 }
 
-function formatChicagoIso(date: Date): string {
+function formatEhrTimestamp(date: Date, timeZone?: string | null): string {
   try {
+    const resolvedTimeZone = timeZone && timeZone.trim() ? timeZone.trim() : 'UTC'
     const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'America/New_York',
+      timeZone: resolvedTimeZone,
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -355,6 +356,7 @@ function buildTelephoneEncounterBundle(params: {
   startTime: Date
   endTime: Date
   refs: EcwTelephoneEncounterRefs
+  timeZone?: string
   encounterId?: string
   requestMethod?: 'POST' | 'PUT'
 }) {
@@ -364,7 +366,10 @@ function buildTelephoneEncounterBundle(params: {
   const requestMethod = params.requestMethod || 'POST'
   const encounterId = requestMethod === 'PUT' ? params.encounterId || randomUUID() : undefined
   const requestUrl = requestMethod === 'PUT' ? `Encounter/${encounterId}` : 'Encounter'
-  const attribution = `This encounter is created by VantageAI app at ${formatChicagoIso(params.startTime)}`
+  const attribution = `This encounter is created by VantageAI app at ${formatEhrTimestamp(
+    params.startTime,
+    params.timeZone
+  )}`
   const normalizedNoteText = params.noteText.trim()
   const baseText = normalizedNoteText || 'Telephone encounter note'
   const messageText = truncateText(baseText, ecwMaxMessageLength)
@@ -372,7 +377,7 @@ function buildTelephoneEncounterBundle(params: {
   return {
     resourceType: 'Bundle',
     id: bundleId,
-    meta: { lastUpdated: formatChicagoIso(new Date()) },
+    meta: { lastUpdated: formatEhrTimestamp(new Date(), params.timeZone) },
     type: 'transaction',
     entry: [
       {
@@ -380,7 +385,7 @@ function buildTelephoneEncounterBundle(params: {
           resourceType: 'Encounter',
           ...(requestMethod === 'PUT' && encounterId ? { id: encounterId } : {}),
           meta: {
-            lastUpdated: formatChicagoIso(new Date()),
+            lastUpdated: formatEhrTimestamp(new Date(), params.timeZone),
             profile: ['http://hl7.org/fhir/us/core/StructureDefinition/us-core-encounter'],
           },
           extension: [
@@ -424,8 +429,8 @@ function buildTelephoneEncounterBundle(params: {
             },
           ],
           period: {
-            start: formatChicagoIso(params.startTime),
-            end: formatChicagoIso(params.endTime),
+            start: formatEhrTimestamp(params.startTime, params.timeZone),
+            end: formatEhrTimestamp(params.endTime, params.timeZone),
           },
           reasonCode: [{ text: 'Telephone encounter' }],
           location: [
@@ -830,6 +835,7 @@ export async function writeBackRetellCallToEhr(params: {
     const encounterNoteText = buildTelephoneEncounterNoteText(call, extractedData)
     const encounterNotePreview = truncateText(encounterNoteText, 400)
     const encounterRefs = resolveEcwTelephoneEncounterRefs(settings, refreshedConnection.issuer)
+    const ehrTimeZone = settings?.ehrTimeZone || undefined
     const missingRefs = missingEncounterRefs(encounterRefs)
     if (missingRefs.length > 0) {
       await markConversationMetadata(practiceId, call.call_id, {
@@ -850,6 +856,7 @@ export async function writeBackRetellCallToEhr(params: {
         startTime,
         endTime,
         refs: encounterRefs,
+        timeZone: ehrTimeZone,
       })
       const encounterResponse = (await client.request('/', {
         method: 'POST',
@@ -875,6 +882,7 @@ export async function writeBackRetellCallToEhr(params: {
           refs: encounterRefs,
           encounterId,
           requestMethod: 'PUT',
+          timeZone: ehrTimeZone,
         })
         const putResponse = (await client.request('/', {
           method: 'POST',
@@ -1153,6 +1161,7 @@ export async function syncPatientNoteToEhrEncounter(params: {
   const endTime = new Date(startTime.getTime() + 15 * 60 * 1000)
   const noteText = formatEncounterNote(noteType, content)
   const encounterRefs = resolveEcwTelephoneEncounterRefs(settings, refreshedConnection.issuer)
+  const ehrTimeZone = settings?.ehrTimeZone || undefined
   const missingRefs = missingEncounterRefs(encounterRefs)
   if (missingRefs.length > 0) {
     return { status: 'error', reason: `missing_encounter_refs_${missingRefs.join('_')}` }
@@ -1164,6 +1173,7 @@ export async function syncPatientNoteToEhrEncounter(params: {
       startTime,
       endTime,
       refs: encounterRefs,
+      timeZone: ehrTimeZone,
     })
     const createResponse = (await client.request('/', {
       method: 'POST',
@@ -1189,6 +1199,7 @@ export async function syncPatientNoteToEhrEncounter(params: {
     refs: encounterRefs,
     encounterId: resolvedEncounterId,
     requestMethod: 'PUT',
+    timeZone: ehrTimeZone,
   })
   const encounterResponse = (await client.request('/', {
     method: 'POST',
