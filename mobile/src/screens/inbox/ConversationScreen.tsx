@@ -105,14 +105,27 @@ export function ConversationScreen() {
 
         {/* Composer */}
         <View style={[styles.composer, isTablet && styles.composerTablet, shadow.sm]}>
+          {/* Channel pill */}
+          {conversation?.channel && (
+            <View style={styles.channelPill}>
+              <Ionicons
+                name={conversation.channel === 'email' ? 'mail-outline' : 'phone-portrait-outline'}
+                size={12}
+                color={colors.accent}
+              />
+              <Text style={styles.channelPillText}>
+                {conversation.channel === 'email' ? 'Email' : 'SMS'}
+              </Text>
+            </View>
+          )}
           <TextInput
             style={styles.composerInput}
             value={draft}
             onChangeText={setDraft}
-            placeholder="Type a message…"
+            placeholder={conversation?.channel === 'email' ? 'Type an email…' : 'Type a message…'}
             placeholderTextColor={colors.textMuted}
             multiline
-            maxLength={2000}
+            maxLength={conversation?.channel === 'email' ? 10000 : 1600}
             returnKeyType="default"
           />
           <TouchableOpacity
@@ -198,4 +211,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sendBtnDisabled: { opacity: 0.4 },
+
+  channelPill: {
+    position: 'absolute',
+    top: -22,
+    left: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.accentLight,
+    borderRadius: radius.full,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: colors.accentSurface,
+  },
+  channelPillText: {
+    fontSize: fontSize.xxs,
+    fontWeight: fontWeight.semibold,
+    color: colors.accent,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
 })

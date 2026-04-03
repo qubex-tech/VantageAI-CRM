@@ -21,6 +21,7 @@ export type RootTabParamList = {
 export type InboxStackParamList = {
   InboxList: undefined
   ConversationDetail: { conversationId: string }
+  NewConversation: undefined
 }
 
 export type CallsStackParamList = {
