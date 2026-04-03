@@ -113,7 +113,7 @@ function formatEcwPhone(value: string): string {
 function formatChicagoIso(date: Date): string {
   try {
     const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'America/Chicago',
+      timeZone: 'America/New_York',
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
