@@ -168,12 +168,18 @@ function resolveEcwTelephoneEncounterRefs(
       : ECW_TELEPHONE_REFS_FFBJCD
   const writeConfig =
     (settings?.providerConfigs?.[WRITEBACK_PROVIDER_ID] as Record<string, unknown> | undefined) || {}
+  const primaryPractitionerRef = normalizeFhirReference(
+    writeConfig.ecwTelephonePractitionerRef,
+    'Practitioner'
+  )
 
   return {
     participantPractitionerRef:
+      primaryPractitionerRef ||
       normalizeFhirReference(writeConfig.ecwTelephoneParticipantPractitionerRef, 'Practitioner') ||
       defaults.participantPractitionerRef,
     assignedToPractitionerRef:
+      primaryPractitionerRef ||
       normalizeFhirReference(writeConfig.ecwTelephoneAssignedToPractitionerRef, 'Practitioner') ||
       defaults.assignedToPractitionerRef,
     locationRef:

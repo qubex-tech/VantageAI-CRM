@@ -84,6 +84,11 @@ const fallbackProviders: Provider[] = [
       { id: 'clientId', label: 'Client ID', type: 'text', required: true },
       { id: 'clientSecret', label: 'Client Secret (optional)', type: 'password' },
       {
+        id: 'ecwTelephonePractitionerRef',
+        label: 'Telephone Encounter Practitioner Ref (Primary)',
+        type: 'text',
+      },
+      {
         id: 'ecwTelephoneParticipantPractitionerRef',
         label: 'Telephone Encounter Practitioner Ref',
         type: 'text',

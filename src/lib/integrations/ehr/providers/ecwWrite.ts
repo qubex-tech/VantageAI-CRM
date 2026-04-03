@@ -6,6 +6,7 @@ const configSchema = z.object({
   fhirBaseUrl: z.string().url().optional(),
   clientId: z.string().min(3),
   clientSecret: z.string().min(4).optional(),
+  ecwTelephonePractitionerRef: z.string().optional(),
   ecwTelephoneParticipantPractitionerRef: z.string().optional(),
   ecwTelephoneAssignedToPractitionerRef: z.string().optional(),
   ecwTelephoneLocationRef: z.string().optional(),
@@ -23,6 +24,12 @@ export const ecwWriteProvider: EhrProvider = {
     { id: 'fhirBaseUrl', label: 'FHIR Base URL (optional override)', type: 'url' },
     { id: 'clientId', label: 'Client ID', type: 'text', required: true },
     { id: 'clientSecret', label: 'Client Secret (optional)', type: 'password' },
+    {
+      id: 'ecwTelephonePractitionerRef',
+      label: 'Telephone Encounter Practitioner Ref (Primary)',
+      type: 'text',
+      helpText: 'Single Practitioner reference used for participant + assigned-to (e.g., Practitioner/<id>).',
+    },
     {
       id: 'ecwTelephoneParticipantPractitionerRef',
       label: 'Telephone Encounter Practitioner Ref',
