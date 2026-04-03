@@ -152,6 +152,14 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
   const [selectedPracticeId, setSelectedPracticeId] = useState<string>('')
   const [privateKeyJwtConfigured, setPrivateKeyJwtConfigured] = useState(true)
   const [ecwStatusMap, setEcwStatusMap] = useState<Record<string, StatusResponse | null>>({})
+  const northAmericaTimeZones = [
+    { label: 'Pacific (America/Los_Angeles)', value: 'America/Los_Angeles' },
+    { label: 'Mountain (America/Denver)', value: 'America/Denver' },
+    { label: 'Central (America/Chicago)', value: 'America/Chicago' },
+    { label: 'Eastern (America/New_York)', value: 'America/New_York' },
+    { label: 'Alaska (America/Anchorage)', value: 'America/Anchorage' },
+    { label: 'Hawaii (Pacific/Honolulu)', value: 'Pacific/Honolulu' },
+  ]
 
   const resolvedProviders = providers.length > 0 ? providers : fallbackProviders
   const selectedProvider = useMemo(
@@ -613,14 +621,22 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
           </div>
           <div className="space-y-1">
             <label className="text-sm font-medium text-gray-700">EHR timezone</label>
-            <Input
-              type="text"
-              placeholder="e.g. America/New_York"
+            <select
+              className="w-full rounded border border-gray-200 p-2 text-sm"
               value={settings.ehrTimeZone || ''}
               onChange={(event) =>
                 setSettings((prev) => ({ ...prev, ehrTimeZone: event.target.value }))
               }
-            />
+            >
+              <option value="" disabled>
+                Select a timezone
+              </option>
+              {northAmericaTimeZones.map((zone) => (
+                <option key={zone.value} value={zone.value}>
+                  {zone.label}
+                </option>
+              ))}
+            </select>
             <p className="text-xs text-gray-500">
               Used for encounter timestamps. Provide an IANA timezone (e.g. America/Chicago).
             </p>
