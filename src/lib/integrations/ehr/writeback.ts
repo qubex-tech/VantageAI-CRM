@@ -858,6 +858,10 @@ export async function writeBackRetellCallToEhr(params: {
         refs: encounterRefs,
         timeZone: ehrTimeZone,
       })
+      await markConversationMetadata(practiceId, call.call_id, {
+        ehrWritebackEncounterPayload: encounterBundle,
+        ehrWritebackEncounterTimeZone: ehrTimeZone || null,
+      })
       const encounterResponse = (await client.request('/', {
         method: 'POST',
         body: JSON.stringify(encounterBundle),
