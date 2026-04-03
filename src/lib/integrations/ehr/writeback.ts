@@ -35,7 +35,7 @@ const ECW_TELEPHONE_REFS_FFBJCD: EcwTelephoneEncounterRefs = {
 
 const ECW_TELEPHONE_REFS_FACGCD: EcwTelephoneEncounterRefs = {
   participantPractitionerRef: 'Practitioner/W6s8TGka96L4tHbCRoQU8YMH.WUkwA2pU9wsHWwur0c',
-  assignedToPractitionerRef: 'Practitioner/W6s8TGka96L4tHbCRoQU8WSi9xbr9U1rukOaVW6NHLo',
+  assignedToPractitionerRef: 'Practitioner/W6s8TGka96L4tHbCRoQU8WcRWBuy8GIWV-VrjGM8Exs',
   locationRef: 'Location/W6s8TGka96L4tHbCRoQU8V1DmHBjAJrx9h-SsrKuRnA',
   organizationRef: 'Organization/W6s8TGka96L4tHbCRoQU8ZfnvLnRYQ9519x5HFoW2uFnSuQOQi-FoYA2O2oMawcO',
 }
