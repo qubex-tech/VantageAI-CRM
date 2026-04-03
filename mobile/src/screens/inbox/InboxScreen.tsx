@@ -64,13 +64,6 @@ export function InboxScreen() {
               )}
             </View>
           </View>
-          <TouchableOpacity
-            style={styles.iconBtn}
-            activeOpacity={0.7}
-            onPress={() => navigation.navigate('NewConversation')}
-          >
-            <Ionicons name="compose-outline" size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
         </View>
 
         {/* Search */}
@@ -108,28 +101,39 @@ export function InboxScreen() {
       <View style={styles.divider} />
 
       {/* List */}
-      <FlatList
-        data={conversations}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <ConversationItem conversation={item} onPress={() => handleConversation(item.id)} />
-        )}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        refreshControl={
-          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.accent} />
-        }
-        ListEmptyComponent={
-          !isLoading ? (
-            <EmptyState
-              icon="chatbubbles-outline"
-              title={search ? 'No results' : 'Inbox is empty'}
-              subtitle={search ? 'Try a different search term.' : 'New conversations will appear here.'}
-            />
-          ) : null
-        }
-        contentContainerStyle={conversations.length === 0 ? styles.emptyContainer : undefined}
-        style={[styles.list, isTablet && styles.listTablet]}
-      />
+      <View style={styles.flex}>
+        <FlatList
+          data={conversations}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <ConversationItem conversation={item} onPress={() => handleConversation(item.id)} />
+          )}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          refreshControl={
+            <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.accent} />
+          }
+          ListEmptyComponent={
+            !isLoading ? (
+              <EmptyState
+                icon="chatbubbles-outline"
+                title={search ? 'No results' : 'Inbox is empty'}
+                subtitle={search ? 'Try a different search term.' : 'New conversations will appear here.'}
+              />
+            ) : null
+          }
+          contentContainerStyle={conversations.length === 0 ? styles.emptyContainer : undefined}
+          style={[styles.list, isTablet && styles.listTablet]}
+        />
+
+        {/* WhatsApp-style FAB */}
+        <TouchableOpacity
+          style={[styles.fab, isTablet && styles.fabTablet]}
+          onPress={() => navigation.navigate('NewConversation')}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="chatbubble-ellipses" size={24} color={colors.white} />
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   )
 }
@@ -171,14 +175,27 @@ const styles = StyleSheet.create({
   },
   countText: { fontSize: fontSize.xs, fontWeight: fontWeight.bold, color: colors.white },
 
-  iconBtn: {
-    width: 36, height: 36,
-    borderRadius: radius.md,
-    backgroundColor: colors.bgSubtle,
+  flex: { flex: 1 },
+
+  fab: {
+    position: 'absolute',
+    bottom: spacing.xl,
+    right: spacing.lg,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
+    shadowColor: colors.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  fabTablet: {
+    right: spacing.xxl,
+    bottom: spacing.xxl,
   },
 
   searchBar: {
