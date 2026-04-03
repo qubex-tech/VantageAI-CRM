@@ -878,6 +878,12 @@ export async function writeBackRetellCallToEhr(params: {
         encounterTimeZone: ehrTimeZone || null,
         payloadSize: JSON.stringify(encounterBundle).length,
       })
+      console.log('[EHR Writeback] Encounter payload', {
+        practiceId,
+        callId: call.call_id,
+        writebackVersion: WRITEBACK_VERSION,
+        payload: encounterBundle,
+      })
       const encounterResponse = (await client.request('/', {
         method: 'POST',
         body: JSON.stringify(encounterBundle),
