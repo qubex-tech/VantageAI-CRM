@@ -496,6 +496,7 @@ export async function writeBackRetellCallToEhr(params: {
   extractedData: ExtractedCallData
 }): Promise<WritebackResult> {
   const { practiceId, patientId, call, extractedData } = params
+  const WRITEBACK_VERSION = 'writeback_v7'
   if (!call.call_id) {
     return { status: 'skipped', reason: 'missing_call_id' }
   }
@@ -506,6 +507,7 @@ export async function writeBackRetellCallToEhr(params: {
     patientId,
     hasExtractedName: Boolean(extractedData.patient_name),
     hasExtractedPhone: Boolean(extractedData.user_phone_number),
+    writebackVersion: WRITEBACK_VERSION,
   })
 
   const settings = await getEhrSettings(practiceId)
@@ -539,6 +541,7 @@ export async function writeBackRetellCallToEhr(params: {
     ehrWritebackStatus: 'in_progress',
     ehrWritebackStartedAt: new Date().toISOString(),
     ehrWritebackProviderId: WRITEBACK_PROVIDER_ID,
+    ehrWritebackVersion: WRITEBACK_VERSION,
   })
 
   try {
@@ -557,11 +560,13 @@ export async function writeBackRetellCallToEhr(params: {
         practiceId,
         callId: call.call_id,
         providerId: WRITEBACK_PROVIDER_ID,
+        writebackVersion: WRITEBACK_VERSION,
       })
       await markConversationMetadata(practiceId, call.call_id, {
         ehrWritebackStatus: 'error',
         ehrWritebackError: 'No backend services connection for writeback provider.',
         ehrWritebackFailedAt: new Date().toISOString(),
+        ehrWritebackVersion: WRITEBACK_VERSION,
       })
       return { status: 'error', reason: 'missing_connection' }
     }
@@ -821,12 +826,14 @@ export async function writeBackRetellCallToEhr(params: {
       console.error('[EHR Writeback] Missing EHR patient ID', {
         practiceId,
         callId: call.call_id,
+        writebackVersion: WRITEBACK_VERSION,
         patientId,
       })
       await markConversationMetadata(practiceId, call.call_id, {
         ehrWritebackStatus: 'error',
         ehrWritebackError: 'Missing EHR patient ID for writeback.',
         ehrWritebackFailedAt: new Date().toISOString(),
+        ehrWritebackVersion: WRITEBACK_VERSION,
       })
       return { status: 'error', reason: 'missing_patient_id' }
     }
@@ -842,6 +849,7 @@ export async function writeBackRetellCallToEhr(params: {
         ehrWritebackStatus: 'error',
         ehrWritebackError: `Missing encounter reference configuration: ${missingRefs.join(', ')}`,
         ehrWritebackFailedAt: new Date().toISOString(),
+        ehrWritebackVersion: WRITEBACK_VERSION,
       })
       return { status: 'error', reason: 'missing_encounter_refs' }
     }
@@ -861,6 +869,7 @@ export async function writeBackRetellCallToEhr(params: {
       await markConversationMetadata(practiceId, call.call_id, {
         ehrWritebackEncounterPayload: encounterBundle,
         ehrWritebackEncounterTimeZone: ehrTimeZone || null,
+        ehrWritebackVersion: WRITEBACK_VERSION,
       })
       const encounterResponse = (await client.request('/', {
         method: 'POST',
@@ -983,6 +992,7 @@ export async function writeBackRetellCallToEhr(params: {
       ehrWritebackPatientId: ehrPatientId,
       ehrWritebackError: null,
       ehrWritebackFailedAt: null,
+      ehrWritebackVersion: WRITEBACK_VERSION,
     })
 
     console.log('[EHR Writeback] Success', {
@@ -1001,12 +1011,14 @@ export async function writeBackRetellCallToEhr(params: {
         practiceId,
         callId: call.call_id,
         supportedInteractions: error.supportedInteractions,
+        writebackVersion: WRITEBACK_VERSION,
       })
       await markConversationMetadata(practiceId, call.call_id, {
         ehrWritebackStatus: 'error',
         ehrWritebackError: 'Write not supported by EHR',
         ehrWritebackFailedAt: new Date().toISOString(),
         ehrWritebackSupportedInteractions: error.supportedInteractions,
+        ehrWritebackVersion: WRITEBACK_VERSION,
       })
       return { status: 'error', reason: 'write_not_supported' }
     }
@@ -1014,11 +1026,13 @@ export async function writeBackRetellCallToEhr(params: {
       practiceId,
       callId: call.call_id,
       error: message,
+      writebackVersion: WRITEBACK_VERSION,
     })
     await markConversationMetadata(practiceId, call.call_id, {
       ehrWritebackStatus: 'error',
       ehrWritebackError: message,
       ehrWritebackFailedAt: new Date().toISOString(),
+      ehrWritebackVersion: WRITEBACK_VERSION,
     })
     return { status: 'error', reason: 'exception' }
   }
