@@ -31,6 +31,7 @@ function usePatientSearch(query: string) {
       }),
     enabled: query.length >= 2,
     staleTime: 10_000,
+    retry: false,
   })
 }
 
@@ -47,7 +48,7 @@ export function NewConversationScreen() {
   const [body, setBody]               = useState('')
   const bodyRef = useRef<TextInput>(null)
 
-  const { data, isFetching } = usePatientSearch(search)
+  const { data, isFetching, isError, error } = usePatientSearch(search)
   const patients = selected ? [] : (data?.patients ?? [])
 
   const sendMutation = useMutation({
@@ -166,6 +167,16 @@ export function NewConversationScreen() {
             </View>
           </View>
           <View style={styles.rowDivider} />
+
+          {/* Search error */}
+          {isError && !selected && (
+            <View style={styles.searchError}>
+              <Ionicons name="warning-outline" size={14} color={colors.error} />
+              <Text style={styles.searchErrorText}>
+                {(error as any)?.response?.data?.error ?? 'Could not load patients'}
+              </Text>
+            </View>
+          )}
 
           {/* Patient suggestions */}
           {patients.length > 0 && (
@@ -291,6 +302,22 @@ export function NewConversationScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   flex: { flex: 1 },
+
+  searchError: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.errorLight,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  searchErrorText: {
+    flex: 1,
+    fontSize: fontSize.sm,
+    color: colors.error,
+  },
 
   header: {
     flexDirection: 'row',
