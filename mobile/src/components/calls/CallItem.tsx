@@ -28,6 +28,54 @@ function formatDuration(ms?: number): string {
   return `${m}m ${sec}s`
 }
 
+function extractPatientLabel(call: RetellCall): string {
+  const data = call.call_analysis?.custom_analysis_data as Record<string, unknown> | undefined
+
+  // Extract patient name from custom_analysis_data (check many possible field names)
+  const rawName = (
+    data?.patient_name ??
+    data?.patientName ??
+    data?.['Patient Name'] ??
+    data?.caller_name ??
+    data?.callerName ??
+    data?.['Caller Name'] ??
+    data?.full_name ??
+    data?.['Full Name'] ??
+    data?.name ??
+    data?.Name ??
+    null
+  ) as string | null
+
+  // Parse name from call summary as fallback: "The caller, {Name}, a/an ..."
+  const summary = call.call_analysis?.call_summary ?? ''
+  const summaryMatch = summary.match(/[Tt]he caller,\s+([^,]+),/)
+  const nameFromSummary = summaryMatch ? summaryMatch[1].trim() : null
+
+  const patientName = rawName || nameFromSummary
+
+  // Extract patient type
+  const rawType = (
+    data?.patient_type ??
+    data?.patientType ??
+    data?.patient_status ??
+    data?.['Patient Type'] ??
+    null
+  ) as string | null
+
+  const patientType = rawType
+    ? /new/i.test(rawType) ? 'New Patient' : 'Existing Patient'
+    : null
+
+  if (patientName && patientType) return `${patientType}: ${patientName}`
+  if (patientName) return patientName
+  if (patientType) return patientType
+
+  // Fallback to phone number or call type
+  return (call.metadata as any)?.from_number
+    ?? (call.metadata as any)?.caller_id
+    ?? (call.call_type === 'web_call' ? 'Web call' : 'Unknown caller')
+}
+
 export function CallItem({ call, reviewed, onPress }: Props) {
   const status = STATUS_CONFIG[call.call_status] ?? STATUS_CONFIG.ended
   const hasUnread = !reviewed
@@ -35,9 +83,7 @@ export function CallItem({ call, reviewed, onPress }: Props) {
     ? format(new Date(call.start_timestamp), 'MMM d, h:mm a')
     : '—'
   const duration = formatDuration(call.duration_ms)
-  const callerId = (call.metadata as any)?.from_number
-    ?? (call.metadata as any)?.caller_id
-    ?? call.call_type === 'web_call' ? 'Web call' : 'Unknown caller'
+  const callerId = extractPatientLabel(call)
   const summary = call.call_analysis?.call_summary
 
   return (
