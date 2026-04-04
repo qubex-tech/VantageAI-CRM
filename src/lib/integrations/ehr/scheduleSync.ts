@@ -9,6 +9,7 @@ import {
 import { createClientAssertion } from '@/lib/integrations/ehr/smartEngine'
 import { FhirClient } from '@/lib/integrations/fhir/fhirClient'
 import { refreshBackendConnectionIfNeeded } from '@/lib/integrations/ehr/backendTokens'
+import { getEcwDefaultLocationOrganizationForIssuer } from '@/lib/integrations/ehr/writeback'
 
 const WRITEBACK_PROVIDER_ID = 'ecw_write'
 const STALE_SYNC_WINDOW_MS = 12 * 60 * 60 * 1000
@@ -58,12 +59,108 @@ type FhirPractitioner = {
   name?: Array<{ text?: string; family?: string; given?: string[] }>
 }
 
+type FhirPractitionerRole = {
+  id?: string
+  practitioner?: { reference?: string }
+  organization?: { reference?: string }
+  code?: Array<{ coding?: Array<{ display?: string; code?: string }>; text?: string }>
+  location?: Array<{ reference?: string }>
+}
+
+export type EhrTelephoneEncounterRefsFromPractitioner = {
+  /** participant + assignedTo always match the resolved Practitioner */
+  participantPractitionerRef: string
+  assignedToPractitionerRef: string
+  /** From PractitionerRole (requires system/PractitionerRole.read). */
+  locationRefFromRole: string | null
+  organizationRefFromRole: string | null
+  /**
+   * Values to pass to telephone Encounter build: role-derived when present, else issuer defaults
+   * (same as writeback `ECW_TELEPHONE_REFS_*` for FACGCD/FFBJCD).
+   */
+  effectiveLocationRef: string
+  effectiveOrganizationRef: string
+  notes: string[]
+}
+
+export type EhrPractitionerDetail = {
+  reference: string
+  practitioner: FhirPractitioner & { id: string }
+  roles: FhirPractitionerRole[]
+  /** eCW mishandles path reads when Practitioner.id contains "."; use `_id` search instead. */
+  practitionerRequestPath: string
+  practitionerRoleRequestPath: string
+  telephoneEncounterRefs: EhrTelephoneEncounterRefsFromPractitioner
+}
+
 function normalizePractitionerReference(value: string): string | null {
   const trimmed = value.trim()
   if (!trimmed) return null
   if (trimmed.startsWith('Practitioner/')) return trimmed
   if (trimmed.includes('/')) return null
   return `Practitioner/${trimmed}`
+}
+
+function normalizeLocationOrOrganizationRef(value: string | undefined, resourceType: 'Location' | 'Organization') {
+  if (!value?.trim()) return null
+  const trimmed = value.trim()
+  if (trimmed.startsWith(`${resourceType}/`)) return trimmed
+  if (trimmed.includes('/')) return null
+  return `${resourceType}/${trimmed}`
+}
+
+function buildTelephoneEncounterRefsForPractitioner(
+  practitionerCanonicalRef: string,
+  roles: FhirPractitionerRole[],
+  issuer: string
+): EhrTelephoneEncounterRefsFromPractitioner {
+  let locationRefFromRole: string | null = null
+  let organizationRefFromRole: string | null = null
+
+  for (const role of roles) {
+    if (!organizationRefFromRole) {
+      organizationRefFromRole = normalizeLocationOrOrganizationRef(
+        role.organization?.reference,
+        'Organization'
+      )
+    }
+    if (!locationRefFromRole) {
+      const loc = role.location?.[0]?.reference
+      locationRefFromRole = normalizeLocationOrOrganizationRef(loc, 'Location')
+    }
+    if (locationRefFromRole && organizationRefFromRole) break
+  }
+
+  const fallback = getEcwDefaultLocationOrganizationForIssuer(issuer)
+  const notes: string[] = []
+
+  const effectiveLocationRef =
+    locationRefFromRole || fallback?.locationRef || ''
+  const effectiveOrganizationRef =
+    organizationRefFromRole || fallback?.organizationRef || ''
+
+  if (!locationRefFromRole && fallback?.locationRef) {
+    notes.push('locationRef: using issuer bundled default (PractitionerRole missing or no location)')
+  }
+  if (!organizationRefFromRole && fallback?.organizationRef) {
+    notes.push('organizationRef: using issuer bundled default (PractitionerRole missing or no organization)')
+  }
+  if (roles.length === 0) {
+    notes.push('PractitionerRole bundle was empty — ensure token includes system/PractitionerRole.read')
+  }
+  if (!effectiveLocationRef || !effectiveOrganizationRef) {
+    notes.push('Set ecwTelephoneLocationRef and ecwTelephoneOrganizationRef in practice EHR settings.')
+  }
+
+  return {
+    participantPractitionerRef: practitionerCanonicalRef,
+    assignedToPractitionerRef: practitionerCanonicalRef,
+    locationRefFromRole,
+    organizationRefFromRole,
+    effectiveLocationRef,
+    effectiveOrganizationRef,
+    notes,
+  }
 }
 
 function inferDefaultPractitionerRef(issuer: string) {
@@ -226,6 +323,21 @@ function formatPractitionerName(practitioner: FhirPractitioner) {
   return combined || null
 }
 
+/**
+ * eClinicalWorks lists Practitioner and PractitionerRole under USCDI read APIs; we call the
+ * standard FHIR R4 endpoints on the tenant base URL from SMART configuration.
+ *
+ * - Practitioner (read): https://fhir.eclinicalworks.com/ecwopendev/documentation/v3-read-resources?name=Practitioner
+ * - PractitionerRole (read): https://fhir.eclinicalworks.com/ecwopendev/documentation/v3-read-resources?name=PractitionerRole
+ *
+ * Interactions used here:
+ * - Type search (list): GET `{base}/Practitioner?_count=…` — follow `Bundle.link.relation === "next"`.
+ * - Read by id (spec): GET `{base}/Practitioner/{id}` — often fails on eCW when `{id}` contains `.`;
+ *   use type search GET `{base}/Practitioner?_id={encodedId}&_count=1` instead.
+ * - Roles for a practitioner: GET `{base}/PractitionerRole?practitioner=Practitioner/{id}&_count=…`.
+ *
+ * Supported search parameters vary by tenant; use GET `{base}/metadata` to confirm.
+ */
 async function fetchPractitionerPages(client: FhirClient, initialPath: string) {
   const practitioners: FhirPractitioner[] = []
   let nextPath: string | undefined = initialPath
@@ -242,6 +354,88 @@ async function fetchPractitionerPages(client: FhirClient, initialPath: string) {
   }
 
   return practitioners
+}
+
+/**
+ * Prefer this over `GET /Practitioner/{id}` on eCW: dotted ids often return
+ * OperationOutcome ("String index out of range: -1").
+ */
+async function fetchPractitionerByIdSearch(client: FhirClient, practitionerId: string) {
+  const path = `/Practitioner?_id=${encodeURIComponent(practitionerId)}&_count=1`
+  const responseBundle: FhirBundle<FhirPractitioner> = await client.request(path)
+  const resource = responseBundle.entry?.[0]?.resource
+  return resource?.id ? resource : null
+}
+
+async function fetchPractitionerRolesForRef(client: FhirClient, practitionerRef: string) {
+  const roles: FhirPractitionerRole[] = []
+  const params = new URLSearchParams({ practitioner: practitionerRef, _count: '50' })
+  let nextPath: string | undefined = `/PractitionerRole?${params.toString()}`
+
+  while (nextPath) {
+    const responseBundle: FhirBundle<FhirPractitionerRole> = await client.request(nextPath)
+    for (const entry of responseBundle.entry || []) {
+      if (entry.resource?.id) {
+        roles.push(entry.resource)
+      }
+    }
+    const nextLink = responseBundle.link?.find((link) => link.relation === 'next')?.url
+    nextPath = nextLink || undefined
+  }
+
+  return roles
+}
+
+/** Resolve practitioner + roles using search endpoints (eCW-safe for dotted ids). */
+export async function fetchEhrPractitionerDetailForPractice(
+  practiceId: string,
+  practitionerRefInput: string,
+  options?: { timeoutMs?: number }
+): Promise<EhrPractitionerDetail | null> {
+  const normalizedRef = normalizePractitionerReference(practitionerRefInput.trim())
+  if (!normalizedRef) {
+    return null
+  }
+  const practitionerId = normalizedRef.replace(/^Practitioner\//, '')
+  const ehrContext = await createEhrClientForPractice(practiceId, {
+    timeoutMs: options?.timeoutMs ?? 60_000,
+  })
+  if (!ehrContext) {
+    return null
+  }
+
+  const { client, connection } = ehrContext
+  const practitionerRequestPath = `/Practitioner?_id=${encodeURIComponent(practitionerId)}&_count=1`
+  const practitioner = await fetchPractitionerByIdSearch(client, practitionerId)
+  if (!practitioner?.id) {
+    return null
+  }
+
+  const canonicalRef = `Practitioner/${practitioner.id}`
+  const roleParams = new URLSearchParams({ practitioner: canonicalRef, _count: '50' })
+  const practitionerRoleRequestPath = `/PractitionerRole?${roleParams.toString()}`
+
+  let roles: FhirPractitionerRole[] = []
+  try {
+    roles = await fetchPractitionerRolesForRef(client, canonicalRef)
+  } catch {
+    roles = []
+  }
+
+  const telephoneEncounterRefs = buildTelephoneEncounterRefsForPractitioner(
+    canonicalRef,
+    roles,
+    connection.issuer
+  )
+
+  return {
+    reference: canonicalRef,
+    practitioner: { ...practitioner, id: practitioner.id },
+    roles,
+    practitionerRequestPath,
+    practitionerRoleRequestPath,
+    telephoneEncounterRefs,
+  }
 }
 
 async function upsertPatientFromEhr(params: {
@@ -381,7 +575,10 @@ async function getWritebackConnection(practiceId: string) {
   return connections[0] || null
 }
 
-async function createEhrClientForPractice(practiceId: string) {
+async function createEhrClientForPractice(
+  practiceId: string,
+  options?: { timeoutMs?: number }
+) {
   const connection = await getWritebackConnection(practiceId)
   if (!connection?.accessTokenEnc) {
     return null
@@ -440,6 +637,7 @@ async function createEhrClientForPractice(practiceId: string) {
         },
       })
     },
+    timeoutMs: options?.timeoutMs,
   })
 
   return { client, connection: refreshedConnection }

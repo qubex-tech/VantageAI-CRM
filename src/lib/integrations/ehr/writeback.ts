@@ -39,6 +39,28 @@ const ECW_TELEPHONE_REFS_FACGCD: EcwTelephoneEncounterRefs = {
   locationRef: 'Location/W6s8TGka96L4tHbCRoQU8V1DmHBjAJrx9h-SsrKuRnA',
   organizationRef: 'Organization/W6s8TGka96L4tHbCRoQU8ZfnvLnRYQ9519x5HFoW2uFnSuQOQi-FoYA2O2oMawcO',
 }
+
+/** Location + org from bundled telephone-encounter defaults (when PractitionerRole does not return them). */
+export function getEcwDefaultLocationOrganizationForIssuer(issuer: string): {
+  locationRef: string
+  organizationRef: string
+} | null {
+  const n = issuer.toLowerCase()
+  if (n.includes('/facgcd')) {
+    return {
+      locationRef: ECW_TELEPHONE_REFS_FACGCD.locationRef,
+      organizationRef: ECW_TELEPHONE_REFS_FACGCD.organizationRef!,
+    }
+  }
+  if (n.includes('/ffbjcd')) {
+    return {
+      locationRef: ECW_TELEPHONE_REFS_FFBJCD.locationRef,
+      organizationRef: ECW_TELEPHONE_REFS_FFBJCD.organizationRef!,
+    }
+  }
+  return null
+}
+
 const ENCOUNTER_NOTE_TYPES = [
   'telephone_encounter',
   'online_visit',
@@ -197,6 +219,13 @@ function missingEncounterRefs(refs: EcwTelephoneEncounterRefs) {
   if (!refs.assignedToPractitionerRef) missing.push('assignedToPractitionerRef')
   if (!refs.locationRef) missing.push('locationRef')
   return missing
+}
+
+/** Strip optional Patient/ prefix and history segments for Encounter.subject reference. */
+function normalizeStoredEhrPatientId(stored: string) {
+  let s = stored.trim()
+  if (s.startsWith('Patient/')) s = s.slice('Patient/'.length)
+  return s.split('/')[0] || s
 }
 
 function resolvePatientMode(params: {
@@ -628,6 +657,7 @@ export async function writeBackRetellCallToEhr(params: {
           entityId: connection.id,
         })
       },
+      timeoutMs: 120_000,
     })
 
     let capabilityStatement
@@ -674,10 +704,11 @@ export async function writeBackRetellCallToEhr(params: {
         ? patientRecord.dateOfBirth.toISOString().split('T')[0]
         : null)
     const lookupName = patientRecord?.name || extractedData.patient_name || null
+    // Prefer patient-stated number from this call before CRM/store, then PSTN/callback last.
     const lookupPhone =
+      extractedData.patient_phone_number ||
       patientRecord?.primaryPhone ||
       patientRecord?.phone ||
-      extractedData.patient_phone_number ||
       extractedData.user_phone_number ||
       null
 
@@ -1186,6 +1217,7 @@ export async function syncPatientNoteToEhrEncounter(params: {
         entityId: connection.id,
       })
     },
+    timeoutMs: 120_000,
   })
 
   const startTime = new Date()
@@ -1197,9 +1229,10 @@ export async function syncPatientNoteToEhrEncounter(params: {
   if (missingRefs.length > 0) {
     return { status: 'error', reason: `missing_encounter_refs_${missingRefs.join('_')}` }
   }
+  const ehrPatientIdForEncounter = normalizeStoredEhrPatientId(patient.externalEhrId)
   if (!resolvedEncounterId) {
     const createBundle = buildTelephoneEncounterBundle({
-      patientId: patient.externalEhrId,
+      patientId: ehrPatientIdForEncounter,
       noteText,
       startTime,
       endTime,
@@ -1223,7 +1256,7 @@ export async function syncPatientNoteToEhrEncounter(params: {
   }
 
   const updateBundle = buildTelephoneEncounterBundle({
-    patientId: patient.externalEhrId,
+    patientId: ehrPatientIdForEncounter,
     noteText,
     startTime,
     endTime,
@@ -1232,16 +1265,43 @@ export async function syncPatientNoteToEhrEncounter(params: {
     requestMethod: 'PUT',
     timeZone: ehrTimeZone,
   })
-  const encounterResponse = (await client.request('/', {
-    method: 'POST',
-    body: JSON.stringify(updateBundle),
-  })) as any
-  const updateStatus = encounterResponse?.entry?.[0]?.response?.status as string | undefined
-  if (!isSuccessfulTransactionStatus(updateStatus)) {
-    return { status: 'error', reason: `encounter_update_failed_${updateStatus || 'missing_status'}` }
+  let persistedId: string | null = null
+  try {
+    const encounterResponse = (await client.request('/', {
+      method: 'POST',
+      body: JSON.stringify(updateBundle),
+    })) as any
+    const updateEntry = encounterResponse?.entry?.[0] as any
+    if (updateEntry?.resource?.resourceType === 'OperationOutcome') {
+      console.warn('[EHR Note Sync] Encounter PUT returned OperationOutcome; using create id', {
+        practiceId,
+        patientId,
+        encounterId: resolvedEncounterId,
+        outcome: updateEntry.resource,
+      })
+    } else {
+      const updateStatus = updateEntry?.response?.status as string | undefined
+      if (!isSuccessfulTransactionStatus(updateStatus)) {
+        console.warn('[EHR Note Sync] Encounter PUT non-success or empty status', {
+          practiceId,
+          patientId,
+          encounterId: resolvedEncounterId,
+          updateStatus,
+        })
+      }
+      const encounterLocation = updateEntry?.response?.location as string | undefined
+      persistedId = extractResourceIdFromLocation(encounterLocation, 'Encounter') || null
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.warn('[EHR Note Sync] Encounter PUT failed (timeout/outcome); create likely persisted', {
+      practiceId,
+      patientId,
+      encounterId: resolvedEncounterId,
+      error: message,
+    })
   }
-  const encounterLocation = encounterResponse?.entry?.[0]?.response?.location as string | undefined
-  const persistedId = extractResourceIdFromLocation(encounterLocation, 'Encounter') || null
+
   await logEhrAudit({
     tenantId: practiceId,
     actorUserId,

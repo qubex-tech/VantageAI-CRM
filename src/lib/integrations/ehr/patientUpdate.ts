@@ -93,6 +93,225 @@ function extractResponseStatus(payload: any) {
   return entry?.response?.status || entry?.response?.statusCode || null
 }
 
+function normalizeBareEhrPatientId(value: string | null | undefined): string | null {
+  if (!value) return null
+  let s = value.trim()
+  if (!s) return null
+  try {
+    s = decodeURIComponent(s)
+  } catch {
+    /* keep raw */
+  }
+  s = s.split('?')[0].split('#')[0].replace(/^\/+/, '')
+  if (s.startsWith('Patient/')) {
+    s = s.slice('Patient/'.length)
+  } else {
+    const marker = '/Patient/'
+    const i = s.lastIndexOf(marker)
+    if (i >= 0) s = s.slice(i + marker.length)
+  }
+  const historyIndex = s.indexOf('/_history/')
+  if (historyIndex >= 0) s = s.slice(0, historyIndex)
+  s = s.split('/')[0].trim()
+  return s || null
+}
+
+type FhirPatientRead = {
+  id?: string
+  name?: Array<{ text?: string; family?: string; given?: string[] }>
+  birthDate?: string
+  gender?: string
+  telecom?: Array<{ system?: string; value?: string }>
+}
+
+function displayNameFromFhirPatient(p: FhirPatientRead): string | null {
+  const name = p.name?.[0]
+  if (!name) return null
+  if (name.text?.trim()) return name.text.trim()
+  const combined = [...(name.given || []), name.family || ''].filter(Boolean).join(' ').trim()
+  return combined || null
+}
+
+/**
+ * Read Patient/{id} from eCW via backend_services connection and update local CRM demographics + externalEhrId.
+ * Use `ehrPatientId` when the CRM row is not yet linked (e.g. only stored on VoiceConversation metadata).
+ */
+export async function syncPatientDemographicsFromEhr(params: {
+  practiceId: string
+  patientId: string
+  ehrPatientId?: string | null
+  actorUserId: string
+}): Promise<
+  | { status: 'success'; ehrPatientId: string; updated: Record<string, unknown> }
+  | { status: 'skipped'; reason: string }
+> {
+  const { practiceId, patientId, ehrPatientId: overrideEhrId, actorUserId } = params
+  const auditActorUserId =
+    actorUserId && actorUserId !== 'system' ? actorUserId : null
+
+  const patient = await prisma.patient.findFirst({
+    where: { id: patientId, practiceId, deletedAt: null },
+  })
+  if (!patient) {
+    console.warn('[EHR Patient Import] Skipped - patient not found', { practiceId, patientId })
+    return { status: 'skipped', reason: 'missing_patient' }
+  }
+
+  const resolvedId =
+    normalizeBareEhrPatientId(overrideEhrId ?? undefined) ||
+    normalizeBareEhrPatientId(patient.externalEhrId)
+  if (!resolvedId) {
+    console.warn('[EHR Patient Import] Skipped - no EHR patient id', { practiceId, patientId })
+    return { status: 'skipped', reason: 'missing_ehr_id' }
+  }
+
+  const settings = await getEhrSettings(practiceId)
+  if (!settings?.enabledProviders?.includes(UPDATE_PROVIDER_ID as any)) {
+    return { status: 'skipped', reason: 'provider_not_enabled' }
+  }
+
+  const connections = await prisma.ehrConnection.findMany({
+    where: { tenantId: practiceId, providerId: UPDATE_PROVIDER_ID },
+    orderBy: { updatedAt: 'desc' },
+  })
+  const connection = connections.find((c) => c.authFlow === 'backend_services')
+  if (!connection?.accessTokenEnc) {
+    console.error('[EHR Patient Import] Missing backend connection', { practiceId, patientId })
+    return { status: 'skipped', reason: 'missing_connection' }
+  }
+
+  const refreshedConnection = await refreshBackendConnectionIfNeeded({ connection })
+  const tokenEndpoint = refreshedConnection.tokenEndpoint || undefined
+  const privateKeyConfig = tokenEndpoint ? getPrivateKeyJwtConfig(connection.providerId) : null
+  const audOverride = connection.providerId.startsWith('ecw')
+    ? getEcwClientAssertionAud(connection.issuer)
+    : undefined
+  const client = new FhirClient({
+    baseUrl: refreshedConnection.fhirBaseUrl,
+    tokenEndpoint,
+    clientId: refreshedConnection.clientId,
+    clientSecret:
+      !privateKeyConfig && refreshedConnection.clientSecretEnc
+        ? decryptString(refreshedConnection.clientSecretEnc)
+        : undefined,
+    clientAssertionProvider:
+      privateKeyConfig && tokenEndpoint
+        ? () =>
+            createClientAssertion({
+              clientId: refreshedConnection.clientId,
+              tokenEndpoint,
+              privateKeyPem: privateKeyConfig.privateKeyPem,
+              keyId: privateKeyConfig.keyId,
+              audience: audOverride,
+            })
+        : undefined,
+    tokenState: {
+      accessToken: decryptString(refreshedConnection.accessTokenEnc!),
+      refreshToken: refreshedConnection.refreshTokenEnc
+        ? decryptString(refreshedConnection.refreshTokenEnc)
+        : undefined,
+      tokenType: undefined,
+      expiresAt: refreshedConnection.expiresAt,
+      scopes: refreshedConnection.scopesGranted || undefined,
+    },
+    onTokenRefresh: async (tokenResponse) => {
+      await prisma.ehrConnection.update({
+        where: { id: refreshedConnection.id },
+        data: {
+          accessTokenEnc: encryptString(tokenResponse.access_token),
+          refreshTokenEnc: tokenResponse.refresh_token
+            ? encryptString(tokenResponse.refresh_token)
+            : refreshedConnection.refreshTokenEnc,
+          expiresAt: tokenResponse.expires_in
+            ? new Date(Date.now() + tokenResponse.expires_in * 1000)
+            : refreshedConnection.expiresAt,
+          scopesGranted: tokenResponse.scope || refreshedConnection.scopesGranted,
+        },
+      })
+      await logEhrAudit({
+        tenantId: practiceId,
+        actorUserId: auditActorUserId,
+        action: 'EHR_TOKEN_REFRESH',
+        providerId: connection.providerId,
+        entity: 'EhrConnection',
+        entityId: connection.id,
+      })
+    },
+    timeoutMs: 120_000,
+  })
+
+  let fhirPatient: FhirPatientRead
+  try {
+    fhirPatient = (await client.request(`/Patient/${resolvedId}`)) as FhirPatientRead
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'FHIR read failed'
+    console.error('[EHR Patient Import] FHIR read failed', {
+      practiceId,
+      patientId,
+      resolvedId,
+      error: message,
+    })
+    return { status: 'skipped', reason: 'fhir_read_failed' }
+  }
+
+  const canonicalId =
+    normalizeBareEhrPatientId(fhirPatient.id) || resolvedId
+
+  const firstNameFromFhir = fhirPatient.name?.[0]?.given?.[0] ?? null
+  const lastNameFromFhir = fhirPatient.name?.[0]?.family ?? null
+  const nameFromFhir = displayNameFromFhirPatient(fhirPatient)
+  const primaryPhoneFromFhir =
+    fhirPatient.telecom?.find((t) => t.system === 'phone')?.value?.trim() || null
+  const emailFromFhir =
+    fhirPatient.telecom?.find((t) => t.system === 'email')?.value?.trim() || null
+  const dateOfBirthFromFhir = fhirPatient.birthDate ? new Date(fhirPatient.birthDate) : null
+
+  await prisma.patient.update({
+    where: { id: patientId },
+    data: {
+      externalEhrId: canonicalId,
+      firstName: firstNameFromFhir ?? patient.firstName,
+      lastName: lastNameFromFhir ?? patient.lastName,
+      name: nameFromFhir ?? patient.name,
+      dateOfBirth: dateOfBirthFromFhir ?? patient.dateOfBirth,
+      gender: fhirPatient.gender || patient.gender,
+      primaryPhone: primaryPhoneFromFhir ?? patient.primaryPhone,
+      phone: primaryPhoneFromFhir || patient.phone || 'unknown',
+      email: emailFromFhir ?? patient.email,
+    },
+  })
+
+  await logEhrAudit({
+    tenantId: practiceId,
+    actorUserId: auditActorUserId,
+    action: 'FHIR_READ',
+    providerId: connection.providerId,
+    entity: 'Patient',
+    entityId: canonicalId,
+    metadata: { patientId, op: 'syncPatientDemographicsFromEhr' },
+  })
+
+  console.log('[EHR Patient Import] Success', {
+    practiceId,
+    patientId,
+    ehrPatientId: canonicalId,
+  })
+
+  return {
+    status: 'success',
+    ehrPatientId: canonicalId,
+    updated: {
+      firstName: firstNameFromFhir,
+      lastName: lastNameFromFhir,
+      name: nameFromFhir,
+      birthDate: fhirPatient.birthDate,
+      gender: fhirPatient.gender,
+      primaryPhone: primaryPhoneFromFhir,
+      email: emailFromFhir,
+    },
+  }
+}
+
 export async function syncPatientUpdateToEhr(params: {
   practiceId: string
   patientId: string
@@ -406,6 +625,7 @@ export async function syncPatientCreateToEhr(params: {
         entityId: connection.id,
       })
     },
+    timeoutMs: 120_000,
   })
 
   const given = patient.firstName

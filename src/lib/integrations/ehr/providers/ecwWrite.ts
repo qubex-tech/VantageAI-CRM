@@ -65,6 +65,9 @@ export const ecwWriteProvider: EhrProvider = {
     const scopes = new Set(['system/Patient.read', 'system/DocumentReference.read'])
     if (enableWrite) {
       scopes.add('system/Encounter.write')
+      // USCDI read APIs — same resource family as eCW Connect docs (Practitioner / PractitionerRole).
+      scopes.add('system/Practitioner.read')
+      scopes.add('system/PractitionerRole.read')
       if (enablePatientCreate) scopes.add('system/Patient.write')
       if (enableNoteCreate) scopes.add('system/DocumentReference.write')
     }

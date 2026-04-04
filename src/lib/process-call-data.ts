@@ -297,20 +297,22 @@ function enrichFromCustomAnalysis(
     const dob = getCustomValue(customData, ['Patient DOB', 'patient_dob'])
     extracted.patient_dob = dob || (normalized.patient_dob as string | undefined)
   }
+  // Patient-stated phone only (never Callback / ANI — those go to user_phone_number).
   if (!extracted.patient_phone_number) {
-    const phone = getCustomValue(customData, ['Patient Phone Number', 'Callback Number'])
+    const phone = getCustomValue(customData, ['Patient Phone Number'])
     extracted.patient_phone_number =
-      phone ||
-      (normalized.patient_phone_number as string | undefined) ||
-      (normalized.callback_number as string | undefined) ||
-      (normalized.caller_number as string | undefined) ||
-      (normalized.caller_phone_number as string | undefined)
+      phone || (normalized.patient_phone_number as string | undefined)
   }
   if (!extracted.user_phone_number) {
-    const phone = getCustomValue(customData, ['Callback Number', 'Caller Phone Number'])
+    const phone = getCustomValue(customData, [
+      'Callback Number',
+      'Caller Phone Number',
+      'Caller Number',
+    ])
     extracted.user_phone_number =
       phone ||
       (normalized.callback_number as string | undefined) ||
+      (normalized.caller_number as string | undefined) ||
       (normalized.caller_phone_number as string | undefined)
   }
   if (!extracted.patient_email) {
@@ -419,11 +421,15 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
         if (dob) extracted.patient_dob = dob
       }
       if (!extracted.patient_phone_number) {
-        const phone = getCustomValue(customData, ['Patient Phone Number', 'Callback Number'])
+        const phone = getCustomValue(customData, ['Patient Phone Number'])
         if (phone) extracted.patient_phone_number = phone
       }
       if (!extracted.user_phone_number) {
-        const phone = getCustomValue(customData, ['Callback Number', 'Caller Phone Number'])
+        const phone = getCustomValue(customData, [
+          'Callback Number',
+          'Caller Phone Number',
+          'Caller Number',
+        ])
         if (phone) extracted.user_phone_number = phone
       }
       if (!extracted.call_reason) {
@@ -458,12 +464,6 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
       }
       if (!extracted.patient_phone_number && normalizedCustomData.patient_phone_number) {
         extracted.patient_phone_number = normalizedCustomData.patient_phone_number as string
-      }
-      if (!extracted.patient_phone_number && normalizedCustomData.callback_number) {
-        extracted.patient_phone_number = normalizedCustomData.callback_number as string
-      }
-      if (!extracted.patient_phone_number && normalizedCustomData.caller_number) {
-        extracted.patient_phone_number = normalizedCustomData.caller_number as string
       }
       if (!extracted.user_phone_number) {
         extracted.user_phone_number =
@@ -752,6 +752,18 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
     extracted.patient_name = `${insuranceVerification.patient_first_name} ${insuranceVerification.patient_last_name}`.trim()
   }
 
+  // PSTN leg when Retell analysis did not populate callback (may differ from patient-stated number).
+  if (!extracted.user_phone_number) {
+    const direction = call.direction
+    const from = call.from_number
+    const to = call.to_number
+    if (direction === 'outbound' && to) {
+      extracted.user_phone_number = String(to).trim()
+    } else if (from) {
+      extracted.user_phone_number = String(from).trim()
+    }
+  }
+
   console.log('[extractCallData] Final extracted data:', extracted)
   console.log('[extractCallData] Full call object keys:', Object.keys(call))
   if (call.call_analysis) {
@@ -770,9 +782,9 @@ export async function processCallDataForPatient(
   userId: string | null,
   callId?: string
 ): Promise<{ patientId: string | null; isNew: boolean }> {
-  // Need phone number or patient name to identify/create patient.
+  // Match/create on patient-stated phone only; never ANI/callback (user_phone_number).
   // Never derive patient identity from summary text.
-  let phoneNumber = callData.patient_phone_number || callData.user_phone_number
+  let phoneNumber = callData.patient_phone_number
   let patientName = callData.patient_name
   if (patientName && /^the caller\b/i.test(patientName.trim())) {
     patientName = undefined
@@ -790,10 +802,7 @@ export async function processCallDataForPatient(
       }
     }
     if (!phoneNumber) {
-      const phone =
-        customData['Patient Phone Number'] ||
-        customData['Callback Number'] ||
-        customData['Caller Phone Number']
+      const phone = customData['Patient Phone Number']
       if (phone) {
         phoneNumber = String(phone).trim()
       }
@@ -803,7 +812,8 @@ export async function processCallDataForPatient(
   // Log extracted data for debugging
   console.log('[processCallDataForPatient] Extracted call data:', {
     patient_name: patientName,
-    user_phone_number: phoneNumber,
+    patient_stated_phone: phoneNumber,
+    callback_or_ani: callData.user_phone_number,
     user_age: callData.user_age,
     callId,
   })
@@ -1015,10 +1025,7 @@ export async function processRetellCallData(
     }
     if (!extractedData.patient_phone_number) {
       extractedData.patient_phone_number =
-        (normalizedCustomData.patient_phone_number as string) ||
-        (normalizedCustomData.callback_number as string) ||
-        (normalizedCustomData.caller_number as string) ||
-        (normalizedCustomData.caller_phone_number as string)
+        normalizedCustomData.patient_phone_number as string | undefined
     }
     if (!extractedData.patient_dob) {
       extractedData.patient_dob = normalizedCustomData.patient_dob as string | undefined
@@ -1044,11 +1051,12 @@ export async function processRetellCallData(
       }
     }
     if (!extractedData.patient_phone_number) {
-      const phone = customData['Patient Phone Number'] || customData['Callback Number']
+      const phone = customData['Patient Phone Number']
       if (phone) extractedData.patient_phone_number = String(phone).trim()
     }
     if (!extractedData.user_phone_number) {
-      const phone = customData['Callback Number']
+      const phone =
+        customData['Callback Number'] || customData['Caller Phone Number'] || customData['Caller Number']
       if (phone) extractedData.user_phone_number = String(phone).trim()
     }
     if (!extractedData.patient_dob && customData['Patient DOB']) {
