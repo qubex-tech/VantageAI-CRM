@@ -173,7 +173,7 @@ export function NewConversationScreen() {
             <View style={styles.searchError}>
               <Ionicons name="warning-outline" size={14} color={colors.error} />
               <Text style={styles.searchErrorText}>
-                {(error as any)?.response?.data?.error ?? 'Could not load patients'}
+                {`[${(error as any)?.response?.status ?? '?'}] ${(error as any)?.response?.data?.error ?? (error as any)?.message ?? 'Could not load patients'}`}
               </Text>
             </View>
           )}
