@@ -21,21 +21,18 @@ const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.326070'
 const ECW_PATIENT_IDENTIFIER_VALUE = '15455'
 type EcwTelephoneEncounterRefs = {
   participantPractitionerRef: string
-  assignedToPractitionerRef: string
   locationRef: string
   organizationRef?: string
 }
 
 const ECW_TELEPHONE_REFS_FFBJCD: EcwTelephoneEncounterRefs = {
   participantPractitionerRef: 'Practitioner/Lt2IFR5Ah76n4d8TFP5gBPiX1g1-Q2P9s8IYoGZvbFM',
-  assignedToPractitionerRef: 'Practitioner/Lt2IFR5Ah76n4d8TFP5gBAfrwqxiesg83cejztPkOEI',
   locationRef: 'Location/Lt2IFR5Ah76n4d8TFP5gBFO4aIYpuamqju2XjvYx6Ik',
   organizationRef: 'Organization/Lt2IFR5Ah76n4d8TFP5gBPMFWGL8HhxnxooU.mnA.n5.Xl5yXZN1TQgZByeKFIIZ',
 }
 
 const ECW_TELEPHONE_REFS_FACGCD: EcwTelephoneEncounterRefs = {
   participantPractitionerRef: 'Practitioner/W6s8TGka96L4tHbCRoQU8YMH.WUkwA2pU9wsHWwur0c',
-  assignedToPractitionerRef: 'Practitioner/W6s8TGka96L4tHbCRoQU8YMH.WUkwA2pU9wsHWwur0c',
   locationRef: 'Location/W6s8TGka96L4tHbCRoQU8V1DmHBjAJrx9h-SsrKuRnA',
   organizationRef: 'Organization/W6s8TGka96L4tHbCRoQU8ZfnvLnRYQ9519x5HFoW2uFnSuQOQi-FoYA2O2oMawcO',
 }
@@ -201,10 +198,6 @@ function resolveEcwTelephoneEncounterRefs(
       primaryPractitionerRef ||
       normalizeFhirReference(writeConfig.ecwTelephoneParticipantPractitionerRef, 'Practitioner') ||
       defaults.participantPractitionerRef,
-    assignedToPractitionerRef:
-      primaryPractitionerRef ||
-      normalizeFhirReference(writeConfig.ecwTelephoneAssignedToPractitionerRef, 'Practitioner') ||
-      defaults.assignedToPractitionerRef,
     locationRef:
       normalizeFhirReference(writeConfig.ecwTelephoneLocationRef, 'Location') || defaults.locationRef,
     organizationRef:
@@ -216,7 +209,6 @@ function resolveEcwTelephoneEncounterRefs(
 function missingEncounterRefs(refs: EcwTelephoneEncounterRefs) {
   const missing: string[] = []
   if (!refs.participantPractitionerRef) missing.push('participantPractitionerRef')
-  if (!refs.assignedToPractitionerRef) missing.push('assignedToPractitionerRef')
   if (!refs.locationRef) missing.push('locationRef')
   return missing
 }
@@ -519,7 +511,7 @@ export async function writeBackRetellCallToEhr(params: {
   extractedData: ExtractedCallData
 }): Promise<WritebackResult> {
   const { practiceId, patientId, call, extractedData } = params
-  const WRITEBACK_VERSION = 'writeback_v7'
+  const WRITEBACK_VERSION = 'writeback_v8'
   if (!call.call_id) {
     return { status: 'skipped', reason: 'missing_call_id' }
   }
