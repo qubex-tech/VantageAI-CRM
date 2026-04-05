@@ -61,7 +61,7 @@ export function NewConversationScreen() {
       Animated.timing(textOpacity,  { toValue: 1, duration: 250, useNativeDriver: true }),
     ]).start()
     const timer = setTimeout(() => {
-      navigation.getParent()?.navigate('Inbox', { screen: 'InboxHome' })
+      navigation.popToTop()
     }, 1800)
     return () => clearTimeout(timer)
   }, [sent])
