@@ -511,7 +511,7 @@ export async function writeBackRetellCallToEhr(params: {
   extractedData: ExtractedCallData
 }): Promise<WritebackResult> {
   const { practiceId, patientId, call, extractedData } = params
-  const WRITEBACK_VERSION = 'writeback_v11'
+  const WRITEBACK_VERSION = 'writeback_v12'
   if (!call.call_id) {
     return { status: 'skipped', reason: 'missing_call_id' }
   }
@@ -873,8 +873,8 @@ export async function writeBackRetellCallToEhr(params: {
     let encounterId: string | null = null
     let encounterUrl: string | null = null
     if (encounterNoteText) {
-      const startTime = new Date()
-      const endTime = new Date(startTime.getTime() + 15 * 60 * 1000)
+      const startTime = call.start_timestamp ? new Date(call.start_timestamp) : new Date()
+      const endTime = call.end_timestamp ? new Date(call.end_timestamp) : new Date(startTime.getTime() + 15 * 60 * 1000)
       const encounterBundle = buildTelephoneEncounterBundle({
         patientId: ehrPatientId,
         noteText: encounterNoteText,
