@@ -426,12 +426,6 @@ function buildTelephoneEncounterBundle(params: {
               url: 'http://eclinicalworks.com/supportingInfo/telephoneEncounter/notes',
               valueString: notesText,
             },
-            {
-              url: 'http://eclinicalworks.com/supportingInfo/telephoneEncounter/assignedTo',
-              valueReference: {
-                reference: params.refs.assignedToPractitionerRef,
-              },
-            },
           ],
           status: 'planned',
           class: {
