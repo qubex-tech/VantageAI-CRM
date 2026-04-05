@@ -511,7 +511,7 @@ export async function writeBackRetellCallToEhr(params: {
   extractedData: ExtractedCallData
 }): Promise<WritebackResult> {
   const { practiceId, patientId, call, extractedData } = params
-  const WRITEBACK_VERSION = 'writeback_v10'
+  const WRITEBACK_VERSION = 'writeback_v11'
   if (!call.call_id) {
     return { status: 'skipped', reason: 'missing_call_id' }
   }
@@ -916,31 +916,9 @@ export async function writeBackRetellCallToEhr(params: {
         | undefined
       encounterId = extractResourceIdFromLocation(encounterLocation, 'Encounter') || null
       encounterUrl = encounterId ? `${client.getBaseUrl()}/Encounter/${encounterId}` : null
-      if (encounterId) {
-        const putBundle = buildTelephoneEncounterBundle({
-          patientId: ehrPatientId,
-          noteText: encounterNoteText,
-          startTime,
-          endTime,
-          refs: encounterRefs,
-          encounterId,
-          requestMethod: 'PUT',
-          timeZone: ehrTimeZone,
-        })
-        const putResponse = (await client.request('/', {
-          method: 'POST',
-          body: JSON.stringify(putBundle),
-        })) as any
-        const putStatus = putResponse?.entry?.[0]?.response?.status as string | undefined
-        if (!isSuccessfulTransactionStatus(putStatus)) {
-          console.warn('[EHR Writeback] Encounter extension PUT failed', {
-            practiceId,
-            callId: call.call_id,
-            encounterId,
-            putStatus,
-          })
-        }
-      }
+      // No PUT — ECW's background process finalizes past-dated encounters to status=finished
+      // within minutes, which is what makes them addressable by staff. A PUT pre-empts that
+      // finalization and leaves status=arrived permanently.
       await logEhrAudit({
         tenantId: practiceId,
         actorUserId: null,
