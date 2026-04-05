@@ -1,8 +1,8 @@
-import React, { useState, useCallback, useRef } from 'react'
+import React, { useState, useCallback, useRef, useEffect } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   FlatList, ActivityIndicator, KeyboardAvoidingView,
-  Platform, Alert, useWindowDimensions,
+  Platform, Alert, useWindowDimensions, Animated,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
@@ -31,7 +31,6 @@ function usePatientSearch(query: string) {
       }),
     enabled: query.length >= 2,
     staleTime: 10_000,
-    retry: false,
   })
 }
 
@@ -46,19 +45,37 @@ export function NewConversationScreen() {
   const [channel, setChannel]         = useState<Channel>('sms')
   const [subject, setSubject]         = useState('')
   const [body, setBody]               = useState('')
+  const [sent, setSent]               = useState(false)
   const bodyRef = useRef<TextInput>(null)
 
-  const { data, isFetching, isError, error } = usePatientSearch(search)
+  // Success animation values
+  const circleScale  = useRef(new Animated.Value(0)).current
+  const checkOpacity = useRef(new Animated.Value(0)).current
+  const textOpacity  = useRef(new Animated.Value(0)).current
+
+  useEffect(() => {
+    if (!sent) return
+    Animated.sequence([
+      Animated.spring(circleScale, { toValue: 1, useNativeDriver: true, tension: 80, friction: 6 }),
+      Animated.timing(checkOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.timing(textOpacity,  { toValue: 1, duration: 250, useNativeDriver: true }),
+    ]).start()
+    const timer = setTimeout(() => {
+      navigation.getParent()?.navigate('Inbox', { screen: 'InboxHome' })
+    }, 1800)
+    return () => clearTimeout(timer)
+  }, [sent])
+
+  const { data, isFetching } = usePatientSearch(search)
   const patients = selected ? [] : (data?.patients ?? [])
 
   const sendMutation = useMutation({
     mutationFn: (payload: any) =>
       apiPost<{ data: { conversationId: string } }>(ENDPOINTS.conversations, payload),
-    onSuccess: (res) => {
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['conversations'] })
       qc.invalidateQueries({ queryKey: ['unreadCount'] })
-      const conversationId = res?.data?.conversationId
-      navigation.replace('ConversationDetail', { conversationId })
+      setSent(true)
     },
     onError: (err: any) => {
       const msg =
@@ -167,16 +184,6 @@ export function NewConversationScreen() {
             </View>
           </View>
           <View style={styles.rowDivider} />
-
-          {/* Search error */}
-          {isError && !selected && (
-            <View style={styles.searchError}>
-              <Ionicons name="warning-outline" size={14} color={colors.error} />
-              <Text style={styles.searchErrorText}>
-                {`[${(error as any)?.response?.status ?? '?'}] ${(error as any)?.response?.data?.error ?? (error as any)?.message ?? 'Could not load patients'}`}
-              </Text>
-            </View>
-          )}
 
           {/* Patient suggestions */}
           {patients.length > 0 && (
@@ -295,6 +302,25 @@ export function NewConversationScreen() {
           )}
         </View>
       </KeyboardAvoidingView>
+
+      {/* Success overlay */}
+      {sent && (
+        <View style={styles.successOverlay}>
+          <Animated.View style={[styles.successCircle, { transform: [{ scale: circleScale }] }]}>
+            <Animated.View style={{ opacity: checkOpacity }}>
+              <Ionicons name="checkmark" size={52} color={colors.white} />
+            </Animated.View>
+          </Animated.View>
+          <Animated.Text style={[styles.successTitle, { opacity: textOpacity }]}>
+            Message Sent!
+          </Animated.Text>
+          <Animated.Text style={[styles.successSub, { opacity: textOpacity }]}>
+            {selected
+              ? `${selected.name} will receive your ${channel === 'sms' ? 'SMS' : 'email'} shortly.`
+              : 'Your message has been sent.'}
+          </Animated.Text>
+        </View>
+      )}
     </SafeAreaView>
   )
 }
@@ -303,20 +329,38 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   flex: { flex: 1 },
 
-  searchError: {
-    flexDirection: 'row',
+  successOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.bg,
     alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.errorLight,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    justifyContent: 'center',
+    gap: spacing.lg,
+    paddingHorizontal: spacing.xxl,
   },
-  searchErrorText: {
-    flex: 1,
-    fontSize: fontSize.sm,
-    color: colors.error,
+  successCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: colors.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.success,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  successTitle: {
+    fontSize: fontSize.xl,
+    fontWeight: fontWeight.bold,
+    color: colors.text,
+    textAlign: 'center',
+  },
+  successSub: {
+    fontSize: fontSize.base,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
   },
 
   header: {
