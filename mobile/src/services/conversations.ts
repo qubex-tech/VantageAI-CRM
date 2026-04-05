@@ -28,8 +28,12 @@ export async function fetchConversations(filters: ConversationFilters = {}): Pro
 
   const data = await apiGet<ConversationsResponse>(ENDPOINTS.conversations, params)
 
-  // Normalize — web API returns conversations array directly
-  const raw = Array.isArray(data) ? data : (data as any).conversations ?? []
+  // Normalize — API returns { data: { conversations: [...] } }, { conversations: [...] }, or plain array
+  const raw = Array.isArray(data)
+    ? data
+    : (data as any).data?.conversations
+      ?? (data as any).conversations
+      ?? []
   return raw as Conversation[]
 }
 
