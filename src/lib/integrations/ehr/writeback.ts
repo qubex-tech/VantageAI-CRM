@@ -20,29 +20,20 @@ const WRITEBACK_PROVIDER_ID = 'ecw_write'
 const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.326070'
 const ECW_PATIENT_IDENTIFIER_VALUE = '15455'
 
-/** Refs for eCW telephone Encounter; `assignedToPractitionerRef` triggers extension http://eclinicalworks.com/.../telephoneEncounter/assignedTo (required for successful POST in many tenants). */
 export type EcwTelephoneEncounterRefs = {
   participantPractitionerRef: string
-  /** Omit only for diagnostic scripts; production writeback always sets this. */
-  assignedToPractitionerRef?: string
   locationRef: string
   organizationRef?: string
 }
 
-const ECW_TELEPHONE_REFS_FFBJCD: Required<
-  Pick<EcwTelephoneEncounterRefs, 'participantPractitionerRef' | 'assignedToPractitionerRef' | 'locationRef' | 'organizationRef'>
-> = {
+const ECW_TELEPHONE_REFS_FFBJCD: EcwTelephoneEncounterRefs = {
   participantPractitionerRef: 'Practitioner/Lt2IFR5Ah76n4d8TFP5gBPiX1g1-Q2P9s8IYoGZvbFM',
-  assignedToPractitionerRef: 'Practitioner/Lt2IFR5Ah76n4d8TFP5gBAfrwqxiesg83cejztPkOEI',
   locationRef: 'Location/Lt2IFR5Ah76n4d8TFP5gBFO4aIYpuamqju2XjvYx6Ik',
   organizationRef: 'Organization/Lt2IFR5Ah76n4d8TFP5gBPMFWGL8HhxnxooU.mnA.n5.Xl5yXZN1TQgZByeKFIIZ',
 }
 
-const ECW_TELEPHONE_REFS_FACGCD: Required<
-  Pick<EcwTelephoneEncounterRefs, 'participantPractitionerRef' | 'assignedToPractitionerRef' | 'locationRef' | 'organizationRef'>
-> = {
+const ECW_TELEPHONE_REFS_FACGCD: EcwTelephoneEncounterRefs = {
   participantPractitionerRef: 'Practitioner/W6s8TGka96L4tHbCRoQU8YMH.WUkwA2pU9wsHWwur0c',
-  assignedToPractitionerRef: 'Practitioner/W6s8TGka96L4tHbCRoQU8YMH.WUkwA2pU9wsHWwur0c',
   locationRef: 'Location/W6s8TGka96L4tHbCRoQU8V1DmHBjAJrx9h-SsrKuRnA',
   organizationRef: 'Organization/W6s8TGka96L4tHbCRoQU8ZfnvLnRYQ9519x5HFoW2uFnSuQOQi-FoYA2O2oMawcO',
 }
@@ -215,16 +206,8 @@ function resolveEcwTelephoneEncounterRefs(
     primaryPractitionerRef ||
     normalizeFhirReference(writeConfig.ecwTelephoneParticipantPractitionerRef, 'Practitioner') ||
     defaults.participantPractitionerRef
-  const explicitAssignedTo = normalizeFhirReference(
-    writeConfig.ecwTelephoneAssignedToPractitionerRef,
-    'Practitioner'
-  )
-  const assignedToPractitionerRef =
-    explicitAssignedTo || primaryPractitionerRef || participantPractitionerRef || defaults.assignedToPractitionerRef
-
   return {
     participantPractitionerRef,
-    assignedToPractitionerRef,
     locationRef:
       normalizeFhirReference(writeConfig.ecwTelephoneLocationRef, 'Location') || defaults.locationRef,
     organizationRef:
@@ -236,7 +219,6 @@ function resolveEcwTelephoneEncounterRefs(
 function missingEncounterRefs(refs: EcwTelephoneEncounterRefs) {
   const missing: string[] = []
   if (!refs.participantPractitionerRef?.trim()) missing.push('participantPractitionerRef')
-  if (!refs.assignedToPractitionerRef?.trim()) missing.push('assignedToPractitionerRef')
   if (!refs.locationRef?.trim()) missing.push('locationRef')
   return missing
 }
@@ -437,7 +419,6 @@ export function buildTelephoneEncounterBundle(params: {
         code: 'VR',
         display: 'virtual',
       }
-  const assignedToRef = params.refs.assignedToPractitionerRef?.trim()
   const telephoneExtensions: Array<Record<string, unknown>> = [
     {
       url: 'http://eclinicalworks.com/supportingInfo/telephoneEncounter/messages',
@@ -448,12 +429,6 @@ export function buildTelephoneEncounterBundle(params: {
       valueString: notesText,
     },
   ]
-  if (assignedToRef) {
-    telephoneExtensions.push({
-      url: 'http://eclinicalworks.com/supportingInfo/telephoneEncounter/assignedTo',
-      valueReference: { reference: assignedToRef },
-    })
-  }
   const subject: { reference: string; display?: string } = {
     reference: `Patient/${params.patientId}`,
   }
@@ -563,7 +538,7 @@ export async function writeBackRetellCallToEhr(params: {
   extractedData: ExtractedCallData
 }): Promise<WritebackResult> {
   const { practiceId, patientId, call, extractedData } = params
-  const WRITEBACK_VERSION = 'writeback_v14'
+  const WRITEBACK_VERSION = 'writeback_v15'
   if (!call.call_id) {
     return { status: 'skipped', reason: 'missing_call_id' }
   }
