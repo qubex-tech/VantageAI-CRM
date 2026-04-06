@@ -149,9 +149,7 @@ function formatEhrTimestamp(date: Date, timeZone?: string | null): string {
     const offsetMatch = offsetRaw.match(/GMT([+-]\d{1,2})/)
     const offsetHours = offsetMatch ? Number(offsetMatch[1]) : 0
     const offset = `${offsetHours >= 0 ? '+' : '-'}${String(Math.abs(offsetHours)).padStart(2, '0')}:00`
-    return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get(
-      'minute'
-    )}:${get('second')}${offset}`
+    return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:00${offset}`
   } catch {
     return date.toISOString()
   }
@@ -511,7 +509,7 @@ export async function writeBackRetellCallToEhr(params: {
   extractedData: ExtractedCallData
 }): Promise<WritebackResult> {
   const { practiceId, patientId, call, extractedData } = params
-  const WRITEBACK_VERSION = 'writeback_v13'
+  const WRITEBACK_VERSION = 'writeback_v14'
   if (!call.call_id) {
     return { status: 'skipped', reason: 'missing_call_id' }
   }
