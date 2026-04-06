@@ -42,7 +42,7 @@ type ViewMode = 'list' | 'week' | 'day'
 function parseViewParam(raw: string | null): ViewMode {
   if (raw === 'week' || raw === 'day' || raw === 'list') return raw
   if (raw === 'calendar') return 'week'
-  return 'list'
+  return 'day'
 }
 
 function parseLocalDateInput(value: string): Date {
@@ -71,10 +71,11 @@ export function AppointmentsView({ initialAppointments, practitioners }: Appoint
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
   const [selectedPractitionerRefs, setSelectedPractitionerRefs] = useState<string[]>([])
 
-  // Update URL when filters change
+  // Update URL when filters change (Day is default — omit `view` for clean /appointments URLs)
   useEffect(() => {
     const params = new URLSearchParams()
-    if (viewMode !== 'list') params.set('view', viewMode) // week | day
+    if (viewMode === 'list') params.set('view', 'list')
+    if (viewMode === 'week') params.set('view', 'week')
     if (searchQuery) params.set('search', searchQuery)
     if (statusFilter !== 'all') params.set('status', statusFilter)
     if (dateFilter) params.set('date', dateFilter)
