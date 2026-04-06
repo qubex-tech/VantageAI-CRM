@@ -575,7 +575,7 @@ async function getWritebackConnection(practiceId: string) {
   return connections[0] || null
 }
 
-async function createEhrClientForPractice(
+export async function createEhrClientForPractice(
   practiceId: string,
   options?: { timeoutMs?: number }
 ) {

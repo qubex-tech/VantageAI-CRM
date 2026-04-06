@@ -28,9 +28,9 @@ export type EcwTelephoneEncounterRefs = {
   organizationRef?: string
 }
 
-type EcwTelephoneIssuerBucket = 'facgcd' | 'ffbjcd' | 'ffbjcd_fallback'
+export type EcwTelephoneIssuerBucket = 'facgcd' | 'ffbjcd' | 'ffbjcd_fallback'
 
-function telephoneDefaultBucketFromIssuer(issuer: string | null | undefined): EcwTelephoneIssuerBucket {
+export function telephoneDefaultBucketFromIssuer(issuer: string | null | undefined): EcwTelephoneIssuerBucket {
   const n = (issuer || '').toLowerCase()
   if (n.includes('/facgcd')) return 'facgcd'
   if (n.includes('/ffbjcd')) return 'ffbjcd'
@@ -199,7 +199,7 @@ function normalizeFhirReference(value: unknown, resourceType: 'Practitioner' | '
 }
 
 /** Practitioner + location/org used on telephone Encounter; eCW returns transaction status 101 if practitioner info does not match site rules. */
-function resolveEcwTelephoneEncounterRefs(
+export function resolveEcwTelephoneEncounterRefs(
   settings: Awaited<ReturnType<typeof getEhrSettings>>,
   issuer?: string | null
 ): EcwTelephoneEncounterRefs {
@@ -258,7 +258,7 @@ function missingEncounterRefs(refs: EcwTelephoneEncounterRefs) {
 }
 
 /** Strip optional Patient/ prefix and history segments for Encounter.subject reference. */
-function normalizeStoredEhrPatientId(stored: string) {
+export function normalizeStoredEhrPatientId(stored: string) {
   let s = stored.trim()
   if (s.startsWith('Patient/')) s = s.slice('Patient/'.length)
   return s.split('/')[0] || s
