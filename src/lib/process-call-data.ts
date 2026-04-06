@@ -147,7 +147,6 @@ async function triggerCurogramAfterRetellProcessing(
   }
 
   const intentTopic = resolveCurogramIntentTopic({
-    callReason: extractedData.call_reason,
     callSummary: extractedData.call_summary,
     defaultIntent: process.env.CUROGRAM_AI_ESCALATION_DEFAULT_INTENT || 'AI call escalation',
   })
