@@ -15,6 +15,12 @@ import {
   sendCurogramEscalation,
 } from './curogram'
 
+function metadataObjectFromRow(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {}
+}
+
 export interface ExtractedCallData {
   call_summary?: string
   call_successful?: boolean | string
@@ -1124,10 +1130,13 @@ export async function processRetellCallData(
     })
 
     if (existingConversation) {
-      const existingMetadata =
-        existingConversation.metadata && typeof existingConversation.metadata === 'object'
-          ? (existingConversation.metadata as Record<string, unknown>)
-          : {}
+      // Re-read latest metadata so concurrent EHR writeback (or other writers) is not clobbered
+      // when merging extracted fields — avoids losing ehrWritebackEncounterPayload / ehrWritebackVersion.
+      const latestForMerge = await prisma.voiceConversation.findUnique({
+        where: { id: existingConversation.id },
+        select: { metadata: true },
+      })
+      const existingMetadata = metadataObjectFromRow(latestForMerge?.metadata)
 
       conversationForEscalation = await prisma.voiceConversation.update({
         where: { id: existingConversation.id },
@@ -1163,10 +1172,11 @@ export async function processRetellCallData(
   }
 
   if (conversationForEscalation) {
-    const markerMetadata =
-      conversationForEscalation.metadata && typeof conversationForEscalation.metadata === 'object'
-        ? (conversationForEscalation.metadata as Record<string, unknown>)
-        : {}
+    const latestForMarker = await prisma.voiceConversation.findUnique({
+      where: { id: conversationForEscalation.id },
+      select: { metadata: true },
+    })
+    const markerMetadata = metadataObjectFromRow(latestForMarker?.metadata)
 
     // Diagnostic marker to confirm this post-call pipeline runs in production.
     conversationForEscalation = await prisma.voiceConversation.update({

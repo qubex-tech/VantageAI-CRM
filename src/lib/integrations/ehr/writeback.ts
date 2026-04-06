@@ -81,9 +81,9 @@ type WritebackResult = {
   reviewUrl?: string
 }
 
-export function isSuccessfulTransactionStatus(status: string | undefined): boolean {
-  if (!status) return false
-  const normalized = status.trim()
+export function isSuccessfulTransactionStatus(status: string | number | undefined): boolean {
+  if (status === undefined || status === null) return false
+  const normalized = String(status).trim()
   // eCW transaction responses can return "1" for success instead of HTTP-like 2xx.
   return normalized === '1' || normalized.startsWith('2')
 }
@@ -91,8 +91,8 @@ export function isSuccessfulTransactionStatus(status: string | undefined): boole
 /** eCW Bundle `$transaction` entry `response.status` when practitioner refs are invalid for org/location. */
 const ECW_TRANSACTION_STATUS_WRONG_PRACTITIONER = '101'
 
-function ecwTransactionFailureHint(status: string | undefined): string {
-  if (status?.trim() === ECW_TRANSACTION_STATUS_WRONG_PRACTITIONER) {
+function ecwTransactionFailureHint(status: string | number | undefined): string {
+  if (String(status ?? '').trim() === ECW_TRANSACTION_STATUS_WRONG_PRACTITIONER) {
     return ' — eCW: wrong practitioner information (verify telephone encounter practitioner refs vs org/location).'
   }
   return ''
