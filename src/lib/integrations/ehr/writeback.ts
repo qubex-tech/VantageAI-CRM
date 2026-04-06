@@ -511,7 +511,7 @@ export async function writeBackRetellCallToEhr(params: {
   extractedData: ExtractedCallData
 }): Promise<WritebackResult> {
   const { practiceId, patientId, call, extractedData } = params
-  const WRITEBACK_VERSION = 'writeback_v12'
+  const WRITEBACK_VERSION = 'writeback_v13'
   if (!call.call_id) {
     return { status: 'skipped', reason: 'missing_call_id' }
   }
@@ -835,6 +835,10 @@ export async function writeBackRetellCallToEhr(params: {
               patientId: patientRecord.id,
             },
           })
+          // Brief pause after new patient creation so ECW has time to fully
+          // register the patient before we write the encounter. Without this,
+          // ECW returns 101 (practitioner/location mismatch) for new patients.
+          await new Promise((r) => setTimeout(r, 3000))
         }
       }
     }
