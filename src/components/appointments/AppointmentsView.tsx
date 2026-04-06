@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { Calendar, List, Search, X, Plus, RefreshCw } from 'lucide-react'
+import { CalendarDays, List, Search, X, Plus, RefreshCw, Calendar } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -37,7 +37,13 @@ interface AppointmentsViewProps {
   }>
 }
 
-type ViewMode = 'list' | 'calendar'
+type ViewMode = 'list' | 'week' | 'day'
+
+function parseViewParam(raw: string | null): ViewMode {
+  if (raw === 'week' || raw === 'day' || raw === 'list') return raw
+  if (raw === 'calendar') return 'week'
+  return 'list'
+}
 
 function parseLocalDateInput(value: string): Date {
   const [year, month, day] = value.split('-').map(Number)
@@ -54,7 +60,9 @@ function toLocalDateInputValue(date: Date): string {
 export function AppointmentsView({ initialAppointments, practitioners }: AppointmentsViewProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [viewMode, setViewMode] = useState<ViewMode>((searchParams?.get('view') as ViewMode) || 'list')
+  const [viewMode, setViewMode] = useState<ViewMode>(() =>
+    parseViewParam(searchParams?.get('view') ?? null)
+  )
   const [appointments, setAppointments] = useState(initialAppointments)
   const [searchQuery, setSearchQuery] = useState(searchParams?.get('search') || '')
   const [statusFilter, setStatusFilter] = useState(searchParams?.get('status') || 'all')
@@ -66,7 +74,7 @@ export function AppointmentsView({ initialAppointments, practitioners }: Appoint
   // Update URL when filters change
   useEffect(() => {
     const params = new URLSearchParams()
-    if (viewMode !== 'list') params.set('view', viewMode)
+    if (viewMode !== 'list') params.set('view', viewMode) // week | day
     if (searchQuery) params.set('search', searchQuery)
     if (statusFilter !== 'all') params.set('status', statusFilter)
     if (dateFilter) params.set('date', dateFilter)
@@ -96,7 +104,7 @@ export function AppointmentsView({ initialAppointments, practitioners }: Appoint
       filtered = filtered.filter(apt => apt.status === statusFilter)
     }
 
-    // Date filter (list view only). Calendar handles selected date internally.
+    // Date filter (list view only). Week/day grids handle focus date internally.
     if (dateFilter && viewMode === 'list') {
       const filterDate = parseLocalDateInput(dateFilter)
       const startOfDay = new Date(filterDate)
@@ -172,7 +180,7 @@ export function AppointmentsView({ initialAppointments, practitioners }: Appoint
       {/* Header with View Toggle and Filters */}
       <div className="flex flex-col gap-4">
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant={viewMode === 'list' ? 'default' : 'outline'}
               size="sm"
@@ -183,13 +191,22 @@ export function AppointmentsView({ initialAppointments, practitioners }: Appoint
               <span className="hidden sm:inline">List</span>
             </Button>
             <Button
-              variant={viewMode === 'calendar' ? 'default' : 'outline'}
+              variant={viewMode === 'week' ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setViewMode('calendar')}
+              onClick={() => setViewMode('week')}
               className="gap-2"
             >
               <Calendar className="h-4 w-4" />
-              <span className="hidden sm:inline">Calendar</span>
+              <span className="hidden sm:inline">Week</span>
+            </Button>
+            <Button
+              variant={viewMode === 'day' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setViewMode('day')}
+              className="gap-2"
+            >
+              <CalendarDays className="h-4 w-4" />
+              <span className="hidden sm:inline">Day</span>
             </Button>
           </div>
 
@@ -326,7 +343,8 @@ export function AppointmentsView({ initialAppointments, practitioners }: Appoint
       {viewMode === 'list' ? (
         <AppointmentsListView appointments={appointments} />
       ) : (
-        <AppointmentsCalendarView 
+        <AppointmentsCalendarView
+          layout={viewMode === 'day' ? 'day' : 'week'}
           appointments={appointments}
           selectedDate={dateFilter ? parseLocalDateInput(dateFilter) : undefined}
           onDateSelect={(date) => setDateFilter(date ? toLocalDateInputValue(date) : '')}
