@@ -19,20 +19,30 @@ import { refreshBackendConnectionIfNeeded } from '@/lib/integrations/ehr/backend
 const WRITEBACK_PROVIDER_ID = 'ecw_write'
 const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.326070'
 const ECW_PATIENT_IDENTIFIER_VALUE = '15455'
-type EcwTelephoneEncounterRefs = {
+
+/** Refs for eCW telephone Encounter; `assignedToPractitionerRef` triggers extension http://eclinicalworks.com/.../telephoneEncounter/assignedTo (required for successful POST in many tenants). */
+export type EcwTelephoneEncounterRefs = {
   participantPractitionerRef: string
+  /** Omit only for diagnostic scripts; production writeback always sets this. */
+  assignedToPractitionerRef?: string
   locationRef: string
   organizationRef?: string
 }
 
-const ECW_TELEPHONE_REFS_FFBJCD: EcwTelephoneEncounterRefs = {
+const ECW_TELEPHONE_REFS_FFBJCD: Required<
+  Pick<EcwTelephoneEncounterRefs, 'participantPractitionerRef' | 'assignedToPractitionerRef' | 'locationRef' | 'organizationRef'>
+> = {
   participantPractitionerRef: 'Practitioner/Lt2IFR5Ah76n4d8TFP5gBPiX1g1-Q2P9s8IYoGZvbFM',
+  assignedToPractitionerRef: 'Practitioner/Lt2IFR5Ah76n4d8TFP5gBAfrwqxiesg83cejztPkOEI',
   locationRef: 'Location/Lt2IFR5Ah76n4d8TFP5gBFO4aIYpuamqju2XjvYx6Ik',
   organizationRef: 'Organization/Lt2IFR5Ah76n4d8TFP5gBPMFWGL8HhxnxooU.mnA.n5.Xl5yXZN1TQgZByeKFIIZ',
 }
 
-const ECW_TELEPHONE_REFS_FACGCD: EcwTelephoneEncounterRefs = {
+const ECW_TELEPHONE_REFS_FACGCD: Required<
+  Pick<EcwTelephoneEncounterRefs, 'participantPractitionerRef' | 'assignedToPractitionerRef' | 'locationRef' | 'organizationRef'>
+> = {
   participantPractitionerRef: 'Practitioner/W6s8TGka96L4tHbCRoQU8YMH.WUkwA2pU9wsHWwur0c',
+  assignedToPractitionerRef: 'Practitioner/W6s8TGka96L4tHbCRoQU8YMH.WUkwA2pU9wsHWwur0c',
   locationRef: 'Location/W6s8TGka96L4tHbCRoQU8V1DmHBjAJrx9h-SsrKuRnA',
   organizationRef: 'Organization/W6s8TGka96L4tHbCRoQU8ZfnvLnRYQ9519x5HFoW2uFnSuQOQi-FoYA2O2oMawcO',
 }
@@ -71,14 +81,24 @@ type WritebackResult = {
   reviewUrl?: string
 }
 
-function isSuccessfulTransactionStatus(status: string | undefined): boolean {
+export function isSuccessfulTransactionStatus(status: string | undefined): boolean {
   if (!status) return false
   const normalized = status.trim()
   // eCW transaction responses can return "1" for success instead of HTTP-like 2xx.
   return normalized === '1' || normalized.startsWith('2')
 }
 
-function extractResourceIdFromLocation(
+/** eCW Bundle `$transaction` entry `response.status` when practitioner refs are invalid for org/location. */
+const ECW_TRANSACTION_STATUS_WRONG_PRACTITIONER = '101'
+
+function ecwTransactionFailureHint(status: string | undefined): string {
+  if (status?.trim() === ECW_TRANSACTION_STATUS_WRONG_PRACTITIONER) {
+    return ' — eCW: wrong practitioner information (verify telephone encounter practitioner refs vs org/location).'
+  }
+  return ''
+}
+
+export function extractResourceIdFromLocation(
   location: string | undefined,
   resourceType: 'Patient' | 'Encounter' | 'DocumentReference'
 ): string | undefined {
@@ -174,6 +194,7 @@ function normalizeFhirReference(value: unknown, resourceType: 'Practitioner' | '
   return `${resourceType}/${trimmed}`
 }
 
+/** Practitioner + location/org used on telephone Encounter; eCW returns transaction status 101 if practitioner info does not match site rules. */
 function resolveEcwTelephoneEncounterRefs(
   settings: Awaited<ReturnType<typeof getEhrSettings>>,
   issuer?: string | null
@@ -190,12 +211,20 @@ function resolveEcwTelephoneEncounterRefs(
     writeConfig.ecwTelephonePractitionerRef,
     'Practitioner'
   )
+  const participantPractitionerRef =
+    primaryPractitionerRef ||
+    normalizeFhirReference(writeConfig.ecwTelephoneParticipantPractitionerRef, 'Practitioner') ||
+    defaults.participantPractitionerRef
+  const explicitAssignedTo = normalizeFhirReference(
+    writeConfig.ecwTelephoneAssignedToPractitionerRef,
+    'Practitioner'
+  )
+  const assignedToPractitionerRef =
+    explicitAssignedTo || primaryPractitionerRef || participantPractitionerRef || defaults.assignedToPractitionerRef
 
   return {
-    participantPractitionerRef:
-      primaryPractitionerRef ||
-      normalizeFhirReference(writeConfig.ecwTelephoneParticipantPractitionerRef, 'Practitioner') ||
-      defaults.participantPractitionerRef,
+    participantPractitionerRef,
+    assignedToPractitionerRef,
     locationRef:
       normalizeFhirReference(writeConfig.ecwTelephoneLocationRef, 'Location') || defaults.locationRef,
     organizationRef:
@@ -206,8 +235,9 @@ function resolveEcwTelephoneEncounterRefs(
 
 function missingEncounterRefs(refs: EcwTelephoneEncounterRefs) {
   const missing: string[] = []
-  if (!refs.participantPractitionerRef) missing.push('participantPractitionerRef')
-  if (!refs.locationRef) missing.push('locationRef')
+  if (!refs.participantPractitionerRef?.trim()) missing.push('participantPractitionerRef')
+  if (!refs.assignedToPractitionerRef?.trim()) missing.push('assignedToPractitionerRef')
+  if (!refs.locationRef?.trim()) missing.push('locationRef')
   return missing
 }
 
@@ -369,7 +399,7 @@ function buildTelephoneEncounterNoteText(
   return truncateText(fallback || 'Telephone encounter note', 1800)
 }
 
-function buildTelephoneEncounterBundle(params: {
+export function buildTelephoneEncounterBundle(params: {
   patientId: string
   noteText: string
   startTime: Date
@@ -378,6 +408,9 @@ function buildTelephoneEncounterBundle(params: {
   timeZone?: string
   encounterId?: string
   requestMethod?: 'POST' | 'PUT'
+  encounterClass?: { code: string; display: string }
+  encounterStatus?: string
+  subjectDisplay?: string
 }) {
   const ecwMaxMessageLength = 2000
   const ecwMaxNotesLength = 2000
@@ -393,6 +426,40 @@ function buildTelephoneEncounterBundle(params: {
   const baseText = normalizedNoteText || 'Telephone encounter note'
   const messageText = truncateText(baseText, ecwMaxMessageLength)
   const notesText = truncateText(`${baseText}\n${attribution}`, ecwMaxNotesLength)
+  const classBlock = params.encounterClass
+    ? {
+        system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
+        code: params.encounterClass.code,
+        display: params.encounterClass.display,
+      }
+    : {
+        system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
+        code: 'VR',
+        display: 'virtual',
+      }
+  const assignedToRef = params.refs.assignedToPractitionerRef?.trim()
+  const telephoneExtensions: Array<Record<string, unknown>> = [
+    {
+      url: 'http://eclinicalworks.com/supportingInfo/telephoneEncounter/messages',
+      valueString: messageText,
+    },
+    {
+      url: 'http://eclinicalworks.com/supportingInfo/telephoneEncounter/notes',
+      valueString: notesText,
+    },
+  ]
+  if (assignedToRef) {
+    telephoneExtensions.push({
+      url: 'http://eclinicalworks.com/supportingInfo/telephoneEncounter/assignedTo',
+      valueReference: { reference: assignedToRef },
+    })
+  }
+  const subject: { reference: string; display?: string } = {
+    reference: `Patient/${params.patientId}`,
+  }
+  if (params.subjectDisplay?.trim()) {
+    subject.display = params.subjectDisplay.trim()
+  }
   return {
     resourceType: 'Bundle',
     id: bundleId,
@@ -407,22 +474,9 @@ function buildTelephoneEncounterBundle(params: {
             lastUpdated: formatEhrTimestamp(new Date(), params.timeZone),
             profile: ['http://hl7.org/fhir/us/core/StructureDefinition/us-core-encounter'],
           },
-          extension: [
-            {
-              url: 'http://eclinicalworks.com/supportingInfo/telephoneEncounter/messages',
-              valueString: messageText,
-            },
-            {
-              url: 'http://eclinicalworks.com/supportingInfo/telephoneEncounter/notes',
-              valueString: notesText,
-            },
-          ],
-          status: 'arrived',
-          class: {
-            system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
-            code: 'VR',
-            display: 'virtual',
-          },
+          extension: telephoneExtensions,
+          status: params.encounterStatus?.trim() || 'arrived',
+          class: classBlock,
           type: [
             {
               coding: [
@@ -435,7 +489,7 @@ function buildTelephoneEncounterBundle(params: {
               text: 'Telephonic Encounter',
             },
           ],
-          subject: { reference: `Patient/${params.patientId}` },
+          subject,
           participant: [
             {
               individual: { reference: params.refs.participantPractitionerRef, type: 'Practitioner' },
@@ -833,9 +887,8 @@ export async function writeBackRetellCallToEhr(params: {
               patientId: patientRecord.id,
             },
           })
-          // Brief pause after new patient creation so ECW has time to fully
-          // register the patient before we write the encounter. Without this,
-          // ECW returns 101 (practitioner/location mismatch) for new patients.
+          // Brief pause after new patient creation before the encounter transaction
+          // (eCW replication / readiness for chained writes in some tenants).
           await new Promise((r) => setTimeout(r, 3000))
         }
       }
@@ -909,8 +962,9 @@ export async function writeBackRetellCallToEhr(params: {
       })) as any
       const encounterStatus = encounterResponse?.entry?.[0]?.response?.status as string | undefined
       if (!isSuccessfulTransactionStatus(encounterStatus)) {
+        const hint = ecwTransactionFailureHint(encounterStatus)
         throw new Error(
-          `Encounter transaction failed: ${encounterStatus || 'missing_status'}`
+          `Encounter transaction failed: ${encounterStatus || 'missing_status'}${hint}`
         )
       }
       const encounterLocation = encounterResponse?.entry?.[0]?.response?.location as
