@@ -22,7 +22,7 @@ const ECW_PATIENT_IDENTIFIER_VALUE = '15455'
 
 export type EcwTelephoneEncounterRefs = {
   participantPractitionerRef: string
-  /** eCW `telephoneEncounter/assignedTo`; omit only in diagnostic scripts. Production writeback always sets this. */
+  /** Resolved for logging/metadata; included on the Encounter only when `buildTelephoneEncounterBundle({ includeTelephoneAssignedTo: true })`. */
   assignedToPractitionerRef?: string
   locationRef: string
   organizationRef?: string
@@ -36,6 +36,12 @@ export function telephoneDefaultBucketFromIssuer(issuer: string | null | undefin
   if (n.includes('/ffbjcd')) return 'ffbjcd'
   return 'ffbjcd_fallback'
 }
+
+/** Align Retell / note-sync bundles with minimal direct-to-eCW payloads (no assignedTo; notes identical to messages). */
+export const TELEPHONE_ENCOUNTER_BUNDLE_DIRECT_ECW_OPTIONS = {
+  includeTelephoneAssignedTo: false,
+  notesAttribution: 'none' as const,
+} as const
 
 const ECW_TELEPHONE_REFS_FFBJCD: EcwTelephoneEncounterRefs & { assignedToPractitionerRef: string } = {
   participantPractitionerRef: 'Practitioner/Lt2IFR5Ah76n4d8TFP5gBPiX1g1-Q2P9s8IYoGZvbFM',
@@ -427,6 +433,17 @@ export function buildTelephoneEncounterBundle(params: {
   encounterClass?: { code: string; display: string }
   encounterStatus?: string
   subjectDisplay?: string
+  /**
+   * When false, omit `telephoneEncounter/assignedTo` (matches minimal direct-to-eCW payloads eCW accepts for FACGCD).
+   * @default true
+   */
+  includeTelephoneAssignedTo?: boolean
+  /**
+   * `vantage`: append attribution line to `notes` extension only.
+   * `none`: same string as `messages` for `notes` (matches direct Postman/eCW tooling).
+   * @default 'vantage'
+   */
+  notesAttribution?: 'vantage' | 'none'
 }) {
   const ecwMaxMessageLength = 2000
   const ecwMaxNotesLength = 2000
@@ -434,6 +451,8 @@ export function buildTelephoneEncounterBundle(params: {
   const requestMethod = params.requestMethod || 'POST'
   const encounterId = requestMethod === 'PUT' ? params.encounterId || randomUUID() : undefined
   const requestUrl = requestMethod === 'PUT' ? `Encounter/${encounterId}` : 'Encounter'
+  const includeAssignedTo = params.includeTelephoneAssignedTo !== false
+  const notesAttribution = params.notesAttribution ?? 'vantage'
   const attribution = `This encounter is created by VantageAI app at ${formatEhrTimestamp(
     params.startTime,
     params.timeZone
@@ -441,7 +460,10 @@ export function buildTelephoneEncounterBundle(params: {
   const normalizedNoteText = params.noteText.trim()
   const baseText = normalizedNoteText || 'Telephone encounter note'
   const messageText = truncateText(baseText, ecwMaxMessageLength)
-  const notesText = truncateText(`${baseText}\n${attribution}`, ecwMaxNotesLength)
+  const notesText =
+    notesAttribution === 'none'
+      ? messageText
+      : truncateText(`${baseText}\n${attribution}`, ecwMaxNotesLength)
   const classBlock = params.encounterClass
     ? {
         system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
@@ -464,7 +486,7 @@ export function buildTelephoneEncounterBundle(params: {
     },
   ]
   const assignedToRef = params.refs.assignedToPractitionerRef?.trim()
-  if (assignedToRef) {
+  if (includeAssignedTo && assignedToRef) {
     telephoneExtensions.push({
       url: 'http://eclinicalworks.com/supportingInfo/telephoneEncounter/assignedTo',
       valueReference: { reference: assignedToRef },
@@ -579,7 +601,7 @@ export async function writeBackRetellCallToEhr(params: {
   extractedData: ExtractedCallData
 }): Promise<WritebackResult> {
   const { practiceId, patientId, call, extractedData } = params
-  const WRITEBACK_VERSION = 'writeback_v15'
+  const WRITEBACK_VERSION = 'writeback_v16'
   if (!call.call_id) {
     return { status: 'skipped', reason: 'missing_call_id' }
   }
@@ -941,6 +963,7 @@ export async function writeBackRetellCallToEhr(params: {
       assignedToPractitionerRef: encounterRefs.assignedToPractitionerRef,
       locationRef: encounterRefs.locationRef,
       organizationRef: encounterRefs.organizationRef,
+      telephoneEncounterBundleShape: TELEPHONE_ENCOUNTER_BUNDLE_DIRECT_ECW_OPTIONS,
     })
     const missingRefs = missingEncounterRefs(encounterRefs)
     if (missingRefs.length > 0) {
@@ -964,6 +987,7 @@ export async function writeBackRetellCallToEhr(params: {
         endTime,
         refs: encounterRefs,
         timeZone: ehrTimeZone,
+        ...TELEPHONE_ENCOUNTER_BUNDLE_DIRECT_ECW_OPTIONS,
       })
       const encResource = encounterBundle.entry?.[0]?.resource as { extension?: Array<{ url?: string }> } | undefined
       const extUrls = encResource?.extension?.map((e) => e.url).filter(Boolean) ?? []
@@ -986,6 +1010,7 @@ export async function writeBackRetellCallToEhr(params: {
         writebackVersion: WRITEBACK_VERSION,
         issuerTelephoneBucket,
         encounterExtensionUrls: extUrls,
+        telephoneEncounterBundleShape: TELEPHONE_ENCOUNTER_BUNDLE_DIRECT_ECW_OPTIONS,
         encounterTimeZone: ehrTimeZone || null,
         payloadSize: JSON.stringify(encounterBundle).length,
       })
@@ -1293,6 +1318,7 @@ export async function syncPatientNoteToEhrEncounter(params: {
     assignedToPractitionerRef: encounterRefs.assignedToPractitionerRef,
     locationRef: encounterRefs.locationRef,
     organizationRef: encounterRefs.organizationRef,
+    telephoneEncounterBundleShape: TELEPHONE_ENCOUNTER_BUNDLE_DIRECT_ECW_OPTIONS,
   })
   const missingRefs = missingEncounterRefs(encounterRefs)
   if (missingRefs.length > 0) {
@@ -1307,6 +1333,7 @@ export async function syncPatientNoteToEhrEncounter(params: {
       endTime,
       refs: encounterRefs,
       timeZone: ehrTimeZone,
+      ...TELEPHONE_ENCOUNTER_BUNDLE_DIRECT_ECW_OPTIONS,
     })
     const createResponse = (await client.request('/', {
       method: 'POST',
@@ -1333,6 +1360,7 @@ export async function syncPatientNoteToEhrEncounter(params: {
     encounterId: resolvedEncounterId,
     requestMethod: 'PUT',
     timeZone: ehrTimeZone,
+    ...TELEPHONE_ENCOUNTER_BUNDLE_DIRECT_ECW_OPTIONS,
   })
   let persistedId: string | null = null
   try {

@@ -25,6 +25,7 @@ import {
   isSuccessfulTransactionStatus,
   normalizeStoredEhrPatientId,
   resolveEcwTelephoneEncounterRefs,
+  TELEPHONE_ENCOUNTER_BUNDLE_DIRECT_ECW_OPTIONS,
   telephoneDefaultBucketFromIssuer,
 } from '../src/lib/integrations/ehr/writeback'
 
@@ -79,6 +80,7 @@ async function main() {
     endTime,
     refs: encounterRefs,
     timeZone: ehrTimeZone,
+    ...TELEPHONE_ENCOUNTER_BUNDLE_DIRECT_ECW_OPTIONS,
   })
 
   const meta = {
