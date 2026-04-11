@@ -9,10 +9,11 @@ import { RetellCall } from './retell-api'
 import { createAuditLog } from './audit'
 import type { Prisma } from '@prisma/client'
 import {
+  buildCurogramIntentTopicWithPatientContext,
   isCurogramEscalationEnabled,
   normalizePhoneToE164,
-  resolveCurogramIntentTopic,
   sendCurogramEscalation,
+  trimCurogramIntentTopicForApi,
 } from './curogram'
 
 function metadataObjectFromRow(value: unknown): Record<string, unknown> {
@@ -152,10 +153,12 @@ async function triggerCurogramAfterRetellProcessing(
     return
   }
 
-  const intentTopic = resolveCurogramIntentTopic({
-    callSummary: extractedData.call_summary,
-    defaultIntent: process.env.CUROGRAM_AI_ESCALATION_DEFAULT_INTENT || 'AI call escalation',
-  })
+  const intentTopic = trimCurogramIntentTopicForApi(
+    buildCurogramIntentTopicWithPatientContext({
+      extracted: extractedData,
+      defaultIntent: process.env.CUROGRAM_AI_ESCALATION_DEFAULT_INTENT || 'AI call escalation',
+    })
+  )
 
   console.log('[Curogram Escalation] Sending after Retell processing', {
     requestId,
@@ -163,6 +166,7 @@ async function triggerCurogramAfterRetellProcessing(
     callId: call.call_id,
     callerNumber,
     hasIntentTopic: Boolean(intentTopic),
+    intentTopicLength: intentTopic?.length ?? 0,
   })
 
   const escalationResult = await sendCurogramEscalation(
