@@ -86,11 +86,14 @@ export class RetellApiClient {
           agent_id: [params.agentId]
         }
       }
-      
+
+      // Always return newest calls first
+      body.sort_order = 'descending'
+
       if (params?.limit) {
         body.limit = params.limit
       }
-      
+
       // Note: RetellAI API uses pagination_key instead of offset
       // For now, we'll ignore offset as pagination_key requires a call_id
       
