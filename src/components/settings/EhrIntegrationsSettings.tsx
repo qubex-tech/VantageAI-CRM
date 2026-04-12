@@ -36,6 +36,8 @@ type EhrSettings = {
   ehrRetellWritebackAllowDraftNotes?: boolean
   ehrWritebackOnNewPatientAdd?: boolean
   ehrWritebackOnExistingPatientUpdate?: boolean
+  ehrRetellWritebackEncounterAndNotesWhenNewPatient?: boolean
+  ehrRetellWritebackEncounterAndNotesWhenExistingPatient?: boolean
 }
 
 type StatusResponse = {
@@ -144,6 +146,8 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
     ehrRetellWritebackAllowDraftNotes: true,
     ehrWritebackOnNewPatientAdd: true,
     ehrWritebackOnExistingPatientUpdate: true,
+    ehrRetellWritebackEncounterAndNotesWhenNewPatient: true,
+    ehrRetellWritebackEncounterAndNotesWhenExistingPatient: true,
   })
   const [selectedProviderId, setSelectedProviderId] = useState<string>('ecw')
   const [status, setStatus] = useState<StatusResponse | null>(null)
@@ -215,6 +219,10 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
           ehrRetellWritebackAllowDraftNotes: data.settings.ehrRetellWritebackAllowDraftNotes ?? true,
           ehrWritebackOnNewPatientAdd: data.settings.ehrWritebackOnNewPatientAdd ?? true,
           ehrWritebackOnExistingPatientUpdate: data.settings.ehrWritebackOnExistingPatientUpdate ?? true,
+          ehrRetellWritebackEncounterAndNotesWhenNewPatient:
+            data.settings.ehrRetellWritebackEncounterAndNotesWhenNewPatient ?? true,
+          ehrRetellWritebackEncounterAndNotesWhenExistingPatient:
+            data.settings.ehrRetellWritebackEncounterAndNotesWhenExistingPatient ?? true,
         })
       }
     }
@@ -686,6 +694,44 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
                   checked={settings.ehrRetellWritebackAllowDraftNotes !== false}
                   onCheckedChange={(checked) =>
                     setSettings((prev) => ({ ...prev, ehrRetellWritebackAllowDraftNotes: checked }))
+                  }
+                  className="shrink-0"
+                />
+              </div>
+              <div className="flex items-center justify-between rounded border border-gray-200 bg-white p-3">
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Encounter + notes (new patient path)</p>
+                  <p className="text-xs text-gray-500">
+                    When Retell resolves to a new patient, allow telephone encounter and both draft notes
+                    (still requires the two switches above). Does not affect eCW patient create.
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.ehrRetellWritebackEncounterAndNotesWhenNewPatient !== false}
+                  onCheckedChange={(checked) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      ehrRetellWritebackEncounterAndNotesWhenNewPatient: checked,
+                    }))
+                  }
+                  className="shrink-0"
+                />
+              </div>
+              <div className="flex items-center justify-between rounded border border-gray-200 bg-white p-3">
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Encounter + notes (existing patient path)</p>
+                  <p className="text-xs text-gray-500">
+                    When Retell resolves to an existing patient update, allow telephone encounter and both
+                    draft notes (still requires the two switches above).
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.ehrRetellWritebackEncounterAndNotesWhenExistingPatient !== false}
+                  onCheckedChange={(checked) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      ehrRetellWritebackEncounterAndNotesWhenExistingPatient: checked,
+                    }))
                   }
                   className="shrink-0"
                 />

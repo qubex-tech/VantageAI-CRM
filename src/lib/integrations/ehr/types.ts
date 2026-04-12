@@ -54,4 +54,14 @@ export type EhrSettings = {
   ehrWritebackOnNewPatientAdd?: boolean
   /** Retell post-call: when false, skip all eCW writes if Retell resolves to `existing` (default true). */
   ehrWritebackOnExistingPatientUpdate?: boolean
+  /**
+   * Retell post-call: when false, skip telephone encounter and draft notes when Retell resolves to `new`
+   * (still subject to global encounter/notes toggles). Default true.
+   */
+  ehrRetellWritebackEncounterAndNotesWhenNewPatient?: boolean
+  /**
+   * Retell post-call: when false, skip telephone encounter and draft notes when Retell resolves to `existing`
+   * (still subject to global encounter/notes toggles). Default true.
+   */
+  ehrRetellWritebackEncounterAndNotesWhenExistingPatient?: boolean
 }

@@ -280,6 +280,19 @@ export function normalizeStoredEhrPatientId(stored: string) {
   return s.split('/')[0] || s
 }
 
+export function encounterAndNotesAllowedForPatientMode(
+  settings: EhrSettings | null,
+  patientMode: 'new' | 'existing' | 'check_only' | 'conflict'
+): boolean {
+  if (patientMode === 'new') {
+    return settings?.ehrRetellWritebackEncounterAndNotesWhenNewPatient !== false
+  }
+  if (patientMode === 'existing') {
+    return settings?.ehrRetellWritebackEncounterAndNotesWhenExistingPatient !== false
+  }
+  return true
+}
+
 function resolvePatientMode(params: {
   extractedData: ExtractedCallData
 }): 'new' | 'existing' | 'check_only' | 'conflict' {
@@ -611,13 +624,15 @@ export async function writeBackRetellCallToEhr(params: {
   extractedData: ExtractedCallData
 }): Promise<WritebackResult> {
   const { practiceId, patientId, call, extractedData } = params
-  const WRITEBACK_VERSION = 'writeback_v17'
+  const WRITEBACK_VERSION = 'writeback_v18'
   if (!call.call_id) {
     return { status: 'skipped', reason: 'missing_call_id' }
   }
 
   const settings = await getEhrSettings(practiceId)
   const layers = getRetellEcwWritebackLayerFlags(settings)
+  const patientMode = resolvePatientMode({ extractedData })
+  const encounterNotesByModeForLog = encounterAndNotesAllowedForPatientMode(settings, patientMode)
 
   console.log('[EHR Writeback] Start', {
     practiceId,
@@ -627,6 +642,8 @@ export async function writeBackRetellCallToEhr(params: {
     hasExtractedPhone: Boolean(extractedData.user_phone_number),
     writebackVersion: WRITEBACK_VERSION,
     retellWritebackLayers: layers,
+    patientMode,
+    encounterAndNotesForPatientMode: encounterNotesByModeForLog,
   })
 
   const existingConversation = await prisma.voiceConversation.findFirst({
@@ -651,7 +668,6 @@ export async function writeBackRetellCallToEhr(params: {
     }
   }
 
-  const patientMode = resolvePatientMode({ extractedData })
   if (settings?.ehrWritebackOnNewPatientAdd === false && patientMode === 'new') {
     await markConversationMetadata(practiceId, call.call_id, {
       ehrWritebackStatus: 'skipped',
@@ -982,8 +998,10 @@ export async function writeBackRetellCallToEhr(params: {
 
     const noteText = buildCallNoteText(call, extractedData)
     const encounterNoteText = buildTelephoneEncounterNoteText(call, extractedData)
-    const wantsEncounter = layers.allowEncounter && Boolean(encounterNoteText?.trim())
-    const wantsNotes = layers.allowDraftNotes
+    const encounterNotesByMode = encounterAndNotesAllowedForPatientMode(settings, patientMode)
+    const wantsEncounter =
+      layers.allowEncounter && Boolean(encounterNoteText?.trim()) && encounterNotesByMode
+    const wantsNotes = layers.allowDraftNotes && encounterNotesByMode
 
     if (!ehrPatientId) {
       if (patientMode === 'new' && (wantsEncounter || wantsNotes) && !layers.allowPatientCreate) {
@@ -995,10 +1013,16 @@ export async function writeBackRetellCallToEhr(params: {
           ehrWritebackVersion: WRITEBACK_VERSION,
           ehrWritebackLayersSummary: {
             patientCreateInEcw: false,
+            patientMode,
+            encounterNotesByMode,
             layersRequested: {
               patientCreate: layers.allowPatientCreate,
               encounter: layers.allowEncounter,
               draftNotes: layers.allowDraftNotes,
+              encounterAndNotesWhenNewPatient:
+                settings?.ehrRetellWritebackEncounterAndNotesWhenNewPatient !== false,
+              encounterAndNotesWhenExistingPatient:
+                settings?.ehrRetellWritebackEncounterAndNotesWhenExistingPatient !== false,
             },
           },
         })
@@ -1213,7 +1237,13 @@ export async function writeBackRetellCallToEhr(params: {
             patientCreate: layers.allowPatientCreate,
             encounter: layers.allowEncounter,
             draftNotes: layers.allowDraftNotes,
+            encounterAndNotesWhenNewPatient:
+              settings?.ehrRetellWritebackEncounterAndNotesWhenNewPatient !== false,
+            encounterAndNotesWhenExistingPatient:
+              settings?.ehrRetellWritebackEncounterAndNotesWhenExistingPatient !== false,
           },
+          patientMode,
+          encounterNotesByMode,
         },
       })
       return { status: 'skipped', reason: 'retell_writeback_nothing_written' }
@@ -1244,7 +1274,13 @@ export async function writeBackRetellCallToEhr(params: {
           patientCreate: layers.allowPatientCreate,
           encounter: layers.allowEncounter,
           draftNotes: layers.allowDraftNotes,
+          encounterAndNotesWhenNewPatient:
+            settings?.ehrRetellWritebackEncounterAndNotesWhenNewPatient !== false,
+          encounterAndNotesWhenExistingPatient:
+            settings?.ehrRetellWritebackEncounterAndNotesWhenExistingPatient !== false,
         },
+        patientMode,
+        encounterNotesByMode,
       },
     })
 
