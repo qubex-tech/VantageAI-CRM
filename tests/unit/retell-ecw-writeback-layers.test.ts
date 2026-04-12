@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   getRetellEcwWritebackLayerFlags,
   encounterAndNotesAllowedForPatientMode,
+  classifyEncounterNotesPatientPath,
 } from '@/lib/integrations/ehr/writeback'
 
 describe('getRetellEcwWritebackLayerFlags', () => {
@@ -51,14 +52,26 @@ describe('encounterAndNotesAllowedForPatientMode', () => {
     expect(encounterAndNotesAllowedForPatientMode(base, 'existing')).toBe(true)
   })
 
-  it('always allows encounter+notes for check_only and conflict', () => {
+  it('allows encounter+notes for check_only when patient path is neutral (no new/existing hints)', () => {
     const off = {
       ...base,
       ehrRetellWritebackEncounterAndNotesWhenNewPatient: false,
       ehrRetellWritebackEncounterAndNotesWhenExistingPatient: false,
     }
-    expect(encounterAndNotesAllowedForPatientMode(off, 'check_only')).toBe(true)
+    expect(encounterAndNotesAllowedForPatientMode(off, 'check_only', {})).toBe(true)
     expect(encounterAndNotesAllowedForPatientMode(off, 'conflict')).toBe(true)
+  })
+
+  it('applies new-patient toggle for check_only when patient_type indicates new', () => {
+    const off = { ...base, ehrRetellWritebackEncounterAndNotesWhenNewPatient: false }
+    const extracted = { patient_type: 'New Patient' } as any
+    expect(encounterAndNotesAllowedForPatientMode(off, 'check_only', extracted)).toBe(false)
+  })
+
+  it('applies existing-patient toggle for check_only when patient_type indicates existing', () => {
+    const off = { ...base, ehrRetellWritebackEncounterAndNotesWhenExistingPatient: false }
+    const extracted = { patient_type: 'Existing Patient' } as any
+    expect(encounterAndNotesAllowedForPatientMode(off, 'check_only', extracted)).toBe(false)
   })
 
   it('respects false for new vs existing only', () => {
@@ -74,5 +87,25 @@ describe('encounterAndNotesAllowedForPatientMode', () => {
         'existing'
       )
     ).toBe(false)
+  })
+})
+
+describe('classifyEncounterNotesPatientPath', () => {
+  it('classifies check_only from patient_type', () => {
+    expect(classifyEncounterNotesPatientPath('check_only', { patient_type: 'New Patient' } as any)).toBe(
+      'new'
+    )
+    expect(
+      classifyEncounterNotesPatientPath('check_only', { patient_type: 'Existing Patient' } as any)
+    ).toBe('existing')
+  })
+
+  it('does not infer new from patient_type when new_patient_add is explicitly false', () => {
+    expect(
+      classifyEncounterNotesPatientPath('check_only', {
+        new_patient_add: false,
+        patient_type: 'New Patient',
+      } as any)
+    ).toBe('neutral')
   })
 })

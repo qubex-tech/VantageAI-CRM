@@ -282,12 +282,14 @@ export function normalizeStoredEhrPatientId(stored: string) {
 
 export function encounterAndNotesAllowedForPatientMode(
   settings: EhrSettings | null,
-  patientMode: 'new' | 'existing' | 'check_only' | 'conflict'
+  patientMode: 'new' | 'existing' | 'check_only' | 'conflict',
+  extractedData?: ExtractedCallData | null
 ): boolean {
-  if (patientMode === 'new') {
+  const path = classifyEncounterNotesPatientPath(patientMode, extractedData ?? ({} as ExtractedCallData))
+  if (path === 'new') {
     return settings?.ehrRetellWritebackEncounterAndNotesWhenNewPatient !== false
   }
-  if (patientMode === 'existing') {
+  if (path === 'existing') {
     return settings?.ehrRetellWritebackEncounterAndNotesWhenExistingPatient !== false
   }
   return true
@@ -297,19 +299,74 @@ function resolvePatientMode(params: {
   extractedData: ExtractedCallData
 }): 'new' | 'existing' | 'check_only' | 'conflict' {
   const customData = (params.extractedData.retell_custom_data || {}) as Record<string, unknown>
-  const newPatientAdd = parseBooleanLike(
-    customData['New Patient Add'] ?? customData['new patient add'] ?? params.extractedData.new_patient_add
-  )
-  const existingPatientUpdate = parseBooleanLike(
-    customData['Existing Patient Update'] ??
-      customData['existing patient update'] ??
-      params.extractedData.existing_patient_update
-  )
-  if (existingPatientUpdate === true && newPatientAdd === true) return 'conflict'
-  if (existingPatientUpdate === true) return 'existing'
-  if (newPatientAdd === true) return 'new'
+  // Prefer merged top-level flags from processRetellCallData (metadata / root / custom), then custom_data only.
+  const newPatientAdd =
+    params.extractedData.new_patient_add !== undefined
+      ? params.extractedData.new_patient_add
+      : parseBooleanLike(customData['New Patient Add'] ?? customData['new patient add']) === true
+  const existingPatientUpdate =
+    params.extractedData.existing_patient_update !== undefined
+      ? params.extractedData.existing_patient_update
+      : parseBooleanLike(
+          customData['Existing Patient Update'] ?? customData['existing patient update']
+        ) === true
+  if (existingPatientUpdate && newPatientAdd) return 'conflict'
+  if (existingPatientUpdate) return 'existing'
+  if (newPatientAdd) return 'new'
   // Strict mode: if booleans are not true, only perform demographic checks.
   return 'check_only'
+}
+
+/**
+ * Finer classification for encounter + draft-notes toggles only.
+ * Many tenants send patient_type / "Patient Type" without explicit New Patient Add booleans; those calls
+ * were previously treated as check_only and bypassed the per-path encounter toggles.
+ */
+export function classifyEncounterNotesPatientPath(
+  patientMode: 'new' | 'existing' | 'check_only' | 'conflict',
+  extractedData: ExtractedCallData
+): 'new' | 'existing' | 'neutral' {
+  if (patientMode === 'conflict') return 'neutral'
+  if (patientMode === 'new') return 'new'
+  if (patientMode === 'existing') return 'existing'
+  if (extractedData.new_patient_add === true) return 'new'
+  if (extractedData.existing_patient_update === true) return 'existing'
+
+  const custom = (extractedData.retell_custom_data || {}) as Record<string, unknown>
+  const typeCandidates = [
+    extractedData.patient_type,
+    custom['Patient Type'],
+    custom['patient_type'],
+    custom['patientType'],
+    custom['patient_status'],
+  ]
+  const typeStr = typeCandidates
+    .map((t) => (t !== null && t !== undefined ? String(t).trim().toLowerCase() : ''))
+    .find((s) => s.length > 0)
+
+  if (!typeStr) return 'neutral'
+
+  const explicitNewFalse = extractedData.new_patient_add === false
+  const explicitExistingFalse = extractedData.existing_patient_update === false
+
+  const looksExisting =
+    !explicitExistingFalse &&
+    (/\bexisting\b/.test(typeStr) ||
+      /\bestablished\b/.test(typeStr) ||
+      /\breturning\b/.test(typeStr) ||
+      /\bcurrent\s+patient\b/.test(typeStr))
+
+  const looksNew =
+    !explicitNewFalse &&
+    ((/\bnew\b/.test(typeStr) && /\bpatient\b/.test(typeStr)) ||
+      typeStr === 'new' ||
+      typeStr === 'np' ||
+      typeStr === 'new patient')
+
+  if (looksExisting && looksNew) return 'existing'
+  if (looksExisting) return 'existing'
+  if (looksNew) return 'new'
+  return 'neutral'
 }
 
 function parseDobToIso(dateText: string | undefined) {
@@ -624,7 +681,7 @@ export async function writeBackRetellCallToEhr(params: {
   extractedData: ExtractedCallData
 }): Promise<WritebackResult> {
   const { practiceId, patientId, call, extractedData } = params
-  const WRITEBACK_VERSION = 'writeback_v18'
+  const WRITEBACK_VERSION = 'writeback_v19'
   if (!call.call_id) {
     return { status: 'skipped', reason: 'missing_call_id' }
   }
@@ -632,7 +689,12 @@ export async function writeBackRetellCallToEhr(params: {
   const settings = await getEhrSettings(practiceId)
   const layers = getRetellEcwWritebackLayerFlags(settings)
   const patientMode = resolvePatientMode({ extractedData })
-  const encounterNotesByModeForLog = encounterAndNotesAllowedForPatientMode(settings, patientMode)
+  const encounterNotesPatientPath = classifyEncounterNotesPatientPath(patientMode, extractedData)
+  const encounterNotesByModeForLog = encounterAndNotesAllowedForPatientMode(
+    settings,
+    patientMode,
+    extractedData
+  )
 
   console.log('[EHR Writeback] Start', {
     practiceId,
@@ -643,6 +705,7 @@ export async function writeBackRetellCallToEhr(params: {
     writebackVersion: WRITEBACK_VERSION,
     retellWritebackLayers: layers,
     patientMode,
+    encounterNotesPatientPath,
     encounterAndNotesForPatientMode: encounterNotesByModeForLog,
   })
 
@@ -998,7 +1061,7 @@ export async function writeBackRetellCallToEhr(params: {
 
     const noteText = buildCallNoteText(call, extractedData)
     const encounterNoteText = buildTelephoneEncounterNoteText(call, extractedData)
-    const encounterNotesByMode = encounterAndNotesAllowedForPatientMode(settings, patientMode)
+    const encounterNotesByMode = encounterAndNotesAllowedForPatientMode(settings, patientMode, extractedData)
     const wantsEncounter =
       layers.allowEncounter && Boolean(encounterNoteText?.trim()) && encounterNotesByMode
     const wantsNotes = layers.allowDraftNotes && encounterNotesByMode
@@ -1014,6 +1077,7 @@ export async function writeBackRetellCallToEhr(params: {
           ehrWritebackLayersSummary: {
             patientCreateInEcw: false,
             patientMode,
+            encounterNotesPatientPath,
             encounterNotesByMode,
             layersRequested: {
               patientCreate: layers.allowPatientCreate,
@@ -1243,6 +1307,7 @@ export async function writeBackRetellCallToEhr(params: {
               settings?.ehrRetellWritebackEncounterAndNotesWhenExistingPatient !== false,
           },
           patientMode,
+          encounterNotesPatientPath,
           encounterNotesByMode,
         },
       })
@@ -1280,6 +1345,7 @@ export async function writeBackRetellCallToEhr(params: {
             settings?.ehrRetellWritebackEncounterAndNotesWhenExistingPatient !== false,
         },
         patientMode,
+        encounterNotesPatientPath,
         encounterNotesByMode,
       },
     })
