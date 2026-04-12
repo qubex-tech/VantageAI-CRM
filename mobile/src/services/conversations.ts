@@ -28,20 +28,26 @@ export async function fetchConversations(filters: ConversationFilters = {}): Pro
 
   const data = await apiGet<ConversationsResponse>(ENDPOINTS.conversations, params)
 
-  // Normalize — web API returns conversations array directly
-  const raw = Array.isArray(data) ? data : (data as any).conversations ?? []
+  // API returns { data: { conversations: [...] } } — extract the array
+  const raw = Array.isArray(data)
+    ? data
+    : (data as any).data?.conversations
+      ?? (data as any).conversations
+      ?? []
   return raw as Conversation[]
 }
 
 export async function fetchConversation(id: string): Promise<Conversation> {
-  return apiGet<Conversation>(ENDPOINTS.conversationById(id))
+  const data = await apiGet<any>(ENDPOINTS.conversationById(id))
+  // API returns { data: { conversation: {...} } }
+  return (data?.data?.conversation ?? data?.conversation ?? data) as Conversation
 }
 
 export async function fetchMessages(conversationId: string): Promise<Message[]> {
-  const data = await apiGet<MessagesResponse | Message[]>(
-    ENDPOINTS.conversationMessages(conversationId)
-  )
-  return Array.isArray(data) ? data : (data as MessagesResponse).messages ?? []
+  const data = await apiGet<any>(ENDPOINTS.conversationMessages(conversationId))
+  // API returns { data: { messages: [...] } }
+  if (Array.isArray(data)) return data
+  return data?.data?.messages ?? data?.messages ?? []
 }
 
 export async function sendMessage(payload: SendMessagePayload): Promise<Message> {

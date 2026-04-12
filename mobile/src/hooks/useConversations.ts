@@ -20,8 +20,9 @@ export function useConversations(filters: ConversationFilters = {}) {
   return useQuery({
     queryKey: QUERY_KEYS.conversations(filters),
     queryFn: () => fetchConversations(filters),
-    staleTime: 30_000,
-    refetchInterval: 30_000, // poll every 30s
+    staleTime: 15_000,
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: false,
   })
 }
 
@@ -39,8 +40,9 @@ export function useMessages(conversationId: string) {
     queryKey: QUERY_KEYS.messages(conversationId),
     queryFn: () => fetchMessages(conversationId),
     enabled: !!conversationId,
-    staleTime: 10_000,
-    refetchInterval: 15_000,
+    staleTime: 5_000,
+    refetchInterval: 8_000, // poll every 8s for near-real-time inbound messages
+    refetchIntervalInBackground: false,
   })
 }
 

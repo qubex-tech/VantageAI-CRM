@@ -17,6 +17,11 @@ const settingsSchema = z.object({
   enablePatientCreate: z.boolean().optional(),
   enableNoteCreate: z.boolean().optional(),
   enableBulkExport: z.boolean().optional(),
+  ehrRetellWritebackAllowPatientCreate: z.boolean().optional(),
+  ehrRetellWritebackAllowTelephoneEncounter: z.boolean().optional(),
+  ehrRetellWritebackAllowDraftNotes: z.boolean().optional(),
+  ehrWritebackOnNewPatientAdd: z.boolean().optional(),
+  ehrWritebackOnExistingPatientUpdate: z.boolean().optional(),
 })
 
 export async function GET(req: NextRequest) {
@@ -82,6 +87,11 @@ export async function POST(req: NextRequest) {
       enablePatientCreate: parsed.data.enablePatientCreate,
       enableNoteCreate: parsed.data.enableNoteCreate,
       enableBulkExport: parsed.data.enableBulkExport,
+      ehrRetellWritebackAllowPatientCreate: parsed.data.ehrRetellWritebackAllowPatientCreate,
+      ehrRetellWritebackAllowTelephoneEncounter: parsed.data.ehrRetellWritebackAllowTelephoneEncounter,
+      ehrRetellWritebackAllowDraftNotes: parsed.data.ehrRetellWritebackAllowDraftNotes,
+      ehrWritebackOnNewPatientAdd: parsed.data.ehrWritebackOnNewPatientAdd,
+      ehrWritebackOnExistingPatientUpdate: parsed.data.ehrWritebackOnExistingPatientUpdate,
     }
     const stored = await upsertEhrSettings(practiceId, settings)
     return NextResponse.json({

@@ -5,7 +5,9 @@ export function useCalls(filter = {}) {
   return useQuery({
     queryKey: ['calls', filter],
     queryFn: () => fetchCalls(filter),
-    refetchInterval: 60_000,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   })
 }
 

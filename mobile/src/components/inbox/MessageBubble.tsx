@@ -9,12 +9,21 @@ interface Props {
   message: Message
 }
 
+const CHANNEL_CONFIG: Record<string, { icon: string; label: string; color: string }> = {
+  sms:    { icon: 'phone-portrait-outline', label: 'SMS',    color: colors.sms   ?? '#16a34a' },
+  email:  { icon: 'mail-outline',           label: 'Email',  color: colors.email ?? '#2563eb' },
+  secure: { icon: 'lock-closed-outline',    label: 'Secure', color: '#7c3aed' },
+  voice:  { icon: 'call-outline',           label: 'Voice',  color: '#ea580c' },
+  video:  { icon: 'videocam-outline',       label: 'Video',  color: '#0891b2' },
+}
+
 export function MessageBubble({ message }: Props) {
-  const { body, direction, type, createdAt, deliveryStatus } = message
+  const { body, direction, type, channel, createdAt, deliveryStatus } = message
   const isOutbound = direction === 'outbound'
   const isInternal = type === 'note'
   const isSystem   = type === 'system'
   const time = format(new Date(createdAt), 'h:mm a')
+  const ch = CHANNEL_CONFIG[channel] ?? CHANNEL_CONFIG.sms
 
   if (isSystem) {
     return (
@@ -39,17 +48,26 @@ export function MessageBubble({ message }: Props) {
 
   return (
     <View style={[styles.row, isOutbound ? styles.rowOut : styles.rowIn]}>
-      <View style={[styles.bubble, isOutbound ? styles.bubbleOut : styles.bubbleIn]}>
-        <Text style={[styles.body, isOutbound ? styles.bodyOut : styles.bodyIn]}>{body}</Text>
-        <View style={styles.meta}>
-          <Text style={[styles.time, isOutbound ? styles.timeOut : styles.timeIn]}>{time}</Text>
-          {isOutbound && (
-            <Ionicons
-              name={deliveryStatus === 'delivered' || deliveryStatus === 'read' ? 'checkmark-done' : 'checkmark'}
-              size={12}
-              color={isOutbound ? 'rgba(255,255,255,0.7)' : colors.textMuted}
-            />
-          )}
+      <View style={styles.bubbleGroup}>
+        {/* Bubble */}
+        <View style={[styles.bubble, isOutbound ? styles.bubbleOut : styles.bubbleIn]}>
+          <Text style={[styles.body, isOutbound ? styles.bodyOut : styles.bodyIn]}>{body}</Text>
+          <View style={styles.meta}>
+            <Text style={[styles.time, isOutbound ? styles.timeOut : styles.timeIn]}>{time}</Text>
+            {isOutbound && (
+              <Ionicons
+                name={deliveryStatus === 'delivered' || deliveryStatus === 'read' ? 'checkmark-done' : 'checkmark'}
+                size={12}
+                color="rgba(255,255,255,0.7)"
+              />
+            )}
+          </View>
+        </View>
+
+        {/* Channel label below bubble */}
+        <View style={[styles.channelTag, isOutbound ? styles.channelTagOut : styles.channelTagIn]}>
+          <Ionicons name={ch.icon as any} size={10} color={ch.color} />
+          <Text style={[styles.channelTagText, { color: ch.color }]}>{ch.label}</Text>
         </View>
       </View>
     </View>
@@ -59,13 +77,15 @@ export function MessageBubble({ message }: Props) {
 const styles = StyleSheet.create({
   row: {
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xs,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.sm,
   },
   rowOut: { alignItems: 'flex-end' },
   rowIn:  { alignItems: 'flex-start' },
 
+  bubbleGroup: { gap: 4, maxWidth: '78%' },
+
   bubble: {
-    maxWidth: '78%',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
     borderRadius: radius.xl,
@@ -90,6 +110,26 @@ const styles = StyleSheet.create({
   time: { fontSize: fontSize.xxs },
   timeOut: { color: 'rgba(255,255,255,0.65)' },
   timeIn:  { color: colors.textMuted },
+
+  channelTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+    backgroundColor: colors.bgSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignSelf: 'flex-start',
+  },
+  channelTagOut: { alignSelf: 'flex-end' },
+  channelTagIn:  { alignSelf: 'flex-start' },
+  channelTagText: {
+    fontSize: 10,
+    fontWeight: fontWeight.semibold,
+    letterSpacing: 0.3,
+  },
 
   // Internal note
   noteWrap: {

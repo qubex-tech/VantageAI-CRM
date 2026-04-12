@@ -5,7 +5,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useFocusEffect } from '@react-navigation/native'
 import { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
 import { ConversationItem } from '@/components/inbox/ConversationItem'
@@ -41,8 +41,10 @@ export function InboxScreen() {
   }
 
   const { data, isLoading, refetch, isRefetching } = useConversations(queryFilters)
+
+  useFocusEffect(useCallback(() => { refetch() }, [refetch]))
   const { data: unreadCount = 0 } = useUnreadCount()
-  const conversations = data?.conversations ?? []
+  const conversations = Array.isArray(data) ? data : []
 
   const handleConversation = useCallback((id: string) => {
     navigation.navigate('ConversationDetail', { conversationId: id })
@@ -64,6 +66,17 @@ export function InboxScreen() {
               )}
             </View>
           </View>
+          <TouchableOpacity
+            onPress={() => refetch()}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={styles.refreshBtn}
+          >
+            <Ionicons
+              name="refresh-outline"
+              size={22}
+              color={isRefetching ? colors.accent : colors.textMuted}
+            />
+          </TouchableOpacity>
         </View>
 
         {/* Search */}
@@ -154,6 +167,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
+  },
+  refreshBtn: {
+    paddingTop: 4,
   },
   practiceName: {
     fontSize: fontSize.xs,

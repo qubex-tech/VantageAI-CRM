@@ -438,6 +438,92 @@ export async function fetchEhrPractitionerDetailForPractice(
   }
 }
 
+/** Test route helper: roles + paths for one practitioner (backed by detail fetch). */
+export async function fetchEhrPractitionerRolesOnlyForPractice(
+  practiceId: string,
+  practitionerRefInput: string,
+  options?: { timeoutMs?: number }
+) {
+  const detail = await fetchEhrPractitionerDetailForPractice(practiceId, practitionerRefInput, options)
+  if (!detail) return null
+  return {
+    reference: detail.reference,
+    practitioner: detail.practitioner,
+    roles: detail.roles,
+    pagesScanned: 1,
+    practitionerRequestPath: detail.practitionerRequestPath,
+    practitionerRoleRequestPath: detail.practitionerRoleRequestPath,
+    telephoneEncounterRefs: detail.telephoneEncounterRefs,
+  }
+}
+
+export type FacgcdPractitionerDirectoryEntry = {
+  reference: string
+  practitionerId: string
+  formattedName: string
+  practitionerRoleIds: string[]
+  organizationReferences: string[]
+  locationReferences: string[]
+}
+
+/**
+ * Test route helper: practitioner list plus role/org/location summary per practitioner
+ * (bounded by maxPractitionerPages for detail calls).
+ */
+export async function fetchFacgcdPractitionerDirectoryForPractice(
+  practiceId: string,
+  options?: { timeoutMs?: number; maxPractitionerPages?: number; maxRolePages?: number }
+) {
+  const ehrContext = await createEhrClientForPractice(practiceId, { timeoutMs: options?.timeoutMs ?? 60_000 })
+  if (!ehrContext) return null
+
+  const list = await listEhrPractitionersForPractice(practiceId)
+  const maxDetails = Math.min(list.length, Math.max(1, options?.maxPractitionerPages ?? 200))
+  const entries: FacgcdPractitionerDirectoryEntry[] = []
+  let rolePageBuckets = 0
+
+  for (let i = 0; i < maxDetails; i++) {
+    const opt = list[i]
+    const d = await fetchEhrPractitionerDetailForPractice(practiceId, opt.reference, {
+      timeoutMs: options?.timeoutMs,
+    })
+    if (!d) continue
+    rolePageBuckets += 1
+    const orgRefs: string[] = []
+    const locRefs: string[] = []
+    for (const r of d.roles) {
+      const o = r.organization?.reference
+      if (o) orgRefs.push(o)
+      for (const loc of r.location || []) {
+        const ref = loc?.reference
+        if (ref) locRefs.push(ref)
+      }
+    }
+    const pid = d.practitioner.id
+    if (!pid) continue
+    entries.push({
+      reference: d.reference,
+      practitionerId: pid,
+      formattedName: formatPractitionerName(d.practitioner) || opt.name,
+      practitionerRoleIds: d.roles.map((r) => r.id).filter((id): id is string => Boolean(id)),
+      organizationReferences: [...new Set(orgRefs)],
+      locationReferences: [...new Set(locRefs)],
+    })
+  }
+
+  const practitionerRoleCount = entries.reduce((acc, e) => acc + e.practitionerRoleIds.length, 0)
+
+  return {
+    issuer: ehrContext.connection.issuer,
+    practitionerInitialPath: '/Practitioner?_count=200',
+    practitionerPagesScanned: 1,
+    practitionerRolePagesScanned: rolePageBuckets,
+    practitionerCount: list.length,
+    practitionerRoleCount,
+    entries,
+  }
+}
+
 async function upsertPatientFromEhr(params: {
   practiceId: string
   client: FhirClient

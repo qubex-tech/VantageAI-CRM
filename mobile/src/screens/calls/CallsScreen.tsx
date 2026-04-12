@@ -4,7 +4,7 @@ import {
   RefreshControl, useWindowDimensions,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useFocusEffect } from '@react-navigation/native'
 import { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { CallItem } from '@/components/calls/CallItem'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -23,6 +23,8 @@ export function CallsScreen() {
   const practiceName = user?.practiceName ?? null
 
   const { data, isLoading, refetch, isRefetching, isError, error } = useCalls()
+
+  useFocusEffect(useCallback(() => { refetch() }, [refetch]))
   const calls = data?.calls ?? []
   const reviewedIds = new Set(data?.reviewedCallIds ?? [])
   const debugMsg = (data as any)?.debug ?? null

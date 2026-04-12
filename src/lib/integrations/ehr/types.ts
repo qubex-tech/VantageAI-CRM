@@ -44,4 +44,14 @@ export type EhrSettings = {
   enablePatientCreate?: boolean
   enableNoteCreate?: boolean
   enableBulkExport?: boolean
+  /** Retell post-call: allow FHIR Patient create in eCW when agent path is “new” (default true). */
+  ehrRetellWritebackAllowPatientCreate?: boolean
+  /** Retell post-call: allow telephone Encounter transaction POST (default true). */
+  ehrRetellWritebackAllowTelephoneEncounter?: boolean
+  /** Retell post-call: allow draft DocumentReference notes (call summary + telephone draft) (default true). */
+  ehrRetellWritebackAllowDraftNotes?: boolean
+  /** Retell post-call: when false, skip all eCW writes if Retell resolves to `new` (default true). */
+  ehrWritebackOnNewPatientAdd?: boolean
+  /** Retell post-call: when false, skip all eCW writes if Retell resolves to `existing` (default true). */
+  ehrWritebackOnExistingPatientUpdate?: boolean
 }

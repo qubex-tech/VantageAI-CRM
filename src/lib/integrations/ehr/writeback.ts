@@ -11,6 +11,7 @@ import { createDraftDocumentReference } from '@/lib/integrations/fhir/resources/
 import { createPatient } from '@/lib/integrations/fhir/resources/patient'
 import { FhirClient, WriteNotSupportedError } from '@/lib/integrations/fhir/fhirClient'
 import type { ExtractedCallData } from '@/lib/process-call-data'
+import type { EhrSettings } from '@/lib/integrations/ehr/types'
 import type { RetellCall } from '@/lib/retell-api'
 import { Prisma } from '@prisma/client'
 import { randomUUID } from 'crypto'
@@ -19,6 +20,15 @@ import { refreshBackendConnectionIfNeeded } from '@/lib/integrations/ehr/backend
 const WRITEBACK_PROVIDER_ID = 'ecw_write'
 const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.326070'
 const ECW_PATIENT_IDENTIFIER_VALUE = '15455'
+
+/** Defaults preserve legacy behavior when fields are unset. */
+export function getRetellEcwWritebackLayerFlags(settings: EhrSettings | null) {
+  return {
+    allowPatientCreate: settings?.ehrRetellWritebackAllowPatientCreate !== false,
+    allowEncounter: settings?.ehrRetellWritebackAllowTelephoneEncounter !== false,
+    allowDraftNotes: settings?.ehrRetellWritebackAllowDraftNotes !== false,
+  }
+}
 
 export type EcwTelephoneEncounterRefs = {
   participantPractitionerRef: string
@@ -601,10 +611,13 @@ export async function writeBackRetellCallToEhr(params: {
   extractedData: ExtractedCallData
 }): Promise<WritebackResult> {
   const { practiceId, patientId, call, extractedData } = params
-  const WRITEBACK_VERSION = 'writeback_v16'
+  const WRITEBACK_VERSION = 'writeback_v17'
   if (!call.call_id) {
     return { status: 'skipped', reason: 'missing_call_id' }
   }
+
+  const settings = await getEhrSettings(practiceId)
+  const layers = getRetellEcwWritebackLayerFlags(settings)
 
   console.log('[EHR Writeback] Start', {
     practiceId,
@@ -613,9 +626,9 @@ export async function writeBackRetellCallToEhr(params: {
     hasExtractedName: Boolean(extractedData.patient_name),
     hasExtractedPhone: Boolean(extractedData.user_phone_number),
     writebackVersion: WRITEBACK_VERSION,
+    retellWritebackLayers: layers,
   })
 
-  const settings = await getEhrSettings(practiceId)
   const existingConversation = await prisma.voiceConversation.findFirst({
     where: { practiceId, retellCallId: call.call_id },
   })
@@ -624,11 +637,7 @@ export async function writeBackRetellCallToEhr(params: {
       ? (existingConversation.metadata as Record<string, unknown>)
       : {}
   const existingWritebackStatus = existingMetadata.ehrWritebackStatus
-  const existingEncounterId =
-    typeof existingMetadata.ehrWritebackEncounterId === 'string'
-      ? existingMetadata.ehrWritebackEncounterId
-      : null
-  if (existingWritebackStatus === 'success' && existingEncounterId) {
+  if (existingWritebackStatus === 'success') {
     return { status: 'skipped', reason: 'already_written' }
   }
   if (existingWritebackStatus === 'in_progress') {
@@ -640,6 +649,38 @@ export async function writeBackRetellCallToEhr(params: {
     if (Number.isNaN(startedAtMs) || Date.now() - startedAtMs < 30 * 60 * 1000) {
       return { status: 'skipped', reason: 'duplicate_in_progress' }
     }
+  }
+
+  const patientMode = resolvePatientMode({ extractedData })
+  if (settings?.ehrWritebackOnNewPatientAdd === false && patientMode === 'new') {
+    await markConversationMetadata(practiceId, call.call_id, {
+      ehrWritebackStatus: 'skipped',
+      ehrWritebackError:
+        'EHR writeback disabled for calls classified as New Patient Add (practice setting).',
+      ehrWritebackFailedAt: new Date().toISOString(),
+      ehrWritebackVersion: WRITEBACK_VERSION,
+    })
+    return { status: 'skipped', reason: 'retell_writeback_disabled_new_patient_add' }
+  }
+  if (settings?.ehrWritebackOnExistingPatientUpdate === false && patientMode === 'existing') {
+    await markConversationMetadata(practiceId, call.call_id, {
+      ehrWritebackStatus: 'skipped',
+      ehrWritebackError:
+        'EHR writeback disabled for calls classified as Existing Patient Update (practice setting).',
+      ehrWritebackFailedAt: new Date().toISOString(),
+      ehrWritebackVersion: WRITEBACK_VERSION,
+    })
+    return { status: 'skipped', reason: 'retell_writeback_disabled_existing_patient_update' }
+  }
+  if (!layers.allowPatientCreate && !layers.allowEncounter && !layers.allowDraftNotes) {
+    await markConversationMetadata(practiceId, call.call_id, {
+      ehrWritebackStatus: 'skipped',
+      ehrWritebackError:
+        'All Retell eCW writeback layers are disabled (patient create, telephone encounter, draft notes).',
+      ehrWritebackFailedAt: new Date().toISOString(),
+      ehrWritebackVersion: WRITEBACK_VERSION,
+    })
+    return { status: 'skipped', reason: 'retell_writeback_all_layers_disabled' }
   }
 
   await markConversationMetadata(practiceId, call.call_id, {
@@ -765,6 +806,7 @@ export async function writeBackRetellCallToEhr(params: {
     }
 
     let ehrPatientId: string | null = null
+    let ehrPatientCreatedInEcw = false
     let patientRecord = null
     if (patientId) {
       patientRecord = await prisma.patient.findUnique({
@@ -773,7 +815,6 @@ export async function writeBackRetellCallToEhr(params: {
       ehrPatientId = patientRecord?.externalEhrId || null
     }
 
-    const patientMode = resolvePatientMode({ extractedData })
     const lookupBirthDate =
       parseDobToIso(extractedData.patient_dob) ||
       (patientRecord?.dateOfBirth
@@ -844,7 +885,13 @@ export async function writeBackRetellCallToEhr(params: {
       return { status: 'skipped', reason: 'create_not_requested' }
     }
 
-    if (!ehrPatientId && settings?.enablePatientCreate && patientRecord && patientMode === 'new') {
+    if (
+      !ehrPatientId &&
+      layers.allowPatientCreate &&
+      settings?.enablePatientCreate &&
+      patientRecord &&
+      patientMode === 'new'
+    ) {
         const name =
           parsePatientName(patientRecord.name) || parsePatientName(extractedData.patient_name)
       if (name) {
@@ -910,6 +957,7 @@ export async function writeBackRetellCallToEhr(params: {
         }
         if (createdId) {
           ehrPatientId = createdId
+          ehrPatientCreatedInEcw = true
           await prisma.patient.update({
             where: { id: patientRecord.id },
             data: { externalEhrId: createdId },
@@ -932,7 +980,40 @@ export async function writeBackRetellCallToEhr(params: {
       }
     }
 
+    const noteText = buildCallNoteText(call, extractedData)
+    const encounterNoteText = buildTelephoneEncounterNoteText(call, extractedData)
+    const wantsEncounter = layers.allowEncounter && Boolean(encounterNoteText?.trim())
+    const wantsNotes = layers.allowDraftNotes
+
     if (!ehrPatientId) {
+      if (patientMode === 'new' && (wantsEncounter || wantsNotes) && !layers.allowPatientCreate) {
+        await markConversationMetadata(practiceId, call.call_id, {
+          ehrWritebackStatus: 'skipped',
+          ehrWritebackError:
+            'No EHR patient ID: telephone encounter and/or draft notes require an eCW patient, but creating a patient in eCW is disabled for Retell writeback.',
+          ehrWritebackFailedAt: new Date().toISOString(),
+          ehrWritebackVersion: WRITEBACK_VERSION,
+          ehrWritebackLayersSummary: {
+            patientCreateInEcw: false,
+            layersRequested: {
+              patientCreate: layers.allowPatientCreate,
+              encounter: layers.allowEncounter,
+              draftNotes: layers.allowDraftNotes,
+            },
+          },
+        })
+        return { status: 'skipped', reason: 'missing_ehr_patient_patient_create_disabled' }
+      }
+      if (patientMode === 'new' && !wantsEncounter && !wantsNotes && !layers.allowPatientCreate) {
+        await markConversationMetadata(practiceId, call.call_id, {
+          ehrWritebackStatus: 'skipped',
+          ehrWritebackError:
+            'No EHR patient match and all Retell eCW writeback layers are off or not applicable without an existing eCW patient.',
+          ehrWritebackFailedAt: new Date().toISOString(),
+          ehrWritebackVersion: WRITEBACK_VERSION,
+        })
+        return { status: 'skipped', reason: 'retell_writeback_nothing_applicable' }
+      }
       console.error('[EHR Writeback] Missing EHR patient ID', {
         practiceId,
         callId: call.call_id,
@@ -948,36 +1029,35 @@ export async function writeBackRetellCallToEhr(params: {
       return { status: 'error', reason: 'missing_patient_id' }
     }
 
-    const noteText = buildCallNoteText(call, extractedData)
-    const encounterNoteText = buildTelephoneEncounterNoteText(call, extractedData)
-    const encounterNotePreview = truncateText(encounterNoteText, 400)
+    const encounterNotePreview = encounterNoteText ? truncateText(encounterNoteText, 400) : ''
     const issuerTelephoneBucket = telephoneDefaultBucketFromIssuer(refreshedConnection.issuer)
-    const encounterRefs = resolveEcwTelephoneEncounterRefs(settings, refreshedConnection.issuer)
     const ehrTimeZone = settings?.ehrTimeZone || undefined
-    console.log('[EHR Writeback] Telephone encounter ref resolution', {
-      practiceId,
-      callId: call.call_id,
-      writebackVersion: WRITEBACK_VERSION,
-      issuerTelephoneBucket,
-      participantPractitionerRef: encounterRefs.participantPractitionerRef,
-      assignedToPractitionerRef: encounterRefs.assignedToPractitionerRef,
-      locationRef: encounterRefs.locationRef,
-      organizationRef: encounterRefs.organizationRef,
-      telephoneEncounterBundleShape: TELEPHONE_ENCOUNTER_BUNDLE_DIRECT_ECW_OPTIONS,
-    })
-    const missingRefs = missingEncounterRefs(encounterRefs)
-    if (missingRefs.length > 0) {
-      await markConversationMetadata(practiceId, call.call_id, {
-        ehrWritebackStatus: 'error',
-        ehrWritebackError: `Missing encounter reference configuration: ${missingRefs.join(', ')}`,
-        ehrWritebackFailedAt: new Date().toISOString(),
-        ehrWritebackVersion: WRITEBACK_VERSION,
-      })
-      return { status: 'error', reason: 'missing_encounter_refs' }
-    }
+
     let encounterId: string | null = null
     let encounterUrl: string | null = null
-    if (encounterNoteText) {
+    if (wantsEncounter) {
+      const encounterRefs = resolveEcwTelephoneEncounterRefs(settings, refreshedConnection.issuer)
+      console.log('[EHR Writeback] Telephone encounter ref resolution', {
+        practiceId,
+        callId: call.call_id,
+        writebackVersion: WRITEBACK_VERSION,
+        issuerTelephoneBucket,
+        participantPractitionerRef: encounterRefs.participantPractitionerRef,
+        assignedToPractitionerRef: encounterRefs.assignedToPractitionerRef,
+        locationRef: encounterRefs.locationRef,
+        organizationRef: encounterRefs.organizationRef,
+        telephoneEncounterBundleShape: TELEPHONE_ENCOUNTER_BUNDLE_DIRECT_ECW_OPTIONS,
+      })
+      const missingRefs = missingEncounterRefs(encounterRefs)
+      if (missingRefs.length > 0) {
+        await markConversationMetadata(practiceId, call.call_id, {
+          ehrWritebackStatus: 'error',
+          ehrWritebackError: `Missing encounter reference configuration: ${missingRefs.join(', ')}`,
+          ehrWritebackFailedAt: new Date().toISOString(),
+          ehrWritebackVersion: WRITEBACK_VERSION,
+        })
+        return { status: 'error', reason: 'missing_encounter_refs' }
+      }
       const startTime = call.start_timestamp ? new Date(call.start_timestamp) : new Date()
       const endTime = call.end_timestamp ? new Date(call.end_timestamp) : new Date(startTime.getTime() + 15 * 60 * 1000)
       const encounterBundle = buildTelephoneEncounterBundle({
@@ -1053,24 +1133,27 @@ export async function writeBackRetellCallToEhr(params: {
         },
       })
     }
-    const created = await createDraftDocumentReference({
-      client,
-      patientId: ehrPatientId,
-      noteText,
-      preferPreliminary: false,
-      capabilityStatement,
-      skipCapabilityCheck: connection.providerId.startsWith('ecw'),
-      useTransaction: connection.providerId.startsWith('ecw'),
-    })
 
-    const telephoneNoteText = buildTelephoneEncounterNoteText(call, extractedData)
+    let created: { id?: string; reviewUrl?: string | null } | null = null
+    if (wantsNotes) {
+      created = await createDraftDocumentReference({
+        client,
+        patientId: ehrPatientId,
+        noteText,
+        preferPreliminary: false,
+        capabilityStatement,
+        skipCapabilityCheck: connection.providerId.startsWith('ecw'),
+        useTransaction: connection.providerId.startsWith('ecw'),
+      })
+    }
+
     let telephoneNoteId: string | null = null
     let telephoneNoteUrl: string | null = null
-    if (telephoneNoteText) {
+    if (wantsNotes && encounterNoteText) {
       const telephoneNote = await createDraftDocumentReference({
         client,
         patientId: ehrPatientId,
-        noteText: telephoneNoteText,
+        noteText: encounterNoteText,
         preferPreliminary: false,
         capabilityStatement,
         skipCapabilityCheck: connection.providerId.startsWith('ecw'),
@@ -1093,45 +1176,87 @@ export async function writeBackRetellCallToEhr(params: {
       })
     }
 
-    await logEhrAudit({
-      tenantId: practiceId,
-      actorUserId: null,
-      action: 'FHIR_WRITE',
-      providerId: connection.providerId,
-      entity: 'DocumentReference',
-      entityId: created.id || undefined,
-      metadata: {
-        patientId: ehrPatientId,
-        callId: call.call_id,
-      },
-    })
+    if (created?.id) {
+      await logEhrAudit({
+        tenantId: practiceId,
+        actorUserId: null,
+        action: 'FHIR_WRITE',
+        providerId: connection.providerId,
+        entity: 'DocumentReference',
+        entityId: created.id,
+        metadata: {
+          patientId: ehrPatientId,
+          callId: call.call_id,
+        },
+      })
+    }
+
+    const didAnyWrite =
+      ehrPatientCreatedInEcw ||
+      Boolean(encounterId) ||
+      Boolean(created?.id) ||
+      Boolean(telephoneNoteId)
+
+    if (!didAnyWrite) {
+      await markConversationMetadata(practiceId, call.call_id, {
+        ehrWritebackStatus: 'skipped',
+        ehrWritebackError:
+          'No eCW resources were written (layers disabled or no applicable telephone encounter content).',
+        ehrWritebackFailedAt: new Date().toISOString(),
+        ehrWritebackVersion: WRITEBACK_VERSION,
+        ehrWritebackLayersSummary: {
+          patientCreateInEcw: ehrPatientCreatedInEcw,
+          encounterWritten: Boolean(encounterId),
+          callSummaryNoteWritten: Boolean(created?.id),
+          telephoneDraftNoteWritten: Boolean(telephoneNoteId),
+          layersConfigured: {
+            patientCreate: layers.allowPatientCreate,
+            encounter: layers.allowEncounter,
+            draftNotes: layers.allowDraftNotes,
+          },
+        },
+      })
+      return { status: 'skipped', reason: 'retell_writeback_nothing_written' }
+    }
 
     await markConversationMetadata(practiceId, call.call_id, {
       ehrWritebackStatus: 'success',
       ehrWritebackCompletedAt: new Date().toISOString(),
-      ehrWritebackNoteId: created.id || null,
-      ehrWritebackReviewUrl: created.reviewUrl || null,
+      ehrWritebackNoteId: created?.id || null,
+      ehrWritebackReviewUrl: created?.reviewUrl || null,
       ehrWritebackTelephoneNoteId: telephoneNoteId,
       ehrWritebackTelephoneNoteUrl: telephoneNoteUrl,
       ehrWritebackEncounterId: encounterId,
       ehrWritebackEncounterUrl: encounterUrl,
-      ehrWritebackEncounterNoteLength: encounterNoteText.length,
+      ehrWritebackEncounterNoteLength: encounterNoteText?.length ?? 0,
       ehrWritebackEncounterNotePreview: encounterNotePreview,
       ehrWritebackPatientId: ehrPatientId,
+      ehrWritebackPatientCreatedInEcw: ehrPatientCreatedInEcw,
       ehrWritebackError: null,
       ehrWritebackFailedAt: null,
       ehrWritebackVersion: WRITEBACK_VERSION,
+      ehrWritebackLayersSummary: {
+        patientCreateInEcw: ehrPatientCreatedInEcw,
+        encounterWritten: Boolean(encounterId),
+        callSummaryNoteWritten: Boolean(created?.id),
+        telephoneDraftNoteWritten: Boolean(telephoneNoteId),
+        layersConfigured: {
+          patientCreate: layers.allowPatientCreate,
+          encounter: layers.allowEncounter,
+          draftNotes: layers.allowDraftNotes,
+        },
+      },
     })
 
     console.log('[EHR Writeback] Success', {
       practiceId,
       callId: call.call_id,
       ehrPatientId,
-      noteId: created.id || null,
-      reviewUrl: created.reviewUrl || null,
+      noteId: created?.id || null,
+      reviewUrl: created?.reviewUrl || null,
     })
 
-    return { status: 'success', noteId: created.id, reviewUrl: created.reviewUrl }
+    return { status: 'success', noteId: created?.id, reviewUrl: created?.reviewUrl ?? undefined }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'EHR writeback failed'
     if (error instanceof WriteNotSupportedError) {

@@ -40,7 +40,7 @@ export function StatusDot({ status }: { status: ConversationStatus }) {
 }
 
 export function StatusPill({ status }: { status: ConversationStatus }) {
-  const cfg = STATUS_CONFIG[status]
+  const cfg = STATUS_CONFIG[status] ?? { label: status ?? 'Unknown', color: colors.textMuted }
   return (
     <View style={[styles.statusPill, { backgroundColor: cfg.color + '18' }]}>
       <View style={[styles.dot, { backgroundColor: cfg.color, marginRight: 4 }]} />

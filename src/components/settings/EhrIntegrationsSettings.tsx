@@ -31,6 +31,11 @@ type EhrSettings = {
   enablePatientCreate?: boolean
   enableNoteCreate?: boolean
   enableBulkExport?: boolean
+  ehrRetellWritebackAllowPatientCreate?: boolean
+  ehrRetellWritebackAllowTelephoneEncounter?: boolean
+  ehrRetellWritebackAllowDraftNotes?: boolean
+  ehrWritebackOnNewPatientAdd?: boolean
+  ehrWritebackOnExistingPatientUpdate?: boolean
 }
 
 type StatusResponse = {
@@ -134,6 +139,11 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
     enablePatientCreate: false,
     enableNoteCreate: false,
     enableBulkExport: false,
+    ehrRetellWritebackAllowPatientCreate: true,
+    ehrRetellWritebackAllowTelephoneEncounter: true,
+    ehrRetellWritebackAllowDraftNotes: true,
+    ehrWritebackOnNewPatientAdd: true,
+    ehrWritebackOnExistingPatientUpdate: true,
   })
   const [selectedProviderId, setSelectedProviderId] = useState<string>('ecw')
   const [status, setStatus] = useState<StatusResponse | null>(null)
@@ -199,6 +209,12 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
           enablePatientCreate: data.settings.enablePatientCreate ?? false,
           enableNoteCreate: data.settings.enableNoteCreate ?? false,
           enableBulkExport: data.settings.enableBulkExport ?? false,
+          ehrRetellWritebackAllowPatientCreate: data.settings.ehrRetellWritebackAllowPatientCreate ?? true,
+          ehrRetellWritebackAllowTelephoneEncounter:
+            data.settings.ehrRetellWritebackAllowTelephoneEncounter ?? true,
+          ehrRetellWritebackAllowDraftNotes: data.settings.ehrRetellWritebackAllowDraftNotes ?? true,
+          ehrWritebackOnNewPatientAdd: data.settings.ehrWritebackOnNewPatientAdd ?? true,
+          ehrWritebackOnExistingPatientUpdate: data.settings.ehrWritebackOnExistingPatientUpdate ?? true,
         })
       }
     }
@@ -617,6 +633,93 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
                 }
                 className="shrink-0"
               />
+            </div>
+          </div>
+          <div className="rounded border border-gray-200 bg-gray-50/80 p-4 space-y-3">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Retell post-call eCW writeback</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Controls automated writes after voice calls when the backend write app is connected.
+                Draft notes include the call summary and the telephone-encounter draft.
+              </p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="flex items-center justify-between rounded border border-gray-200 bg-white p-3">
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Create patient in eCW</p>
+                  <p className="text-xs text-gray-500">
+                    When Retell classifies as new patient and Patient.create is allowed above.
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.ehrRetellWritebackAllowPatientCreate !== false}
+                  onCheckedChange={(checked) =>
+                    setSettings((prev) => ({ ...prev, ehrRetellWritebackAllowPatientCreate: checked }))
+                  }
+                  className="shrink-0"
+                />
+              </div>
+              <div className="flex items-center justify-between rounded border border-gray-200 bg-white p-3">
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Telephone encounter</p>
+                  <p className="text-xs text-gray-500">POST the telephone Encounter transaction bundle.</p>
+                </div>
+                <Switch
+                  checked={settings.ehrRetellWritebackAllowTelephoneEncounter !== false}
+                  onCheckedChange={(checked) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      ehrRetellWritebackAllowTelephoneEncounter: checked,
+                    }))
+                  }
+                  className="shrink-0"
+                />
+              </div>
+              <div className="flex items-center justify-between rounded border border-gray-200 bg-white p-3">
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Draft notes</p>
+                  <p className="text-xs text-gray-500">
+                    Create DocumentReference drafts (summary + telephone encounter text).
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.ehrRetellWritebackAllowDraftNotes !== false}
+                  onCheckedChange={(checked) =>
+                    setSettings((prev) => ({ ...prev, ehrRetellWritebackAllowDraftNotes: checked }))
+                  }
+                  className="shrink-0"
+                />
+              </div>
+              <div className="flex items-center justify-between rounded border border-gray-200 bg-white p-3">
+                <div>
+                  <p className="text-sm font-medium text-gray-700">When Retell: New Patient Add</p>
+                  <p className="text-xs text-gray-500">
+                    Off skips all Retell eCW writes for calls classified as new patient.
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.ehrWritebackOnNewPatientAdd !== false}
+                  onCheckedChange={(checked) =>
+                    setSettings((prev) => ({ ...prev, ehrWritebackOnNewPatientAdd: checked }))
+                  }
+                  className="shrink-0"
+                />
+              </div>
+              <div className="flex items-center justify-between rounded border border-gray-200 bg-white p-3 md:col-span-2">
+                <div>
+                  <p className="text-sm font-medium text-gray-700">When Retell: Existing Patient Update</p>
+                  <p className="text-xs text-gray-500">
+                    Off skips all Retell eCW writes for calls classified as existing patient update.
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.ehrWritebackOnExistingPatientUpdate !== false}
+                  onCheckedChange={(checked) =>
+                    setSettings((prev) => ({ ...prev, ehrWritebackOnExistingPatientUpdate: checked }))
+                  }
+                  className="shrink-0"
+                />
+              </div>
             </div>
           </div>
           <div className="space-y-1">

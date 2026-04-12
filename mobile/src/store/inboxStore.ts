@@ -18,7 +18,7 @@ interface InboxStore {
 }
 
 const defaultFilters: InboxFilters = {
-  status: 'open',
+  status: undefined,
   channel: undefined,
   assignee: 'all',
   search: '',

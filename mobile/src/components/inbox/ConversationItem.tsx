@@ -12,15 +12,18 @@ interface Props {
 }
 
 export function ConversationItem({ conversation, onPress }: Props) {
-  const { patient, latestMessage, unreadCount, channel, lastMessageAt, status } = conversation
+  const { patient, channel, lastMessageAt, status } = conversation
+  const anyConv = conversation as any
   const name = patient
     ? `${patient.firstName ?? ''} ${patient.lastName ?? ''}`.trim() || patient.name || 'Unknown'
     : 'Unknown Patient'
-  const preview = latestMessage?.body ?? 'No messages yet'
+  // Support both API shapes: latestMessage.body and lastMessagePreview
+  const preview = conversation.latestMessage?.body ?? anyConv.lastMessagePreview ?? 'No messages yet'
   const time = lastMessageAt
     ? formatDistanceToNowStrict(new Date(lastMessageAt), { addSuffix: false })
     : ''
-  const hasUnread = unreadCount > 0
+  // Support both unreadCount (number) and unread (boolean)
+  const hasUnread = (conversation.unreadCount > 0) || (anyConv.unread === true)
 
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.6} style={styles.row}>
