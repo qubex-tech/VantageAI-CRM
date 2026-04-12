@@ -38,8 +38,18 @@ export function CallDetailScreen() {
   const { width } = useWindowDimensions()
   const isTablet = width >= 768
 
-  const { data, isLoading } = useCall(callId)
+  const { data, isLoading, error } = useCall(callId)
   const markReviewed = useMarkCallReviewed()
+
+  // Debug: log call fetch result
+  useEffect(() => {
+    if (data !== undefined) {
+      console.log('[CallDetail] data received:', { callId, hasCall: !!data?.call, callStatus: data?.call?.call_status })
+    }
+    if (error) {
+      console.error('[CallDetail] fetch error:', { callId, error: (error as any)?.message })
+    }
+  }, [data, error, callId])
 
   // Auto-mark reviewed when screen opens
   useEffect(() => {
@@ -86,7 +96,12 @@ export function CallDetailScreen() {
         <ActivityIndicator style={styles.loader} color={colors.accent} />
       ) : !call ? (
         <View style={styles.loader}>
-          <Text style={styles.errorText}>Call not found</Text>
+          <Text style={styles.errorText}>
+            {error ? `Error: ${(error as any)?.message ?? 'Failed to load call'}` : 'Call not found'}
+          </Text>
+          <Text style={[styles.errorText, { fontSize: 11, marginTop: 4, color: colors.textMuted }]}>
+            ID: {callId}
+          </Text>
         </View>
       ) : (
         <ScrollView

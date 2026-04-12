@@ -11,6 +11,12 @@ export interface PushNotificationHandlers {
 
 export function usePushNotifications(handlers?: PushNotificationHandlers) {
   const tokenRef = useRef<string | null>(null)
+  // Keep a stable ref to the latest handlers so listeners always call the
+  // most-recent version even though the effect runs only once.
+  const handlersRef = useRef(handlers)
+  useEffect(() => {
+    handlersRef.current = handlers
+  })
 
   useEffect(() => {
     let notificationListener: any
@@ -30,11 +36,36 @@ export function usePushNotifications(handlers?: PushNotificationHandlers) {
       })
 
       notificationListener = Notifications.addNotificationReceivedListener(
-        (n: any) => handlers?.onNotification?.(n)
+        (n: any) => handlersRef.current?.onNotification?.(n)
       )
       responseListener = Notifications.addNotificationResponseReceivedListener(
-        (r: any) => handlers?.onResponse?.(r)
+        (r: any) => handlersRef.current?.onResponse?.(r)
       )
+
+      // ── Cold-start / killed-app case ──────────────────────────────────────
+      // If the user tapped a notification that launched the app from a killed
+      // state the response arrives *before* the listener above is registered.
+      // Expo stores the last response so we can pick it up here.
+      try {
+        const lastResponse = await Notifications.getLastNotificationResponseAsync()
+        if (lastResponse) {
+          // Only handle recent taps (within last 60 s) to avoid re-navigating
+          // on a normal app launch long after the notification was tapped.
+          const ageSecs = Date.now() / 1000 - lastResponse.notification.date
+          if (ageSecs < 60) {
+            // Deliver async so the navigator tree is ready before we navigate.
+            setTimeout(() => {
+              handlersRef.current?.onResponse?.(lastResponse)
+              // Dismiss so the same notification doesn't re-navigate next launch.
+              Notifications.dismissNotificationAsync(
+                lastResponse.notification.request.identifier
+              ).catch(() => null)
+            }, 600)
+          }
+        }
+      } catch (err) {
+        console.warn('[PushNotifications] getLastNotificationResponseAsync error', err)
+      }
 
       const token = await registerForPushNotificationsAsync(Notifications)
       tokenRef.current = token ?? null

@@ -16,6 +16,8 @@ export function useCall(id: string) {
     queryKey: ['call', id],
     queryFn: () => fetchCall(id),
     enabled: !!id,
+    staleTime: 0,          // always fetch fresh call data when navigating to detail
+    retry: 2,
   })
 }
 

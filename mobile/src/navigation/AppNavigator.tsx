@@ -37,11 +37,19 @@ function MainTabs() {
       if (!data) return
 
       if (data.type === 'call' && data.callId) {
-        // Deep-link to call detail screen
+        // Deep-link to call detail screen.
+        // Use CommonActions.reset on the Calls stack so the correct callId
+        // is always shown — even if a previous CallDetail is already in the stack.
         navigation.navigate('Calls', {
-          screen: 'CallDetail',
-          params: { callId: data.callId },
+          screen: 'CallsList',
         })
+        // Small delay lets the Calls navigator mount before drilling into CallDetail
+        setTimeout(() => {
+          navigation.navigate('Calls', {
+            screen: 'CallDetail',
+            params: { callId: data.callId },
+          })
+        }, 100)
       } else if (data.conversationId) {
         // Deep-link to inbox conversation
         navigation.navigate('Inbox', {

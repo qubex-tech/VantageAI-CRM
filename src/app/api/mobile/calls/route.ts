@@ -12,18 +12,20 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(parseInt(searchParams.get('limit') ?? '50'), 100)
     const offset = parseInt(searchParams.get('offset') ?? '0')
 
-    // Fetch calls from the existing /api/calls endpoint logic
-    // Use the RetellAI client from the practice's integration
     if (!user.practiceId) {
       return NextResponse.json({ calls: [], reviewedCallIds: [] })
     }
 
-    const { getRetellClient } = await import('@/lib/retell-api')
+    const { getRetellClient, getRetellIntegrationConfig } = await import('@/lib/retell-api')
+
+    // Load integration to get the configured agentId for filtering
     let retell: any = null
+    let agentId: string | null = null
     try {
+      const config = await getRetellIntegrationConfig(user.practiceId)
+      agentId = config.agentId ?? null
       retell = await getRetellClient(user.practiceId)
     } catch (e: any) {
-      // Practice has no RetellAI integration configured
       console.log('[mobile/calls] No Retell integration:', e?.message)
       return NextResponse.json({ calls: [], reviewedCallIds: [], debug: e?.message })
     }
@@ -35,12 +37,32 @@ export async function GET(req: NextRequest) {
     })
     const reviewedCallIds = reviews.map((r) => r.callId)
 
-    // listCalls matches the web /api/calls route
+    // Fetch a larger batch so we can sort + slice for the right window.
+    // Retell doesn't reliably honour sort_order so we over-fetch and sort server-side.
     let calls: any[] = []
     try {
-      const result = await retell.listCalls({ limit, offset })
-      calls = result?.calls ?? []
-      console.log(`[mobile/calls] fetched ${calls.length} calls for practice ${user.practiceId}`)
+      // Fetch more than needed so sorting gives us the true newest records
+      const fetchLimit = Math.min(limit * 4, 200)
+      const result = await retell.listCalls({ limit: fetchLimit, agentId: agentId ?? undefined })
+      const raw: any[] = result?.calls ?? []
+
+      // Sort newest-first by start_timestamp (milliseconds epoch).
+      // This is the definitive client-side sort so the list is always newest at top
+      // regardless of what Retell returns.
+      raw.sort((a, b) => {
+        const aTs = a.start_timestamp ?? a.startTimestamp ?? 0
+        const bTs = b.start_timestamp ?? b.startTimestamp ?? 0
+        return bTs - aTs
+      })
+
+      // Slice to the requested window
+      calls = raw.slice(offset, offset + limit)
+
+      console.log(
+        `[mobile/calls] fetched ${raw.length} calls, returning ${calls.length} ` +
+        `(offset=${offset}, limit=${limit}, agentId=${agentId ?? 'all'}) ` +
+        `newest=${calls[0]?.start_timestamp ?? 'n/a'}`
+      )
     } catch (e: any) {
       console.error('[mobile/calls] listCalls failed:', e?.message)
       return NextResponse.json({ calls: [], reviewedCallIds: [], debug: `listCalls error: ${e?.message}` })
