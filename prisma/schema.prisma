@@ -422,13 +422,14 @@ model TwilioIntegration {
 }
 
 model PracticeSettings {
-  id                     String   @id @default(uuid())
-  practiceId             String   @unique
-  smartFhir              Json?
-  ehrIntegrations        Json?
-  healixPreChartTemplate Json?
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  id                             String   @id @default(uuid())
+  practiceId                     String   @unique
+  smartFhir                      Json?
+  ehrIntegrations                Json?
+  healixPreChartTemplate         Json?
+  outboundCustomerNotifications  Json?
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
 
   practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
 

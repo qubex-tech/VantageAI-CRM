@@ -452,3 +452,12 @@ export const communicationResolveSchema = z.object({
 export const communicationNoteSchema = z.object({
   body: z.string().min(1),
 })
+
+/** Vantage Admin: outbound notifications (e.g. unsuccessful Retell transfer alerts via Resend) */
+export const outboundCustomerNotificationsSchema = z.object({
+  recipientEmail: z.preprocess(
+    (val) => (val === '' || val === undefined || val === null ? null : String(val).trim() || null),
+    z.union([z.string().email(), z.null()]).optional()
+  ),
+  notifyUnsuccessfulTransfer: z.boolean().optional().default(false),
+})

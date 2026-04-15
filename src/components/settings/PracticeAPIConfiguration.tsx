@@ -15,6 +15,7 @@ import { RetellSettings } from './RetellSettings'
 import { ResendSettings } from './SendgridSettings'
 import { TwilioSettings } from './TwilioSettings'
 import { EhrIntegrationsSettings } from './EhrIntegrationsSettings'
+import { OutboundCustomerNotificationsSettings } from './OutboundCustomerNotificationsSettings'
 
 interface Practice {
   id: string
@@ -185,6 +186,14 @@ export function PracticeAPIConfiguration() {
               <ResendSettingsWithPracticeId 
                 practiceId={selectedPracticeId}
                 initialIntegration={resendIntegration}
+              />
+              <OutboundCustomerNotificationsSettings
+                practiceId={selectedPracticeId}
+                resendConfigured={Boolean(
+                  resendIntegration?.apiKey &&
+                    resendIntegration?.fromEmail &&
+                    resendIntegration?.isActive !== false
+                )}
               />
               <TwilioSettingsWithPracticeId
                 practiceId={selectedPracticeId}

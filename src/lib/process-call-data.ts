@@ -15,6 +15,7 @@ import {
   sendCurogramEscalation,
   trimCurogramIntentTopicForApi,
 } from './curogram'
+import { maybeNotifyUnsuccessfulTransfer } from './outbound-customer-notifications'
 
 function metadataObjectFromRow(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -1216,6 +1217,14 @@ export async function processRetellCallData(
         existingPatientUpdate: extractedData.existing_patient_update,
       })
     }
+  }
+
+  if (conversationForEscalation?.id) {
+    await maybeNotifyUnsuccessfulTransfer({
+      practiceId,
+      call,
+      conversationId: conversationForEscalation.id,
+    })
   }
 
   return { patientId, extractedData }
