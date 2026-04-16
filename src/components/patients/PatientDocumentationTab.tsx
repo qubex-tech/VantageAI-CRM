@@ -271,12 +271,12 @@ function EcwScopeCallout() {
       <p className="font-medium text-blue-900">eCW Vantage — Backend Services</p>
       <p className="mt-1 text-blue-900/85">
         Requires <code className="rounded bg-blue-100/80 px-1">system/DocumentReference.read</code> and a linked
-        patient <code className="rounded bg-blue-100/80 px-1">externalEhrId</code>. Set{' '}
-        <code className="rounded bg-blue-100/80 px-1">VANTAGE_ECW_FHIR_BASE_URL</code> (staging or prod FHIR base for
-        your tenant) and <code className="rounded bg-blue-100/80 px-1">VANTAGE_ECW_CLIENT_ID</code>. Authenticate with
-        either <code className="rounded bg-blue-100/80 px-1">VANTAGE_ECW_CLIENT_SECRET</code> or{' '}
-        <code className="rounded bg-blue-100/80 px-1">VANTAGE_ECW_JWT_PRIVATE_KEY</code> (PEM). Values belong only in
-        the host environment (e.g. Vercel), not in git.
+        patient <code className="rounded bg-blue-100/80 px-1">externalEhrId</code>. FHIR base and client id may use{' '}
+        <code className="rounded bg-blue-100/80 px-1">VANTAGE_ECW_*</code> or shared{' '}
+        <code className="rounded bg-blue-100/80 px-1">EHR_ECW_FHIR_BASE_URL</code> /{' '}
+        <code className="rounded bg-blue-100/80 px-1">EHR_ECW_CLIENT_ID</code>. JWT auth accepts{' '}
+        <code className="rounded bg-blue-100/80 px-1">EHR_JWT_PRIVATE_KEY</code> (same as the main CRM). Secrets live
+        only in the host environment (e.g. Vercel), not in git.
       </p>
     </div>
   )

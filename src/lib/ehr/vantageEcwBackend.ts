@@ -6,6 +6,43 @@ type SmartConfig = {
 
 let cachedToken: { accessToken: string; expiresAtMs: number } | null = null
 
+/** First non-empty trimmed value among env keys (Vantage-specific names first, then shared Medical CRM names). */
+function pickEnv(...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const v = process.env[key]?.trim()
+    if (v) return v
+  }
+  return undefined
+}
+
+function getEcwFhirBaseUrl(): string | undefined {
+  return pickEnv('VANTAGE_ECW_FHIR_BASE_URL', 'EHR_ECW_FHIR_BASE_URL', 'ECW_FHIR_BASE_URL')
+}
+
+function getEcwClientId(): string | undefined {
+  return pickEnv('VANTAGE_ECW_CLIENT_ID', 'EHR_ECW_CLIENT_ID', 'ECW_CLIENT_ID')
+}
+
+function getEcwClientSecret(): string | undefined {
+  return pickEnv('VANTAGE_ECW_CLIENT_SECRET', 'EHR_ECW_CLIENT_SECRET', 'ECW_CLIENT_SECRET')
+}
+
+function getStaticAccessToken(): string | undefined {
+  return pickEnv('VANTAGE_ECW_STATIC_ACCESS_TOKEN', 'EHR_ECW_STATIC_ACCESS_TOKEN')
+}
+
+function getTokenUrlOverride(): string | undefined {
+  return pickEnv('VANTAGE_ECW_TOKEN_URL', 'EHR_ECW_TOKEN_URL', 'EHR_TOKEN_URL')
+}
+
+function getScopeOverride(): string | undefined {
+  return pickEnv('VANTAGE_ECW_SCOPE', 'EHR_ECW_SCOPE')
+}
+
+function getJwtKeyId(): string | undefined {
+  return pickEnv('VANTAGE_ECW_JWT_KEY_ID', 'EHR_JWT_KEY_ID')
+}
+
 function trimTrailingSlash(url: string): string {
   return url.replace(/\/+$/, '')
 }
@@ -23,14 +60,19 @@ function normalizePrivateKeyPem(raw: string | undefined): string | null {
 }
 
 /**
- * PEM from `VANTAGE_ECW_JWT_PRIVATE_KEY`, or UTF-8 PEM decoded from
- * `VANTAGE_ECW_JWT_PRIVATE_KEY_BASE64` (recommended on Vercel for multiline keys).
+ * PEM from Vantage or shared CRM env names, or UTF-8 PEM decoded from base64 vars (Vercel-friendly).
+ * Accepts: VANTAGE_ECW_JWT_PRIVATE_KEY, EHR_JWT_PRIVATE_KEY (same as main Medical CRM), and _BASE64 variants.
  */
 export function readJwtPrivateKeyFromEnv(): string | null {
-  const fromPem = normalizePrivateKeyPem(process.env.VANTAGE_ECW_JWT_PRIVATE_KEY)
-  if (fromPem?.includes('BEGIN')) return fromPem
-  const b64 = process.env.VANTAGE_ECW_JWT_PRIVATE_KEY_BASE64?.trim()
-  if (b64) {
+  const pemKeys = ['VANTAGE_ECW_JWT_PRIVATE_KEY', 'EHR_JWT_PRIVATE_KEY'] as const
+  for (const key of pemKeys) {
+    const fromPem = normalizePrivateKeyPem(process.env[key])
+    if (fromPem?.includes('BEGIN')) return fromPem
+  }
+  const b64Keys = ['VANTAGE_ECW_JWT_PRIVATE_KEY_BASE64', 'EHR_JWT_PRIVATE_KEY_BASE64'] as const
+  for (const key of b64Keys) {
+    const b64 = process.env[key]?.trim()
+    if (!b64) continue
     try {
       const decoded = Buffer.from(b64, 'base64').toString('utf8')
       const normalized = normalizePrivateKeyPem(decoded)
@@ -39,31 +81,39 @@ export function readJwtPrivateKeyFromEnv(): string | null {
       /* ignore */
     }
   }
-  return fromPem?.includes('BEGIN') ? fromPem : null
+  return null
 }
 
 /** Which pieces are still missing on the server (for operator debugging; no secret values). */
 export function getEcwDocumentationConfigGaps(): string[] {
   const gaps: string[] = []
-  if (!process.env.VANTAGE_ECW_FHIR_BASE_URL?.trim()) {
-    gaps.push('Missing VANTAGE_ECW_FHIR_BASE_URL (e.g. https://fhir4.eclinicalworks.com/fhir/r4/FACGCD).')
+  if (!getEcwFhirBaseUrl()) {
+    gaps.push(
+      'Missing FHIR base URL. Set VANTAGE_ECW_FHIR_BASE_URL (preferred) or EHR_ECW_FHIR_BASE_URL / ECW_FHIR_BASE_URL (e.g. https://fhir4.eclinicalworks.com/fhir/r4/FACGCD).'
+    )
   }
-  if (!process.env.VANTAGE_ECW_CLIENT_ID?.trim()) {
-    gaps.push('Missing VANTAGE_ECW_CLIENT_ID.')
+  if (!getEcwClientId()) {
+    gaps.push(
+      'Missing OAuth client id. Set VANTAGE_ECW_CLIENT_ID (preferred) or EHR_ECW_CLIENT_ID / ECW_CLIENT_ID.'
+    )
   }
-  const secret = process.env.VANTAGE_ECW_CLIENT_SECRET?.trim()
-  const staticTok = process.env.VANTAGE_ECW_STATIC_ACCESS_TOKEN?.trim()
-  const jwtPemSet = Boolean(process.env.VANTAGE_ECW_JWT_PRIVATE_KEY?.trim())
-  const jwtB64Set = Boolean(process.env.VANTAGE_ECW_JWT_PRIVATE_KEY_BASE64?.trim())
+  const secret = getEcwClientSecret()
+  const staticTok = getStaticAccessToken()
+  const jwtPemSet = Boolean(
+    process.env.VANTAGE_ECW_JWT_PRIVATE_KEY?.trim() || process.env.EHR_JWT_PRIVATE_KEY?.trim()
+  )
+  const jwtB64Set = Boolean(
+    process.env.VANTAGE_ECW_JWT_PRIVATE_KEY_BASE64?.trim() || process.env.EHR_JWT_PRIVATE_KEY_BASE64?.trim()
+  )
   const jwtMaterial = readJwtPrivateKeyFromEnv()
   if (!secret && !staticTok && !jwtMaterial) {
     if (jwtPemSet || jwtB64Set) {
       gaps.push(
-        'JWT key env is set but did not parse as a PEM (use real newlines in VANTAGE_ECW_JWT_PRIVATE_KEY, or put base64-of-UTF-8-PEM in VANTAGE_ECW_JWT_PRIVATE_KEY_BASE64).'
+        'JWT private key env is set but did not parse as a PEM (fix newlines in EHR_JWT_PRIVATE_KEY / VANTAGE_ECW_JWT_PRIVATE_KEY, or use EHR_JWT_PRIVATE_KEY_BASE64 / VANTAGE_ECW_JWT_PRIVATE_KEY_BASE64 with base64-of-UTF-8-PEM).'
       )
     } else {
       gaps.push(
-        'Missing credential: set VANTAGE_ECW_CLIENT_SECRET and/or VANTAGE_ECW_JWT_PRIVATE_KEY (or VANTAGE_ECW_JWT_PRIVATE_KEY_BASE64), or VANTAGE_ECW_STATIC_ACCESS_TOKEN for local testing.'
+        'Missing credential: set VANTAGE_ECW_CLIENT_SECRET or EHR_ECW_CLIENT_SECRET, or JWT PEM in EHR_JWT_PRIVATE_KEY / VANTAGE_ECW_JWT_PRIVATE_KEY (or a *_BASE64 variant), or VANTAGE_ECW_STATIC_ACCESS_TOKEN for local testing.'
       )
     }
   }
@@ -72,9 +122,9 @@ export function getEcwDocumentationConfigGaps(): string[] {
 
 /** OAuth JWT `aud` for client assertion; eCW often requires a fixed audience per environment. */
 function clientAssertionAudience(fhirBaseUrl: string): string | undefined {
-  const defaultAud = process.env.VANTAGE_ECW_CLIENT_ASSERTION_AUD?.trim()
-  const prodAud = process.env.VANTAGE_ECW_CLIENT_ASSERTION_AUD_PROD?.trim()
-  const sandboxAud = process.env.VANTAGE_ECW_CLIENT_ASSERTION_AUD_SANDBOX?.trim()
+  const defaultAud = pickEnv('VANTAGE_ECW_CLIENT_ASSERTION_AUD', 'EHR_ECW_CLIENT_ASSERTION_AUD')
+  const prodAud = pickEnv('VANTAGE_ECW_CLIENT_ASSERTION_AUD_PROD', 'EHR_ECW_CLIENT_ASSERTION_AUD_PROD')
+  const sandboxAud = pickEnv('VANTAGE_ECW_CLIENT_ASSERTION_AUD_SANDBOX', 'EHR_ECW_CLIENT_ASSERTION_AUD_SANDBOX')
   const n = fhirBaseUrl.toLowerCase()
   const isSandbox = n.includes('staging') || n.includes('ecwcloud.com')
   const isProd = n.includes('eclinicalworks.com')
@@ -96,7 +146,7 @@ function patientQueryParam(externalEhrId: string): string {
 }
 
 async function discoverTokenEndpoint(fhirBaseUrl: string): Promise<string> {
-  const explicit = process.env.VANTAGE_ECW_TOKEN_URL?.trim()
+  const explicit = getTokenUrlOverride()
   if (explicit) return explicit
 
   const wellKnown = `${trimTrailingSlash(fhirBaseUrl)}/.well-known/smart-configuration`
@@ -112,22 +162,22 @@ async function discoverTokenEndpoint(fhirBaseUrl: string): Promise<string> {
 }
 
 async function fetchAccessToken(): Promise<string> {
-  const staticToken = process.env.VANTAGE_ECW_STATIC_ACCESS_TOKEN?.trim()
+  const staticToken = getStaticAccessToken()
   if (staticToken) return staticToken
 
-  const fhirBase = process.env.VANTAGE_ECW_FHIR_BASE_URL?.trim()
-  const clientId = process.env.VANTAGE_ECW_CLIENT_ID?.trim()
-  const clientSecret = process.env.VANTAGE_ECW_CLIENT_SECRET?.trim()
+  const fhirBase = getEcwFhirBaseUrl()
+  const clientId = getEcwClientId()
+  const clientSecret = getEcwClientSecret()
   const privateKeyPem = readJwtPrivateKeyFromEnv()
 
   if (!fhirBase || !clientId) {
     throw new Error(
-      'Vantage ECW documentation is not configured (set VANTAGE_ECW_FHIR_BASE_URL and VANTAGE_ECW_CLIENT_ID)'
+      'Vantage ECW documentation is not configured (set VANTAGE_ECW_FHIR_BASE_URL or EHR_ECW_FHIR_BASE_URL, and VANTAGE_ECW_CLIENT_ID or EHR_ECW_CLIENT_ID)'
     )
   }
   if (!clientSecret && !privateKeyPem) {
     throw new Error(
-      'Vantage ECW auth: set VANTAGE_ECW_CLIENT_SECRET and/or VANTAGE_ECW_JWT_PRIVATE_KEY (PEM) or VANTAGE_ECW_JWT_PRIVATE_KEY_BASE64 for client_credentials'
+      'Vantage ECW auth: set client secret or JWT private key (VANTAGE_* or EHR_JWT_PRIVATE_KEY / EHR_ECW_CLIENT_SECRET)'
     )
   }
 
@@ -138,8 +188,7 @@ async function fetchAccessToken(): Promise<string> {
 
   const tokenEndpoint = await discoverTokenEndpoint(fhirBase)
   const scope =
-    process.env.VANTAGE_ECW_SCOPE?.trim() ||
-    'system/DocumentReference.read system/Patient.read'
+    getScopeOverride() || 'system/DocumentReference.read system/Patient.read'
 
   const body = new URLSearchParams({
     grant_type: 'client_credentials',
@@ -152,7 +201,7 @@ async function fetchAccessToken(): Promise<string> {
       clientId,
       tokenEndpoint,
       privateKeyPem,
-      keyId: process.env.VANTAGE_ECW_JWT_KEY_ID?.trim(),
+      keyId: getJwtKeyId(),
       audience: clientAssertionAudience(fhirBase),
     })
     body.set('client_assertion_type', 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer')
@@ -199,9 +248,9 @@ type FhirBundle = {
 export async function fetchPatientDocumentReferences(
   externalPatientId: string
 ): Promise<{ raw: FhirBundle; patientParam: string }> {
-  const fhirBase = process.env.VANTAGE_ECW_FHIR_BASE_URL?.trim()
+  const fhirBase = getEcwFhirBaseUrl()
   if (!fhirBase) {
-    throw new Error('VANTAGE_ECW_FHIR_BASE_URL is not set')
+    throw new Error('FHIR base URL is not set (VANTAGE_ECW_FHIR_BASE_URL or EHR_ECW_FHIR_BASE_URL)')
   }
 
   const token = await fetchAccessToken()
