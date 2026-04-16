@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest'
 import {
   readRetellTransferNotificationFields,
   isUnsuccessfulTransferFromRetellAnalysis,
+  buildStaffCallLogDeepLink,
 } from '@/lib/outbound-customer-notifications'
+import { isSafeInternalCallbackPath } from '@/lib/safe-callback-path'
 import type { RetellCall } from '@/lib/retell-api'
 
 function callWithCustomAnalysis(data: Record<string, unknown>): RetellCall {
@@ -51,6 +53,31 @@ describe('readRetellTransferNotificationFields', () => {
       transferOutcome: null,
       voicemailMessage: null,
     })
+  })
+})
+
+describe('buildStaffCallLogDeepLink', () => {
+  it('includes call path and practiceId for tenant context', () => {
+    const url = buildStaffCallLogDeepLink('call_retell_1', 'practice-uuid-1')
+    expect(url).toContain('/calls/call_retell_1')
+    expect(url).toContain('practiceId=practice-uuid-1')
+  })
+
+  it('encodes special characters in call id', () => {
+    const url = buildStaffCallLogDeepLink('a/b', 'p')
+    expect(url).toContain(encodeURIComponent('a/b'))
+  })
+})
+
+describe('isSafeInternalCallbackPath', () => {
+  it('allows paths with query strings', () => {
+    expect(isSafeInternalCallbackPath('/calls/x?practiceId=y')).toBe(true)
+  })
+
+  it('rejects protocol-relative and absolute URLs', () => {
+    expect(isSafeInternalCallbackPath('//evil.com')).toBe(false)
+    expect(isSafeInternalCallbackPath('/ok?u=https://evil.com')).toBe(true)
+    expect(isSafeInternalCallbackPath('https://evil.com')).toBe(false)
   })
 })
 

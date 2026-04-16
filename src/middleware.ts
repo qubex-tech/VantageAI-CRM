@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { createServerClient } from '@supabase/ssr'
+import { isSafeInternalCallbackPath } from '@/lib/safe-callback-path'
 
 export async function middleware(req: NextRequest) {
   let res = NextResponse.next({
@@ -162,11 +163,9 @@ export async function middleware(req: NextRequest) {
       // Protect all other routes on CRM domain
       if (!user && !pathname.startsWith('/api/auth')) {
         const loginUrl = new URL('/login', req.url)
-        // Validate callbackUrl to prevent open redirect vulnerabilities
-        // Only allow relative paths starting with /
-        const safeCallbackUrl = pathname.startsWith('/') && !pathname.startsWith('//') 
-          ? pathname 
-          : '/dashboard'
+        // Preserve query string (e.g. ?practiceId=) for deep links; still same-origin relative only.
+        const pathWithQuery = `${pathname}${req.nextUrl.search}`
+        const safeCallbackUrl = isSafeInternalCallbackPath(pathWithQuery) ? pathWithQuery : '/dashboard'
         loginUrl.searchParams.set('callbackUrl', safeCallbackUrl)
         return NextResponse.redirect(loginUrl)
       }

@@ -111,9 +111,16 @@ function getAppBaseUrlForEmailLinks(): string {
   return 'http://localhost:3000'
 }
 
-function buildCallLogUrl(callId: string): string {
+/**
+ * Deep link to a call in the CRM for a specific practice (query param).
+ * Staff sessions are scoped to `app.getvantage.tech`; `practiceId` lets Vantage admins
+ * open the correct tenant after login and avoids ambiguous practice context.
+ */
+export function buildStaffCallLogDeepLink(callId: string, practiceId: string): string {
   const base = getAppBaseUrlForEmailLinks()
-  return `${base}/calls/${encodeURIComponent(callId)}`
+  const path = `/calls/${encodeURIComponent(callId)}`
+  const qs = new URLSearchParams({ practiceId })
+  return `${base}${path}?${qs.toString()}`
 }
 
 /** True when Retell analysis reports transfer outcome "not successful" (case-insensitive, trimmed). */
@@ -171,15 +178,16 @@ export async function resolveOutboundStaffNotificationRecipient(
 }
 
 function buildStaffTransferEmail(params: {
+  practiceId: string
   practiceName: string
   call: RetellCall
 }): { subject: string; textContent: string; htmlContent: string } {
-  const { practiceName, call } = params
+  const { practiceId, practiceName, call } = params
   const callId = call.call_id || 'unknown'
   const { transferOutcome, voicemailMessage } = readRetellTransferNotificationFields(call)
   const patientName = readPatientDisplayNameFromCall(call)
   const callDatetime = formatCallDateTime(call)
-  const callbackUrl = buildCallLogUrl(callId)
+  const callbackUrl = buildStaffCallLogDeepLink(callId, practiceId)
 
   const e = escapeHtml
   const outcomeDisplay = e(transferOutcome?.trim() || 'Not successful')
@@ -423,6 +431,7 @@ export async function sendSampleMissedTransferNotification(params: {
   try {
     const call = await (await getRetellClient(practiceId)).getCall(callId)
     const { subject, textContent, htmlContent } = buildStaffTransferEmail({
+      practiceId,
       practiceName: resolved.practiceName,
       call,
     })
@@ -473,6 +482,7 @@ export async function maybeNotifyUnsuccessfulTransfer(params: {
     const { practiceName, recipient } = resolved
 
     const { subject, textContent, htmlContent } = buildStaffTransferEmail({
+      practiceId,
       practiceName,
       call,
     })

@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import Link from 'next/link'
+import { isSafeInternalCallbackPath } from '@/lib/safe-callback-path'
 
 type AuthMethod = 'otp' | 'password'
 
@@ -16,9 +17,7 @@ function LoginForm() {
   
   // Validate callbackUrl to prevent open redirect vulnerabilities
   const rawCallbackUrl = searchParams?.get('callbackUrl') || '/dashboard'
-  const callbackUrl = rawCallbackUrl.startsWith('/') && !rawCallbackUrl.startsWith('//')
-    ? rawCallbackUrl
-    : '/dashboard'
+  const callbackUrl = isSafeInternalCallbackPath(rawCallbackUrl) ? rawCallbackUrl : '/dashboard'
   
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')

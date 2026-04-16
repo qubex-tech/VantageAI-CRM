@@ -1,6 +1,7 @@
 import { redirect, notFound } from 'next/navigation'
 import { getSupabaseSession } from '@/lib/auth-supabase'
 import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
+import { canAccessPractice } from '@/lib/permissions'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { MarkCallReviewed } from '@/components/calls/MarkCallReviewed'
 import { format } from 'date-fns'
@@ -10,10 +11,13 @@ export const dynamic = 'force-dynamic'
 
 export default async function CallDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ practiceId?: string }>
 }) {
   const { id: callId } = await params
+  const query = await searchParams
   const supabaseSession = await getSupabaseSession()
   
   if (!supabaseSession) {
@@ -38,11 +42,26 @@ export default async function CallDetailPage({
     redirect('/login?error=User account not found.')
   }
 
-  // Practice-specific feature - require practiceId
-  if (!user.practiceId) {
+  const queryPracticeId = typeof query?.practiceId === 'string' ? query.practiceId.trim() : ''
+  const userForAccess = {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    practiceId: user.practiceId,
+    role: user.role,
+  }
+
+  let practiceId: string
+  if (queryPracticeId) {
+    if (!canAccessPractice(userForAccess, queryPracticeId)) {
+      notFound()
+    }
+    practiceId = queryPracticeId
+  } else if (user.practiceId) {
+    practiceId = user.practiceId
+  } else {
     notFound()
   }
-  const practiceId = user.practiceId
 
   // Fetch call details from RetellAI API
   let call: RetellCall | null = null

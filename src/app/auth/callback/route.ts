@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { isSafeInternalCallbackPath } from '@/lib/safe-callback-path'
 
 /**
  * Handles Supabase OTP magic link callback.
@@ -55,6 +56,6 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const safeNext = next.startsWith('/') && !next.startsWith('//') ? next : '/dashboard'
+  const safeNext = isSafeInternalCallbackPath(next) ? next : '/dashboard'
   return NextResponse.redirect(new URL(safeNext, req.url))
 }
