@@ -29,6 +29,7 @@ type ApiOk =
   | {
       configured: false
       message: string
+      configGaps?: string[]
       buckets: Record<DocumentationBucket, DocumentationItem[]>
     }
   | {
@@ -151,6 +152,17 @@ export function PatientDocumentationTab({ patientId }: { patientId: string }) {
           <div>
             <p className="font-medium">EHR documentation is not connected</p>
             <p className="mt-1 text-amber-900/90">{payload.message}</p>
+            {payload.configGaps && payload.configGaps.length > 0 && (
+              <ul className="mt-3 list-disc space-y-1 pl-5 text-amber-950/95">
+                {payload.configGaps.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            )}
+            <p className="mt-3 text-xs text-amber-900/80">
+              After saving variables, redeploy. If you already added them, confirm they apply to this environment
+              (Production vs Preview) and that the deployment finished after the save.
+            </p>
           </div>
         </div>
         <EcwScopeCallout />

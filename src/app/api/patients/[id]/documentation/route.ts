@@ -8,6 +8,7 @@ import {
 } from '@/lib/ehr/documentReferenceCatalog'
 import {
   fetchPatientDocumentReferences,
+  getEcwDocumentationConfigGaps,
   isEcwDocumentationConfigured,
 } from '@/lib/ehr/vantageEcwBackend'
 
@@ -114,10 +115,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     if (!isEcwDocumentationConfigured()) {
+      const configGaps = getEcwDocumentationConfigGaps()
       return NextResponse.json({
         configured: false as const,
         message:
-          'On the server (e.g. Vercel → Project → Settings → Environment Variables), set VANTAGE_ECW_FHIR_BASE_URL and VANTAGE_ECW_CLIENT_ID, plus either VANTAGE_ECW_CLIENT_SECRET or VANTAGE_ECW_JWT_PRIVATE_KEY (RSA PEM for Backend Services JWT). Optional: VANTAGE_ECW_CLIENT_ASSERTION_AUD (or _PROD / _SANDBOX), VANTAGE_ECW_JWT_KEY_ID, VANTAGE_ECW_SCOPE, VANTAGE_ECW_STATIC_ACCESS_TOKEN (dev only). Redeploy after saving.',
+          'The server does not have a complete ECW Documentation configuration yet. In Vercel: Project → Settings → Environment Variables, add the variables below for Production (or Preview if that is what you use), then trigger a new deployment.',
+        configGaps,
         buckets: emptyBuckets(),
       })
     }

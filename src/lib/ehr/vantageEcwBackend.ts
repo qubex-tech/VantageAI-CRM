@@ -22,8 +22,52 @@ function normalizePrivateKeyPem(raw: string | undefined): string | null {
   return normalized || null
 }
 
-function jwtPrivateKeyFromEnv(): string | null {
-  return normalizePrivateKeyPem(process.env.VANTAGE_ECW_JWT_PRIVATE_KEY)
+/**
+ * PEM from `VANTAGE_ECW_JWT_PRIVATE_KEY`, or UTF-8 PEM decoded from
+ * `VANTAGE_ECW_JWT_PRIVATE_KEY_BASE64` (recommended on Vercel for multiline keys).
+ */
+export function readJwtPrivateKeyFromEnv(): string | null {
+  const fromPem = normalizePrivateKeyPem(process.env.VANTAGE_ECW_JWT_PRIVATE_KEY)
+  if (fromPem?.includes('BEGIN')) return fromPem
+  const b64 = process.env.VANTAGE_ECW_JWT_PRIVATE_KEY_BASE64?.trim()
+  if (b64) {
+    try {
+      const decoded = Buffer.from(b64, 'base64').toString('utf8')
+      const normalized = normalizePrivateKeyPem(decoded)
+      if (normalized?.includes('BEGIN')) return normalized
+    } catch {
+      /* ignore */
+    }
+  }
+  return fromPem?.includes('BEGIN') ? fromPem : null
+}
+
+/** Which pieces are still missing on the server (for operator debugging; no secret values). */
+export function getEcwDocumentationConfigGaps(): string[] {
+  const gaps: string[] = []
+  if (!process.env.VANTAGE_ECW_FHIR_BASE_URL?.trim()) {
+    gaps.push('Missing VANTAGE_ECW_FHIR_BASE_URL (e.g. https://fhir4.eclinicalworks.com/fhir/r4/FACGCD).')
+  }
+  if (!process.env.VANTAGE_ECW_CLIENT_ID?.trim()) {
+    gaps.push('Missing VANTAGE_ECW_CLIENT_ID.')
+  }
+  const secret = process.env.VANTAGE_ECW_CLIENT_SECRET?.trim()
+  const staticTok = process.env.VANTAGE_ECW_STATIC_ACCESS_TOKEN?.trim()
+  const jwtPemSet = Boolean(process.env.VANTAGE_ECW_JWT_PRIVATE_KEY?.trim())
+  const jwtB64Set = Boolean(process.env.VANTAGE_ECW_JWT_PRIVATE_KEY_BASE64?.trim())
+  const jwtMaterial = readJwtPrivateKeyFromEnv()
+  if (!secret && !staticTok && !jwtMaterial) {
+    if (jwtPemSet || jwtB64Set) {
+      gaps.push(
+        'JWT key env is set but did not parse as a PEM (use real newlines in VANTAGE_ECW_JWT_PRIVATE_KEY, or put base64-of-UTF-8-PEM in VANTAGE_ECW_JWT_PRIVATE_KEY_BASE64).'
+      )
+    } else {
+      gaps.push(
+        'Missing credential: set VANTAGE_ECW_CLIENT_SECRET and/or VANTAGE_ECW_JWT_PRIVATE_KEY (or VANTAGE_ECW_JWT_PRIVATE_KEY_BASE64), or VANTAGE_ECW_STATIC_ACCESS_TOKEN for local testing.'
+      )
+    }
+  }
+  return gaps
 }
 
 /** OAuth JWT `aud` for client assertion; eCW often requires a fixed audience per environment. */
@@ -40,12 +84,7 @@ function clientAssertionAudience(fhirBaseUrl: string): string | undefined {
 }
 
 export function isEcwDocumentationConfigured(): boolean {
-  const base = process.env.VANTAGE_ECW_FHIR_BASE_URL?.trim()
-  const clientId = process.env.VANTAGE_ECW_CLIENT_ID?.trim()
-  const secret = process.env.VANTAGE_ECW_CLIENT_SECRET?.trim()
-  const staticToken = process.env.VANTAGE_ECW_STATIC_ACCESS_TOKEN?.trim()
-  const jwtKey = jwtPrivateKeyFromEnv()
-  return Boolean(base && clientId && (secret || staticToken || jwtKey))
+  return getEcwDocumentationConfigGaps().length === 0
 }
 
 function patientQueryParam(externalEhrId: string): string {
@@ -79,7 +118,7 @@ async function fetchAccessToken(): Promise<string> {
   const fhirBase = process.env.VANTAGE_ECW_FHIR_BASE_URL?.trim()
   const clientId = process.env.VANTAGE_ECW_CLIENT_ID?.trim()
   const clientSecret = process.env.VANTAGE_ECW_CLIENT_SECRET?.trim()
-  const privateKeyPem = jwtPrivateKeyFromEnv()
+  const privateKeyPem = readJwtPrivateKeyFromEnv()
 
   if (!fhirBase || !clientId) {
     throw new Error(
@@ -88,7 +127,7 @@ async function fetchAccessToken(): Promise<string> {
   }
   if (!clientSecret && !privateKeyPem) {
     throw new Error(
-      'Vantage ECW auth: set VANTAGE_ECW_CLIENT_SECRET and/or VANTAGE_ECW_JWT_PRIVATE_KEY (PEM) for client_credentials'
+      'Vantage ECW auth: set VANTAGE_ECW_CLIENT_SECRET and/or VANTAGE_ECW_JWT_PRIVATE_KEY (PEM) or VANTAGE_ECW_JWT_PRIVATE_KEY_BASE64 for client_credentials'
     )
   }
 
