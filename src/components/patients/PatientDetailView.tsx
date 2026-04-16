@@ -41,7 +41,8 @@ import {
   Shield,
   Globe,
   Pencil,
-  PhoneCall
+  PhoneCall,
+  FolderOpen,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { InsuranceTab } from './InsuranceTab'
@@ -62,6 +63,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { EditPatientForm } from './EditPatientForm'
 import { PatientTasks } from '@/components/tasks/PatientTasks'
+import { PatientDocumentationTab } from './PatientDocumentationTab'
 import { cn } from '@/lib/utils'
 import { useSidebar } from '@/components/layout/SidebarProvider'
 
@@ -249,7 +251,9 @@ interface PatientNote {
 }
 
 export function PatientDetailView({ patient, users = [], currentUserId = '' }: PatientDetailViewProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'activity' | 'appointments' | 'calls' | 'insurance' | 'previsit'>('overview')
+  const [activeTab, setActiveTab] = useState<
+    'overview' | 'activity' | 'appointments' | 'calls' | 'insurance' | 'previsit' | 'documentation'
+  >('overview')
   const [preVisitChartType, setPreVisitChartType] = useState<'new_patient' | 'follow_up'>('new_patient')
   const router = useRouter()
   const [sidebarTab, setSidebarTab] = useState<'details' | 'comments'>('details')
@@ -621,6 +625,17 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
             >
               <FileText className="h-4 w-4" />
               Pre-Visit Chart
+            </button>
+            <button
+              onClick={() => setActiveTab('documentation')}
+              className={`px-1 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+                activeTab === 'documentation'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <FolderOpen className="h-4 w-4" />
+              Documentation
             </button>
           </div>
         </div>
@@ -1025,6 +1040,8 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                 includeAskPanel={false}
               />
             )}
+
+            {activeTab === 'documentation' && <PatientDocumentationTab patientId={patient.id} />}
           </div>
         </div>
       </div>

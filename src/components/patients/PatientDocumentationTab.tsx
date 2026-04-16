@@ -1,0 +1,269 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { format, parseISO } from 'date-fns'
+import { AlertCircle, FileStack, FolderOpen, IdCard, Stethoscope } from 'lucide-react'
+
+type DocumentationBucket = 'insurance_and_id' | 'clinical_notes' | 'summaries' | 'other'
+
+type DocumentationItem = {
+  id: string
+  bucket: DocumentationBucket
+  title: string
+  status?: string
+  date?: string
+  docStatus?: string
+  typeCode?: string
+  typeSystem?: string
+  authorReferences: string[]
+  contentSummary: Array<{
+    contentType?: string
+    url?: string
+    title?: string
+    size?: number
+    hasData: boolean
+  }>
+}
+
+type ApiOk =
+  | {
+      configured: false
+      message: string
+      buckets: Record<DocumentationBucket, DocumentationItem[]>
+    }
+  | {
+      configured: true
+      patientLinked: false
+      message: string
+      buckets: Record<DocumentationBucket, DocumentationItem[]>
+    }
+  | {
+      configured: true
+      patientLinked: true
+      buckets: Record<DocumentationBucket, DocumentationItem[]>
+    }
+
+const SECTIONS: Array<{
+  bucket: DocumentationBucket
+  title: string
+  description: string
+  icon: typeof FolderOpen
+}> = [
+  {
+    bucket: 'insurance_and_id',
+    title: 'Insurance card & government ID',
+    description:
+      'Scanned insurance cards and government-issued identification uploaded to eCW as DocumentReference (US Core), LOINC 64290-0 and 53245-7.',
+    icon: IdCard,
+  },
+  {
+    bucket: 'clinical_notes',
+    title: 'Clinical notes',
+    description:
+      'Consultation, H&P, progress, procedure, discharge, imaging, lab, and pathology narrative documents from eCW.',
+    icon: Stethoscope,
+  },
+  {
+    bucket: 'summaries',
+    title: 'Summaries & C-CDA',
+    description:
+      'Patient summary and related document types (for example LOINC 34133-9) including C-CDA-style payloads when returned by eCW.',
+    icon: FileStack,
+  },
+  {
+    bucket: 'other',
+    title: 'Other',
+    description: 'Additional DocumentReference resources returned for this patient.',
+    icon: FolderOpen,
+  },
+]
+
+function formatDocDate(iso?: string) {
+  if (!iso) return '—'
+  try {
+    return format(parseISO(iso), 'MMM d, yyyy h:mm a')
+  } catch {
+    return iso
+  }
+}
+
+function contentHint(row: DocumentationItem['contentSummary'][0]) {
+  const parts: string[] = []
+  if (row.contentType) parts.push(row.contentType)
+  if (row.hasData) parts.push('inline payload')
+  if (row.url) parts.push('URL')
+  return parts.length ? parts.join(' · ') : '—'
+}
+
+export function PatientDocumentationTab({ patientId }: { patientId: string }) {
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [payload, setPayload] = useState<ApiOk | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const res = await fetch(`/api/patients/${patientId}/documentation`)
+        const json = await res.json()
+        if (!res.ok) {
+          throw new Error(json.error || 'Request failed')
+        }
+        if (!cancelled) setPayload(json as ApiOk)
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load documentation')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    run()
+    return () => {
+      cancelled = true
+    }
+  }, [patientId])
+
+  if (loading) {
+    return (
+      <div className="rounded-lg border border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
+        Loading documentation from eClinicalWorks…
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+        <AlertCircle className="h-5 w-5 flex-shrink-0" />
+        <div>{error}</div>
+      </div>
+    )
+  }
+
+  if (!payload) return null
+
+  if (!payload.configured) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+          <AlertCircle className="h-5 w-5 flex-shrink-0" />
+          <div>
+            <p className="font-medium">EHR documentation is not connected</p>
+            <p className="mt-1 text-amber-900/90">{payload.message}</p>
+          </div>
+        </div>
+        <EcwScopeCallout />
+      </div>
+    )
+  }
+
+  if (!payload.patientLinked) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-800">
+          <AlertCircle className="h-5 w-5 flex-shrink-0 text-gray-500" />
+          <div>
+            <p className="font-medium">Patient not linked to eCW</p>
+            <p className="mt-1 text-gray-600">{payload.message}</p>
+          </div>
+        </div>
+        <EcwScopeCallout />
+      </div>
+    )
+  }
+
+  const total = SECTIONS.reduce((acc, s) => acc + payload.buckets[s.bucket].length, 0)
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900">Documentation</h2>
+        <p className="mt-1 text-sm text-gray-600">
+          Documents stored in eClinicalWorks for this patient (US Core DocumentReference), grouped by type.
+          {total > 0 ? ` Showing ${total} document${total === 1 ? '' : 's'}.` : ' No documents returned for category clinical-note.'}
+        </p>
+      </div>
+
+      <EcwScopeCallout />
+
+      {SECTIONS.map(({ bucket, title, description, icon: Icon }) => {
+        const rows = payload.buckets[bucket]
+        return (
+          <section key={bucket} className="rounded-xl border border-gray-200 bg-white shadow-sm">
+            <div className="border-b border-gray-100 px-5 py-4">
+              <div className="flex items-center gap-2">
+                <Icon className="h-5 w-5 text-blue-600" />
+                <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+                <span className="ml-auto rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                  {rows.length}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-gray-500">{description}</p>
+            </div>
+            {rows.length === 0 ? (
+              <div className="px-5 py-6 text-sm text-gray-500">No documents in this category.</div>
+            ) : (
+              <ul className="divide-y divide-gray-100">
+                {rows.map((doc) => (
+                  <li key={doc.id} className="px-5 py-4">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="font-medium text-gray-900">{doc.title}</div>
+                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
+                          <span>Date: {formatDocDate(doc.date)}</span>
+                          {doc.status && <span>Status: {doc.status}</span>}
+                          {doc.docStatus && <span>Doc status: {doc.docStatus}</span>}
+                          {doc.typeCode && (
+                            <span>
+                              Code: {doc.typeCode}
+                              {doc.typeSystem ? ` (${doc.typeSystem})` : ''}
+                            </span>
+                          )}
+                        </div>
+                        {doc.authorReferences.length > 0 && (
+                          <div className="mt-1 text-xs text-gray-500">
+                            Author: {doc.authorReferences.join(', ')}
+                          </div>
+                        )}
+                      </div>
+                      <div className="mt-2 text-xs text-gray-500 sm:mt-0 sm:text-right">
+                        <div className="font-mono text-[11px] text-gray-400">DocumentReference/{doc.id}</div>
+                      </div>
+                    </div>
+                    {doc.contentSummary.length > 0 && (
+                      <div className="mt-2 text-xs text-gray-600">
+                        <span className="font-medium text-gray-700">Content: </span>
+                        {doc.contentSummary.map((c, i) => (
+                          <span key={i}>
+                            {i > 0 ? ' · ' : ''}
+                            {contentHint(c)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )
+      })}
+    </div>
+  )
+}
+
+function EcwScopeCallout() {
+  return (
+    <div className="rounded-lg border border-blue-100 bg-blue-50/80 px-4 py-3 text-xs text-blue-950">
+      <p className="font-medium text-blue-900">eCW Vantage — Backend Services</p>
+      <p className="mt-1 text-blue-900/85">
+        Requires <code className="rounded bg-blue-100/80 px-1">system/DocumentReference.read</code> (and patient
+        linkage). FHIR base is configured with{' '}
+        <code className="rounded bg-blue-100/80 px-1">VANTAGE_ECW_FHIR_BASE_URL</code> (for example staging{' '}
+        <code className="rounded bg-blue-100/80 px-1">…/fhir/r4/FFBJCD</code>). Do not put client secrets in source;
+        use environment variables on the server.
+      </p>
+    </div>
+  )
+}
