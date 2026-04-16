@@ -258,11 +258,13 @@ function EcwScopeCallout() {
     <div className="rounded-lg border border-blue-100 bg-blue-50/80 px-4 py-3 text-xs text-blue-950">
       <p className="font-medium text-blue-900">eCW Vantage — Backend Services</p>
       <p className="mt-1 text-blue-900/85">
-        Requires <code className="rounded bg-blue-100/80 px-1">system/DocumentReference.read</code> (and patient
-        linkage). FHIR base is configured with{' '}
-        <code className="rounded bg-blue-100/80 px-1">VANTAGE_ECW_FHIR_BASE_URL</code> (for example staging{' '}
-        <code className="rounded bg-blue-100/80 px-1">…/fhir/r4/FFBJCD</code>). Do not put client secrets in source;
-        use environment variables on the server.
+        Requires <code className="rounded bg-blue-100/80 px-1">system/DocumentReference.read</code> and a linked
+        patient <code className="rounded bg-blue-100/80 px-1">externalEhrId</code>. Set{' '}
+        <code className="rounded bg-blue-100/80 px-1">VANTAGE_ECW_FHIR_BASE_URL</code> (staging or prod FHIR base for
+        your tenant) and <code className="rounded bg-blue-100/80 px-1">VANTAGE_ECW_CLIENT_ID</code>. Authenticate with
+        either <code className="rounded bg-blue-100/80 px-1">VANTAGE_ECW_CLIENT_SECRET</code> or{' '}
+        <code className="rounded bg-blue-100/80 px-1">VANTAGE_ECW_JWT_PRIVATE_KEY</code> (PEM). Values belong only in
+        the host environment (e.g. Vercel), not in git.
       </p>
     </div>
   )

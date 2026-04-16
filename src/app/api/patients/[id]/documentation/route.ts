@@ -117,7 +117,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({
         configured: false as const,
         message:
-          'ECW documentation is not configured. Set VANTAGE_ECW_FHIR_BASE_URL, VANTAGE_ECW_CLIENT_ID, and VANTAGE_ECW_CLIENT_SECRET (or VANTAGE_ECW_STATIC_ACCESS_TOKEN for testing).',
+          'On the server (e.g. Vercel → Project → Settings → Environment Variables), set VANTAGE_ECW_FHIR_BASE_URL and VANTAGE_ECW_CLIENT_ID, plus either VANTAGE_ECW_CLIENT_SECRET or VANTAGE_ECW_JWT_PRIVATE_KEY (RSA PEM for Backend Services JWT). Optional: VANTAGE_ECW_CLIENT_ASSERTION_AUD (or _PROD / _SANDBOX), VANTAGE_ECW_JWT_KEY_ID, VANTAGE_ECW_SCOPE, VANTAGE_ECW_STATIC_ACCESS_TOKEN (dev only). Redeploy after saving.',
         buckets: emptyBuckets(),
       })
     }

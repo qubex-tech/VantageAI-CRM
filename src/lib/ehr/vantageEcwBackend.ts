@@ -1,3 +1,5 @@
+import { createEcwClientAssertionJwt } from '@/lib/ehr/ecwClientAssertion'
+
 type SmartConfig = {
   token_endpoint?: string
 }
@@ -8,12 +10,42 @@ function trimTrailingSlash(url: string): string {
   return url.replace(/\/+$/, '')
 }
 
+function normalizePrivateKeyPem(raw: string | undefined): string | null {
+  if (!raw?.trim()) return null
+  const normalized = raw
+    .trim()
+    .replace(/^"+|"+$/g, '')
+    .replace(/^'+|'+$/g, '')
+    .replace(/\\r/g, '')
+    .replace(/\\n/g, '\n')
+    .replace(/\r/g, '')
+  return normalized || null
+}
+
+function jwtPrivateKeyFromEnv(): string | null {
+  return normalizePrivateKeyPem(process.env.VANTAGE_ECW_JWT_PRIVATE_KEY)
+}
+
+/** OAuth JWT `aud` for client assertion; eCW often requires a fixed audience per environment. */
+function clientAssertionAudience(fhirBaseUrl: string): string | undefined {
+  const defaultAud = process.env.VANTAGE_ECW_CLIENT_ASSERTION_AUD?.trim()
+  const prodAud = process.env.VANTAGE_ECW_CLIENT_ASSERTION_AUD_PROD?.trim()
+  const sandboxAud = process.env.VANTAGE_ECW_CLIENT_ASSERTION_AUD_SANDBOX?.trim()
+  const n = fhirBaseUrl.toLowerCase()
+  const isSandbox = n.includes('staging') || n.includes('ecwcloud.com')
+  const isProd = n.includes('eclinicalworks.com')
+  if (isProd && prodAud) return prodAud
+  if (isSandbox && sandboxAud) return sandboxAud
+  return defaultAud || (isProd ? prodAud : sandboxAud) || undefined
+}
+
 export function isEcwDocumentationConfigured(): boolean {
   const base = process.env.VANTAGE_ECW_FHIR_BASE_URL?.trim()
   const clientId = process.env.VANTAGE_ECW_CLIENT_ID?.trim()
   const secret = process.env.VANTAGE_ECW_CLIENT_SECRET?.trim()
   const staticToken = process.env.VANTAGE_ECW_STATIC_ACCESS_TOKEN?.trim()
-  return Boolean(base && clientId && (secret || staticToken))
+  const jwtKey = jwtPrivateKeyFromEnv()
+  return Boolean(base && clientId && (secret || staticToken || jwtKey))
 }
 
 function patientQueryParam(externalEhrId: string): string {
@@ -47,8 +79,17 @@ async function fetchAccessToken(): Promise<string> {
   const fhirBase = process.env.VANTAGE_ECW_FHIR_BASE_URL?.trim()
   const clientId = process.env.VANTAGE_ECW_CLIENT_ID?.trim()
   const clientSecret = process.env.VANTAGE_ECW_CLIENT_SECRET?.trim()
-  if (!fhirBase || !clientId || !clientSecret) {
-    throw new Error('Vantage ECW documentation is not configured (FHIR base, client id, and client secret required)')
+  const privateKeyPem = jwtPrivateKeyFromEnv()
+
+  if (!fhirBase || !clientId) {
+    throw new Error(
+      'Vantage ECW documentation is not configured (set VANTAGE_ECW_FHIR_BASE_URL and VANTAGE_ECW_CLIENT_ID)'
+    )
+  }
+  if (!clientSecret && !privateKeyPem) {
+    throw new Error(
+      'Vantage ECW auth: set VANTAGE_ECW_CLIENT_SECRET and/or VANTAGE_ECW_JWT_PRIVATE_KEY (PEM) for client_credentials'
+    )
   }
 
   const now = Date.now()
@@ -64,9 +105,22 @@ async function fetchAccessToken(): Promise<string> {
   const body = new URLSearchParams({
     grant_type: 'client_credentials',
     client_id: clientId,
-    client_secret: clientSecret,
     scope,
   })
+
+  if (privateKeyPem) {
+    const assertion = createEcwClientAssertionJwt({
+      clientId,
+      tokenEndpoint,
+      privateKeyPem,
+      keyId: process.env.VANTAGE_ECW_JWT_KEY_ID?.trim(),
+      audience: clientAssertionAudience(fhirBase),
+    })
+    body.set('client_assertion_type', 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer')
+    body.set('client_assertion', assertion)
+  } else if (clientSecret) {
+    body.set('client_secret', clientSecret)
+  }
 
   const tokenRes = await fetch(tokenEndpoint, {
     method: 'POST',
