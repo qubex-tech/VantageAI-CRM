@@ -43,6 +43,44 @@ function getJwtKeyId(): string | undefined {
   return pickEnv('VANTAGE_ECW_JWT_KEY_ID', 'EHR_JWT_KEY_ID')
 }
 
+/** Org / tenant segment for multitenant eCW FHIR (e.g. FACGCD, FFBJCD). */
+function getEcwTenantSegment(): string | undefined {
+  return pickEnv('VANTAGE_ECW_TENANT', 'EHR_ECW_TENANT', 'ECW_TENANT')?.replace(/^\/+|\/+$/g, '')
+}
+
+/** True when pathname is exactly /fhir/r4 (no tenant after R4). */
+function fhirBaseMissingEcwTenantPath(fhirBaseUrl: string): boolean {
+  try {
+    const path = new URL(trimTrailingSlash(fhirBaseUrl)).pathname.replace(/\/+$/, '')
+    return /\/fhir\/r4$/i.test(path)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * eCW serves FHIR and SMART metadata under …/fhir/r4/{TENANT}.
+ * If the configured base stops at …/fhir/r4, append EHR_ECW_TENANT / VANTAGE_ECW_TENANT when set (eCW hosts only).
+ */
+export function resolveEcwFhirBaseUrl(raw: string | undefined | null): string {
+  if (!raw?.trim()) return ''
+  let base = trimTrailingSlash(raw.trim())
+  const tenant = getEcwTenantSegment()
+  if (!tenant) return base
+  let hostname = ''
+  try {
+    hostname = new URL(base).hostname.toLowerCase()
+  } catch {
+    return base
+  }
+  const isLikelyEcw =
+    hostname.includes('eclinicalworks.com') ||
+    hostname.includes('ecwcloud.com') ||
+    hostname.includes('healow.com')
+  if (!isLikelyEcw || !fhirBaseMissingEcwTenantPath(base)) return base
+  return `${base}/${tenant}`
+}
+
 function trimTrailingSlash(url: string): string {
   return url.replace(/\/+$/, '')
 }
@@ -87,9 +125,14 @@ export function readJwtPrivateKeyFromEnv(): string | null {
 /** Which pieces are still missing on the server (for operator debugging; no secret values). */
 export function getEcwDocumentationConfigGaps(): string[] {
   const gaps: string[] = []
-  if (!getEcwFhirBaseUrl()) {
+  const fhirRaw = getEcwFhirBaseUrl()
+  if (!fhirRaw) {
     gaps.push(
       'Missing FHIR base URL. Set VANTAGE_ECW_FHIR_BASE_URL (preferred) or EHR_ECW_FHIR_BASE_URL / ECW_FHIR_BASE_URL (e.g. https://fhir4.eclinicalworks.com/fhir/r4/FACGCD).'
+    )
+  } else if (fhirBaseMissingEcwTenantPath(fhirRaw) && !getEcwTenantSegment()) {
+    gaps.push(
+      'FHIR base URL ends at /fhir/r4 without an organization segment. Use …/fhir/r4/FACGCD (your tenant), or keep …/fhir/r4 and set VANTAGE_ECW_TENANT / EHR_ECW_TENANT=FACGCD.'
     )
   }
   if (!getEcwClientId()) {
@@ -149,10 +192,25 @@ async function discoverTokenEndpoint(fhirBaseUrl: string): Promise<string> {
   const explicit = getTokenUrlOverride()
   if (explicit) return explicit
 
-  const wellKnown = `${trimTrailingSlash(fhirBaseUrl)}/.well-known/smart-configuration`
+  const base = trimTrailingSlash(fhirBaseUrl)
+  if (fhirBaseMissingEcwTenantPath(base)) {
+    throw new Error(
+      `eCW FHIR base must include the tenant after /fhir/r4 (e.g. https://fhir4.eclinicalworks.com/fhir/r4/FACGCD). ` +
+        `Got "${base}", which requests SMART metadata at …/fhir/r4/.well-known/smart-configuration and typically returns 400. ` +
+        `Append your org id to the URL or set VANTAGE_ECW_TENANT / EHR_ECW_TENANT.`
+    )
+  }
+
+  const wellKnown = `${base}/.well-known/smart-configuration`
   const res = await fetch(wellKnown, { method: 'GET', cache: 'no-store' })
   if (!res.ok) {
-    throw new Error(`Could not load SMART configuration from ${wellKnown} (${res.status})`)
+    const errText = await res.text().catch(() => '')
+    const r4WellKnown =
+      /\/fhir\/r4\/\.well-known\//i.test(wellKnown) || /\/r4\/\.well-known\//i.test(wellKnown)
+    const hint = r4WellKnown
+      ? ' This URL usually means the FHIR base is missing the /{TENANT} segment after /fhir/r4.'
+      : ''
+    throw new Error(`Could not load SMART configuration from ${wellKnown} (${res.status}).${hint} ${errText.slice(0, 200)}`)
   }
   const json = (await res.json()) as SmartConfig
   if (!json.token_endpoint) {
@@ -165,7 +223,8 @@ async function fetchAccessToken(): Promise<string> {
   const staticToken = getStaticAccessToken()
   if (staticToken) return staticToken
 
-  const fhirBase = getEcwFhirBaseUrl()
+  const fhirBaseRaw = getEcwFhirBaseUrl()
+  const fhirBase = resolveEcwFhirBaseUrl(fhirBaseRaw || null)
   const clientId = getEcwClientId()
   const clientSecret = getEcwClientSecret()
   const privateKeyPem = readJwtPrivateKeyFromEnv()
@@ -248,7 +307,8 @@ type FhirBundle = {
 export async function fetchPatientDocumentReferences(
   externalPatientId: string
 ): Promise<{ raw: FhirBundle; patientParam: string }> {
-  const fhirBase = getEcwFhirBaseUrl()
+  const fhirBaseRaw = getEcwFhirBaseUrl()
+  const fhirBase = resolveEcwFhirBaseUrl(fhirBaseRaw || null)
   if (!fhirBase) {
     throw new Error('FHIR base URL is not set (VANTAGE_ECW_FHIR_BASE_URL or EHR_ECW_FHIR_BASE_URL)')
   }
