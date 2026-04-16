@@ -121,7 +121,8 @@ export function OutboundCustomerNotificationsSettings({
                 autoComplete="email"
               />
               <p className="text-xs text-gray-500">
-                Where to send staff alerts (separate from the Resend &quot;from&quot; address).
+                Where to send staff alerts (separate from the Resend &quot;from&quot; address). If empty, alerts use
+                this practice&apos;s profile email from Practice Management when set.
               </p>
             </div>
 
