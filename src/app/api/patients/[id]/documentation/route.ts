@@ -114,12 +114,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: 'Patient not found' }, { status: 404 })
     }
 
-    if (!isEcwDocumentationConfigured()) {
-      const configGaps = getEcwDocumentationConfigGaps()
+    if (!(await isEcwDocumentationConfigured(user.practiceId))) {
+      const configGaps = await getEcwDocumentationConfigGaps(user.practiceId)
       return NextResponse.json({
         configured: false as const,
         message:
-          'The server does not have a complete ECW Documentation configuration yet. In Vercel: Project → Settings → Environment Variables, add the variables below for Production (or Preview if that is what you use), then trigger a new deployment.',
+          'The server does not have a complete ECW Documentation configuration yet. Add the items below via Vercel environment variables and/or by saving a Backend eCW connection for this practice (issuer / FHIR base on EhrConnection), then redeploy.',
         configGaps,
         buckets: emptyBuckets(),
       })
@@ -134,7 +134,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       })
     }
 
-    const { raw } = await fetchPatientDocumentReferences(patient.externalEhrId)
+    const { raw } = await fetchPatientDocumentReferences(patient.externalEhrId, user.practiceId)
 
     const bundle = raw as { resourceType?: string; entry?: Array<{ resource?: Record<string, unknown> }> }
     const entries = bundle.resourceType === 'Bundle' && Array.isArray(bundle.entry) ? bundle.entry : []

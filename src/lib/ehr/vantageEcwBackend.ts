@@ -1,10 +1,11 @@
 import { createEcwClientAssertionJwt } from '@/lib/ehr/ecwClientAssertion'
+import { prisma } from '@/lib/db'
 
 type SmartConfig = {
   token_endpoint?: string
 }
 
-let cachedToken: { accessToken: string; expiresAtMs: number } | null = null
+let cachedToken: { cacheKey: string; accessToken: string; expiresAtMs: number } | null = null
 
 /** First non-empty trimmed value among env keys (Vantage-specific names first, then shared Medical CRM names). */
 function pickEnv(...keys: string[]): string | undefined {
@@ -81,6 +82,32 @@ export function resolveEcwFhirBaseUrl(raw: string | undefined | null): string {
   return `${base}/${tenant}`
 }
 
+/** Backend eCW row for this practice (issuer + FHIR base from connect flow). */
+async function loadDocumentationEhrConnection(practiceId: string | undefined) {
+  if (!practiceId) return null
+  return prisma.ehrConnection.findFirst({
+    where: {
+      tenantId: practiceId,
+      authFlow: 'backend_services',
+      providerId: { in: ['ecw_write', 'ecw'] },
+    },
+    orderBy: { updatedAt: 'desc' },
+    select: { fhirBaseUrl: true, issuer: true, clientId: true },
+  })
+}
+
+async function resolveDocumentationFhirClient(practiceId?: string): Promise<{
+  fhirBase: string
+  clientId: string | undefined
+  fhirRaw: string | undefined
+}> {
+  const row = await loadDocumentationEhrConnection(practiceId)
+  const fhirRaw = row?.fhirBaseUrl?.trim() || row?.issuer?.trim() || getEcwFhirBaseUrl()
+  const fhirBase = resolveEcwFhirBaseUrl(fhirRaw || null)
+  const clientId = row?.clientId?.trim() || getEcwClientId()
+  return { fhirBase, clientId, fhirRaw }
+}
+
 function trimTrailingSlash(url: string): string {
   return url.replace(/\/+$/, '')
 }
@@ -123,21 +150,21 @@ export function readJwtPrivateKeyFromEnv(): string | null {
 }
 
 /** Which pieces are still missing on the server (for operator debugging; no secret values). */
-export function getEcwDocumentationConfigGaps(): string[] {
+export async function getEcwDocumentationConfigGaps(practiceId?: string): Promise<string[]> {
   const gaps: string[] = []
-  const fhirRaw = getEcwFhirBaseUrl()
-  if (!fhirRaw) {
+  const { fhirBase, clientId, fhirRaw } = await resolveDocumentationFhirClient(practiceId)
+  if (!fhirRaw?.trim()) {
     gaps.push(
-      'Missing FHIR base URL. Set VANTAGE_ECW_FHIR_BASE_URL (preferred) or EHR_ECW_FHIR_BASE_URL / ECW_FHIR_BASE_URL (e.g. https://fhir4.eclinicalworks.com/fhir/r4/FACGCD).'
+      'Missing FHIR base URL. Set VANTAGE_ECW_FHIR_BASE_URL / EHR_ECW_FHIR_BASE_URL in Vercel, or connect Backend eCW for this practice so fhirBaseUrl / issuer is stored (EhrConnection).'
     )
-  } else if (fhirBaseMissingEcwTenantPath(fhirRaw) && !getEcwTenantSegment()) {
+  } else if (fhirBaseMissingEcwTenantPath(fhirBase)) {
     gaps.push(
-      'FHIR base URL ends at /fhir/r4 without an organization segment. Use …/fhir/r4/FACGCD (your tenant), or keep …/fhir/r4 and set VANTAGE_ECW_TENANT / EHR_ECW_TENANT=FACGCD.'
+      'FHIR base URL ends at /fhir/r4 without an organization segment. Use …/fhir/r4/{TENANT}, set VANTAGE_ECW_TENANT / EHR_ECW_TENANT, or save the full FHIR base when connecting eCW for this practice.'
     )
   }
-  if (!getEcwClientId()) {
+  if (!clientId?.trim()) {
     gaps.push(
-      'Missing OAuth client id. Set VANTAGE_ECW_CLIENT_ID (preferred) or EHR_ECW_CLIENT_ID / ECW_CLIENT_ID.'
+      'Missing OAuth client id. Set VANTAGE_ECW_CLIENT_ID / EHR_ECW_CLIENT_ID in Vercel, or store it on the practice Backend eCW connection.'
     )
   }
   const secret = getEcwClientSecret()
@@ -176,8 +203,9 @@ function clientAssertionAudience(fhirBaseUrl: string): string | undefined {
   return defaultAud || (isProd ? prodAud : sandboxAud) || undefined
 }
 
-export function isEcwDocumentationConfigured(): boolean {
-  return getEcwDocumentationConfigGaps().length === 0
+export async function isEcwDocumentationConfigured(practiceId?: string): Promise<boolean> {
+  const gaps = await getEcwDocumentationConfigGaps(practiceId)
+  return gaps.length === 0
 }
 
 function patientQueryParam(externalEhrId: string): string {
@@ -219,19 +247,17 @@ async function discoverTokenEndpoint(fhirBaseUrl: string): Promise<string> {
   return json.token_endpoint
 }
 
-async function fetchAccessToken(): Promise<string> {
+async function fetchAccessToken(practiceId?: string): Promise<string> {
   const staticToken = getStaticAccessToken()
   if (staticToken) return staticToken
 
-  const fhirBaseRaw = getEcwFhirBaseUrl()
-  const fhirBase = resolveEcwFhirBaseUrl(fhirBaseRaw || null)
-  const clientId = getEcwClientId()
+  const { fhirBase, clientId } = await resolveDocumentationFhirClient(practiceId)
   const clientSecret = getEcwClientSecret()
   const privateKeyPem = readJwtPrivateKeyFromEnv()
 
   if (!fhirBase || !clientId) {
     throw new Error(
-      'Vantage ECW documentation is not configured (set VANTAGE_ECW_FHIR_BASE_URL or EHR_ECW_FHIR_BASE_URL, and VANTAGE_ECW_CLIENT_ID or EHR_ECW_CLIENT_ID)'
+      'Vantage ECW documentation is not configured (FHIR base + client id from Vercel env or practice EhrConnection)'
     )
   }
   if (!clientSecret && !privateKeyPem) {
@@ -241,7 +267,8 @@ async function fetchAccessToken(): Promise<string> {
   }
 
   const now = Date.now()
-  if (cachedToken && cachedToken.expiresAtMs > now + 15_000) {
+  const cacheKey = `${fhirBase}::${clientId}`
+  if (cachedToken?.cacheKey === cacheKey && cachedToken.expiresAtMs > now + 15_000) {
     return cachedToken.accessToken
   }
 
@@ -291,6 +318,7 @@ async function fetchAccessToken(): Promise<string> {
 
   const ttlSec = typeof tokenJson.expires_in === 'number' ? tokenJson.expires_in : 300
   cachedToken = {
+    cacheKey,
     accessToken: tokenJson.access_token,
     expiresAtMs: Date.now() + Math.max(60, ttlSec - 30) * 1000,
   }
@@ -305,15 +333,15 @@ type FhirBundle = {
 }
 
 export async function fetchPatientDocumentReferences(
-  externalPatientId: string
+  externalPatientId: string,
+  practiceId?: string
 ): Promise<{ raw: FhirBundle; patientParam: string }> {
-  const fhirBaseRaw = getEcwFhirBaseUrl()
-  const fhirBase = resolveEcwFhirBaseUrl(fhirBaseRaw || null)
+  const { fhirBase } = await resolveDocumentationFhirClient(practiceId)
   if (!fhirBase) {
-    throw new Error('FHIR base URL is not set (VANTAGE_ECW_FHIR_BASE_URL or EHR_ECW_FHIR_BASE_URL)')
+    throw new Error('FHIR base URL is not set (env or practice EhrConnection)')
   }
 
-  const token = await fetchAccessToken()
+  const token = await fetchAccessToken(practiceId)
   const patientParam = patientQueryParam(externalPatientId)
 
   const search = new URLSearchParams()
