@@ -208,12 +208,142 @@ export async function isEcwDocumentationConfigured(practiceId?: string): Promise
   return gaps.length === 0
 }
 
-function patientQueryParam(externalEhrId: string): string {
+export function patientQueryParam(externalEhrId: string): string {
   const raw = externalEhrId.trim()
   if (raw.startsWith('Patient/')) {
     return raw.slice('Patient/'.length).split('|')[0] || raw
   }
   return raw
+}
+
+/** True when `DocumentReference.subject` refers to the same logical patient as `externalPatientId`. */
+export function documentReferenceSubjectMatchesPatient(
+  resource: Record<string, unknown>,
+  externalPatientId: string
+): boolean {
+  const expected = patientQueryParam(externalPatientId)
+  if (!expected) return false
+  const subject = resource.subject
+  if (!subject || typeof subject !== 'object') return false
+  const ref = (subject as { reference?: string }).reference?.trim()
+  if (!ref) return false
+  const m = ref.match(/(?:^|\/)(?:Patient)\/([^|/\s?]+)/i)
+  const idFromRef = m?.[1] ?? ref.replace(/^Patient\//i, '').split('|')[0]
+  return idFromRef === expected
+}
+
+const MAX_DOCUMENT_ATTACHMENT_BYTES = 12 * 1024 * 1024
+
+function absoluteFhirUrl(fhirBase: string, url: string): string {
+  const u = url.trim()
+  if (/^https?:\/\//i.test(u)) return u
+  return `${trimTrailingSlash(fhirBase)}/${u.replace(/^\//, '')}`
+}
+
+export type ResolvedDocumentBody = {
+  contentType: string
+  encoding: 'utf8' | 'base64'
+  body: string
+}
+
+/**
+ * Read `DocumentReference/{id}` (full resource, often including inline `content.attachment.data`).
+ */
+export async function fetchDocumentReferenceById(
+  logicalId: string,
+  practiceId?: string
+): Promise<Record<string, unknown>> {
+  const id = logicalId
+    .trim()
+    .replace(/^DocumentReference\//i, '')
+    .split('/')[0]
+  if (!id) {
+    throw new Error('Missing DocumentReference id')
+  }
+  const { fhirBase } = await resolveDocumentationFhirClient(practiceId)
+  if (!fhirBase) {
+    throw new Error('FHIR base URL is not set (env or practice EhrConnection)')
+  }
+  const token = await fetchAccessToken(practiceId)
+  const url = `${trimTrailingSlash(fhirBase)}/DocumentReference/${encodeURIComponent(id)}`
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/fhir+json',
+    },
+    cache: 'no-store',
+  })
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '')
+    throw new Error(`DocumentReference read failed (${res.status}): ${errText.slice(0, 500)}`)
+  }
+  return (await res.json()) as Record<string, unknown>
+}
+
+/**
+ * First attachment with inline base64 or fetchable `url` (Bearer against FHIR base when relative).
+ */
+export async function resolveDocumentReferenceBody(
+  resource: Record<string, unknown>,
+  practiceId?: string
+): Promise<ResolvedDocumentBody | null> {
+  const content = Array.isArray(resource.content) ? resource.content : []
+  const { fhirBase } = await resolveDocumentationFhirClient(practiceId)
+  if (!fhirBase) return null
+  const token = await fetchAccessToken(practiceId)
+
+  for (const row of content) {
+    const att = (row as { attachment?: Record<string, unknown> }).attachment
+    if (!att) continue
+    const contentType =
+      typeof att.contentType === 'string' && att.contentType.trim()
+        ? att.contentType.trim()
+        : 'application/octet-stream'
+    const dataStr = typeof att.data === 'string' ? att.data : ''
+    if (dataStr.length > 0) {
+      let buf: Buffer
+      try {
+        buf = Buffer.from(dataStr, 'base64')
+      } catch {
+        continue
+      }
+      if (buf.byteLength > MAX_DOCUMENT_ATTACHMENT_BYTES) {
+        throw new Error('Document attachment exceeds size limit')
+      }
+      const asText =
+        contentType.startsWith('text/') ||
+        contentType === 'application/xhtml+xml' ||
+        contentType.includes('+xml') ||
+        contentType === 'application/json'
+      if (asText) {
+        return { contentType, encoding: 'utf8', body: buf.toString('utf8') }
+      }
+      return { contentType, encoding: 'base64', body: buf.toString('base64') }
+    }
+
+    const refUrl = typeof att.url === 'string' ? att.url.trim() : ''
+    if (!refUrl) continue
+    const target = absoluteFhirUrl(fhirBase, refUrl)
+    const res = await fetch(target, {
+      headers: { Authorization: `Bearer ${token}`, Accept: '*/*' },
+      cache: 'no-store',
+    })
+    if (!res.ok) continue
+    const arrBuf = await res.arrayBuffer()
+    if (arrBuf.byteLength > MAX_DOCUMENT_ATTACHMENT_BYTES) {
+      throw new Error('Document attachment exceeds size limit')
+    }
+    const ct =
+      res.headers.get('content-type')?.split(';')[0]?.trim() || contentType
+    const asText =
+      ct.startsWith('text/') || ct === 'application/xhtml+xml' || ct.includes('+xml') || ct === 'application/json'
+    if (asText) {
+      return { contentType: ct, encoding: 'utf8', body: Buffer.from(arrBuf).toString('utf8') }
+    }
+    return { contentType: ct, encoding: 'base64', body: Buffer.from(arrBuf).toString('base64') }
+  }
+
+  return null
 }
 
 async function discoverTokenEndpoint(fhirBaseUrl: string): Promise<string> {

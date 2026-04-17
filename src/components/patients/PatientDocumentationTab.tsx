@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { format, parseISO } from 'date-fns'
-import { AlertCircle, FileStack, FolderOpen, IdCard, Stethoscope } from 'lucide-react'
+import { AlertCircle, FileStack, FolderOpen, IdCard, Loader2, Stethoscope, X } from 'lucide-react'
 
 type DocumentationBucket = 'insurance_and_id' | 'clinical_notes' | 'summaries' | 'other'
 
@@ -96,10 +96,74 @@ function contentHint(row: DocumentationItem['contentSummary'][0]) {
   return parts.length ? parts.join(' · ') : '—'
 }
 
+type DocumentBodyResponse = {
+  title: string
+  contentType: string
+  encoding: 'utf8' | 'base64'
+  body: string
+  documentReferenceId?: string
+}
+
+function base64ToBlob(base64: string, contentType: string): Blob {
+  const binary = atob(base64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return new Blob([bytes], { type: contentType || 'application/octet-stream' })
+}
+
 export function PatientDocumentationTab({ patientId }: { patientId: string }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [payload, setPayload] = useState<ApiOk | null>(null)
+
+  const [viewerOpen, setViewerOpen] = useState(false)
+  const [viewerLoading, setViewerLoading] = useState(false)
+  const [viewerError, setViewerError] = useState<string | null>(null)
+  const [viewerDoc, setViewerDoc] = useState<DocumentBodyResponse | null>(null)
+  const [viewerLabel, setViewerLabel] = useState('')
+
+  const closeViewer = useCallback(() => {
+    setViewerOpen(false)
+    setViewerDoc(null)
+    setViewerError(null)
+    setViewerLoading(false)
+  }, [])
+
+  const openDocument = useCallback(
+    async (docId: string, listTitle: string) => {
+      setViewerLabel(listTitle)
+      setViewerOpen(true)
+      setViewerLoading(true)
+      setViewerError(null)
+      setViewerDoc(null)
+      try {
+        const res = await fetch(
+          `/api/patients/${encodeURIComponent(patientId)}/documentation/${encodeURIComponent(docId)}`
+        )
+        const json = await res.json()
+        if (!res.ok) {
+          throw new Error(json.error || `Request failed (${res.status})`)
+        }
+        setViewerDoc(json as DocumentBodyResponse)
+      } catch (e) {
+        setViewerError(e instanceof Error ? e.message : 'Failed to load document')
+      } finally {
+        setViewerLoading(false)
+      }
+    },
+    [patientId]
+  )
+
+  useEffect(() => {
+    if (!viewerOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeViewer()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [viewerOpen, closeViewer])
 
   useEffect(() => {
     let cancelled = false
@@ -195,9 +259,64 @@ export function PatientDocumentationTab({ patientId }: { patientId: string }) {
           Documents stored in eClinicalWorks for this patient (US Core DocumentReference), grouped by type.
           {total > 0 ? ` Showing ${total} document${total === 1 ? '' : 's'}.` : ' No documents returned for category clinical-note.'}
         </p>
+        {total > 0 && (
+          <p className="mt-1 text-xs text-gray-500">Double-click a row to open the document body from eCW.</p>
+        )}
       </div>
 
       <EcwScopeCallout />
+
+      {viewerOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          role="presentation"
+          onClick={closeViewer}
+        >
+          <div
+            className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="doc-viewer-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-gray-100 px-4 py-3">
+              <div className="min-w-0">
+                <h4 id="doc-viewer-title" className="truncate text-sm font-semibold text-gray-900">
+                  {viewerDoc?.title || viewerLabel}
+                </h4>
+                {viewerDoc && (
+                  <p className="mt-0.5 truncate text-xs text-gray-500">
+                    {viewerDoc.contentType}
+                    {viewerDoc.encoding === 'base64' ? ' · binary' : ' · text'}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={closeViewer}
+                className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="min-h-[200px] flex-1 overflow-auto bg-gray-50 p-3">
+              {viewerLoading && (
+                <div className="flex items-center justify-center gap-2 py-16 text-sm text-gray-600">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  Loading document…
+                </div>
+              )}
+              {viewerError && (
+                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+                  {viewerError}
+                </div>
+              )}
+              {!viewerLoading && !viewerError && viewerDoc && <DocumentBodyView doc={viewerDoc} />}
+            </div>
+          </div>
+        </div>
+      )}
 
       {SECTIONS.map(({ bucket, title, description, icon: Icon }) => {
         const rows = payload.buckets[bucket]
@@ -218,7 +337,12 @@ export function PatientDocumentationTab({ patientId }: { patientId: string }) {
             ) : (
               <ul className="divide-y divide-gray-100">
                 {rows.map((doc) => (
-                  <li key={doc.id} className="px-5 py-4">
+                  <li
+                    key={doc.id}
+                    className="cursor-pointer px-5 py-4 hover:bg-gray-50/80"
+                    title="Double-click to open document"
+                    onDoubleClick={() => openDocument(doc.id, doc.title)}
+                  >
                     <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">
                         <div className="font-medium text-gray-900">{doc.title}</div>
@@ -261,6 +385,67 @@ export function PatientDocumentationTab({ patientId }: { patientId: string }) {
           </section>
         )
       })}
+    </div>
+  )
+}
+
+function DocumentBodyView({ doc }: { doc: DocumentBodyResponse }) {
+  const [objectUrl, setObjectUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (doc.encoding !== 'base64') return
+    const url = URL.createObjectURL(base64ToBlob(doc.body, doc.contentType))
+    setObjectUrl(url)
+    return () => {
+      URL.revokeObjectURL(url)
+    }
+  }, [doc.body, doc.contentType, doc.encoding])
+
+  if (doc.encoding === 'utf8') {
+    const ct = doc.contentType.toLowerCase()
+    if (ct.includes('html')) {
+      return (
+        <iframe
+          title="Document"
+          className="h-[min(70vh,720px)] w-full rounded border border-gray-200 bg-white"
+          sandbox=""
+          srcDoc={doc.body}
+        />
+      )
+    }
+    return (
+      <pre className="max-h-[min(70vh,720px)] overflow-auto whitespace-pre-wrap break-words rounded border border-gray-200 bg-white p-3 text-xs text-gray-900">
+        {doc.body}
+      </pre>
+    )
+  }
+
+  if (!objectUrl) {
+    return (
+      <div className="flex items-center justify-center py-12 text-sm text-gray-500">
+        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+        Preparing preview…
+      </div>
+    )
+  }
+
+  const ct = doc.contentType.toLowerCase()
+  if (ct.includes('pdf')) {
+    return (
+      <iframe title="PDF document" src={objectUrl} className="h-[min(70vh,720px)] w-full rounded border border-gray-200 bg-white" />
+    )
+  }
+
+  return (
+    <div className="rounded-md border border-gray-200 bg-white p-4 text-sm text-gray-700">
+      <p className="mb-3">No inline preview for this MIME type.</p>
+      <a
+        href={objectUrl}
+        download={`document.${ct.includes('xml') ? 'xml' : 'bin'}`}
+        className="font-medium text-blue-600 underline hover:text-blue-800"
+      >
+        Download file
+      </a>
     </div>
   )
 }
