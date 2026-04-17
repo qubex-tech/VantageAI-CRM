@@ -347,7 +347,8 @@ export async function fetchPatientDocumentReferences(
   const search = new URLSearchParams()
   search.set('patient', patientParam)
   search.set('category', 'clinical-note')
-  search.set('_count', '100')
+  // eCW Vantage rejects `_count` on DocumentReference search ("Unsupported query parameter(s): _count").
+  // Rely on default page size and `Bundle.link.relation=next` pagination.
 
   const firstUrl = `${trimTrailingSlash(fhirBase)}/DocumentReference?${search.toString()}`
   const headers = {
@@ -363,7 +364,8 @@ export async function fetchPatientDocumentReferences(
 
   let pageUrl: string | null = firstUrl
   const seenUrls = new Set<string>()
-  for (let page = 0; page < 5 && pageUrl; page++) {
+  // Without `_count`, page size is server-default; follow more `next` links to approximate prior depth.
+  for (let page = 0; page < 25 && pageUrl; page++) {
     if (seenUrls.has(pageUrl)) break
     seenUrls.add(pageUrl)
 
