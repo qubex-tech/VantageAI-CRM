@@ -210,41 +210,35 @@ export function PatientDocumentationTab({ patientId }: { patientId: string }) {
 
   if (!payload.configured) {
     return (
-      <div className="space-y-4">
-        <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-          <AlertCircle className="h-5 w-5 flex-shrink-0" />
-          <div>
-            <p className="font-medium">EHR documentation is not connected</p>
-            <p className="mt-1 text-amber-900/90">{payload.message}</p>
-            {payload.configGaps && payload.configGaps.length > 0 && (
-              <ul className="mt-3 list-disc space-y-1 pl-5 text-amber-950/95">
-                {payload.configGaps.map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-              </ul>
-            )}
-            <p className="mt-3 text-xs text-amber-900/80">
-              After saving variables, redeploy. If you already added them, confirm they apply to this environment
-              (Production vs Preview) and that the deployment finished after the save.
-            </p>
-          </div>
+      <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+        <AlertCircle className="h-5 w-5 flex-shrink-0" />
+        <div>
+          <p className="font-medium">EHR documentation is not connected</p>
+          <p className="mt-1 text-amber-900/90">{payload.message}</p>
+          {payload.configGaps && payload.configGaps.length > 0 && (
+            <ul className="mt-3 list-disc space-y-1 pl-5 text-amber-950/95">
+              {payload.configGaps.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-3 text-xs text-amber-900/80">
+            After saving variables, redeploy. If you already added them, confirm they apply to this environment
+            (Production vs Preview) and that the deployment finished after the save.
+          </p>
         </div>
-        <EcwScopeCallout />
       </div>
     )
   }
 
   if (!payload.patientLinked) {
     return (
-      <div className="space-y-4">
-        <div className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-800">
-          <AlertCircle className="h-5 w-5 flex-shrink-0 text-gray-500" />
-          <div>
-            <p className="font-medium">Patient not linked to eCW</p>
-            <p className="mt-1 text-gray-600">{payload.message}</p>
-          </div>
+      <div className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-800">
+        <AlertCircle className="h-5 w-5 flex-shrink-0 text-gray-500" />
+        <div>
+          <p className="font-medium">Patient not linked to eCW</p>
+          <p className="mt-1 text-gray-600">{payload.message}</p>
         </div>
-        <EcwScopeCallout />
       </div>
     )
   }
@@ -263,8 +257,6 @@ export function PatientDocumentationTab({ patientId }: { patientId: string }) {
           <p className="mt-1 text-xs text-gray-500">Double-click a row to open the document body from eCW.</p>
         )}
       </div>
-
-      <EcwScopeCallout />
 
       {viewerOpen && (
         <div
@@ -446,23 +438,6 @@ function DocumentBodyView({ doc }: { doc: DocumentBodyResponse }) {
       >
         Download file
       </a>
-    </div>
-  )
-}
-
-function EcwScopeCallout() {
-  return (
-    <div className="rounded-lg border border-blue-100 bg-blue-50/80 px-4 py-3 text-xs text-blue-950">
-      <p className="font-medium text-blue-900">eCW Vantage — Backend Services</p>
-      <p className="mt-1 text-blue-900/85">
-        Requires <code className="rounded bg-blue-100/80 px-1">system/DocumentReference.read</code> and a linked
-        patient <code className="rounded bg-blue-100/80 px-1">externalEhrId</code>. FHIR base and client id may use{' '}
-        <code className="rounded bg-blue-100/80 px-1">VANTAGE_ECW_*</code> or shared{' '}
-        <code className="rounded bg-blue-100/80 px-1">EHR_ECW_FHIR_BASE_URL</code> /{' '}
-        <code className="rounded bg-blue-100/80 px-1">EHR_ECW_CLIENT_ID</code>. JWT auth accepts{' '}
-        <code className="rounded bg-blue-100/80 px-1">EHR_JWT_PRIVATE_KEY</code> (same as the main CRM). Secrets live
-        only in the host environment (e.g. Vercel), not in git.
-      </p>
     </div>
   )
 }
