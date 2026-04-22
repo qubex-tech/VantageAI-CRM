@@ -80,9 +80,10 @@ function escapeCsv(value: string): string {
 
 type CallReportingTableProps = {
   rows: AnalyticsCallRow[]
+  callRangeLabel?: string
 }
 
-export function CallReportingTable({ rows }: CallReportingTableProps) {
+export function CallReportingTable({ rows, callRangeLabel }: CallReportingTableProps) {
   const [dynamicKeys, setDynamicKeys] = useState<string[]>([])
   const [filters, setFilters] = useState<Record<string, string>>({})
   const [pendingKey, setPendingKey] = useState<string>('')
@@ -171,9 +172,13 @@ export function CallReportingTable({ rows }: CallReportingTableProps) {
     <section className="space-y-4">
       <div>
         <h2 className="text-lg font-semibold text-gray-900">Reporting</h2>
-        <p className="text-sm text-gray-500">
+        {callRangeLabel ? (
+          <p className="text-xs text-gray-500 mt-1">Active call date range: {callRangeLabel}</p>
+        ) : null}
+        <p className="text-sm text-gray-500 mt-1">
           Build your table by adding columns from Retell and CRM fields. Each column can filter rows
           (contains, case-insensitive). Caller name is derived from extracted metadata when available.
+          Use the date range bar above to change which calls are loaded.
         </p>
       </div>
 
