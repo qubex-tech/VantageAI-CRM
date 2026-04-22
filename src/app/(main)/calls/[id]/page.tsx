@@ -4,8 +4,8 @@ import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
 import { canAccessPractice } from '@/lib/permissions'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { MarkCallReviewed } from '@/components/calls/MarkCallReviewed'
-import { format } from 'date-fns'
 import { RetellCall } from '@/lib/retell-api'
+import { LocalDateTime } from '@/components/calls/LocalDateTime'
 
 export const dynamic = 'force-dynamic'
 
@@ -172,7 +172,7 @@ export default async function CallDetailPage({
                 <div>
                   <p className="text-sm font-medium text-gray-500">Start Time</p>
                   <p className="text-sm text-gray-900 mt-1">
-                    {format(new Date(call.start_timestamp), 'MMM d, yyyy h:mm a')}
+                    <LocalDateTime timestamp={call.start_timestamp} />
                   </p>
                 </div>
               )}
@@ -180,7 +180,7 @@ export default async function CallDetailPage({
                 <div>
                   <p className="text-sm font-medium text-gray-500">End Time</p>
                   <p className="text-sm text-gray-900 mt-1">
-                    {format(new Date(call.end_timestamp), 'MMM d, yyyy h:mm a')}
+                    <LocalDateTime timestamp={call.end_timestamp} />
                   </p>
                 </div>
               )}
