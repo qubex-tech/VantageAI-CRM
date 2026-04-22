@@ -7,45 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { CallAnalyticsSection } from '@/components/analytics/CallAnalyticsSection'
 import { isInboundAgentCall } from '@/lib/analytics/voiceConversationInbound'
 import type { AnalyticsCallRow } from '@/lib/analytics/callSort'
+import { last7DaysStartUtc, resolveCallDateRangeUtc } from '@/lib/analytics/callDateRangeUtc'
 
 export const dynamic = 'force-dynamic'
-
-const MS_PER_DAY = 86400000
-const MAX_CALL_RANGE_DAYS = 366
-
-function parseDateParam(value?: string): Date | null {
-  if (!value) return null
-  const [year, month, day] = value.split('-').map(Number)
-  if (!year || !month || !day) return null
-  return new Date(year, month - 1, day, 0, 0, 0, 0)
-}
-
-function resolveCallDateRange(
-  params: { callFrom?: string; callTo?: string },
-  now: Date
-): { from: Date; to: Date } {
-  const defaultFrom = subDays(startOfDay(now), 30)
-  const defaultTo = endOfDay(now)
-
-  const parsedFrom = parseDateParam(params.callFrom)
-  const parsedToDay = parseDateParam(params.callTo)
-  const parsedTo = parsedToDay ? endOfDay(parsedToDay) : null
-
-  let from = parsedFrom ?? defaultFrom
-  let to = parsedTo ?? defaultTo
-
-  if (from.getTime() > to.getTime()) {
-    from = defaultFrom
-    to = defaultTo
-  }
-
-  const spanMs = to.getTime() - from.getTime()
-  if (spanMs > MAX_CALL_RANGE_DAYS * MS_PER_DAY) {
-    from = startOfDay(new Date(to.getTime() - MAX_CALL_RANGE_DAYS * MS_PER_DAY))
-  }
-
-  return { from, to }
-}
 
 function toSerializableCallRow(row: {
   startedAt: Date
@@ -110,11 +74,11 @@ export default async function AnalyticsPage({
 
   const practiceId = user.practiceId
   const now = new Date()
-  const { from: callRangeStart, to: callRangeEnd } = resolveCallDateRange(params, now)
+  const { from: callRangeStart, to: callRangeEnd } = resolveCallDateRangeUtc(params, now)
 
   const schedulingRangeStart = subDays(startOfDay(now), 30)
   const schedulingRangeEnd = endOfDay(now)
-  const last7Start = subDays(startOfDay(now), 7)
+  const last7Start = last7DaysStartUtc(now)
   const upcomingEnd = addDays(endOfDay(now), 7)
 
   const [calls, appointments, upcomingAppointments] = await Promise.all([
@@ -214,16 +178,23 @@ export default async function AnalyticsPage({
 
   const recentAppointments = appointments.slice(0, 6)
 
-  const callFromStr = format(callRangeStart, 'yyyy-MM-dd')
-  const callToStr = format(callRangeEnd, 'yyyy-MM-dd')
-  const callRangeLabel = `${format(callRangeStart, 'MMM d, yyyy')} – ${format(callRangeEnd, 'MMM d, yyyy')}`
+  const callFromStr = callRangeStart.toISOString().slice(0, 10)
+  const callToStr = callRangeEnd.toISOString().slice(0, 10)
+  const utcDateFmt: Intl.DateTimeFormatOptions = {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }
+  const callRangeLabel = `${callRangeStart.toLocaleDateString('en-US', utcDateFmt)} – ${callRangeEnd.toLocaleDateString('en-US', utcDateFmt)} (UTC)`
 
   return (
     <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-gray-900">Analytics</h1>
         <p className="text-sm text-gray-500">
-          Call analytics use the date range you select below · Scheduling uses the last 30 days
+          Call date range uses UTC calendar days so counts align with Retell timestamps. Scheduling
+          below still uses the last 30 days in server local time.
         </p>
       </div>
 

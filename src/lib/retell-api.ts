@@ -76,36 +76,51 @@ export class RetellApiClient {
     offset?: number
     startTimestamp?: number
     endTimestamp?: number
+    /** Last call_id from previous page (exclusive); see Retell list-calls docs */
+    paginationKey?: string
+    /** When true, only inbound calls (typical inbound agent + Retell analytics) */
+    directionInboundOnly?: boolean
   }): Promise<{ calls: RetellCallListItem[], total?: number }> {
     try {
-      // Build request body according to RetellAI API documentation
-      const body: any = {}
-      
-      if (params?.agentId) {
-        body.filter_criteria = {
-          agent_id: [params.agentId]
-        }
+      // Build request body per https://docs.retellai.com/api-references/list-calls
+      const body: Record<string, unknown> = {
+        sort_order: 'descending',
       }
 
-      // Always return newest calls first
-      body.sort_order = 'descending'
+      const filter: Record<string, unknown> = {}
+      if (params?.agentId) {
+        filter.agent_id = [params.agentId]
+      }
+      if (params?.startTimestamp != null && params?.endTimestamp != null) {
+        filter.start_timestamp = {
+          lower_threshold: params.startTimestamp,
+          upper_threshold: params.endTimestamp,
+        }
+      }
+      if (params?.directionInboundOnly) {
+        filter.direction = ['inbound']
+      }
+      if (Object.keys(filter).length > 0) {
+        body.filter_criteria = filter
+      }
 
       if (params?.limit) {
         body.limit = params.limit
       }
 
-      // Note: RetellAI API uses pagination_key instead of offset
-      // For now, we'll ignore offset as pagination_key requires a call_id
-      
+      if (params?.paginationKey) {
+        body.pagination_key = params.paginationKey
+      }
+
       const url = `${this.baseUrl}/list-calls`
-      
+
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
         },
-        body: Object.keys(body).length > 0 ? JSON.stringify(body) : undefined,
+        body: JSON.stringify(body),
       })
 
       if (!response.ok) {

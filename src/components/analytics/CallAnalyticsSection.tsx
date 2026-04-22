@@ -1,8 +1,9 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
+import { RefreshCw } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import type { AnalyticsCallRow } from '@/lib/analytics/callSort'
 import {
@@ -76,6 +77,14 @@ export function CallAnalyticsSection({
   const [toInput, setToInput] = useState(callTo)
   const [sortKey, setSortKey] = useState<string>('startedAt')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [syncLoading, setSyncLoading] = useState(false)
+  const [syncError, setSyncError] = useState<string | null>(null)
+  const [syncMessage, setSyncMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    setFromInput(callFrom)
+    setToInput(callTo)
+  }, [callFrom, callTo])
 
   const customKeys = useMemo(() => collectRetellCustomDataKeysFromRows(inboundCalls), [inboundCalls])
 
@@ -94,6 +103,42 @@ export function CallAnalyticsSection({
     router.push(q ? `/analytics?${q}` : '/analytics')
   }
 
+  const syncFromRetell = async () => {
+    setSyncError(null)
+    setSyncMessage(null)
+    setSyncLoading(true)
+    try {
+      const res = await fetch('/api/analytics/retell-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          callFrom: fromInput || undefined,
+          callTo: toInput || undefined,
+        }),
+      })
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean
+        error?: string
+        processed?: number
+        fetched?: number
+        failed?: number
+      }
+      if (!res.ok) {
+        throw new Error(data.error || `Sync failed (${res.status})`)
+      }
+      const failedPart =
+        typeof data.failed === 'number' && data.failed > 0 ? `, ${data.failed} failed` : ''
+      setSyncMessage(
+        `Updated from Retell: ${data.processed ?? 0} calls processed (${data.fetched ?? 0} fetched${failedPart}).`
+      )
+      router.refresh()
+    } catch (e) {
+      setSyncError(e instanceof Error ? e.message : 'Sync failed')
+    } finally {
+      setSyncLoading(false)
+    }
+  }
+
   return (
     <section className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -105,10 +150,14 @@ export function CallAnalyticsSection({
         <span className="text-xs text-gray-400 shrink-0">Updated {updatedAtLabel}</span>
       </div>
 
-      <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50/80 p-4 sm:flex-row sm:flex-wrap sm:items-end">
+      <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50/80 p-4">
+        <p className="text-xs text-gray-500">
+          Dates are interpreted as UTC calendar days (same basis as Retell call timestamps).
+        </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
         <div className="flex flex-col gap-1">
           <label htmlFor="call-from" className="text-xs font-medium text-gray-600">
-            From
+            From (UTC)
           </label>
           <input
             id="call-from"
@@ -120,7 +169,7 @@ export function CallAnalyticsSection({
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="call-to" className="text-xs font-medium text-gray-600">
-            To
+            To (UTC)
           </label>
           <input
             id="call-to"
@@ -130,13 +179,28 @@ export function CallAnalyticsSection({
             className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 shadow-sm"
           />
         </div>
-        <button
-          type="button"
-          onClick={applyDateRange}
-          className="inline-flex items-center justify-center rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-800"
-        >
-          Apply range
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={applyDateRange}
+            className="inline-flex items-center justify-center rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-800"
+          >
+            Apply range
+          </button>
+          <button
+            type="button"
+            onClick={syncFromRetell}
+            disabled={syncLoading}
+            title="Fetch latest inbound calls from Retell for this range and update CRM records"
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 shrink-0 ${syncLoading ? 'animate-spin' : ''}`} aria-hidden />
+            {syncLoading ? 'Syncing…' : 'Refresh from Retell'}
+          </button>
+        </div>
+        </div>
+        {syncError ? <p className="text-sm text-red-600">{syncError}</p> : null}
+        {syncMessage ? <p className="text-sm text-green-700">{syncMessage}</p> : null}
       </div>
 
       <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-4 sm:flex-row sm:items-end sm:gap-4">
