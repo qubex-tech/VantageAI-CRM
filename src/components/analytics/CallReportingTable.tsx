@@ -34,11 +34,10 @@ function callDurationSeconds(row: AnalyticsCallRow): number | null {
   return typeof v === 'number' ? v : null
 }
 
-function callTimeUtcDisplay(row: AnalyticsCallRow): string {
+function callTimeLocalDisplay(row: AnalyticsCallRow): string {
   const d = new Date(row.startedAt)
   if (Number.isNaN(d.getTime())) return '—'
   return d.toLocaleString('en-US', {
-    timeZone: 'UTC',
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -227,7 +226,7 @@ export function CallReportingTable({ rows, callRangeLabel }: CallReportingTableP
               <th className="whitespace-nowrap px-3 py-3">Caller name</th>
               <th className="whitespace-nowrap px-3 py-3">Caller number</th>
               <th className="whitespace-nowrap px-3 py-3">Call duration</th>
-              <th className="whitespace-nowrap px-3 py-3">Call time (UTC)</th>
+              <th className="whitespace-nowrap px-3 py-3">Call time</th>
               {dynamicKeys.map((key) => (
                 <th key={key} className="min-w-[140px] px-3 py-2 align-top">
                   <div className="flex items-start justify-between gap-2 normal-case">
@@ -282,7 +281,7 @@ export function CallReportingTable({ rows, callRangeLabel }: CallReportingTableP
                   <td className="whitespace-nowrap px-3 py-2.5">
                     {formatDuration(callDurationSeconds(row))}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 text-gray-700">{callTimeUtcDisplay(row)}</td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-gray-700">{callTimeLocalDisplay(row)}</td>
                   {dynamicKeys.map((key) => (
                     <td key={key} className="max-w-[220px] px-3 py-2.5 align-top text-gray-800">
                       <span className="line-clamp-3 break-words">{cellDisplay(row, key)}</span>
