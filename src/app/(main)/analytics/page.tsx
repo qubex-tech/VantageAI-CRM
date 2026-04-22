@@ -4,32 +4,77 @@ import { getSupabaseSession } from '@/lib/auth-supabase'
 import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
 import { prisma } from '@/lib/db'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { CallAnalyticsSection } from '@/components/analytics/CallAnalyticsSection'
+import { isInboundAgentCall } from '@/lib/analytics/voiceConversationInbound'
+import type { AnalyticsCallRow } from '@/lib/analytics/callSort'
 
 export const dynamic = 'force-dynamic'
 
-const formatDuration = (seconds: number) => {
-  if (!seconds || Number.isNaN(seconds)) {
-    return '—'
-  }
-  const minutes = Math.round(seconds / 60)
-  if (minutes < 60) {
-    return `${minutes}m`
-  }
-  const hours = Math.floor(minutes / 60)
-  const remainingMinutes = minutes % 60
-  return `${hours}h ${remainingMinutes}m`
+const MS_PER_DAY = 86400000
+const MAX_CALL_RANGE_DAYS = 366
+
+function parseDateParam(value?: string): Date | null {
+  if (!value) return null
+  const [year, month, day] = value.split('-').map(Number)
+  if (!year || !month || !day) return null
+  return new Date(year, month - 1, day, 0, 0, 0, 0)
 }
 
-const formatPercent = (value: number) => {
-  if (!Number.isFinite(value)) {
-    return '0%'
+function resolveCallDateRange(
+  params: { callFrom?: string; callTo?: string },
+  now: Date
+): { from: Date; to: Date } {
+  const defaultFrom = subDays(startOfDay(now), 30)
+  const defaultTo = endOfDay(now)
+
+  const parsedFrom = parseDateParam(params.callFrom)
+  const parsedToDay = parseDateParam(params.callTo)
+  const parsedTo = parsedToDay ? endOfDay(parsedToDay) : null
+
+  let from = parsedFrom ?? defaultFrom
+  let to = parsedTo ?? defaultTo
+
+  if (from.getTime() > to.getTime()) {
+    from = defaultFrom
+    to = defaultTo
   }
-  return `${Math.round(value * 100)}%`
+
+  const spanMs = to.getTime() - from.getTime()
+  if (spanMs > MAX_CALL_RANGE_DAYS * MS_PER_DAY) {
+    from = startOfDay(new Date(to.getTime() - MAX_CALL_RANGE_DAYS * MS_PER_DAY))
+  }
+
+  return { from, to }
 }
 
-export default async function AnalyticsPage() {
+function toSerializableCallRow(row: {
+  startedAt: Date
+  endedAt: Date | null
+  callerPhone: string
+  outcome: string | null
+  extractedIntent: string | null
+  metadata: unknown
+}): AnalyticsCallRow {
+  return {
+    startedAt: row.startedAt.toISOString(),
+    endedAt: row.endedAt ? row.endedAt.toISOString() : null,
+    callerPhone: row.callerPhone,
+    outcome: row.outcome,
+    extractedIntent: row.extractedIntent,
+    metadata: row.metadata
+      ? (JSON.parse(JSON.stringify(row.metadata)) as Record<string, unknown>)
+      : null,
+  }
+}
+
+export default async function AnalyticsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ callFrom?: string; callTo?: string }>
+}) {
+  const params = await searchParams
   const supabaseSession = await getSupabaseSession()
-  
+
   if (!supabaseSession) {
     redirect('/login')
   }
@@ -41,10 +86,11 @@ export default async function AnalyticsPage() {
   } catch (error) {
     console.error('Error syncing user to Prisma:', error)
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    const safeErrorMessage = errorMessage.length > 100 
-      ? errorMessage.substring(0, 100) + '...'
-      : errorMessage
-    redirect(`/login?error=${encodeURIComponent(`Failed to sync user account: ${safeErrorMessage}`)}`)
+    const safeErrorMessage =
+      errorMessage.length > 100 ? errorMessage.substring(0, 100) + '...' : errorMessage
+    redirect(
+      `/login?error=${encodeURIComponent(`Failed to sync user account: ${safeErrorMessage}`)}`
+    )
   }
 
   if (!user) {
@@ -64,8 +110,10 @@ export default async function AnalyticsPage() {
 
   const practiceId = user.practiceId
   const now = new Date()
-  const rangeStart = subDays(startOfDay(now), 30)
-  const rangeEnd = endOfDay(now)
+  const { from: callRangeStart, to: callRangeEnd } = resolveCallDateRange(params, now)
+
+  const schedulingRangeStart = subDays(startOfDay(now), 30)
+  const schedulingRangeEnd = endOfDay(now)
   const last7Start = subDays(startOfDay(now), 7)
   const upcomingEnd = addDays(endOfDay(now), 7)
 
@@ -74,8 +122,8 @@ export default async function AnalyticsPage() {
       where: {
         practiceId,
         startedAt: {
-          gte: rangeStart,
-          lte: rangeEnd,
+          gte: callRangeStart,
+          lte: callRangeEnd,
         },
       },
       select: {
@@ -83,6 +131,8 @@ export default async function AnalyticsPage() {
         endedAt: true,
         outcome: true,
         callerPhone: true,
+        extractedIntent: true,
+        metadata: true,
       },
       orderBy: {
         startedAt: 'desc',
@@ -92,8 +142,8 @@ export default async function AnalyticsPage() {
       where: {
         practiceId,
         startTime: {
-          gte: rangeStart,
-          lte: rangeEnd,
+          gte: schedulingRangeStart,
+          lte: schedulingRangeEnd,
         },
       },
       select: {
@@ -120,23 +170,28 @@ export default async function AnalyticsPage() {
     }),
   ])
 
-  const completedCalls = calls.filter((call) => call.endedAt)
-  const totalCallSeconds = completedCalls.reduce((total, call) => {
+  const inboundCallsRaw = calls.filter(isInboundAgentCall)
+  const inboundCalls = inboundCallsRaw.map(toSerializableCallRow)
+
+  const completedInbound = inboundCallsRaw.filter((call) => call.endedAt)
+  const totalCallSeconds = completedInbound.reduce((total, call) => {
     if (!call.endedAt) {
       return total
     }
     return total + Math.max(0, call.endedAt.getTime() - call.startedAt.getTime()) / 1000
   }, 0)
-  const avgCallSeconds = completedCalls.length > 0 ? totalCallSeconds / completedCalls.length : 0
-  const uniqueCallers = new Set(calls.map((call) => call.callerPhone).filter(Boolean)).size
+  const avgCallSeconds =
+    completedInbound.length > 0 ? totalCallSeconds / completedInbound.length : 0
+  const uniqueCallers = new Set(inboundCallsRaw.map((call) => call.callerPhone).filter(Boolean))
+    .size
 
-  const outcomeCounts = calls.reduce<Record<string, number>>((acc, call) => {
+  const outcomeCounts = inboundCallsRaw.reduce<Record<string, number>>((acc, call) => {
     const key = call.outcome || 'Unknown'
     acc[key] = (acc[key] || 0) + 1
     return acc
   }, {})
   const sortedOutcomes = Object.entries(outcomeCounts).sort((a, b) => b[1] - a[1])
-  const callsLast7 = calls.filter((call) => call.startedAt >= last7Start).length
+  const callsLast7 = inboundCallsRaw.filter((call) => call.startedAt >= last7Start).length
 
   const statusCounts = appointments.reduce<Record<string, number>>((acc, apt) => {
     acc[apt.status] = (acc[apt.status] || 0) + 1
@@ -154,128 +209,40 @@ export default async function AnalyticsPage() {
   const leadTimes = appointments
     .map((apt) => (apt.startTime.getTime() - apt.createdAt.getTime()) / (1000 * 60 * 60 * 24))
     .filter((days) => Number.isFinite(days) && days >= 0)
-  const avgLeadTime = leadTimes.length > 0
-    ? leadTimes.reduce((total, days) => total + days, 0) / leadTimes.length
-    : 0
+  const avgLeadTime =
+    leadTimes.length > 0 ? leadTimes.reduce((total, days) => total + days, 0) / leadTimes.length : 0
 
-  const recentCalls = calls.slice(0, 6)
   const recentAppointments = appointments.slice(0, 6)
+
+  const callFromStr = format(callRangeStart, 'yyyy-MM-dd')
+  const callToStr = format(callRangeEnd, 'yyyy-MM-dd')
+  const callRangeLabel = `${format(callRangeStart, 'MMM d, yyyy')} – ${format(callRangeEnd, 'MMM d, yyyy')}`
 
   return (
     <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-gray-900">Analytics</h1>
         <p className="text-sm text-gray-500">
-          Snapshot of calls and scheduling performance • Last 30 days
+          Call analytics use the date range you select below · Scheduling uses the last 30 days
         </p>
       </div>
 
       <div className="space-y-10">
-        <section className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">Calls Analytics</h2>
-              <p className="text-sm text-gray-500">Voice conversations captured in the CRM</p>
-            </div>
-            <span className="text-xs text-gray-400">
-              Updated {format(now, 'MMM d, h:mm a')}
-            </span>
-          </div>
-
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            <Card className="border border-gray-200 shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-gray-500">Total calls</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-semibold text-gray-900">{calls.length}</div>
-                <p className="text-xs text-gray-500 mt-1">{callsLast7} in the last 7 days</p>
-              </CardContent>
-            </Card>
-            <Card className="border border-gray-200 shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-gray-500">Unique callers</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-semibold text-gray-900">{uniqueCallers}</div>
-                <p className="text-xs text-gray-500 mt-1">Distinct phone numbers</p>
-              </CardContent>
-            </Card>
-            <Card className="border border-gray-200 shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-gray-500">Avg. duration</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-semibold text-gray-900">{formatDuration(avgCallSeconds)}</div>
-                <p className="text-xs text-gray-500 mt-1">{completedCalls.length} completed calls</p>
-              </CardContent>
-            </Card>
-            <Card className="border border-gray-200 shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-gray-500">Completion rate</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-semibold text-gray-900">
-                  {formatPercent(calls.length > 0 ? completedCalls.length / calls.length : 0)}
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Calls with an end timestamp</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card className="border border-gray-200 shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base font-semibold text-gray-900">Call outcomes</CardTitle>
-                <CardDescription className="text-sm text-gray-500">Last 30 days</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {sortedOutcomes.length === 0 ? (
-                  <p className="text-sm text-gray-500">No call outcomes recorded.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {sortedOutcomes.map(([outcome, count]) => (
-                      <div key={outcome} className="flex items-center justify-between text-sm text-gray-700">
-                        <span className="capitalize">{outcome.replace(/_/g, ' ')}</span>
-                        <span className="font-medium text-gray-900">{count}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="border border-gray-200 shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base font-semibold text-gray-900">Recent calls</CardTitle>
-                <CardDescription className="text-sm text-gray-500">Most recent conversations</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {recentCalls.length === 0 ? (
-                  <p className="text-sm text-gray-500">No recent call activity.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {recentCalls.map((call, index) => (
-                      <div key={`${call.startedAt.toISOString()}-${index}`} className="flex items-center justify-between text-sm">
-                        <div>
-                          <p className="font-medium text-gray-900">
-                            {call.callerPhone ? call.callerPhone : 'Unknown caller'}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {format(call.startedAt, 'MMM d, h:mm a')}
-                          </p>
-                        </div>
-                        <span className="text-xs px-2 py-1 rounded-md bg-gray-100 text-gray-700 capitalize">
-                          {(call.outcome || 'unknown').replace(/_/g, ' ')}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </section>
+        <CallAnalyticsSection
+          inboundCalls={inboundCalls}
+          callFrom={callFromStr}
+          callTo={callToStr}
+          callRangeLabel={callRangeLabel}
+          callsLast7={callsLast7}
+          uniqueCallers={uniqueCallers}
+          avgCallSeconds={avgCallSeconds}
+          completedCallCount={completedInbound.length}
+          completionRate={
+            inboundCallsRaw.length > 0 ? completedInbound.length / inboundCallsRaw.length : 0
+          }
+          sortedOutcomes={sortedOutcomes}
+          updatedAtLabel={format(now, 'MMM d, h:mm a')}
+        />
 
         <section className="space-y-6">
           <div>
@@ -307,7 +274,9 @@ export default async function AnalyticsPage() {
                 <CardTitle className="text-sm font-medium text-gray-500">No-show rate</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-semibold text-gray-900">{formatPercent(noShowRate)}</div>
+                <div className="text-2xl font-semibold text-gray-900">
+                  {`${Math.round(noShowRate * 100)}%`}
+                </div>
                 <p className="text-xs text-gray-500 mt-1">Based on appointment status</p>
               </CardContent>
             </Card>
@@ -379,7 +348,10 @@ export default async function AnalyticsPage() {
               ) : (
                 <div className="grid gap-3 md:grid-cols-2">
                   {recentAppointments.map((apt, index) => (
-                    <div key={`${apt.startTime.toISOString()}-${index}`} className="flex items-center justify-between text-sm">
+                    <div
+                      key={`${apt.startTime.toISOString()}-${index}`}
+                      className="flex items-center justify-between text-sm"
+                    >
                       <div>
                         <p className="font-medium text-gray-900">{apt.visitType || 'Visit'}</p>
                         <p className="text-xs text-gray-500">

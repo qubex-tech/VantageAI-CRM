@@ -1142,6 +1142,10 @@ export async function processRetellCallData(
         select: { metadata: true },
       })
       const existingMetadata = metadataObjectFromRow(latestForMerge?.metadata)
+      const retellRoutingMeta = {
+        ...(call.direction ? { retell_call_direction: call.direction } : {}),
+        ...(call.call_type ? { retell_call_type: call.call_type } : {}),
+      }
 
       conversationForEscalation = await prisma.voiceConversation.update({
         where: { id: existingConversation.id },
@@ -1154,11 +1158,16 @@ export async function processRetellCallData(
           metadata: {
             ...existingMetadata,
             ...(extractedData as Record<string, unknown>),
+            ...retellRoutingMeta,
           } as any,
           endedAt: call.end_timestamp ? new Date(call.end_timestamp) : existingConversation.endedAt,
         },
       })
     } else {
+      const retellRoutingMeta = {
+        ...(call.direction ? { retell_call_direction: call.direction } : {}),
+        ...(call.call_type ? { retell_call_type: call.call_type } : {}),
+      }
       conversationForEscalation = await prisma.voiceConversation.create({
         data: {
           practiceId,
@@ -1170,7 +1179,10 @@ export async function processRetellCallData(
           transcript: call.transcript || undefined,
           extractedIntent: extractedData.call_reason || undefined,
           outcome: extractedData.call_successful ? 'appointment_booked' : 'information_only',
-          metadata: extractedData as any,
+          metadata: {
+            ...(extractedData as Record<string, unknown>),
+            ...retellRoutingMeta,
+          } as any,
         },
       })
     }

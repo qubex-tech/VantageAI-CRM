@@ -226,6 +226,7 @@ export async function initiateInsuranceOutboundCall(input: InitiateInsuranceOutb
         insurerPhoneNormalized,
         toolName,
         mcpResult: mcpResult.rawResult as any,
+        retell_call_direction: 'outbound',
       },
     },
   })

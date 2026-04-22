@@ -39,6 +39,14 @@ export interface RetellWebhookEvent {
   tool_calls?: Array<{ tool_name: string; parameters: any }>
 }
 
+function retellCallRoutingMetadata(call?: RetellWebhookEvent['call']) {
+  if (!call) return {}
+  return {
+    ...(call.direction ? { retell_call_direction: call.direction } : {}),
+    ...(call.call_type ? { retell_call_type: call.call_type } : {}),
+  } as Record<string, unknown>
+}
+
 /**
  * Process RetellAI webhook event
  */
@@ -75,6 +83,7 @@ export async function processRetellWebhook(
         metadata: {
           retellWebhookEvent: eventType,
           retellWebhookReceivedAt: new Date().toISOString(),
+          ...retellCallRoutingMetadata(call),
         },
       },
     })
@@ -93,6 +102,7 @@ export async function processRetellWebhook(
           ...existingMetadata,
           retellWebhookEvent: eventType,
           retellWebhookReceivedAt: new Date().toISOString(),
+          ...retellCallRoutingMetadata(call),
         },
       },
     })
@@ -142,6 +152,7 @@ export async function processRetellWebhook(
             retellInngestEventName: 'retell/call.ended',
             retellInngestEmitAttemptedAt: emitAttemptedAt,
             retellInngestEmitError: null,
+            ...retellCallRoutingMetadata(call),
           },
         },
       })
