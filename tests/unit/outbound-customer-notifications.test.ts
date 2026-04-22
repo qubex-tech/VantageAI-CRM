@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   readRetellTransferNotificationFields,
   isUnsuccessfulTransferFromRetellAnalysis,
+  isUnsuccessfulTransferOutcomeText,
   buildStaffCallLogDeepLink,
 } from '@/lib/outbound-customer-notifications'
 import { isSafeInternalCallbackPath } from '@/lib/safe-callback-path'
@@ -81,6 +82,19 @@ describe('isSafeInternalCallbackPath', () => {
   })
 })
 
+describe('isUnsuccessfulTransferOutcomeText', () => {
+  const shortPhrase =
+    'Transfer call cannot be completed, the other side did not pick up.'
+  const longPhrase =
+    'Transfer call cannot be completed, the other side did not pick up.. please inform the customer that the transfer did not go through and offer to try again or assist them directly.'
+
+  it('is true for did-not-pick-up transfer failure copy (short and long)', () => {
+    expect(isUnsuccessfulTransferOutcomeText(shortPhrase)).toBe(true)
+    expect(isUnsuccessfulTransferOutcomeText(longPhrase)).toBe(true)
+    expect(isUnsuccessfulTransferOutcomeText(`  ${shortPhrase}  `)).toBe(true)
+  })
+})
+
 describe('isUnsuccessfulTransferFromRetellAnalysis', () => {
   it('is true when outcome is not successful (case-insensitive)', () => {
     expect(
@@ -96,6 +110,24 @@ describe('isUnsuccessfulTransferFromRetellAnalysis', () => {
     expect(
       isUnsuccessfulTransferFromRetellAnalysis(
         callWithCustomAnalysis({ 'Transfer Outcome': '  not successful  ' })
+      )
+    ).toBe(true)
+  })
+
+  it('is true when outcome is did-not-pick-up copy from Retell analysis', () => {
+    const shortOutcome =
+      'transfer call cannot be completed, the other side did not pick up.'
+    expect(
+      isUnsuccessfulTransferFromRetellAnalysis(
+        callWithCustomAnalysis({ 'Transfer Outcome': shortOutcome })
+      )
+    ).toBe(true)
+    expect(
+      isUnsuccessfulTransferFromRetellAnalysis(
+        callWithCustomAnalysis({
+          transfer_outcome:
+            'Transfer call cannot be completed, the other side did not pick up.. please inform the customer that the transfer did not go through and offer to try again or assist them directly.',
+        })
       )
     ).toBe(true)
   })

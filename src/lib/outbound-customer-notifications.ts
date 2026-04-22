@@ -123,11 +123,29 @@ export function buildStaffCallLogDeepLink(callId: string, practiceId: string): s
   return `${base}${path}?${qs.toString()}`
 }
 
-/** True when Retell analysis reports transfer outcome "not successful" (case-insensitive, trimmed). */
+function normalizeTransferOutcomeForMatch(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+/**
+ * True when the Retell transfer-outcome string should trigger missed-transfer staff email.
+ * Matches: exact "not successful", or the "cannot be completed / did not pick up" product phrases
+ * (case-insensitive, whitespace collapsed).
+ */
+export function isUnsuccessfulTransferOutcomeText(outcome: string): boolean {
+  const n = normalizeTransferOutcomeForMatch(outcome)
+  if (n === 'not successful') return true
+  if (n.includes('transfer call cannot be completed') && n.includes('did not pick up')) {
+    return true
+  }
+  return false
+}
+
+/** True when Retell `custom_analysis_data` transfer outcome indicates a failed transfer. */
 export function isUnsuccessfulTransferFromRetellAnalysis(call: RetellCall): boolean {
   const { transferOutcome } = readRetellTransferNotificationFields(call)
   if (!transferOutcome) return false
-  return transferOutcome.trim().toLowerCase() === 'not successful'
+  return isUnsuccessfulTransferOutcomeText(transferOutcome)
 }
 
 function metadataObject(value: unknown): Record<string, unknown> {
