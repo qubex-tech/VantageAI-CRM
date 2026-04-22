@@ -14,6 +14,72 @@ const initiateOutboundCallSchema = z.object({
   agentId: z.string().optional(),
 })
 
+function asObject(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return value as Record<string, unknown>
+}
+
+function booleanLike(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (['true', 'yes', '1'].includes(normalized)) return true
+    if (['false', 'no', '0'].includes(normalized)) return false
+  }
+  return undefined
+}
+
+function detectPatientType(metadata: Record<string, unknown>): 'New Patient' | 'Existing Patient' | 'Other' {
+  const custom = asObject(metadata.retell_custom_data)
+  const patientTypeRaw =
+    metadata.patient_type ??
+    metadata.patientType ??
+    custom.patient_type ??
+    custom.patientType ??
+    custom['Patient Type']
+
+  const newPatientFlag = booleanLike(
+    metadata.new_patient_add ??
+      custom.new_patient_add ??
+      custom['New Patient Add']
+  )
+  const existingPatientFlag = booleanLike(
+    metadata.existing_patient_update ??
+      custom.existing_patient_update ??
+      custom['Existing Patient Update']
+  )
+
+  if (newPatientFlag === true) return 'New Patient'
+  if (existingPatientFlag === true) return 'Existing Patient'
+
+  if (typeof patientTypeRaw === 'string') {
+    const lower = patientTypeRaw.toLowerCase()
+    if (lower.includes('new')) return 'New Patient'
+    if (lower.includes('exist') || lower.includes('return') || lower.includes('establish')) {
+      return 'Existing Patient'
+    }
+  }
+
+  return 'Other'
+}
+
+function detectCallerName(metadata: Record<string, unknown>, fallbackPhone?: string | null): string {
+  const custom = asObject(metadata.retell_custom_data)
+  const first = (custom['Patient First Name'] || custom.patient_first_name) as string | undefined
+  const last = (custom['Patient Last Name'] || custom.patient_last_name) as string | undefined
+  const fullFromParts = `${first || ''} ${last || ''}`.trim()
+
+  return (
+    (metadata.patient_name as string | undefined) ||
+    (metadata.caller_name as string | undefined) ||
+    (custom.patient_name as string | undefined) ||
+    (custom['Caller Name'] as string | undefined) ||
+    fullFromParts ||
+    (fallbackPhone || '').trim() ||
+    'Unknown Caller'
+  )
+}
+
 /**
  * Process calls in the background without blocking the API response
  */
@@ -95,6 +161,46 @@ export async function GET(req: NextRequest) {
     })
 
     const calls = result.calls || []
+    const callIds = calls
+      .map((call) => call.call_id)
+      .filter((id): id is string => Boolean(id))
+
+    const conversations = callIds.length
+      ? await prisma.voiceConversation.findMany({
+          where: {
+            practiceId,
+            retellCallId: { in: callIds },
+          },
+          select: {
+            retellCallId: true,
+            metadata: true,
+            patient: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        })
+      : []
+
+    const conversationByCallId = new Map(
+      conversations
+        .filter((conv): conv is typeof conv & { retellCallId: string } => Boolean(conv.retellCallId))
+        .map((conv) => [conv.retellCallId, conv])
+    )
+
+    const enrichedCalls = calls.map((call) => {
+      const conversation = conversationByCallId.get(call.call_id)
+      const metadata = asObject(conversation?.metadata)
+      const patientTypeLabel = detectPatientType(metadata)
+      const callerDisplayName = conversation?.patient?.name || detectCallerName(metadata, null)
+
+      return {
+        ...call,
+        patientTypeLabel,
+        callerDisplayName,
+      }
+    })
 
     // Fetch call IDs that have been reviewed by any user in this practice
     let reviewedCallIds: string[] = []
@@ -110,7 +216,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Return calls + reviewed IDs for unread flags
-    const response = NextResponse.json({ ...result, reviewedCallIds })
+    const response = NextResponse.json({ ...result, calls: enrichedCalls, reviewedCallIds })
     
     // If processing is requested, do it in the background (don't await)
     if (shouldProcess && calls.length > 0) {

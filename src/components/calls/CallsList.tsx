@@ -16,6 +16,8 @@ interface RetellCallListItem {
   start_timestamp?: number
   end_timestamp?: number
   duration_ms?: number
+  patientTypeLabel?: 'New Patient' | 'Existing Patient' | 'Other'
+  callerDisplayName?: string
 }
 
 interface CallsListProps {
@@ -195,6 +197,8 @@ export function CallsList({ initialCalls, initialReviewedCallIds = [], error: in
         <div className="space-y-3">
           {calls.map((call) => {
             const isUnread = !reviewedCallIds.has(call.call_id)
+            const patientTypeLabel = call.patientTypeLabel || 'Other'
+            const callerDisplayName = call.callerDisplayName || 'Unknown Caller'
             return (
             <Link key={call.call_id} href={`/calls/${call.call_id}`}>
               <Card className={`border shadow-sm hover:shadow-md transition-all cursor-pointer ${isUnread ? 'border-blue-200 bg-blue-50/30' : 'border-gray-200 hover:border-gray-300'}`}>
@@ -205,7 +209,7 @@ export function CallsList({ initialCalls, initialReviewedCallIds = [], error: in
                         <span className="flex h-2 w-2 flex-shrink-0 rounded-full bg-blue-500" title="Unread" aria-hidden />
                       )}
                       <CardTitle className="text-base font-semibold text-gray-900 truncate">
-                        Call {call.call_id.slice(0, 8)}...
+                        {patientTypeLabel}: {callerDisplayName}
                       </CardTitle>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
@@ -220,6 +224,9 @@ export function CallsList({ initialCalls, initialReviewedCallIds = [], error: in
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
+                    <div className="text-xs text-gray-500">
+                      Call ID: {call.call_id.slice(0, 8)}...
+                    </div>
                     <div className="flex items-center gap-4 text-sm text-gray-600">
                       {call.start_timestamp && (
                         <span>
