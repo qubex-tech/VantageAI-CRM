@@ -1,10 +1,11 @@
+import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { addDays, endOfDay, format, startOfDay, subDays } from 'date-fns'
 import { getSupabaseSession } from '@/lib/auth-supabase'
 import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
 import { prisma } from '@/lib/db'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { CallAnalyticsSection } from '@/components/analytics/CallAnalyticsSection'
+import { AnalyticsTabs } from '@/components/analytics/AnalyticsTabs'
 import { isInboundAgentCall } from '@/lib/analytics/voiceConversationInbound'
 import type { AnalyticsCallRow } from '@/lib/analytics/callSort'
 import { last7DaysStartUtc, resolveCallDateRangeUtc } from '@/lib/analytics/callDateRangeUtc'
@@ -199,21 +200,30 @@ export default async function AnalyticsPage({
       </div>
 
       <div className="space-y-10">
-        <CallAnalyticsSection
-          inboundCalls={inboundCalls}
-          callFrom={callFromStr}
-          callTo={callToStr}
-          callRangeLabel={callRangeLabel}
-          callsLast7={callsLast7}
-          uniqueCallers={uniqueCallers}
-          avgCallSeconds={avgCallSeconds}
-          completedCallCount={completedInbound.length}
-          completionRate={
-            inboundCallsRaw.length > 0 ? completedInbound.length / inboundCallsRaw.length : 0
+        <Suspense
+          fallback={
+            <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-16 text-center text-sm text-gray-500">
+              Loading analytics…
+            </div>
           }
-          sortedOutcomes={sortedOutcomes}
-          updatedAtLabel={format(now, 'MMM d, h:mm a')}
-        />
+        >
+          <AnalyticsTabs
+            reportingRows={inboundCalls}
+            inboundCalls={inboundCalls}
+            callFrom={callFromStr}
+            callTo={callToStr}
+            callRangeLabel={callRangeLabel}
+            callsLast7={callsLast7}
+            uniqueCallers={uniqueCallers}
+            avgCallSeconds={avgCallSeconds}
+            completedCallCount={completedInbound.length}
+            completionRate={
+              inboundCallsRaw.length > 0 ? completedInbound.length / inboundCallsRaw.length : 0
+            }
+            sortedOutcomes={sortedOutcomes}
+            updatedAtLabel={format(now, 'MMM d, h:mm a')}
+          />
+        </Suspense>
 
         <section className="space-y-6">
           <div>

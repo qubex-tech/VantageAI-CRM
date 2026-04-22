@@ -129,6 +129,24 @@ export function parseRetellCustomSortKey(key: string): string | null {
   return key.slice(RETELL_CUSTOM_PREFIX.length) || null
 }
 
+/** Best-effort caller / patient name from Retell-extracted metadata. */
+export function getCallerDisplayName(row: AnalyticsCallRow): string {
+  const meta = metadataRecord(row.metadata)
+  const pn = meta.patient_name
+  if (typeof pn === 'string' && pn.trim()) return pn.trim()
+  const custom = meta.retell_custom_data
+  if (custom && typeof custom === 'object' && !Array.isArray(custom)) {
+    const c = custom as Record<string, unknown>
+    const caller = c['Caller Name'] ?? c['caller name']
+    if (caller != null && String(caller).trim()) return String(caller).trim()
+    const first = c['Patient First Name'] ?? c['patient first name']
+    const last = c['Patient Last Name'] ?? c['patient last name']
+    const combined = `${first != null ? String(first) : ''} ${last != null ? String(last) : ''}`.trim()
+    if (combined) return combined
+  }
+  return '—'
+}
+
 export function collectRetellCustomDataKeysFromRows(rows: AnalyticsCallRow[]): string[] {
   const keys = new Set<string>()
   for (const row of rows) {

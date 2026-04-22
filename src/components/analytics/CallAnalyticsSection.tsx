@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { format } from 'date-fns'
 import { RefreshCw } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -73,6 +73,7 @@ export function CallAnalyticsSection({
   updatedAtLabel,
 }: CallAnalyticsSectionProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [fromInput, setFromInput] = useState(callFrom)
   const [toInput, setToInput] = useState(callTo)
   const [sortKey, setSortKey] = useState<string>('startedAt')
@@ -96,9 +97,11 @@ export function CallAnalyticsSection({
   const displayCalls = sortedCalls.slice(0, 24)
 
   const applyDateRange = () => {
-    const params = new URLSearchParams()
+    const params = new URLSearchParams(searchParams.toString())
     if (fromInput) params.set('callFrom', fromInput)
+    else params.delete('callFrom')
     if (toInput) params.set('callTo', toInput)
+    else params.delete('callTo')
     const q = params.toString()
     router.push(q ? `/analytics?${q}` : '/analytics')
   }
