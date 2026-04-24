@@ -4,6 +4,7 @@ import {
   isUnsuccessfulTransferFromRetellAnalysis,
   isUnsuccessfulTransferOutcomeText,
   buildStaffCallLogDeepLink,
+  formatCallTimestampForPracticeEmail,
 } from '@/lib/outbound-customer-notifications'
 import { isSafeInternalCallbackPath } from '@/lib/safe-callback-path'
 import type { RetellCall } from '@/lib/retell-api'
@@ -54,6 +55,19 @@ describe('readRetellTransferNotificationFields', () => {
       transferOutcome: null,
       voicemailMessage: null,
     })
+  })
+})
+
+describe('formatCallTimestampForPracticeEmail', () => {
+  it('formats the same instant in the practice IANA zone (not UTC labels)', () => {
+    // 2026-04-24 14:47:00 UTC
+    const ms = Date.UTC(2026, 3, 24, 14, 47, 0)
+    const chicago = formatCallTimestampForPracticeEmail(ms, 'America/Chicago')
+    const utc = formatCallTimestampForPracticeEmail(ms, 'UTC')
+    expect(utc).toMatch(/2:47/)
+    expect(utc.toUpperCase()).toContain('UTC')
+    expect(chicago).toMatch(/9:47/)
+    expect(chicago.toUpperCase()).not.toContain('UTC')
   })
 })
 

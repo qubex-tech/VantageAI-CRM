@@ -7,6 +7,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { getSendgridClient } from '@/lib/sendgrid'
 import { getRetellClient, type RetellCall } from '@/lib/retell-api'
+import { normalizeTimeZone } from '@/lib/timezone'
 import type { z } from 'zod'
 import { outboundCustomerNotificationsSchema } from '@/lib/validations'
 
@@ -74,22 +75,32 @@ function readPatientDisplayNameFromCall(call: RetellCall): string | null {
   return firstNonEmptyString(norm.caller_name)
 }
 
-function formatCallDateTime(call: RetellCall): string {
-  const ts = call.start_timestamp ?? call.end_timestamp
-  if (ts == null || !Number.isFinite(ts)) return '—'
+const PRACTICE_EMAIL_TIMEZONE_FALLBACK = 'America/Chicago'
+
+/** Formats a Retell epoch-ms instant in the practice IANA timezone (for staff emails). */
+export function formatCallTimestampForPracticeEmail(ms: number, timeZone: string): string {
+  if (!Number.isFinite(ms)) return '—'
+  const tz = normalizeTimeZone(timeZone) ?? PRACTICE_EMAIL_TIMEZONE_FALLBACK
   try {
-    return new Date(ts).toLocaleString('en-US', {
+    return new Date(ms).toLocaleString('en-US', {
       weekday: 'short',
       month: 'short',
       day: 'numeric',
       year: 'numeric',
       hour: 'numeric',
       minute: '2-digit',
+      timeZone: tz,
       timeZoneName: 'short',
     })
   } catch {
     return '—'
   }
+}
+
+function formatCallDateTime(call: RetellCall, timeZone: string): string {
+  const ts = call.start_timestamp ?? call.end_timestamp
+  if (ts == null || !Number.isFinite(ts)) return '—'
+  return formatCallTimestampForPracticeEmail(ts, timeZone)
 }
 
 /** Public CRM origin for links in outbound email (never localhost in production). */
@@ -182,29 +193,37 @@ export async function loadOutboundCustomerNotifications(
 export async function resolveOutboundStaffNotificationRecipient(
   practiceId: string,
   settings: OutboundCustomerNotifications
-): Promise<{ practiceName: string; recipient: string } | null> {
+): Promise<{ practiceName: string; recipient: string; timeZone: string } | null> {
   const practice = await prisma.practice.findUnique({
     where: { id: practiceId },
-    select: { name: true, email: true },
+    select: {
+      name: true,
+      email: true,
+      brandProfile: { select: { timezone: true } },
+    },
   })
   const recipient =
     settings.recipientEmail?.trim() ||
     practice?.email?.trim() ||
     ''
   if (!recipient) return null
-  return { practiceName: practice?.name ?? 'Practice', recipient }
+  const timeZone =
+    normalizeTimeZone(practice?.brandProfile?.timezone ?? undefined) ??
+    PRACTICE_EMAIL_TIMEZONE_FALLBACK
+  return { practiceName: practice?.name ?? 'Practice', recipient, timeZone }
 }
 
 function buildStaffTransferEmail(params: {
   practiceId: string
   practiceName: string
+  timeZone: string
   call: RetellCall
 }): { subject: string; textContent: string; htmlContent: string } {
-  const { practiceId, practiceName, call } = params
+  const { practiceId, practiceName, timeZone, call } = params
   const callId = call.call_id || 'unknown'
   const { transferOutcome, voicemailMessage } = readRetellTransferNotificationFields(call)
   const patientName = readPatientDisplayNameFromCall(call)
-  const callDatetime = formatCallDateTime(call)
+  const callDatetime = formatCallDateTime(call, timeZone)
   const callbackUrl = buildStaffCallLogDeepLink(callId, practiceId)
 
   const e = escapeHtml
@@ -451,6 +470,7 @@ export async function sendSampleMissedTransferNotification(params: {
     const { subject, textContent, htmlContent } = buildStaffTransferEmail({
       practiceId,
       practiceName: resolved.practiceName,
+      timeZone: resolved.timeZone,
       call,
     })
 
@@ -497,11 +517,12 @@ export async function maybeNotifyUnsuccessfulTransfer(params: {
     const resolved = await resolveOutboundStaffNotificationRecipient(practiceId, settings)
     if (!resolved) return
 
-    const { practiceName, recipient } = resolved
+    const { practiceName, recipient, timeZone } = resolved
 
     const { subject, textContent, htmlContent } = buildStaffTransferEmail({
       practiceId,
       practiceName,
+      timeZone,
       call,
     })
 
