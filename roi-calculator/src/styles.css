@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+.font-display {
+  font-family: 'Anton', 'Bebas Neue', Impact, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+/* Magazine-style card: dark slabs over a hero image */
+.slab {
+  background: rgba(0, 0, 0, 0.92);
+  color: white;
+}
+
+.slab-soft {
+  background: rgba(20, 20, 20, 0.88);
+  color: white;
+}
+
+.hero-bg {
+  background-size: cover;
+  background-position: center;
+}
+
+.tag {
+  display: inline-block;
+  background: black;
+  color: white;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  font-size: 0.7rem;
+  padding: 6px 10px;
+  text-transform: uppercase;
+}
+
+/* Print styling for "Save as PDF" */
+@media print {
+  @page { size: A4; margin: 12mm; }
+  body { background: white; }
+  .no-print { display: none !important; }
+  .print-page { break-after: page; page-break-after: always; }
+  .magazine-card { box-shadow: none !important; }
+}
