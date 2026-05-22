@@ -159,8 +159,46 @@ export function isUnsuccessfulTransferFromRetellAnalysis(call: RetellCall): bool
   return isUnsuccessfulTransferOutcomeText(transferOutcome)
 }
 
+/** True when post-call analysis includes a non-empty `custom_analysis_data` object. */
+export function hasRetellPostCallCustomAnalysis(call: RetellCall): boolean {
+  const cad = call.call_analysis?.custom_analysis_data
+  return (
+    cad !== null &&
+    cad !== undefined &&
+    typeof cad === 'object' &&
+    !Array.isArray(cad) &&
+    Object.keys(cad as Record<string, unknown>).length > 0
+  )
+}
+
 function metadataObject(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+}
+
+/** Persist why a missed-transfer email was not sent (does not overwrite a successful send). */
+async function recordUnsuccessfulTransferEmailSkip(
+  conversationId: string,
+  reason: string,
+  detail?: string
+): Promise<void> {
+  const latest = await prisma.voiceConversation.findUnique({
+    where: { id: conversationId },
+    select: { metadata: true },
+  })
+  const meta = metadataObject(latest?.metadata)
+  if (meta.unsuccessfulTransferEmailSentAt) return
+
+  await prisma.voiceConversation.update({
+    where: { id: conversationId },
+    data: {
+      metadata: {
+        ...meta,
+        unsuccessfulTransferEmailSkippedAt: new Date().toISOString(),
+        unsuccessfulTransferEmailSkipReason: reason,
+        unsuccessfulTransferEmailSkipDetail: detail ?? null,
+      } as Prisma.InputJsonObject,
+    },
+  })
 }
 
 function escapeHtml(s: string): string {
@@ -502,10 +540,21 @@ export async function maybeNotifyUnsuccessfulTransfer(params: {
   const { practiceId, call, conversationId } = params
 
   try {
-    if (!isUnsuccessfulTransferFromRetellAnalysis(call)) return
+    if (!isUnsuccessfulTransferFromRetellAnalysis(call)) {
+      const { transferOutcome } = readRetellTransferNotificationFields(call)
+      await recordUnsuccessfulTransferEmailSkip(
+        conversationId,
+        'outcome_not_matched',
+        transferOutcome ?? 'missing_transfer_outcome'
+      )
+      return
+    }
 
     const settings = await loadOutboundCustomerNotifications(practiceId)
-    if (!settings.notifyUnsuccessfulTransfer) return
+    if (!settings.notifyUnsuccessfulTransfer) {
+      await recordUnsuccessfulTransferEmailSkip(conversationId, 'notifications_disabled')
+      return
+    }
 
     const latest = await prisma.voiceConversation.findUnique({
       where: { id: conversationId },
@@ -515,7 +564,10 @@ export async function maybeNotifyUnsuccessfulTransfer(params: {
     if (meta.unsuccessfulTransferEmailSentAt) return
 
     const resolved = await resolveOutboundStaffNotificationRecipient(practiceId, settings)
-    if (!resolved) return
+    if (!resolved) {
+      await recordUnsuccessfulTransferEmailSkip(conversationId, 'no_recipient')
+      return
+    }
 
     const { practiceName, recipient, timeZone } = resolved
 
@@ -575,11 +627,13 @@ export async function maybeNotifyUnsuccessfulTransfer(params: {
       },
     })
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
     console.error('[outbound-customer-notifications]', {
       practiceId,
       callId: call.call_id,
       conversationId,
-      error: error instanceof Error ? error.message : String(error),
+      error: message,
     })
+    await recordUnsuccessfulTransferEmailSkip(conversationId, 'exception', message).catch(() => {})
   }
 }

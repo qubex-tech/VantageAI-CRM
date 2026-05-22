@@ -2,6 +2,7 @@ import { inngest } from '../client'
 import { getRetellClient } from '@/lib/retell-api'
 import { processRetellCallData } from '@/lib/process-call-data'
 import { writeBackRetellCallToEhr } from '@/lib/integrations/ehr/writeback'
+import { hasRetellPostCallCustomAnalysis } from '@/lib/outbound-customer-notifications'
 import type { RetellCall } from '@/lib/retell-api'
 
 /**
@@ -11,7 +12,7 @@ import type { RetellCall } from '@/lib/retell-api'
  * - call_analyzed: full call data including call_analysis - use directly, no fetch
  * - call_ended: excludes call_analysis - fetch via API after 30s delay
  */
-const RETELL_PROCESS_VERSION = 'retell_extraction_v5'
+const RETELL_PROCESS_VERSION = 'retell_extraction_v6'
 
 export const processRetellCallEnded = inngest.createFunction(
   {
@@ -37,9 +38,10 @@ export const processRetellCallEnded = inngest.createFunction(
     let fullCall: RetellCall | null
 
     if (webhookCall && eventType === 'call_analyzed') {
-      const hasAnalysis = Boolean((webhookCall as RetellCall).call_analysis)
-      if (hasAnalysis) {
-        fullCall = webhookCall as RetellCall
+      const analyzed = webhookCall as RetellCall
+      // Require non-empty custom_analysis_data (empty call_analysis object is not enough).
+      if (hasRetellPostCallCustomAnalysis(analyzed)) {
+        fullCall = analyzed
       } else {
         fullCall = null
       }

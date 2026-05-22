@@ -3,6 +3,7 @@ import {
   readRetellTransferNotificationFields,
   isUnsuccessfulTransferFromRetellAnalysis,
   isUnsuccessfulTransferOutcomeText,
+  hasRetellPostCallCustomAnalysis,
   buildStaffCallLogDeepLink,
   formatCallTimestampForPracticeEmail,
 } from '@/lib/outbound-customer-notifications'
@@ -93,6 +94,29 @@ describe('isSafeInternalCallbackPath', () => {
     expect(isSafeInternalCallbackPath('//evil.com')).toBe(false)
     expect(isSafeInternalCallbackPath('/ok?u=https://evil.com')).toBe(true)
     expect(isSafeInternalCallbackPath('https://evil.com')).toBe(false)
+  })
+})
+
+describe('hasRetellPostCallCustomAnalysis', () => {
+  it('is false when custom_analysis_data is missing or empty', () => {
+    expect(
+      hasRetellPostCallCustomAnalysis({
+        call_id: 'c',
+        call_type: 'phone_call',
+        agent_id: 'a',
+        call_status: 'ended',
+        call_analysis: {},
+      } as RetellCall)
+    ).toBe(false)
+    expect(hasRetellPostCallCustomAnalysis(callWithCustomAnalysis({}))).toBe(false)
+  })
+
+  it('is true when custom_analysis_data has fields', () => {
+    expect(
+      hasRetellPostCallCustomAnalysis(
+        callWithCustomAnalysis({ transfer_outcome: 'not successful' })
+      )
+    ).toBe(true)
   })
 })
 
