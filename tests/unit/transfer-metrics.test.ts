@@ -47,6 +47,19 @@ describe('computeInboundTransferMetrics', () => {
     expect(metrics).toEqual({ transfersAttempted: 1, transfersSuccessful: 1 })
   })
 
+  it('counts Retell production outcome phrases as successful', () => {
+    const metrics = computeInboundTransferMetrics([
+      row({
+        retell_custom_data: {
+          'Transfer Outcome': 'transferred to staff for appointment scheduling',
+        },
+      }),
+      row({ retell_custom_data: { transfer_outcome: 'transferred successfully' } }),
+      row({ retell_custom_data: { transfer_outcome: 'transfer initiated' } }),
+    ])
+    expect(metrics).toEqual({ transfersAttempted: 3, transfersSuccessful: 3 })
+  })
+
   it('counts attempted but not successful for not successful', () => {
     const metrics = computeInboundTransferMetrics([
       row({ retell_custom_data: { transfer_outcome: 'not successful' } }),

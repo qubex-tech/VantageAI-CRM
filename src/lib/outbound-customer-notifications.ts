@@ -166,10 +166,24 @@ export function isUnsuccessfulTransferOutcomeText(outcome: string): boolean {
   return false
 }
 
+/**
+ * Substrings (normalized lowercase) that indicate a successful transfer in Retell
+ * post-call "Transfer Outcome" analysis.
+ */
+export const SUCCESSFUL_TRANSFER_OUTCOME_MARKERS = [
+  'successful',
+  'transferred successfully',
+  'transfer initiated',
+  'transferred to staff',
+] as const
+
 /** True when Retell Transfer Outcome indicates a completed successful transfer. */
 export function isSuccessfulTransferOutcomeText(outcome: string): boolean {
   if (isUnsuccessfulTransferOutcomeText(outcome)) return false
-  return normalizeTransferOutcomeForMatch(outcome) === 'successful'
+  const n = normalizeTransferOutcomeForMatch(outcome)
+  return SUCCESSFUL_TRANSFER_OUTCOME_MARKERS.some((marker) =>
+    marker === 'successful' ? n === 'successful' : n.includes(marker)
+  )
 }
 
 /** True when Retell `custom_analysis_data` transfer outcome indicates a failed transfer. */

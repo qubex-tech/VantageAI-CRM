@@ -136,15 +136,26 @@ describe('isUnsuccessfulTransferOutcomeText', () => {
 })
 
 describe('isSuccessfulTransferOutcomeText', () => {
-  it('is true only for successful outcome', () => {
+  it('is true for exact successful and production Retell outcome phrases', () => {
     expect(isSuccessfulTransferOutcomeText('successful')).toBe(true)
     expect(isSuccessfulTransferOutcomeText('Successful')).toBe(true)
+    expect(isSuccessfulTransferOutcomeText('transferred successfully')).toBe(true)
+    expect(isSuccessfulTransferOutcomeText('Transfer initiated')).toBe(true)
+    expect(
+      isSuccessfulTransferOutcomeText(
+        'transferred to staff for appointment scheduling'
+      )
+    ).toBe(true)
+  })
+
+  it('is false for unsuccessful outcomes', () => {
     expect(isSuccessfulTransferOutcomeText('not successful')).toBe(false)
     expect(
       isSuccessfulTransferOutcomeText(
         'Transfer call cannot be completed, the other side did not pick up.'
       )
     ).toBe(false)
+    expect(isSuccessfulTransferOutcomeText('transfer failed')).toBe(false)
   })
 })
 
