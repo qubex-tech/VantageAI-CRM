@@ -1,6 +1,7 @@
 import type { AnalyticsCallRow } from '@/lib/analytics/callSort'
 import {
   isSuccessfulTransferOutcomeText,
+  isUnsuccessfulTransferOutcomeText,
   readTransferOutcomeFromCustomAnalysisData,
 } from '@/lib/outbound-customer-notifications'
 
@@ -28,16 +29,20 @@ export function readTransferOutcomeFromCallRow(row: AnalyticsCallRow): string | 
 export function computeInboundTransferMetrics(rows: AnalyticsCallRow[]): {
   transfersAttempted: number
   transfersSuccessful: number
+  transfersUnsuccessful: number
 } {
   let transfersAttempted = 0
   let transfersSuccessful = 0
+  let transfersUnsuccessful = 0
   for (const row of rows) {
     const outcome = readTransferOutcomeFromCallRow(row)
     if (!outcome) continue
     transfersAttempted += 1
     if (isSuccessfulTransferOutcomeText(outcome)) {
       transfersSuccessful += 1
+    } else if (isUnsuccessfulTransferOutcomeText(outcome)) {
+      transfersUnsuccessful += 1
     }
   }
-  return { transfersAttempted, transfersSuccessful }
+  return { transfersAttempted, transfersSuccessful, transfersUnsuccessful }
 }

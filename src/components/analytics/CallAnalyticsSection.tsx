@@ -25,6 +25,7 @@ export type CallAnalyticsSectionProps = {
   updatedAtLabel: string
   transfersAttempted: number
   transfersSuccessful: number
+  transfersUnsuccessful: number
 }
 
 const formatDuration = (seconds: number) => {
@@ -65,6 +66,7 @@ export function CallAnalyticsSection({
   updatedAtLabel,
   transfersAttempted,
   transfersSuccessful,
+  transfersUnsuccessful,
 }: CallAnalyticsSectionProps) {
   const [sortKey, setSortKey] = useState<string>('startedAt')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
@@ -148,7 +150,7 @@ export function CallAnalyticsSection({
         </div>
       </div>
 
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <Card className="border border-gray-200 shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-500">Total inbound calls</CardTitle>
@@ -205,6 +207,19 @@ export function CallAnalyticsSection({
             <p className="text-xs text-gray-500 mt-1">
               {transfersAttempted > 0
                 ? `${Math.round((transfersSuccessful / transfersAttempted) * 100)}% of attempted transfers`
+                : 'No transfer attempts in range'}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="border border-gray-200 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-500">Transfers unsuccessful</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-semibold text-gray-900">{transfersUnsuccessful}</div>
+            <p className="text-xs text-gray-500 mt-1">
+              {transfersAttempted > 0
+                ? `${Math.round((transfersUnsuccessful / transfersAttempted) * 100)}% of attempted transfers`
                 : 'No transfer attempts in range'}
             </p>
           </CardContent>

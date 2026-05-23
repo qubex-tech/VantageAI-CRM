@@ -44,7 +44,11 @@ describe('computeInboundTransferMetrics', () => {
     const metrics = computeInboundTransferMetrics([
       row({ retell_custom_data: { transfer_outcome: 'successful' } }),
     ])
-    expect(metrics).toEqual({ transfersAttempted: 1, transfersSuccessful: 1 })
+    expect(metrics).toEqual({
+      transfersAttempted: 1,
+      transfersSuccessful: 1,
+      transfersUnsuccessful: 0,
+    })
   })
 
   it('counts Retell production outcome phrases as successful', () => {
@@ -57,17 +61,25 @@ describe('computeInboundTransferMetrics', () => {
       row({ retell_custom_data: { transfer_outcome: 'transferred successfully' } }),
       row({ retell_custom_data: { transfer_outcome: 'transfer initiated' } }),
     ])
-    expect(metrics).toEqual({ transfersAttempted: 3, transfersSuccessful: 3 })
+    expect(metrics).toEqual({
+      transfersAttempted: 3,
+      transfersSuccessful: 3,
+      transfersUnsuccessful: 0,
+    })
   })
 
-  it('counts attempted but not successful for not successful', () => {
+  it('counts unsuccessful transfer for not successful', () => {
     const metrics = computeInboundTransferMetrics([
       row({ retell_custom_data: { transfer_outcome: 'not successful' } }),
     ])
-    expect(metrics).toEqual({ transfersAttempted: 1, transfersSuccessful: 0 })
+    expect(metrics).toEqual({
+      transfersAttempted: 1,
+      transfersSuccessful: 0,
+      transfersUnsuccessful: 1,
+    })
   })
 
-  it('counts attempted but not successful for did-not-pick-up copy', () => {
+  it('counts unsuccessful for did-not-pick-up copy', () => {
     const metrics = computeInboundTransferMetrics([
       row({
         retell_custom_data: {
@@ -76,13 +88,18 @@ describe('computeInboundTransferMetrics', () => {
         },
       }),
     ])
-    expect(metrics).toEqual({ transfersAttempted: 1, transfersSuccessful: 0 })
+    expect(metrics).toEqual({
+      transfersAttempted: 1,
+      transfersSuccessful: 0,
+      transfersUnsuccessful: 1,
+    })
   })
 
   it('returns zero when no transfer outcomes', () => {
     expect(computeInboundTransferMetrics([row({}), row(null)])).toEqual({
       transfersAttempted: 0,
       transfersSuccessful: 0,
+      transfersUnsuccessful: 0,
     })
   })
 
@@ -92,6 +109,10 @@ describe('computeInboundTransferMetrics', () => {
       row({ retell_custom_data: { transfer_outcome: 'not successful' } }),
       row({}),
     ])
-    expect(metrics).toEqual({ transfersAttempted: 2, transfersSuccessful: 1 })
+    expect(metrics).toEqual({
+      transfersAttempted: 2,
+      transfersSuccessful: 1,
+      transfersUnsuccessful: 1,
+    })
   })
 })
