@@ -23,6 +23,8 @@ export type CallAnalyticsSectionProps = {
   completionRate: number
   sortedOutcomes: [string, number][]
   updatedAtLabel: string
+  transfersAttempted: number
+  transfersSuccessful: number
 }
 
 const formatDuration = (seconds: number) => {
@@ -61,6 +63,8 @@ export function CallAnalyticsSection({
   completionRate,
   sortedOutcomes,
   updatedAtLabel,
+  transfersAttempted,
+  transfersSuccessful,
 }: CallAnalyticsSectionProps) {
   const [sortKey, setSortKey] = useState<string>('startedAt')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
@@ -144,7 +148,7 @@ export function CallAnalyticsSection({
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         <Card className="border border-gray-200 shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-500">Total inbound calls</CardTitle>
@@ -181,6 +185,28 @@ export function CallAnalyticsSection({
               {formatPercent(inboundCalls.length > 0 ? completionRate : 0)}
             </div>
             <p className="text-xs text-gray-500 mt-1">Calls with an end timestamp</p>
+          </CardContent>
+        </Card>
+        <Card className="border border-gray-200 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-500">Transfers attempted</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-semibold text-gray-900">{transfersAttempted}</div>
+            <p className="text-xs text-gray-500 mt-1">Calls with a Retell Transfer Outcome</p>
+          </CardContent>
+        </Card>
+        <Card className="border border-gray-200 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-500">Transfers successful</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-semibold text-gray-900">{transfersSuccessful}</div>
+            <p className="text-xs text-gray-500 mt-1">
+              {transfersAttempted > 0
+                ? `${Math.round((transfersSuccessful / transfersAttempted) * 100)}% of attempted transfers`
+                : 'No transfer attempts in range'}
+            </p>
           </CardContent>
         </Card>
       </div>

@@ -40,6 +40,26 @@ function firstNonEmptyString(...values: unknown[]): string | null {
   return null
 }
 
+function readCustomAnalysisTransferFields(
+  data: Record<string, unknown> | null | undefined
+): { transferOutcome: string | null; voicemailMessage: string | null } {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return { transferOutcome: null, voicemailMessage: null }
+  }
+  const norm = normalizeRetellRecord(data)
+  return {
+    transferOutcome: firstNonEmptyString(norm.transfer_outcome),
+    voicemailMessage: firstNonEmptyString(norm.voicemail_message),
+  }
+}
+
+/** Transfer Outcome from a Retell `custom_analysis_data` object (normalized keys). */
+export function readTransferOutcomeFromCustomAnalysisData(
+  data: Record<string, unknown> | null | undefined
+): string | null {
+  return readCustomAnalysisTransferFields(data).transferOutcome
+}
+
 /**
  * Reads transfer outcome and voicemail message from Retell `custom_analysis_data`
  * using normalized keys (e.g. "Transfer Outcome" -> transfer_outcome).
@@ -52,13 +72,7 @@ export function readRetellTransferNotificationFields(call: RetellCall): {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     return { transferOutcome: null, voicemailMessage: null }
   }
-  const data = raw as Record<string, unknown>
-  const norm = normalizeRetellRecord(data)
-
-  return {
-    transferOutcome: firstNonEmptyString(norm.transfer_outcome),
-    voicemailMessage: firstNonEmptyString(norm.voicemail_message),
-  }
+  return readCustomAnalysisTransferFields(raw as Record<string, unknown>)
 }
 
 /** Best-effort patient display name from Retell post-call custom analysis. */
@@ -150,6 +164,12 @@ export function isUnsuccessfulTransferOutcomeText(outcome: string): boolean {
     return true
   }
   return false
+}
+
+/** True when Retell Transfer Outcome indicates a completed successful transfer. */
+export function isSuccessfulTransferOutcomeText(outcome: string): boolean {
+  if (isUnsuccessfulTransferOutcomeText(outcome)) return false
+  return normalizeTransferOutcomeForMatch(outcome) === 'successful'
 }
 
 /** True when Retell `custom_analysis_data` transfer outcome indicates a failed transfer. */

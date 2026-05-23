@@ -3,6 +3,8 @@ import {
   readRetellTransferNotificationFields,
   isUnsuccessfulTransferFromRetellAnalysis,
   isUnsuccessfulTransferOutcomeText,
+  isSuccessfulTransferOutcomeText,
+  readTransferOutcomeFromCustomAnalysisData,
   hasRetellPostCallCustomAnalysis,
   buildStaffCallLogDeepLink,
   formatCallTimestampForPracticeEmail,
@@ -130,6 +132,27 @@ describe('isUnsuccessfulTransferOutcomeText', () => {
     expect(isUnsuccessfulTransferOutcomeText(shortPhrase)).toBe(true)
     expect(isUnsuccessfulTransferOutcomeText(longPhrase)).toBe(true)
     expect(isUnsuccessfulTransferOutcomeText(`  ${shortPhrase}  `)).toBe(true)
+  })
+})
+
+describe('isSuccessfulTransferOutcomeText', () => {
+  it('is true only for successful outcome', () => {
+    expect(isSuccessfulTransferOutcomeText('successful')).toBe(true)
+    expect(isSuccessfulTransferOutcomeText('Successful')).toBe(true)
+    expect(isSuccessfulTransferOutcomeText('not successful')).toBe(false)
+    expect(
+      isSuccessfulTransferOutcomeText(
+        'Transfer call cannot be completed, the other side did not pick up.'
+      )
+    ).toBe(false)
+  })
+})
+
+describe('readTransferOutcomeFromCustomAnalysisData', () => {
+  it('reads transfer outcome from plain object', () => {
+    expect(
+      readTransferOutcomeFromCustomAnalysisData({ 'Transfer Outcome': 'not successful' })
+    ).toBe('not successful')
   })
 })
 

@@ -9,6 +9,7 @@ import { AnalyticsTabs } from '@/components/analytics/AnalyticsTabs'
 import { isInboundAgentCall } from '@/lib/analytics/voiceConversationInbound'
 import type { AnalyticsCallRow } from '@/lib/analytics/callSort'
 import { last7DaysStartUtc, resolveCallDateRangeUtc } from '@/lib/analytics/callDateRangeUtc'
+import { computeInboundTransferMetrics } from '@/lib/analytics/transferMetrics'
 
 export const dynamic = 'force-dynamic'
 
@@ -157,6 +158,7 @@ export default async function AnalyticsPage({
   }, {})
   const sortedOutcomes = Object.entries(outcomeCounts).sort((a, b) => b[1] - a[1])
   const callsLast7 = inboundCallsRaw.filter((call) => call.startedAt >= last7Start).length
+  const { transfersAttempted, transfersSuccessful } = computeInboundTransferMetrics(inboundCalls)
 
   const statusCounts = appointments.reduce<Record<string, number>>((acc, apt) => {
     acc[apt.status] = (acc[apt.status] || 0) + 1
@@ -222,6 +224,8 @@ export default async function AnalyticsPage({
             }
             sortedOutcomes={sortedOutcomes}
             updatedAtLabel={format(now, 'MMM d, h:mm a')}
+            transfersAttempted={transfersAttempted}
+            transfersSuccessful={transfersSuccessful}
           />
         </Suspense>
 
