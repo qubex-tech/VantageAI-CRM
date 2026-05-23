@@ -115,4 +115,21 @@ describe('computeInboundTransferMetrics', () => {
       transfersUnsuccessful: 1,
     })
   })
+
+  it('counts non-failure outcomes as successful so attempted equals successful + unsuccessful', () => {
+    const metrics = computeInboundTransferMetrics([
+      row({ retell_custom_data: { transfer_outcome: 'transferred successfully' } }),
+      row({ retell_custom_data: { transfer_outcome: 'not successful' } }),
+      row({ retell_custom_data: { transfer_outcome: 'warm transfer to billing' } }),
+    ])
+    expect(metrics.transfersAttempted).toBe(3)
+    expect(metrics.transfersSuccessful + metrics.transfersUnsuccessful).toBe(
+      metrics.transfersAttempted
+    )
+    expect(metrics).toEqual({
+      transfersAttempted: 3,
+      transfersSuccessful: 2,
+      transfersUnsuccessful: 1,
+    })
+  })
 })

@@ -195,7 +195,9 @@ export function CallAnalyticsSection({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-semibold text-gray-900">{transfersAttempted}</div>
-            <p className="text-xs text-gray-500 mt-1">Calls with a Retell Transfer Outcome</p>
+            <p className="text-xs text-gray-500 mt-1">
+              Calls with a Transfer Outcome (successful + unsuccessful)
+            </p>
           </CardContent>
         </Card>
         <Card className="border border-gray-200 shadow-sm">
@@ -206,7 +208,7 @@ export function CallAnalyticsSection({
             <div className="text-2xl font-semibold text-gray-900">{transfersSuccessful}</div>
             <p className="text-xs text-gray-500 mt-1">
               {transfersAttempted > 0
-                ? `${Math.round((transfersSuccessful / transfersAttempted) * 100)}% of attempted transfers`
+                ? `${Math.round((transfersSuccessful / transfersAttempted) * 100)}% of attempted (non-failure outcomes)`
                 : 'No transfer attempts in range'}
             </p>
           </CardContent>

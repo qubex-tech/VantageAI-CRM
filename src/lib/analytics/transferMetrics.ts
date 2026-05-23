@@ -1,6 +1,5 @@
 import type { AnalyticsCallRow } from '@/lib/analytics/callSort'
 import {
-  isSuccessfulTransferOutcomeText,
   isUnsuccessfulTransferOutcomeText,
   readTransferOutcomeFromCustomAnalysisData,
 } from '@/lib/outbound-customer-notifications'
@@ -26,6 +25,14 @@ export function readTransferOutcomeFromCallRow(row: AnalyticsCallRow): string | 
   return null
 }
 
+/**
+ * Inbound transfer KPIs for analytics. Every call with a Transfer Outcome is
+ * partitioned into successful or unsuccessful so attempted = successful + unsuccessful.
+ *
+ * - Unsuccessful: missed-transfer email rules (`isUnsuccessfulTransferOutcomeText`).
+ * - Successful: any other non-empty outcome (includes known success phrases and other
+ *   non-failure Retell wording not explicitly listed in `isSuccessfulTransferOutcomeText`).
+ */
 export function computeInboundTransferMetrics(rows: AnalyticsCallRow[]): {
   transfersAttempted: number
   transfersSuccessful: number
@@ -38,10 +45,10 @@ export function computeInboundTransferMetrics(rows: AnalyticsCallRow[]): {
     const outcome = readTransferOutcomeFromCallRow(row)
     if (!outcome) continue
     transfersAttempted += 1
-    if (isSuccessfulTransferOutcomeText(outcome)) {
-      transfersSuccessful += 1
-    } else if (isUnsuccessfulTransferOutcomeText(outcome)) {
+    if (isUnsuccessfulTransferOutcomeText(outcome)) {
       transfersUnsuccessful += 1
+    } else {
+      transfersSuccessful += 1
     }
   }
   return { transfersAttempted, transfersSuccessful, transfersUnsuccessful }
