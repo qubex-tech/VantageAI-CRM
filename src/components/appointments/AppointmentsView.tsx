@@ -69,7 +69,35 @@ export function AppointmentsView({ initialAppointments, practitioners }: Appoint
   const [dateFilter, setDateFilter] = useState(searchParams?.get('date') || '')
   const [isSyncing, setIsSyncing] = useState(false)
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
+  const [syncStatusLine, setSyncStatusLine] = useState<string | null>(null)
   const [selectedPractitionerRefs, setSelectedPractitionerRefs] = useState<string[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/appointments/sync-ehr')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((payload) => {
+        if (cancelled || !payload?.status) return
+        const last = payload.status.lastCompleteAt
+          ? new Date(payload.status.lastCompleteAt).toLocaleString()
+          : 'never'
+        const synced = payload.status.lastCompleteMetadata?.synced
+        const line =
+          typeof synced === 'number'
+            ? `Last EHR sync: ${last} (${synced} appointment(s))`
+            : `Last EHR sync: ${last}`
+        setSyncStatusLine(line)
+        if (payload.status.lastErrorAt && payload.status.lastErrorMessage) {
+          setSyncStatusLine(
+            `${line}. Latest error: ${payload.status.lastErrorMessage.slice(0, 160)}`
+          )
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Update URL when filters change (Day is default — omit `view` for clean /appointments URLs)
   useEffect(() => {
@@ -162,8 +190,31 @@ export function AppointmentsView({ initialAppointments, practitioners }: Appoint
       if (!response.ok) {
         throw new Error(payload?.error || 'Sync failed')
       }
-      const syncedCount = Number(payload?.result?.synced || 0)
-      setSyncMessage(`EHR sync complete. Updated ${syncedCount} appointment(s).`)
+
+      const result = payload?.result
+      if (result?.status === 'skipped') {
+        const reason = result.reason || 'unknown'
+        setSyncMessage(`EHR sync skipped (${reason}).`)
+      } else {
+        const syncedCount = Number(result?.synced || 0)
+        const createdCount = Number(result?.created || 0)
+        const dayErrors = Number(result?.dayErrors || 0)
+        let message = `EHR sync complete. Synced ${syncedCount} appointment(s) (${createdCount} new).`
+        if (dayErrors > 0) {
+          message += ` ${dayErrors} day(s) failed — check EHR connection.`
+        }
+        if (syncedCount === 0) {
+          message =
+            'EHR sync finished but no appointments were returned. Verify ECW schedule and practitioner configuration.'
+        }
+        setSyncMessage(message)
+      }
+
+      if (payload?.status?.lastCompleteAt) {
+        const last = new Date(payload.status.lastCompleteAt).toLocaleString()
+        setSyncStatusLine(`Last EHR sync: ${last}`)
+      }
+
       router.refresh()
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to sync EHR schedule'
@@ -336,8 +387,11 @@ export function AppointmentsView({ initialAppointments, practitioners }: Appoint
         </div>
       )}
 
-      {syncMessage && (
-        <div className="text-sm text-gray-600">{syncMessage}</div>
+      {(syncStatusLine || syncMessage) && (
+        <div className="text-sm text-gray-600 space-y-1">
+          {syncStatusLine && <p>{syncStatusLine}</p>}
+          {syncMessage && <p>{syncMessage}</p>}
+        </div>
       )}
 
       {/* View Content */}

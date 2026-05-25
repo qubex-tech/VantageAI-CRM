@@ -14,6 +14,10 @@ import { getEcwDefaultLocationOrganizationForIssuer } from '@/lib/integrations/e
 const WRITEBACK_PROVIDER_ID = 'ecw_write'
 const STALE_SYNC_WINDOW_MS = 12 * 60 * 60 * 1000
 const SYNC_TIMEZONE = 'America/Chicago'
+/** Default forward horizon when practice config does not override. */
+const DEFAULT_SYNC_BUSINESS_DAYS = 14
+/** Manual backfill default when no query params are passed. */
+const MANUAL_SYNC_DEFAULT_BUSINESS_DAYS = 21
 
 const DEFAULT_SCHEDULE_PRACTITIONER_FFBJCD =
   'Practitioner/Lt2IFR5Ah76n4d8TFP5gBPiX1g1-Q2P9s8IYoGZvbFM'
@@ -43,9 +47,21 @@ type FhirPatient = {
   telecom?: Array<{ system?: string; value?: string }>
 }
 
-type SyncOptions = {
+export type SyncOptions = {
   force?: boolean
+  /** Number of upcoming weekdays (Chicago) to sync when startDate/endDate are omitted. */
   businessDays?: number
+  /** Inclusive calendar start (YYYY-MM-DD, Chicago). */
+  startDate?: string
+  /** Inclusive calendar end (YYYY-MM-DD, Chicago). */
+  endDate?: string
+}
+
+export type EhrAppointmentSyncStatus = {
+  lastCompleteAt: string | null
+  lastCompleteMetadata: Record<string, unknown> | null
+  lastErrorAt: string | null
+  lastErrorMessage: string | null
 }
 
 export type EhrPractitionerOption = {
@@ -219,6 +235,57 @@ function getUpcomingBusinessDays(count: number, timeZone = SYNC_TIMEZONE) {
   }
 
   return days
+}
+
+function parseBusinessDaysFromConfig(config: Record<string, unknown>) {
+  const raw = config.ecwScheduleSyncBusinessDays
+  if (typeof raw === 'number' && raw > 0 && raw <= 90) return Math.floor(raw)
+  if (typeof raw === 'string') {
+    const parsed = Number.parseInt(raw, 10)
+    if (parsed > 0 && parsed <= 90) return parsed
+  }
+  return DEFAULT_SYNC_BUSINESS_DAYS
+}
+
+function isValidDateString(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value)
+}
+
+/** Every calendar day from start through end (inclusive), in Chicago dates. */
+function getCalendarDaysInRange(startDate: string, endDate: string, timeZone = SYNC_TIMEZONE) {
+  if (!isValidDateString(startDate) || !isValidDateString(endDate)) {
+    return []
+  }
+  const days: string[] = []
+  const cursor = new Date(`${startDate}T12:00:00.000Z`)
+  const end = new Date(`${endDate}T12:00:00.000Z`)
+  if (Number.isNaN(cursor.getTime()) || Number.isNaN(end.getTime()) || cursor > end) {
+    return []
+  }
+
+  while (cursor <= end) {
+    days.push(formatTzDate(cursor, timeZone))
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  }
+  return days
+}
+
+function resolveSyncDays(options: SyncOptions, configBusinessDays: number) {
+  if (options.startDate && options.endDate) {
+    const rangeDays = getCalendarDaysInRange(options.startDate, options.endDate)
+    if (rangeDays.length > 0) return rangeDays
+  }
+
+  const businessDays = options.businessDays ?? configBusinessDays
+  return getUpcomingBusinessDays(businessDays, SYNC_TIMEZONE)
+}
+
+function buildEncounterScheduleQuery(practitionerRef: string, day: string) {
+  const nextDay = addUtcDay(day)
+  // eCW rejects _count on Encounter search (OperationOutcome 400).
+  return `/Encounter?practitioner=${encodeURIComponent(
+    practitionerRef
+  )}&date=ge${day}&date=lt${nextDay}`
 }
 
 function addUtcDay(dateString: string) {
@@ -729,9 +796,101 @@ export async function createEhrClientForPractice(
   return { client, connection: refreshedConnection }
 }
 
+export async function getEhrAppointmentSyncStatusForPractice(
+  practiceId: string
+): Promise<EhrAppointmentSyncStatus> {
+  const [lastComplete, lastError] = await Promise.all([
+    prisma.integrationAuditLog.findFirst({
+      where: { tenantId: practiceId, action: 'EHR_APPOINTMENT_SYNC_COMPLETE' },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true, metadata: true },
+    }),
+    prisma.integrationAuditLog.findFirst({
+      where: { tenantId: practiceId, action: 'EHR_APPOINTMENT_SYNC_ERROR' },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true, metadata: true },
+    }),
+  ])
+
+  const lastErrorMeta = lastError?.metadata as { error?: string } | null
+  return {
+    lastCompleteAt: lastComplete?.createdAt?.toISOString() ?? null,
+    lastCompleteMetadata: (lastComplete?.metadata as Record<string, unknown> | null) ?? null,
+    lastErrorAt: lastError?.createdAt?.toISOString() ?? null,
+    lastErrorMessage:
+      typeof lastErrorMeta?.error === 'string' ? lastErrorMeta.error.slice(0, 500) : null,
+  }
+}
+
+async function upsertAppointmentFromEncounter(params: {
+  practiceId: string
+  client: FhirClient
+  encounter: FhirEncounter
+  practitionerRef: string
+  patientCache: Map<string, string>
+}): Promise<'created' | 'updated' | 'skipped'> {
+  const { practiceId, client, encounter, practitionerRef, patientCache } = params
+  if (!encounter.id) return 'skipped'
+
+  const patientEhrId = parsePatientIdFromReference(encounter.subject?.reference)
+  if (!patientEhrId) return 'skipped'
+
+  const start = encounter.period?.start ? new Date(encounter.period.start) : null
+  if (!start || Number.isNaN(start.getTime())) return 'skipped'
+
+  const end =
+    encounter.period?.end && !Number.isNaN(new Date(encounter.period.end).getTime())
+      ? new Date(encounter.period.end)
+      : new Date(start.getTime() + 30 * 60 * 1000)
+  const appointmentKey = `ehr:${encounter.id}`
+
+  const patientId = await upsertPatientFromEhr({
+    practiceId,
+    client,
+    patientId: patientEhrId,
+    cache: patientCache,
+  })
+  const providerRef = encounter.participant?.[0]?.individual?.reference || practitionerRef
+
+  const existing = await prisma.appointment.findUnique({
+    where: { calBookingId: appointmentKey },
+    select: { id: true },
+  })
+
+  await prisma.appointment.upsert({
+    where: { calBookingId: appointmentKey },
+    create: {
+      practiceId,
+      patientId,
+      providerId: providerRef,
+      status: mapEncounterStatusToAppointment(encounter.status),
+      startTime: start,
+      endTime: end,
+      timezone: SYNC_TIMEZONE,
+      visitType: getEncounterVisitType(encounter),
+      reason: getEncounterReason(encounter),
+      notes: `Synced from ECW Encounter/${encounter.id}`,
+      calBookingId: appointmentKey,
+      calEventId: 'ehr',
+    },
+    update: {
+      patientId,
+      providerId: providerRef,
+      status: mapEncounterStatusToAppointment(encounter.status),
+      startTime: start,
+      endTime: end,
+      timezone: SYNC_TIMEZONE,
+      visitType: getEncounterVisitType(encounter),
+      reason: getEncounterReason(encounter),
+      notes: `Synced from ECW Encounter/${encounter.id}`,
+    },
+  })
+
+  return existing ? 'updated' : 'created'
+}
+
 export async function syncEhrAppointmentsForPractice(practiceId: string, options: SyncOptions = {}) {
   const force = options.force === true
-  const businessDays = options.businessDays || 5
 
   if (!force) {
     const latestSync = await prisma.integrationAuditLog.findFirst({
@@ -764,7 +923,12 @@ export async function syncEhrAppointmentsForPractice(practiceId: string, options
     return { status: 'skipped' as const, reason: 'missing_practitioner_refs' }
   }
 
-  const days = getUpcomingBusinessDays(businessDays, SYNC_TIMEZONE)
+  const configBusinessDays = parseBusinessDaysFromConfig(writeConfig)
+  const days = resolveSyncDays(options, configBusinessDays)
+  if (days.length === 0) {
+    return { status: 'skipped' as const, reason: 'invalid_date_range' }
+  }
+
   const encounteredIds = new Set<string>()
   const patientCache = new Map<string, string>()
 
@@ -772,17 +936,16 @@ export async function syncEhrAppointmentsForPractice(practiceId: string, options
   let created = 0
   let updated = 0
   let skipped = 0
+  let dayErrors = 0
 
   for (const practitionerRef of practitionerRefs) {
     for (const day of days) {
-      const nextDay = addUtcDay(day)
-      const query = `/Encounter?practitioner=${encodeURIComponent(
-        practitionerRef
-      )}&date=ge${day}&date=lt${nextDay}&_count=200`
+      const query = buildEncounterScheduleQuery(practitionerRef, day)
       let encounters: FhirEncounter[] = []
       try {
         encounters = await fetchEncounterPages(client, query)
       } catch (error) {
+        dayErrors += 1
         const message = error instanceof Error ? error.message : String(error)
         await logEhrAudit({
           tenantId: practiceId,
@@ -801,84 +964,41 @@ export async function syncEhrAppointmentsForPractice(practiceId: string, options
       }
 
       for (const encounter of encounters) {
-        if (!encounter.id) {
-          skipped += 1
-          continue
-        }
-        if (encounteredIds.has(encounter.id)) {
+        if (!encounter.id || encounteredIds.has(encounter.id)) {
           skipped += 1
           continue
         }
         encounteredIds.add(encounter.id)
 
-        const patientEhrId = parsePatientIdFromReference(encounter.subject?.reference)
-        if (!patientEhrId) {
-          skipped += 1
-          continue
-        }
-
-        const start = encounter.period?.start ? new Date(encounter.period.start) : null
-        if (!start || Number.isNaN(start.getTime())) {
-          skipped += 1
-          continue
-        }
-        const end =
-          encounter.period?.end && !Number.isNaN(new Date(encounter.period.end).getTime())
-            ? new Date(encounter.period.end)
-            : new Date(start.getTime() + 30 * 60 * 1000)
-        const appointmentKey = `ehr:${encounter.id}`
-
-        const patientId = await upsertPatientFromEhr({
+        const outcome = await upsertAppointmentFromEncounter({
           practiceId,
           client,
-          patientId: patientEhrId,
-          cache: patientCache,
+          encounter,
+          practitionerRef,
+          patientCache,
         })
-        const providerRef =
-          encounter.participant?.[0]?.individual?.reference || practitionerRef
-
-        const existing = await prisma.appointment.findUnique({
-          where: { calBookingId: appointmentKey },
-          select: { id: true },
-        })
-
-        await prisma.appointment.upsert({
-          where: { calBookingId: appointmentKey },
-          create: {
-            practiceId,
-            patientId,
-            providerId: providerRef,
-            status: mapEncounterStatusToAppointment(encounter.status),
-            startTime: start,
-            endTime: end,
-            timezone: SYNC_TIMEZONE,
-            visitType: getEncounterVisitType(encounter),
-            reason: getEncounterReason(encounter),
-            notes: `Synced from ECW Encounter/${encounter.id}`,
-            calBookingId: appointmentKey,
-            calEventId: 'ehr',
-          },
-          update: {
-            patientId,
-            providerId: providerRef,
-            status: mapEncounterStatusToAppointment(encounter.status),
-            startTime: start,
-            endTime: end,
-            timezone: SYNC_TIMEZONE,
-            visitType: getEncounterVisitType(encounter),
-            reason: getEncounterReason(encounter),
-            notes: `Synced from ECW Encounter/${encounter.id}`,
-          },
-        })
-
-        synced += 1
-        if (existing) {
-          updated += 1
-        } else {
-          created += 1
+        if (outcome === 'skipped') {
+          skipped += 1
+          continue
         }
+        synced += 1
+        if (outcome === 'updated') updated += 1
+        else created += 1
       }
     }
+  }
+
+  const syncMetadata = {
+    businessDays: options.businessDays ?? configBusinessDays,
+    startDate: options.startDate ?? null,
+    endDate: options.endDate ?? null,
+    daysQueried: days.length,
+    practitionerRefs,
+    synced,
+    created,
+    updated,
+    skipped,
+    dayErrors,
   }
 
   await logEhrAudit({
@@ -887,22 +1007,12 @@ export async function syncEhrAppointmentsForPractice(practiceId: string, options
     action: 'EHR_APPOINTMENT_SYNC_COMPLETE',
     providerId: WRITEBACK_PROVIDER_ID,
     entity: 'Encounter',
-    metadata: {
-      businessDays,
-      practitionerRefs,
-      synced,
-      created,
-      updated,
-      skipped,
-    },
+    metadata: syncMetadata,
   })
 
   return {
     status: 'success' as const,
-    synced,
-    created,
-    updated,
-    skipped,
+    ...syncMetadata,
   }
 }
 

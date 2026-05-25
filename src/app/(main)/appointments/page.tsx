@@ -20,10 +20,17 @@ function parseDateParam(value?: string) {
   return new Date(year, month - 1, day, 0, 0, 0, 0)
 }
 
+function parseRangeParam(value?: string) {
+  if (!value) return null
+  const [year, month, day] = value.split('-').map(Number)
+  if (!year || !month || !day) return null
+  return new Date(year, month - 1, day, 0, 0, 0, 0)
+}
+
 export default async function AppointmentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string; status?: string }>
+  searchParams: Promise<{ date?: string; status?: string; from?: string; to?: string }>
 }) {
   const params = await searchParams
   const supabaseSession = await getSupabaseSession()
@@ -51,6 +58,8 @@ export default async function AppointmentsPage({
   }
 
   const date = parseDateParam(params.date)
+  const rangeFrom = parseRangeParam(params.from)
+  const rangeTo = parseRangeParam(params.to)
   const status = params.status
 
   // Practice-specific feature - require practiceId
@@ -79,8 +88,9 @@ export default async function AppointmentsPage({
     practiceId: practiceId,
   }
 
-  // If a specific date is provided, filter to that day
-  // Otherwise, show all upcoming appointments (from today onwards)
+  // If a specific date is provided, filter to that day.
+  // Optional from/to supports calendar week navigation.
+  // Otherwise load current week through ~8 weeks ahead for week/day views.
   if (date) {
     const startOfDay = new Date(date)
     startOfDay.setHours(0, 0, 0, 0)
@@ -90,12 +100,24 @@ export default async function AppointmentsPage({
       gte: startOfDay,
       lte: endOfDay,
     }
+  } else if (rangeFrom && rangeTo) {
+    const endOfRange = new Date(rangeTo)
+    endOfRange.setHours(23, 59, 59, 999)
+    where.startTime = {
+      gte: rangeFrom,
+      lte: endOfRange,
+    }
   } else {
-    // Show all future appointments by default
     const today = new Date()
     today.setHours(0, 0, 0, 0)
+    const rangeStart = new Date(today)
+    rangeStart.setDate(rangeStart.getDate() - rangeStart.getDay())
+    const rangeEnd = new Date(today)
+    rangeEnd.setDate(rangeEnd.getDate() + 56)
+    rangeEnd.setHours(23, 59, 59, 999)
     where.startTime = {
-      gte: today,
+      gte: rangeStart,
+      lte: rangeEnd,
     }
   }
 
