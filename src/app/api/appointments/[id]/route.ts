@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/middleware'
 import { appointmentSchema } from '@/lib/validations'
 import { createAuditLog } from '@/lib/audit'
 import { emitEvent } from '@/lib/outbox'
+import { triggerOpenSlotFromCancelledAppointment } from '@/lib/appointment-optimization/trigger'
 
 export async function GET(
   req: NextRequest,
@@ -165,6 +166,17 @@ export async function PATCH(
             userId: user.id,
           },
         })
+      } else if (validated.status === 'cancelled') {
+        await triggerOpenSlotFromCancelledAppointment({
+          id: appointment.id,
+          practiceId: appointment.practiceId,
+          providerId: appointment.providerId,
+          visitType: appointment.visitType,
+          startTime: appointment.startTime,
+          endTime: appointment.endTime,
+          timezone: appointment.timezone,
+          status: appointment.status,
+        })
       } else if (validated.status === 'no_show') {
         await emitEvent({
           practiceId,
@@ -271,6 +283,17 @@ export async function DELETE(
         patient: appointment.patient,
         userId: user.id,
       },
+    })
+
+    await triggerOpenSlotFromCancelledAppointment({
+      id: appointment.id,
+      practiceId: appointment.practiceId,
+      providerId: appointment.providerId,
+      visitType: appointment.visitType,
+      startTime: appointment.startTime,
+      endTime: appointment.endTime,
+      timezone: appointment.timezone,
+      status: appointment.status,
     })
 
     return NextResponse.json({ success: true })

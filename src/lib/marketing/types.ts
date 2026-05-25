@@ -191,6 +191,8 @@ export interface VariableContext {
     confirm?: string
     reschedule?: string
     cancel?: string
+    /** Patient portal appointments page for self-reschedule */
+    portalAppointments?: string
     /**
      * Secure patient portal invite URL (verified link).
      * Example: https://{practiceSlug}.portal.getvantage.tech/portal/invite?token=...

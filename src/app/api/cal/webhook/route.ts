@@ -326,9 +326,23 @@ export async function POST(req: NextRequest) {
       case 'BOOKING_CANCELLED':
       case 'booking.cancelled':
         if (appointment) {
-          await prisma.appointment.update({
+          const cancelled = await prisma.appointment.update({
             where: { id: appointment.id },
             data: { status: 'cancelled' },
+          })
+
+          const { triggerOpenSlotFromCancelledAppointment } = await import(
+            '@/lib/appointment-optimization/trigger'
+          )
+          await triggerOpenSlotFromCancelledAppointment({
+            id: cancelled.id,
+            practiceId: cancelled.practiceId,
+            providerId: cancelled.providerId,
+            visitType: cancelled.visitType,
+            startTime: cancelled.startTime,
+            endTime: cancelled.endTime,
+            timezone: cancelled.timezone,
+            status: cancelled.status,
           })
 
           if (appointment.patientId) {

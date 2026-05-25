@@ -1,0 +1,262 @@
+import { prisma } from '@/lib/db'
+import { getTwilioClient } from '@/lib/twilio'
+import { getRetellIntegrationConfig, RetellApiClient } from '@/lib/retell-api'
+import { findEligibleCandidates } from '@/lib/appointment-optimization/candidates'
+import {
+  formatProviderDisplayName,
+  resolveEarlierSlotSmsBody,
+} from '@/lib/appointment-optimization/messages'
+import {
+  getOutboundAgentsSettings,
+  isAppointmentOptimizationEnabled,
+} from '@/lib/appointment-optimization/settings'
+import {
+  isOpenSlotFilled,
+  markOpenSlotExhausted,
+  markOpenSlotFilled,
+} from '@/lib/appointment-optimization/slotFilled'
+import { WAVE_BATCH_SIZE } from '@/lib/appointment-optimization/types'
+
+function providerDisplayFromRef(providerId: string | null) {
+  return formatProviderDisplayName(providerId, 'your provider')
+}
+
+export async function processSlotWave(params: {
+  openSlotEventId: string
+  practiceId: string
+  waveNumber: number
+}) {
+  const settings = await getOutboundAgentsSettings(params.practiceId)
+  if (!isAppointmentOptimizationEnabled(settings)) {
+    return { status: 'skipped', reason: 'agent_disabled' }
+  }
+
+  const slot = await prisma.openSlotEvent.findFirst({
+    where: { id: params.openSlotEventId, practiceId: params.practiceId },
+  })
+  if (!slot || slot.status !== 'open') {
+    return { status: 'skipped', reason: 'slot_not_open' }
+  }
+
+  if (await isOpenSlotFilled(slot.id)) {
+    await markOpenSlotFilled(slot.id)
+    return { status: 'skipped', reason: 'slot_already_filled' }
+  }
+
+  const wave = await prisma.slotWave.upsert({
+    where: {
+      openSlotEventId_waveNumber: {
+        openSlotEventId: slot.id,
+        waveNumber: params.waveNumber,
+      },
+    },
+    create: {
+      practiceId: params.practiceId,
+      openSlotEventId: slot.id,
+      waveNumber: params.waveNumber,
+      status: 'processing',
+      startedAt: new Date(),
+    },
+    update: {
+      status: 'processing',
+      startedAt: new Date(),
+    },
+  })
+
+  const candidates = await findEligibleCandidates({
+    practiceId: params.practiceId,
+    providerId: slot.providerId,
+    appointmentType: slot.appointmentType,
+    slotStart: slot.slotStart,
+    slotEnd: slot.slotEnd,
+    durationMinutes: slot.durationMinutes,
+    openSlotEventId: slot.id,
+    waveNumber: params.waveNumber,
+    limit: WAVE_BATCH_SIZE,
+  })
+
+  if (candidates.length === 0) {
+    await prisma.slotWave.update({
+      where: { id: wave.id },
+      data: { status: 'completed', completedAt: new Date(), patientsTargeted: 0 },
+    })
+    await markOpenSlotExhausted(slot.id)
+    return { status: 'exhausted', patientsContacted: 0 }
+  }
+
+  const practice = await prisma.practice.findUnique({
+    where: { id: params.practiceId },
+    select: { name: true },
+  })
+
+  let sentCount = 0
+  const channel = settings.outreachChannel || 'sms'
+
+  for (const candidate of candidates) {
+    const messageBody = await resolveEarlierSlotSmsBody({
+      practiceId: params.practiceId,
+      templateName: settings.smsTemplateName,
+      patientFirstName: candidate.patientName.split(' ')[0] || 'there',
+      providerName: providerDisplayFromRef(slot.providerId),
+      slotStart: slot.slotStart,
+      timezone: 'America/Chicago',
+    })
+
+    const attempt = await prisma.outreachAttempt.create({
+      data: {
+        practiceId: params.practiceId,
+        openSlotEventId: slot.id,
+        slotWaveId: wave.id,
+        patientId: candidate.patientId,
+        appointmentId: candidate.appointmentId,
+        channel: channel === 'voice' ? 'voice' : 'sms',
+        status: 'queued',
+        waveNumber: params.waveNumber,
+        messageBody,
+      },
+    })
+
+    try {
+      const useVoice = channel === 'voice' || channel === 'prefer_voice'
+      if (useVoice) {
+        await sendVoiceOutreach({
+          practiceId: params.practiceId,
+          attemptId: attempt.id,
+          phone: candidate.phone!,
+          patientName: candidate.patientName,
+          slotStart: slot.slotStart,
+          openSlotEventId: slot.id,
+        })
+      } else {
+        await sendSmsOutreach({
+          practiceId: params.practiceId,
+          attemptId: attempt.id,
+          phone: candidate.phone!,
+          body: messageBody,
+        })
+      }
+      sentCount += 1
+    } catch (error) {
+      await prisma.outreachAttempt.update({
+        where: { id: attempt.id },
+        data: {
+          status: 'failed',
+        },
+      })
+      console.error('[SlotFill] outreach failed', {
+        attemptId: attempt.id,
+        error: error instanceof Error ? error.message : error,
+      })
+    }
+  }
+
+  await prisma.slotWave.update({
+    where: { id: wave.id },
+    data: {
+      status: 'completed',
+      completedAt: new Date(),
+      patientsTargeted: candidates.length,
+    },
+  })
+
+  await prisma.openSlotEvent.update({
+    where: { id: slot.id },
+    data: {
+      wavesSent: { increment: 1 },
+      patientsContacted: { increment: sentCount },
+    },
+  })
+
+  return {
+    status: 'wave_sent',
+    waveNumber: params.waveNumber,
+    patientsContacted: sentCount,
+    practiceName: practice?.name,
+  }
+}
+
+async function sendSmsOutreach(params: {
+  practiceId: string
+  attemptId: string
+  phone: string
+  body: string
+}) {
+  const twilio = await getTwilioClient(params.practiceId)
+  const result = await twilio.sendSms({ to: params.phone, body: params.body })
+  if (!result.success) {
+    throw new Error(result.error || 'SMS send failed')
+  }
+  await prisma.outreachAttempt.update({
+    where: { id: params.attemptId },
+    data: {
+      status: 'sent',
+      externalMessageId: result.messageId || null,
+      sentAt: new Date(),
+    },
+  })
+}
+
+async function sendVoiceOutreach(params: {
+  practiceId: string
+  attemptId: string
+  phone: string
+  patientName: string
+  slotStart: Date
+  openSlotEventId: string
+}) {
+  const config = await getRetellIntegrationConfig(params.practiceId)
+  if (!config.apiKey) {
+    throw new Error('Retell not configured')
+  }
+  const fromNumber = process.env.RETELL_FROM_NUMBER
+  if (!fromNumber) {
+    throw new Error('RETELL_FROM_NUMBER not configured')
+  }
+  const client = new RetellApiClient(config.apiKey)
+  const response = await client.createPhoneCall({
+    fromNumber,
+    toNumber: params.phone,
+    overrideAgentId: config.agentId || undefined,
+    metadata: {
+      openSlotEventId: params.openSlotEventId,
+      outreachAttemptId: params.attemptId,
+      purpose: 'appointment_optimization',
+    },
+    dynamicVariables: {
+      patient_name: params.patientName,
+      offered_slot_datetime: params.slotStart.toISOString(),
+      portal_link: (process.env.APP_BASE_URL || '') + '/portal/appointments',
+    },
+  })
+  const callId =
+    (typeof response.call_id === 'string' && response.call_id) ||
+    (typeof response.callId === 'string' && response.callId) ||
+    null
+  await prisma.outreachAttempt.update({
+    where: { id: params.attemptId },
+    data: {
+      status: 'sent',
+      externalMessageId: callId,
+      sentAt: new Date(),
+    },
+  })
+}
+
+export async function handleSlotFillCheck(params: {
+  openSlotEventId: string
+  practiceId: string
+  waveNumber: number
+}) {
+  const slot = await prisma.openSlotEvent.findFirst({
+    where: { id: params.openSlotEventId, practiceId: params.practiceId },
+  })
+  if (!slot) return { action: 'missing' }
+
+  if (await isOpenSlotFilled(params.openSlotEventId)) {
+    await markOpenSlotFilled(params.openSlotEventId)
+    return { action: 'filled' }
+  }
+
+  const nextWave = params.waveNumber + 1
+  return { action: 'continue', nextWave }
+}

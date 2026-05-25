@@ -12,6 +12,7 @@ interface Preferences {
   emailEnabled: boolean
   voiceEnabled: boolean
   portalEnabled: boolean
+  earlierAppointmentOptIn?: boolean
   quietHoursStart?: string | null
   quietHoursEnd?: string | null
 }
@@ -27,6 +28,7 @@ export function PreferencesForm({ initialPreferences }: PreferencesFormProps) {
     emailEnabled: initialPreferences?.emailEnabled ?? true,
     voiceEnabled: initialPreferences?.voiceEnabled ?? false,
     portalEnabled: initialPreferences?.portalEnabled ?? true,
+    earlierAppointmentOptIn: initialPreferences?.earlierAppointmentOptIn ?? true,
     quietHoursStart: initialPreferences?.quietHoursStart || null,
     quietHoursEnd: initialPreferences?.quietHoursEnd || null,
   })
@@ -67,6 +69,7 @@ export function PreferencesForm({ initialPreferences }: PreferencesFormProps) {
           emailEnabled: preferences.emailEnabled,
           voiceEnabled: preferences.voiceEnabled,
           portalEnabled: preferences.portalEnabled,
+          earlierAppointmentOptIn: preferences.earlierAppointmentOptIn,
           quietHoursStart: preferences.quietHoursStart || undefined,
           quietHoursEnd: preferences.quietHoursEnd || undefined,
         }),
@@ -191,6 +194,24 @@ export function PreferencesForm({ initialPreferences }: PreferencesFormProps) {
               checked={preferences.portalEnabled}
               onCheckedChange={(checked) => 
                 setPreferences({ ...preferences, portalEnabled: checked })
+              }
+            />
+          </div>
+
+          <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+            <div className="flex-1">
+              <Label htmlFor="earlierAppointmentOptIn" className="text-sm font-medium text-gray-900">
+                Earlier appointment offers
+              </Label>
+              <p className="text-xs text-gray-500 mt-1">
+                Get notified when a sooner visit opens so you can reschedule in the portal
+              </p>
+            </div>
+            <Switch
+              id="earlierAppointmentOptIn"
+              checked={preferences.earlierAppointmentOptIn ?? true}
+              onCheckedChange={(checked) =>
+                setPreferences({ ...preferences, earlierAppointmentOptIn: checked })
               }
             />
           </div>

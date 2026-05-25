@@ -25,6 +25,9 @@ model Practice {
   patients                   Patient[]
   insurancePolicies          InsurancePolicy[]
   appointments               Appointment[]
+  openSlotEvents             OpenSlotEvent[]
+  slotWaves                  SlotWave[]
+  outreachAttempts           OutreachAttempt[]
   calIntegrations            CalIntegration[]
   calEventTypeMappings       CalEventTypeMapping[]
   retellIntegrations         RetellIntegration[]
@@ -177,6 +180,7 @@ model Patient {
   practice                   Practice                    @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   insurancePolicies          InsurancePolicy[]
   appointments               Appointment[]
+  outreachAttempts           OutreachAttempt[]
   voiceConversations         VoiceConversation[]
   tags                       PatientTag[]
   timelineEntries            PatientTimelineEntry[]
@@ -316,15 +320,99 @@ model Appointment {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
-  patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  practice          Practice           @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient           Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  outreachAttempts  OutreachAttempt[]
 
   @@index([practiceId])
   @@index([patientId])
   @@index([startTime])
   @@index([status])
   @@index([calBookingId])
+  @@index([practiceId, providerId, startTime])
   @@map("appointments")
+}
+
+/// Detected opening on a provider schedule (cancellation, reschedule, etc.)
+model OpenSlotEvent {
+  id                    String    @id @default(uuid())
+  practiceId            String
+  providerId            String?
+  appointmentType       String
+  slotStart             DateTime
+  slotEnd               DateTime
+  durationMinutes       Int
+  locationId            String?
+  status                String    @default("open") // open | filled | exhausted
+  source                String // cancellation | reschedule | availability
+  sourceAppointmentId   String?
+  idempotencyKey        String
+  wavesSent             Int       @default(0)
+  patientsContacted     Int       @default(0)
+  filledAt              DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  practice Practice           @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  waves    SlotWave[]
+  attempts OutreachAttempt[]
+
+  @@unique([practiceId, idempotencyKey])
+  @@index([practiceId, status])
+  @@index([practiceId, slotStart])
+  @@index([providerId, slotStart])
+  @@map("open_slot_events")
+}
+
+model SlotWave {
+  id               String    @id @default(uuid())
+  practiceId       String
+  openSlotEventId  String
+  waveNumber       Int
+  status           String    @default("pending") // pending | processing | completed | skipped
+  scheduledAt      DateTime?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  patientsTargeted Int       @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  practice      Practice           @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  openSlotEvent OpenSlotEvent      @relation(fields: [openSlotEventId], references: [id], onDelete: Cascade)
+  attempts      OutreachAttempt[]
+
+  @@unique([openSlotEventId, waveNumber])
+  @@index([practiceId, status])
+  @@map("slot_waves")
+}
+
+model OutreachAttempt {
+  id                String    @id @default(uuid())
+  practiceId        String
+  openSlotEventId   String
+  slotWaveId        String?
+  patientId         String
+  appointmentId     String?
+  channel           String // sms | voice
+  status            String    @default("queued") // queued | sent | delivered | failed
+  waveNumber        Int
+  messageBody       String?
+  externalMessageId String?
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  practice      Practice       @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  openSlotEvent OpenSlotEvent  @relation(fields: [openSlotEventId], references: [id], onDelete: Cascade)
+  slotWave      SlotWave?      @relation(fields: [slotWaveId], references: [id], onDelete: SetNull)
+  patient       Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointment   Appointment?   @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@index([practiceId, openSlotEventId])
+  @@index([patientId, createdAt])
+  @@index([openSlotEventId, waveNumber])
+  @@map("outreach_attempts")
 }
 
 model CalIntegration {
@@ -428,6 +516,7 @@ model PracticeSettings {
   ehrIntegrations                Json?
   healixPreChartTemplate         Json?
   outboundCustomerNotifications  Json?
+  outboundAgents                 Json?
   createdAt                      DateTime @default(now())
   updatedAt                      DateTime @updatedAt
 
@@ -1035,8 +1124,9 @@ model CommunicationPreference {
   preferredChannel String   @default("email") // 'sms', 'email', 'voice', 'portal'
   smsEnabled       Boolean  @default(true)
   emailEnabled     Boolean  @default(true)
-  voiceEnabled     Boolean  @default(false)
-  portalEnabled    Boolean  @default(true)
+  voiceEnabled              Boolean  @default(false)
+  portalEnabled             Boolean  @default(true)
+  earlierAppointmentOptIn   Boolean  @default(true)
   quietHoursStart  String? // 'HH:mm'
   quietHoursEnd    String? // 'HH:mm'
   frequencyCap     Int? // Max messages per day/week

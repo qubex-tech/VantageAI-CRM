@@ -11,6 +11,7 @@ import { TwilioSettings } from '@/components/settings/TwilioSettings'
 import { PracticeManagement } from '@/components/settings/PracticeManagement'
 import { PracticeAPIConfiguration } from '@/components/settings/PracticeAPIConfiguration'
 import { PreChartTemplateSettings } from '@/components/settings/PreChartTemplateSettings'
+import { OutboundAgentsSettings } from '@/components/settings/OutboundAgentsSettings'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 
 export const dynamic = 'force-dynamic'
@@ -150,7 +151,8 @@ export default async function SettingsPage() {
           )}
 
           {hasAiConfigTab && (
-            <TabsContent value="ai-config" className="mt-6">
+            <TabsContent value="ai-config" className="mt-6 space-y-6">
+              <OutboundAgentsSettings practiceId={user.practiceId ?? undefined} />
               <PreChartTemplateSettings />
             </TabsContent>
           )}

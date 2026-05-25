@@ -5,6 +5,8 @@ import {
   emitUpcomingAppointmentEvents,
   processRetellCallEnded,
   syncEhrAppointmentsDaily,
+  handleOpenSlotCreated,
+  checkOpenSlotStatus,
 } from '@/inngest/functions'
 
 // Export runtime configuration for Edge/Serverless
@@ -21,6 +23,8 @@ const handler = serve({
     emitUpcomingAppointmentEvents,
     processRetellCallEnded,
     syncEhrAppointmentsDaily,
+    handleOpenSlotCreated,
+    checkOpenSlotStatus,
   ],
 })
 

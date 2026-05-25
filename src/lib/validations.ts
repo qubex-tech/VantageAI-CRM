@@ -315,6 +315,7 @@ export const communicationPreferenceSchema = z.object({
   emailEnabled: z.boolean().optional(),
   voiceEnabled: z.boolean().optional(),
   portalEnabled: z.boolean().optional(),
+  earlierAppointmentOptIn: z.boolean().optional(),
   quietHoursStart: z.string().optional(),
   quietHoursEnd: z.string().optional(),
   frequencyCap: z.number().int().positive().optional(),
@@ -460,4 +461,13 @@ export const outboundCustomerNotificationsSchema = z.object({
     z.union([z.string().email(), z.null()]).optional()
   ),
   notifyUnsuccessfulTransfer: z.boolean().optional().default(false),
+})
+
+/** Outbound AI agents (practice + Vantage admin settings) */
+export const outboundAgentsSettingsSchema = z.object({
+  masterEnabled: z.boolean().default(false),
+  insuranceVerificationEnabled: z.boolean().default(false),
+  appointmentOptimizationEnabled: z.boolean().default(false),
+  outreachChannel: z.enum(['sms', 'voice', 'prefer_sms', 'prefer_voice']).optional(),
+  smsTemplateName: z.string().optional(),
 })

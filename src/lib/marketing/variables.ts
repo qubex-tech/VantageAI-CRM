@@ -73,6 +73,7 @@ function getVariableFallback(varKey: string): string {
     'links.confirm': '#',
     'links.reschedule': '#',
     'links.cancel': '#',
+    'links.portalAppointments': '#',
     'links.portalVerified': '#',
     'links.formRequest': '#',
   }
