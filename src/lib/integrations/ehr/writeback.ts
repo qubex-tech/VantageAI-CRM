@@ -11,6 +11,11 @@ import { createDraftDocumentReference } from '@/lib/integrations/fhir/resources/
 import { createPatient } from '@/lib/integrations/fhir/resources/patient'
 import { FhirClient, WriteNotSupportedError } from '@/lib/integrations/fhir/fhirClient'
 import type { ExtractedCallData } from '@/lib/process-call-data'
+import {
+  hasExplicitRetellPatientIdentity,
+  resolveExplicitPatientNameForEhrLookup,
+  resolvePatientStatedPhoneForEhrLookup,
+} from '@/lib/retell-patient-identity'
 import type { EhrSettings } from '@/lib/integrations/ehr/types'
 import type { RetellCall } from '@/lib/retell-api'
 import { Prisma } from '@prisma/client'
@@ -681,7 +686,7 @@ export async function writeBackRetellCallToEhr(params: {
   extractedData: ExtractedCallData
 }): Promise<WritebackResult> {
   const { practiceId, patientId, call, extractedData } = params
-  const WRITEBACK_VERSION = 'writeback_v19'
+  const WRITEBACK_VERSION = 'writeback_v20'
   if (!call.call_id) {
     return { status: 'skipped', reason: 'missing_call_id' }
   }
@@ -689,6 +694,7 @@ export async function writeBackRetellCallToEhr(params: {
   const settings = await getEhrSettings(practiceId)
   const layers = getRetellEcwWritebackLayerFlags(settings)
   const patientMode = resolvePatientMode({ extractedData })
+  const explicitPatientIdentified = hasExplicitRetellPatientIdentity(extractedData)
   const encounterNotesPatientPath = classifyEncounterNotesPatientPath(patientMode, extractedData)
   const encounterNotesByModeForLog = encounterAndNotesAllowedForPatientMode(
     settings,
@@ -705,6 +711,7 @@ export async function writeBackRetellCallToEhr(params: {
     writebackVersion: WRITEBACK_VERSION,
     retellWritebackLayers: layers,
     patientMode,
+    explicitPatientIdentified,
     encounterNotesPatientPath,
     encounterAndNotesForPatientMode: encounterNotesByModeForLog,
   })
@@ -891,24 +898,24 @@ export async function writeBackRetellCallToEhr(params: {
       patientRecord = await prisma.patient.findUnique({
         where: { id: patientId },
       })
-      ehrPatientId = patientRecord?.externalEhrId || null
+      if (explicitPatientIdentified && patientRecord?.externalEhrId) {
+        ehrPatientId = patientRecord.externalEhrId
+      }
     }
 
     const lookupBirthDate =
       parseDobToIso(extractedData.patient_dob) ||
-      (patientRecord?.dateOfBirth
+      (patientRecord?.dateOfBirth && !isPlaceholderDob(patientRecord.dateOfBirth)
         ? patientRecord.dateOfBirth.toISOString().split('T')[0]
         : null)
-    const lookupName = patientRecord?.name || extractedData.patient_name || null
-    // Prefer patient-stated number from this call before CRM/store, then PSTN/callback last.
-    const lookupPhone =
-      extractedData.patient_phone_number ||
-      patientRecord?.primaryPhone ||
-      patientRecord?.phone ||
-      extractedData.user_phone_number ||
-      null
+    const lookupName = explicitPatientIdentified
+      ? resolveExplicitPatientNameForEhrLookup(extractedData, patientRecord?.name)
+      : null
+    const lookupPhone = explicitPatientIdentified
+      ? resolvePatientStatedPhoneForEhrLookup(extractedData)
+      : null
 
-    if (!ehrPatientId && (lookupName || lookupPhone)) {
+    if (!ehrPatientId && explicitPatientIdentified && (lookupName || lookupPhone)) {
       const matchedId = await findEhrPatientId({
         client,
         fullName: lookupName,
@@ -969,6 +976,7 @@ export async function writeBackRetellCallToEhr(params: {
       layers.allowPatientCreate &&
       settings?.enablePatientCreate &&
       patientRecord &&
+      explicitPatientIdentified &&
       patientMode === 'new'
     ) {
         const name =
@@ -1063,8 +1071,21 @@ export async function writeBackRetellCallToEhr(params: {
     const encounterNoteText = buildTelephoneEncounterNoteText(call, extractedData)
     const encounterNotesByMode = encounterAndNotesAllowedForPatientMode(settings, patientMode, extractedData)
     const wantsEncounter =
-      layers.allowEncounter && Boolean(encounterNoteText?.trim()) && encounterNotesByMode
-    const wantsNotes = layers.allowDraftNotes && encounterNotesByMode
+      explicitPatientIdentified &&
+      layers.allowEncounter &&
+      Boolean(encounterNoteText?.trim()) &&
+      encounterNotesByMode
+    const wantsNotes =
+      explicitPatientIdentified && layers.allowDraftNotes && encounterNotesByMode
+
+    if (!explicitPatientIdentified && (layers.allowEncounter || layers.allowDraftNotes)) {
+      console.log('[EHR Writeback] Skipping encounter and draft notes — no explicit patient identity', {
+        practiceId,
+        callId: call.call_id,
+        writebackVersion: WRITEBACK_VERSION,
+        patientMode,
+      })
+    }
 
     if (!ehrPatientId) {
       if (patientMode === 'new' && (wantsEncounter || wantsNotes) && !layers.allowPatientCreate) {
@@ -1101,6 +1122,27 @@ export async function writeBackRetellCallToEhr(params: {
           ehrWritebackVersion: WRITEBACK_VERSION,
         })
         return { status: 'skipped', reason: 'retell_writeback_nothing_applicable' }
+      }
+      if (!wantsEncounter && !wantsNotes) {
+        await markConversationMetadata(practiceId, call.call_id, {
+          ehrWritebackStatus: 'skipped',
+          ehrWritebackError: explicitPatientIdentified
+            ? 'No matching eCW patient for the identified patient; telephone encounter and draft notes were not written.'
+            : 'No explicit patient identity on this call; telephone encounter and draft notes were not written.',
+          ehrWritebackFailedAt: new Date().toISOString(),
+          ehrWritebackVersion: WRITEBACK_VERSION,
+          ehrWritebackLayersSummary: {
+            patientCreateInEcw: false,
+            patientMode,
+            explicitPatientIdentified,
+            encounterNotesPatientPath,
+            encounterNotesByMode,
+          },
+        })
+        return {
+          status: 'skipped',
+          reason: explicitPatientIdentified ? 'missing_patient_id' : 'no_explicit_patient_identity',
+        }
       }
       console.error('[EHR Writeback] Missing EHR patient ID', {
         practiceId,

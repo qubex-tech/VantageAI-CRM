@@ -15,6 +15,7 @@ import {
   sendCurogramEscalation,
   trimCurogramIntentTopicForApi,
 } from './curogram'
+import { looksLikePhoneNumber } from './retell-patient-identity'
 import { maybeNotifyUnsuccessfulTransfer } from './outbound-customer-notifications'
 
 function metadataObjectFromRow(value: unknown): Record<string, unknown> {
@@ -353,8 +354,10 @@ function enrichFromCustomAnalysis(
   }
   if (!extracted.patient_name) {
     const callerName = getCustomValue(customData, ['Caller Name'])
-    extracted.patient_name =
-      callerName || (normalized.caller_name as string | undefined) || extracted.patient_name
+    if (callerName && !looksLikePhoneNumber(callerName)) {
+      extracted.patient_name =
+        callerName || (normalized.caller_name as string | undefined) || extracted.patient_name
+    }
   }
   return extracted
 }
@@ -459,7 +462,7 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
       }
       if (!extracted.patient_name) {
         const callerName = getCustomValue(customData, ['Caller Name'])
-        if (callerName) extracted.patient_name = callerName
+        if (callerName && !looksLikePhoneNumber(callerName)) extracted.patient_name = callerName
       }
 
       // Normalize Retell keys like "Patient First Name" or "Call Reason"
@@ -799,6 +802,9 @@ export async function processCallDataForPatient(
   if (patientName && /^the caller\b/i.test(patientName.trim())) {
     patientName = undefined
   }
+  if (patientName && looksLikePhoneNumber(patientName)) {
+    patientName = undefined
+  }
   if ((!phoneNumber || !patientName) && callData.retell_custom_data) {
     const customData = callData.retell_custom_data as Record<string, unknown>
     const first = customData['Patient First Name']
@@ -807,7 +813,7 @@ export async function processCallDataForPatient(
     if (!patientName) {
       if (first || last) {
         patientName = `${first || ''} ${last || ''}`.trim()
-      } else if (callerName) {
+      } else if (callerName && !looksLikePhoneNumber(String(callerName))) {
         patientName = String(callerName).trim()
       }
     }
@@ -1029,7 +1035,7 @@ export async function processRetellCallData(
       const caller = normalizedCustomData.caller_name as string | undefined
       if (first || last) {
         extractedData.patient_name = `${first || ''} ${last || ''}`.trim()
-      } else if (caller) {
+      } else if (caller && !looksLikePhoneNumber(String(caller))) {
         extractedData.patient_name = caller
       }
     }
@@ -1056,7 +1062,7 @@ export async function processRetellCallData(
       const caller = customData['Caller Name']
       if (first || last) {
         extractedData.patient_name = `${first || ''} ${last || ''}`.trim()
-      } else if (caller) {
+      } else if (caller && !looksLikePhoneNumber(String(caller))) {
         extractedData.patient_name = String(caller).trim()
       }
     }
