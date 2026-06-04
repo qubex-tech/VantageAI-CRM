@@ -1,14 +1,15 @@
 import { useMemo, useState } from 'react'
-import { Calculator, FileText, Sparkles, Printer } from 'lucide-react'
+import { Calculator, FileText, Printer, Users } from 'lucide-react'
 import { CalculatorForm } from './components/CalculatorForm'
 import { ResultsPanel } from './components/ResultsPanel'
 import { BusinessCase } from './components/BusinessCase'
 import { ProspectSearch } from './components/ProspectSearch'
+import { PlayMakers } from './components/PlayMakers'
 import { DEFAULTS, computeRoi, type RoiInputs } from './lib/roi'
 import type { ProspectResearch } from './lib/types'
 import { cn } from './lib/utils'
 
-type Tab = 'calculator' | 'business-case'
+type Tab = 'calculator' | 'business-case' | 'play-makers'
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('calculator')
@@ -43,6 +44,9 @@ export default function App() {
             <TabButton active={tab === 'business-case'} onClick={() => setTab('business-case')} icon={<FileText size={16} />}>
               Business Case
             </TabButton>
+            <TabButton active={tab === 'play-makers'} onClick={() => setTab('play-makers')} icon={<Users size={16} />}>
+              Play Makers
+            </TabButton>
             {tab === 'business-case' && (
               <button
                 onClick={() => window.print()}
@@ -56,7 +60,7 @@ export default function App() {
       </header>
 
       <main className="flex-1">
-        {tab === 'calculator' ? (
+        {tab === 'calculator' && (
           <div className="max-w-7xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6">
             <div className="space-y-6">
               <ProspectSearch onResult={applyResearch} />
@@ -64,8 +68,12 @@ export default function App() {
             </div>
             <ResultsPanel inputs={inputs} results={results} />
           </div>
-        ) : (
+        )}
+        {tab === 'business-case' && (
           <BusinessCase inputs={inputs} results={results} research={research} />
+        )}
+        {tab === 'play-makers' && (
+          <PlayMakers defaultCompany={research?.company.name} />
         )}
       </main>
 

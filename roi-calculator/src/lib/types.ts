@@ -53,3 +53,49 @@ export interface ResearchError {
   ok: false
   error: string
 }
+
+// ---- Play makers (meeting prep) --------------------------------------------
+
+export interface PlayMaker {
+  id: string
+  // Input
+  inputName: string
+  // Identified person
+  fullName?: string
+  title?: string
+  company?: string
+  tenure?: string
+  location?: string
+  linkedinUrl?: string
+  // Background
+  bio?: string
+  background?: string
+  previousRoles?: Array<{ role: string; org: string; period?: string }>
+  education?: string[]
+  // Sales-relevant
+  responsibilities?: string[]
+  priorities?: string[]
+  publicQuotes?: Array<{ quote: string; context?: string; date?: string; url?: string }>
+  recentActivity?: Array<{ title: string; summary: string; date?: string; url?: string }>
+  // Meeting prep
+  talkingPoints?: string[]
+  conversationStarters?: string[]
+  potentialObjections?: string[]
+  commonGround?: string[]
+  // Identity confidence + raw notes
+  confidence: 'low' | 'medium' | 'high'
+  identityNotes?: string
+  // Sources
+  sources?: Array<{ title: string; uri: string }>
+}
+
+export interface PlayMakersRequest {
+  names: string[]
+  company?: string
+}
+
+export interface PlayMakersResponse {
+  ok: true
+  playMakers: PlayMaker[]
+}
+
