@@ -44,13 +44,32 @@ export async function getSmsClient(practiceId: string): Promise<SmsClient> {
     }
   }
 
-  const twilioClient = await getTwilioClient(practiceId)
-  return {
-    provider: 'twilio',
-    sendSms: async (params) => {
-      const result = await twilioClient.sendSms(params)
-      return { ...result, provider: 'twilio' as const }
-    },
+  try {
+    const twilioClient = await getTwilioClient(practiceId)
+    return {
+      provider: 'twilio',
+      sendSms: async (params) => {
+        const result = await twilioClient.sendSms(params)
+        return { ...result, provider: 'twilio' as const }
+      },
+    }
+  } catch (twilioError) {
+    const configuredElsewhere = await prisma.telnyxIntegration.findFirst({
+      where: { isActive: true },
+      include: { practice: { select: { name: true } } },
+    })
+
+    if (configuredElsewhere && configuredElsewhere.practiceId !== practiceId) {
+      const practice = await prisma.practice.findUnique({
+        where: { id: practiceId },
+        select: { name: true },
+      })
+      throw new Error(
+        `Telnyx is configured for "${configuredElsewhere.practice.name}" but not for "${practice?.name || 'this practice'}". In Settings → Practice API Configuration, select "${practice?.name || 'this practice'}" and save the same Telnyx API key and phone number.`
+      )
+    }
+
+    throw twilioError
   }
 }
 

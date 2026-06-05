@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    const client = new TelnyxApiClient(integration.apiKey, integration.fromNumber)
+    const client = new TelnyxApiClient(integration.apiKey, integration.fromNumber, integration.messagingProfileId || undefined)
     const phoneNumbers = await client.listPhoneNumbers()
     return NextResponse.json({ phoneNumbers })
   } catch (error) {
@@ -72,6 +72,10 @@ export async function POST(req: NextRequest) {
     await requireAuth(req)
     const body = await req.json()
     const validated = telnyxCredentialsSchema.parse(body)
+
+    if (!validated.apiKey) {
+      return NextResponse.json({ error: 'API key is required' }, { status: 400 })
+    }
 
     const client = new TelnyxApiClient(validated.apiKey)
     const isValid = await client.testConnection()

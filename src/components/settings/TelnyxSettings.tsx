@@ -90,11 +90,19 @@ export function TelnyxSettings({ initialIntegration, practiceId }: TelnyxSetting
     setLoadingNumbers(true)
 
     try {
-      const response = await fetch('/api/settings/telnyx/phone-numbers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey }),
-      })
+      let response: Response
+
+      if (apiKey) {
+        response = await fetch('/api/settings/telnyx/phone-numbers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apiKey }),
+        })
+      } else if (apiKeyConfigured) {
+        response = await fetch(apiUrl('/api/settings/telnyx/phone-numbers'))
+      } else {
+        throw new Error('Enter your Telnyx API key or save an existing configuration first')
+      }
 
       if (!response.ok) {
         const payload = await response.json()
@@ -149,6 +157,8 @@ export function TelnyxSettings({ initialIntegration, practiceId }: TelnyxSetting
       }
 
       setSuccess('Telnyx integration saved successfully')
+      setApiKeyConfigured(true)
+      setApiKey('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save settings')
     } finally {
@@ -162,10 +172,14 @@ export function TelnyxSettings({ initialIntegration, practiceId }: TelnyxSetting
     setTestingConnection(true)
 
     try {
-      const response = await fetch('/api/settings/telnyx/test', {
+      const response = await fetch(apiUrl('/api/settings/telnyx/test'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey }),
+        body: JSON.stringify({
+          apiKey: apiKey || undefined,
+          fromNumber: fromNumber || undefined,
+          messagingProfileId: messagingProfileId || undefined,
+        }),
       })
 
       if (!response.ok) {
@@ -173,7 +187,12 @@ export function TelnyxSettings({ initialIntegration, practiceId }: TelnyxSetting
         throw new Error(payload.error || 'Connection test failed')
       }
 
-      setSuccess('Connection test successful!')
+      const payload = await response.json()
+      if (apiKey && !payload.usedStoredKey) {
+        setSuccess('Connection test successful! Click Save Settings to store this API key for sending SMS.')
+      } else {
+        setSuccess('Connection test successful! Saved credentials can send SMS.')
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Connection test failed')
     } finally {

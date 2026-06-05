@@ -176,7 +176,13 @@ export const telnyxIntegrationSchema = z.object({
 })
 
 export const telnyxCredentialsSchema = z.object({
-  apiKey: z.string().min(1, 'API key is required'),
+  apiKey: z.string().optional().or(z.literal('')).transform(val => val === '' ? undefined : val),
+})
+
+export const telnyxTestSchema = z.object({
+  apiKey: z.string().optional().or(z.literal('')).transform(val => val === '' ? undefined : val),
+  fromNumber: z.string().optional().or(z.literal('')).transform(val => val === '' ? undefined : val),
+  messagingProfileId: z.string().optional().or(z.literal('')).transform(val => val === '' ? undefined : val),
 })
 
 export const bookAppointmentSchema = z.object({

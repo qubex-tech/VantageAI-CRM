@@ -174,6 +174,64 @@ export class TelnyxApiClient {
     return result.ok
   }
 
+  /**
+   * Confirms the API key works for POST /messages, not just read-only list endpoints.
+   * Non-auth send errors (e.g. trial destination limits) still count as success.
+   */
+  async validateSendAccess(): Promise<{ ok: boolean; error?: string }> {
+    const from = this.defaultFromNumber
+    if (!from) {
+      return {
+        ok: false,
+        error: 'Select a from number before validating SMS send access.',
+      }
+    }
+
+    const payload: Record<string, string> = {
+      from: formatE164(from),
+      to: formatE164(from),
+      text: 'Vantage SMS credential check',
+    }
+    if (this.messagingProfileId) {
+      payload.messaging_profile_id = this.messagingProfileId
+    }
+
+    const result = await telnyxFetch<{ data: { id?: string } }>(
+      this.apiKey,
+      '/messages',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }
+    )
+
+    if (result.ok) {
+      return { ok: true }
+    }
+
+    if (
+      result.status === 401 ||
+      result.error.includes('rejected the API key') ||
+      result.error.includes('Authenticate')
+    ) {
+      return { ok: false, error: result.error }
+    }
+
+    return { ok: true }
+  }
+
+  async validateCredentials(): Promise<{ ok: boolean; error?: string }> {
+    const connectionOk = await this.testConnection()
+    if (!connectionOk) {
+      return {
+        ok: false,
+        error: 'Invalid Telnyx API key or connection failed.',
+      }
+    }
+
+    return this.validateSendAccess()
+  }
+
   async listMessagingProfiles(): Promise<Array<{ id: string; name: string }>> {
     const profiles = await fetchAllPages<{ id: string; name: string }>(
       this.apiKey,

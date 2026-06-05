@@ -1,9 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
-import { telnyxCredentialsSchema } from '@/lib/validations'
-import { TelnyxApiClient } from '@/lib/telnyx'
+import { isVantageAdmin } from '@/lib/permissions'
+import { telnyxTestSchema } from '@/lib/validations'
+import {
+  TelnyxApiClient,
+  isMaskedTelnyxApiKey,
+  normalizeTelnyxApiKey,
+} from '@/lib/telnyx'
 
 export const dynamic = 'force-dynamic'
+
+function resolvePracticeId(
+  user: { practiceId: string | null; name?: string | null; id: string; email: string; role: string },
+  queryPracticeId: string | null
+): string | null {
+  const normalizedUser = {
+    ...user,
+    name: user.name ?? null,
+  }
+  if (queryPracticeId && isVantageAdmin(normalizedUser)) {
+    return queryPracticeId
+  }
+  return user.practiceId
+}
 
 function formatZodError(error: unknown) {
   if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
@@ -20,17 +40,50 @@ function formatZodError(error: unknown) {
 
 export async function POST(req: NextRequest) {
   try {
-    await requireAuth(req)
+    const user = await requireAuth(req)
     const body = await req.json()
-    const validated = telnyxCredentialsSchema.parse(body)
+    const validated = telnyxTestSchema.parse(body)
+    const practiceId = resolvePracticeId(
+      user,
+      req.nextUrl.searchParams.get('practiceId')
+    )
 
-    const client = new TelnyxApiClient(validated.apiKey)
-    const isValid = await client.testConnection()
-    if (!isValid) {
-      return NextResponse.json({ error: 'Invalid Telnyx API key or connection failed' }, { status: 400 })
+    let apiKey = validated.apiKey
+    let integration = practiceId
+      ? await prisma.telnyxIntegration.findUnique({ where: { practiceId } })
+      : null
+
+    if (!apiKey || isMaskedTelnyxApiKey(apiKey)) {
+      if (!practiceId) {
+        return NextResponse.json({ error: 'API key is required' }, { status: 400 })
+      }
+      apiKey = integration?.apiKey
     }
 
-    return NextResponse.json({ success: true })
+    if (!apiKey) {
+      return NextResponse.json({ error: 'API key is required' }, { status: 400 })
+    }
+
+    apiKey = normalizeTelnyxApiKey(apiKey)
+
+    const fromNumber = validated.fromNumber || integration?.fromNumber || undefined
+    const messagingProfileId =
+      validated.messagingProfileId || integration?.messagingProfileId || undefined
+
+    const client = new TelnyxApiClient(apiKey, fromNumber, messagingProfileId)
+
+    const validation = await client.validateCredentials()
+    if (!validation.ok) {
+      return NextResponse.json(
+        { error: validation.error || 'Telnyx credential validation failed' },
+        { status: 400 }
+      )
+    }
+
+    return NextResponse.json({
+      success: true,
+      usedStoredKey: !validated.apiKey,
+    })
   } catch (error) {
     const zodMessage = formatZodError(error)
     if (zodMessage) {

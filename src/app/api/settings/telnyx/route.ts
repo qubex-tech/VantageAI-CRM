@@ -108,9 +108,12 @@ export async function POST(req: NextRequest) {
       validated.fromNumber,
       validated.messagingProfileId || existing?.messagingProfileId || undefined
     )
-    const isValid = await testClient.testConnection()
-    if (!isValid) {
-      return NextResponse.json({ error: 'Invalid Telnyx API key or connection failed' }, { status: 400 })
+    const validation = await testClient.validateCredentials()
+    if (!validation.ok) {
+      return NextResponse.json(
+        { error: validation.error || 'Invalid Telnyx credentials or connection failed' },
+        { status: 400 }
+      )
     }
 
     const numbers = await testClient.listPhoneNumbers()
@@ -153,7 +156,13 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    return NextResponse.json({ integration })
+    return NextResponse.json({
+      integration: {
+        ...integration,
+        apiKey: '',
+        apiKeyConfigured: Boolean(integration.apiKey),
+      },
+    })
   } catch (error) {
     const zodMessage = formatZodError(error)
     if (zodMessage) {
