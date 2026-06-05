@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { logInboundCommunication } from '@/lib/communications/logging'
-import { phoneNumbersMatch } from '@/lib/telnyx'
+import { resolveInboundSmsPatient } from '@/lib/telnyx-inbound'
 import {
   assertTelnyxWebhookVerified,
   resolveTelnyxWebhookPublicKey,
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
       })
     } catch (error) {
       if (error instanceof TelnyxWebhookVerificationError) {
-        console.error('Telnyx webhook verification failed:', error.message)
+        console.error('[Telnyx webhook] Verification failed:', error.message)
         return NextResponse.json({ error: error.message }, { status: 403 })
       }
       throw error
@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Telnyx webhook error:', error)
+    console.error('[Telnyx webhook] Unexpected error:', error)
     return NextResponse.json({ success: true })
   }
 }
@@ -75,6 +75,10 @@ async function handleInboundMessage(
   payload: NonNullable<TelnyxWebhookEvent['data']>['payload'],
   req: NextRequest
 ) {
+  if (payload?.direction && payload.direction !== 'inbound') {
+    return
+  }
+
   const bodyText = payload?.text?.trim()
   const from = payload?.from?.phone_number
   const toNumbers = (payload?.to || [])
@@ -82,130 +86,52 @@ async function handleInboundMessage(
     .filter(Boolean) as string[]
 
   if (!bodyText || !from || toNumbers.length === 0) {
-    return
-  }
-
-  const normalizedFrom = from.replace(/[^\d]/g, '')
-  const fromLast10 = normalizedFrom.slice(-10)
-
-  if (bodyText.toUpperCase() === 'STOP') {
-    const patient = await prisma.patient.findFirst({
-      where: {
-        OR: [
-          { phone: { contains: normalizedFrom } },
-          { primaryPhone: { contains: normalizedFrom } },
-          { secondaryPhone: { contains: normalizedFrom } },
-        ],
-      },
-      include: {
-        patientAccount: true,
-      },
+    console.warn('[Telnyx webhook] Skipping inbound message with missing text, from, or to', {
+      hasText: Boolean(bodyText),
+      from,
+      toCount: toNumbers.length,
     })
-
-    if (patient) {
-      await prisma.communicationPreference.upsert({
-        where: { patientId: patient.id },
-        create: {
-          practiceId: patient.practiceId,
-          patientId: patient.id,
-          smsEnabled: false,
-          emailEnabled: true,
-          voiceEnabled: false,
-          portalEnabled: true,
-        },
-        update: {
-          smsEnabled: false,
-        },
-      })
-
-      await prisma.consentRecord.create({
-        data: {
-          practiceId: patient.practiceId,
-          patientId: patient.id,
-          consentType: 'sms',
-          consented: false,
-          method: 'sms',
-          source: normalizedFrom,
-          revokedAt: new Date(),
-        },
-      })
-
-      await prisma.portalAuditLog.create({
-        data: {
-          practiceId: patient.practiceId,
-          patientId: patient.id,
-          action: 'opt_out',
-          resourceType: 'communication_preference',
-          ipAddress: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined,
-          userAgent: req.headers.get('user-agent') || undefined,
-        },
-      })
-    }
     return
   }
 
-  let integration = payload.messaging_profile_id
-    ? await prisma.telnyxIntegration.findFirst({
-        where: {
-          messagingProfileId: payload.messaging_profile_id,
-          isActive: true,
-        },
-        select: { practiceId: true, fromNumber: true },
-      })
-    : null
-
-  if (!integration?.practiceId) {
-    const integrations = await prisma.telnyxIntegration.findMany({
-      where: { isActive: true },
-      select: { practiceId: true, fromNumber: true },
-    })
-    integration =
-      integrations.find((entry) =>
-        toNumbers.some((toNumber) => phoneNumbersMatch(entry.fromNumber, toNumber))
-      ) || null
-  }
-
-  if (!integration?.practiceId) {
-    return
-  }
-
-  let patient = await prisma.patient.findFirst({
-    where: {
-      practiceId: integration.practiceId,
-      deletedAt: null,
-      OR: [
-        { phone: { contains: normalizedFrom } },
-        { primaryPhone: { contains: normalizedFrom } },
-        { secondaryPhone: { contains: normalizedFrom } },
-      ],
-    },
-    select: { id: true, phone: true, primaryPhone: true, secondaryPhone: true },
+  const inboundContext = await resolveInboundSmsPatient({
+    from,
+    messagingProfileId: payload.messaging_profile_id,
+    toNumbers,
   })
 
-  if (!patient) {
-    const candidates = await prisma.patient.findMany({
-      where: {
-        practiceId: integration.practiceId,
-        deletedAt: null,
-      },
-      select: { id: true, phone: true, primaryPhone: true, secondaryPhone: true },
-      take: 500,
+  if (!inboundContext) {
+    console.warn('[Telnyx webhook] No active Telnyx integration matched inbound message', {
+      from,
+      to: toNumbers[0],
+      messagingProfileId: payload.messaging_profile_id,
     })
-    patient =
-      candidates.find((candidate) => {
-        const numbers = [candidate.phone, candidate.primaryPhone, candidate.secondaryPhone]
-          .filter(Boolean)
-          .map((num) => String(num).replace(/[^\d]/g, '').slice(-10))
-        return numbers.includes(fromLast10)
-      }) || null
+    return
+  }
+
+  const { patient, integrationPracticeIds } = inboundContext
+
+  if (bodyText.toUpperCase() === 'STOP') {
+    if (!patient) {
+      console.warn('[Telnyx webhook] STOP received but patient not found for', from)
+      return
+    }
+    await handleStopOptOut(patient, from, req)
+    return
   }
 
   if (!patient) {
+    console.warn('[Telnyx webhook] Inbound SMS patient not matched', {
+      from,
+      telnyxPracticeIds: integrationPracticeIds,
+      to: toNumbers[0],
+      messagingProfileId: payload.messaging_profile_id,
+    })
     return
   }
 
   await logInboundCommunication({
-    practiceId: integration.practiceId,
+    practiceId: patient.practiceId,
     patientId: patient.id,
     channel: 'sms',
     body: bodyText,
@@ -214,6 +140,53 @@ async function handleInboundMessage(
       to: toNumbers[0],
       providerMessageId: payload.id,
       provider: 'telnyx',
+      telnyxIntegrationPracticeIds: integrationPracticeIds,
+    },
+  })
+}
+
+async function handleStopOptOut(
+  patient: { id: string; practiceId: string },
+  from: string,
+  req: NextRequest
+) {
+  const normalizedFrom = from.replace(/[^\d]/g, '')
+
+  await prisma.communicationPreference.upsert({
+    where: { patientId: patient.id },
+    create: {
+      practiceId: patient.practiceId,
+      patientId: patient.id,
+      smsEnabled: false,
+      emailEnabled: true,
+      voiceEnabled: false,
+      portalEnabled: true,
+    },
+    update: {
+      smsEnabled: false,
+    },
+  })
+
+  await prisma.consentRecord.create({
+    data: {
+      practiceId: patient.practiceId,
+      patientId: patient.id,
+      consentType: 'sms',
+      consented: false,
+      method: 'sms',
+      source: normalizedFrom,
+      revokedAt: new Date(),
+    },
+  })
+
+  await prisma.portalAuditLog.create({
+    data: {
+      practiceId: patient.practiceId,
+      patientId: patient.id,
+      action: 'opt_out',
+      resourceType: 'communication_preference',
+      ipAddress: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined,
+      userAgent: req.headers.get('user-agent') || undefined,
     },
   })
 }

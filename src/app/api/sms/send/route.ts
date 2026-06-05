@@ -5,6 +5,7 @@ import { prisma } from '@/lib/db'
 import { logPatientActivity } from '@/lib/patient-activity'
 import { logOutboundCommunication } from '@/lib/communications/logging'
 import { resolveSmsPracticeId } from '@/lib/resolve-sms-practice-id'
+import { getTelnyxPracticeMismatchHint } from '@/lib/sms-practice-hints'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,8 +26,11 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const normalizedPatientId =
+      typeof patientId === 'string' && patientId.trim() !== '' ? patientId.trim() : null
+
     const practiceId = await resolveSmsPracticeId(user, {
-      patientId: typeof patientId === 'string' ? patientId : null,
+      patientId: normalizedPatientId,
       queryPracticeId: req.nextUrl.searchParams.get('practiceId'),
     })
 
@@ -35,6 +39,19 @@ export async function POST(req: NextRequest) {
         { error: 'Practice ID is required for this operation' },
         { status: 400 }
       )
+    }
+
+    if (normalizedPatientId) {
+      const patient = await prisma.patient.findFirst({
+        where: { id: normalizedPatientId, deletedAt: null },
+        select: { id: true, practiceId: true },
+      })
+      if (!patient || patient.practiceId !== practiceId) {
+        return NextResponse.json(
+          { error: 'Patient does not belong to the practice used for this SMS send' },
+          { status: 400 }
+        )
+      }
     }
 
     let smsClient
@@ -56,8 +73,21 @@ export async function POST(req: NextRequest) {
     })
 
     if (!result.success) {
+      let errorMessage = result.error || 'Failed to send SMS'
+      if (
+        smsClient.provider === 'telnyx' &&
+        (errorMessage.includes('Telnyx rejected the API key') ||
+          errorMessage.includes('Invalid Telnyx API key') ||
+          errorMessage.includes('Authenticate'))
+      ) {
+        const mismatchHint = await getTelnyxPracticeMismatchHint(practiceId)
+        if (mismatchHint) {
+          errorMessage = `${errorMessage} ${mismatchHint}`
+        }
+      }
+
       return NextResponse.json(
-        { error: result.error || 'Failed to send SMS' },
+        { error: errorMessage },
         { status: 500 }
       )
     }

@@ -51,9 +51,7 @@ function formatE164(phone: string): string {
   return trimmed
 }
 
-function normalizePhoneDigits(phone: string): string {
-  return phone.replace(/[^\d]/g, '')
-}
+import { normalizePhoneDigits, phoneNumbersMatchLoosely } from '@/lib/patient-phone-match'
 
 export function normalizeTelnyxApiKey(apiKey: string): string {
   const trimmed = apiKey.trim()
@@ -404,8 +402,5 @@ export async function getTelnyxClient(practiceId: string) {
 }
 
 export function phoneNumbersMatch(a: string, b: string): boolean {
-  const digitsA = normalizePhoneDigits(a)
-  const digitsB = normalizePhoneDigits(b)
-  if (!digitsA || !digitsB) return false
-  return digitsA === digitsB || digitsA.endsWith(digitsB.slice(-10)) || digitsB.endsWith(digitsA.slice(-10))
+  return phoneNumbersMatchLoosely(a, b)
 }

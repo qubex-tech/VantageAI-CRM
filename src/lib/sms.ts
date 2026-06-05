@@ -1,5 +1,6 @@
 import { getTwilioClient } from '@/lib/twilio'
 import { getTelnyxClient } from '@/lib/telnyx'
+import { getTelnyxPracticeMismatchHint } from '@/lib/sms-practice-hints'
 
 export type SmsProvider = 'telnyx' | 'twilio'
 
@@ -54,6 +55,11 @@ export async function getSmsClient(practiceId: string): Promise<SmsClient> {
       },
     }
   } catch (twilioError) {
+    const mismatchHint = await getTelnyxPracticeMismatchHint(practiceId)
+    if (mismatchHint) {
+      throw new Error(mismatchHint)
+    }
+
     const configuredElsewhere = await prisma.telnyxIntegration.findFirst({
       where: { isActive: true },
       include: { practice: { select: { name: true } } },

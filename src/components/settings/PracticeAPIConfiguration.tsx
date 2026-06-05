@@ -21,6 +21,23 @@ import { OutboundCustomerNotificationsSettings } from './OutboundCustomerNotific
 interface Practice {
   id: string
   name: string
+  createdAt?: string
+  _count?: {
+    patients: number
+    appointments: number
+  }
+}
+
+function formatPracticeLabel(practice: Practice): string {
+  const patientCount = practice._count?.patients ?? 0
+  const idSuffix = practice.id.slice(-8)
+  return `${practice.name} (${patientCount} patient${patientCount === 1 ? '' : 's'}, …${idSuffix})`
+}
+
+function findDuplicateNamePractices(practices: Practice[], practiceId: string): Practice[] {
+  const selected = practices.find((p) => p.id === practiceId)
+  if (!selected) return []
+  return practices.filter((p) => p.id !== practiceId && p.name === selected.name)
 }
 
 export function PracticeAPIConfiguration() {
@@ -121,6 +138,9 @@ export function PracticeAPIConfiguration() {
   }, [selectedPracticeId])
 
   const selectedPractice = practices.find(p => p.id === selectedPracticeId)
+  const duplicateNamePractices = selectedPracticeId
+    ? findDuplicateNamePractices(practices, selectedPracticeId)
+    : []
 
   return (
     <div className="space-y-6">
@@ -155,7 +175,7 @@ export function PracticeAPIConfiguration() {
                     ) : (
                       practices.map((practice) => (
                         <SelectItem key={practice.id} value={practice.id}>
-                          {practice.name}
+                          {formatPracticeLabel(practice)}
                         </SelectItem>
                       ))
                     )}
@@ -164,11 +184,27 @@ export function PracticeAPIConfiguration() {
               )}
             </div>
 
-            {selectedPracticeId && (
-              <div className="pt-4 border-t">
+            {selectedPracticeId && selectedPractice && (
+              <div className="pt-4 border-t space-y-3">
                 <p className="text-sm text-gray-600">
-                  Configuring APIs for: <span className="font-semibold">{selectedPractice?.name}</span>
+                  Configuring APIs for:{' '}
+                  <span className="font-semibold">{formatPracticeLabel(selectedPractice)}</span>
                 </p>
+                {duplicateNamePractices.length > 0 && (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                    <p className="font-medium">Multiple practices share this name</p>
+                    <p className="mt-1 text-amber-800">
+                      SMS and other integrations apply only to the practice you select here. When
+                      sending to a patient, the app uses that patient&apos;s practice — pick the
+                      entry whose patient count matches where your patients live.
+                    </p>
+                    <ul className="mt-2 list-disc pl-5 text-amber-800">
+                      {duplicateNamePractices.map((practice) => (
+                        <li key={practice.id}>{formatPracticeLabel(practice)}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
           </div>
