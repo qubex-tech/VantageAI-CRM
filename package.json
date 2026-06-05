@@ -20,6 +20,7 @@
     "simulate:retell:call-ended": "tsx scripts/simulate-retell-call-ended.ts",
     "create:vantage-admin": "tsx scripts/create-vantage-admin.ts",
     "reset-auth-and-seed-otp": "tsx scripts/reset-auth-and-seed-otp-users.ts",
+    "test:telnyx:sms": "tsx scripts/test-telnyx-sms.ts",
     "mcp:build": "cd mcp-server && npm run build",
     "mcp:start": "node mcp-server/dist/index.js"
   },

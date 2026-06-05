@@ -505,9 +505,9 @@ async function sendSms(
   let smsResult: { success: boolean; messageId?: string; error?: string }
 
   try {
-    const { getTwilioClient } = await import('@/lib/twilio')
-    const twilioClient = await getTwilioClient(practiceId)
-    smsResult = await twilioClient.sendSms({
+    const { getSmsClient } = await import('@/lib/sms')
+    const smsClient = await getSmsClient(practiceId)
+    smsResult = await smsClient.sendSms({
       to: phoneNumber,
       body: messageBody,
     })
@@ -1253,9 +1253,9 @@ async function sendReminder(
     let smsResult: { success: boolean; messageId?: string; error?: string }
 
     try {
-      const { getTwilioClient } = await import('@/lib/twilio')
-      const twilioClient = await getTwilioClient(practiceId)
-      smsResult = await twilioClient.sendSms({
+      const { getSmsClient } = await import('@/lib/sms')
+      const smsClient = await getSmsClient(practiceId)
+      smsResult = await smsClient.sendSms({
         to: patientPhone,
         body: args.message,
       })

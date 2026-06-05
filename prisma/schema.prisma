@@ -33,6 +33,7 @@ model Practice {
   retellIntegrations         RetellIntegration[]
   sendgridIntegrations       SendgridIntegration[]
   twilioIntegrations         TwilioIntegration[]
+  telnyxIntegrations         TelnyxIntegration[]
   ehrConnections             EhrConnection[]
   practiceSettings           PracticeSettings?
   integrationAuditLogs       IntegrationAuditLog[]
@@ -507,6 +508,26 @@ model TwilioIntegration {
 
   @@index([practiceId])
   @@map("twilio_integrations")
+}
+
+model TelnyxIntegration {
+  id                  String   @id @default(uuid())
+  practiceId          String   @unique
+  apiKey              String
+  fromNumber          String
+  phoneNumberId       String?
+  messagingProfileId  String?
+  webhookPublicKey    String?
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId])
+  @@index([fromNumber])
+  @@index([messagingProfileId])
+  @@map("telnyx_integrations")
 }
 
 model PracticeSettings {

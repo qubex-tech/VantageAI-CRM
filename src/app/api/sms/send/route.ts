@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/middleware'
-import { getTwilioClient } from '@/lib/twilio'
+import { getSmsClient } from '@/lib/sms'
 import { prisma } from '@/lib/db'
 import { logPatientActivity } from '@/lib/patient-activity'
 import { logOutboundCommunication } from '@/lib/communications/logging'
@@ -8,7 +8,7 @@ import { logOutboundCommunication } from '@/lib/communications/logging'
 export const dynamic = 'force-dynamic'
 
 /**
- * Send SMS to a patient via Twilio
+ * Send SMS to a patient via the configured SMS provider (Telnyx or Twilio)
  */
 export async function POST(req: NextRequest) {
   try {
@@ -32,27 +32,27 @@ export async function POST(req: NextRequest) {
     }
     const practiceId = user.practiceId
 
-    let twilioClient
+    let smsClient
     try {
-      twilioClient = await getTwilioClient(practiceId)
+      smsClient = await getSmsClient(practiceId)
     } catch (error) {
       const errorMessage = error instanceof Error
         ? error.message
-        : 'Twilio integration is not configured. Please configure it in Settings → Twilio SMS Integration.'
+        : 'SMS integration is not configured. Please configure Telnyx or Twilio in Settings.'
       return NextResponse.json(
         { error: errorMessage },
         { status: 400 }
       )
     }
 
-    const result = await twilioClient.sendSms({
+    const result = await smsClient.sendSms({
       to: String(to).trim(),
       body: String(message).trim(),
     })
 
     if (!result.success) {
       return NextResponse.json(
-        { error: result.error || 'Failed to send SMS via Twilio' },
+        { error: result.error || 'Failed to send SMS' },
         { status: 500 }
       )
     }

@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
 import { getOrCreateVerifiedPatientPortalUrl } from '@/lib/patient-auth'
 import { getSendgridClient } from '@/lib/sendgrid'
-import { getTwilioClient } from '@/lib/twilio'
+import { getSmsClient } from '@/lib/sms'
 import { logEmailActivity, logPatientActivity } from '@/lib/patient-activity'
 
 export const dynamic = 'force-dynamic'
@@ -150,10 +150,10 @@ If you did not expect this message, you can ignore it.
       return NextResponse.json({ error: 'Patient phone number is missing.' }, { status: 400 })
     }
 
-    const twilioClient = await getTwilioClient(user.practiceId)
+    const smsClient = await getSmsClient(user.practiceId)
     // Put the URL on its own line to avoid mobile clients including punctuation in the link.
     const message = `Secure Patient Portal link:\n${urlResult.url}\nExpires ${urlResult.expiresAt.toLocaleDateString()}.`
-    const result = await twilioClient.sendSms({
+    const result = await smsClient.sendSms({
       to: phone,
       body: message,
     })

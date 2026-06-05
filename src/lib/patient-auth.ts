@@ -2,7 +2,7 @@ import { prisma } from './db'
 import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import { getSendgridClient } from './sendgrid'
-import { getTwilioClient } from './twilio'
+import { getSmsClient } from './sms'
 import { buildFormRequestPortalUrl, buildVerifiedPatientPortalUrl } from './portal-invite'
 
 /**
@@ -107,8 +107,8 @@ This is an automated message from ${practiceName}. Please do not reply to this e
       
       return true
     } else if (channel === 'sms') {
-      const twilioClient = await getTwilioClient(practiceId)
-      const result = await twilioClient.sendSms({
+      const smsClient = await getSmsClient(practiceId)
+      const result = await smsClient.sendSms({
         to: recipient,
         body: `Your patient portal login code is ${code}. This code expires in 10 minutes.`,
       })

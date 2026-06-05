@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db'
-import { getTwilioClient } from '@/lib/twilio'
+import { getSmsClient } from '@/lib/sms'
 import { getRetellIntegrationConfig, RetellApiClient } from '@/lib/retell-api'
 import { findEligibleCandidates } from '@/lib/appointment-optimization/candidates'
 import {
@@ -181,8 +181,8 @@ async function sendSmsOutreach(params: {
   phone: string
   body: string
 }) {
-  const twilio = await getTwilioClient(params.practiceId)
-  const result = await twilio.sendSms({ to: params.phone, body: params.body })
+  const sms = await getSmsClient(params.practiceId)
+  const result = await sms.sendSms({ to: params.phone, body: params.body })
   if (!result.success) {
     throw new Error(result.error || 'SMS send failed')
   }

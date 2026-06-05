@@ -5,7 +5,7 @@ import { requireAuth, rateLimit } from '@/lib/middleware'
 import { communicationStartSchema } from '@/lib/validations'
 import { getChannelAdapter } from '@/lib/communications/adapters'
 import type { DeliveryStatus } from '@/lib/communications/types'
-import { getTwilioClient } from '@/lib/twilio'
+import { getSmsClient } from '@/lib/sms'
 import { getSendgridClient } from '@/lib/sendgrid'
 import { generateConversationSummary } from '@/lib/communications/summaryService'
 
@@ -215,14 +215,14 @@ export async function POST(req: NextRequest) {
       if (!recipient.phone) {
         return NextResponse.json({ error: 'Patient phone is required for SMS' }, { status: 400 })
       }
-      const twilioClient = await getTwilioClient(practiceId)
-      const result = await twilioClient.sendSms({
+      const smsClient = await getSmsClient(practiceId)
+      const result = await smsClient.sendSms({
         to: recipient.phone,
         body: validated.body,
       })
       if (!result.success) {
         return NextResponse.json(
-          { error: result.error || 'Failed to send SMS via Twilio' },
+          { error: result.error || 'Failed to send SMS' },
           { status: 500 }
         )
       }

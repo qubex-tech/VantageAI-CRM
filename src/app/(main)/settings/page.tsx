@@ -8,6 +8,7 @@ import { TeamManagement } from '@/components/settings/TeamManagement'
 import { RetellSettings } from '@/components/settings/RetellSettings'
 import { ResendSettings } from '@/components/settings/SendgridSettings'
 import { TwilioSettings } from '@/components/settings/TwilioSettings'
+import { TelnyxSettings } from '@/components/settings/TelnyxSettings'
 import { PracticeManagement } from '@/components/settings/PracticeManagement'
 import { PracticeAPIConfiguration } from '@/components/settings/PracticeAPIConfiguration'
 import { PreChartTemplateSettings } from '@/components/settings/PreChartTemplateSettings'
@@ -57,6 +58,7 @@ export default async function SettingsPage() {
   let retellIntegration = null
   let resendIntegration = null
   let twilioIntegration = null
+  let telnyxIntegration = null
 
   if (user.practiceId) {
     const practiceId = user.practiceId
@@ -94,6 +96,14 @@ export default async function SettingsPage() {
     } catch (error) {
       // Table might not exist if migration hasn't been run yet
       console.error('Error fetching Twilio integration (table may not exist):', error)
+    }
+
+    try {
+      telnyxIntegration = await prisma.telnyxIntegration.findUnique({
+        where: { practiceId: practiceId },
+      })
+    } catch (error) {
+      console.error('Error fetching Telnyx integration (table may not exist):', error)
     }
   }
 
@@ -185,6 +195,8 @@ export default async function SettingsPage() {
                 <ResendSettings initialIntegration={resendIntegration} />
 
                 <TwilioSettings initialIntegration={twilioIntegration} />
+
+                <TelnyxSettings initialIntegration={telnyxIntegration} />
               </div>
             </TabsContent>
           )}

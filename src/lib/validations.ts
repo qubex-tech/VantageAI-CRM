@@ -167,6 +167,18 @@ export const twilioIntegrationSchema = z.object({
   path: ['messagingServiceSid'],
 })
 
+export const telnyxIntegrationSchema = z.object({
+  apiKey: z.string().min(1, 'API key is required'),
+  fromNumber: z.string().min(1, 'Phone number is required'),
+  phoneNumberId: z.string().optional().or(z.literal('')).transform(val => val === '' ? undefined : val),
+  messagingProfileId: z.string().optional().or(z.literal('')).transform(val => val === '' ? undefined : val),
+  webhookPublicKey: z.string().optional().or(z.literal('')).transform(val => val === '' ? undefined : val),
+})
+
+export const telnyxCredentialsSchema = z.object({
+  apiKey: z.string().min(1, 'API key is required'),
+})
+
 export const bookAppointmentSchema = z.object({
   patientId: z.string().uuid(),
   eventTypeId: z.string().min(1, 'Event type ID is required'),

@@ -13,7 +13,7 @@ import { createAuditLog } from './audit'
 import { formatDateTime } from './timezone'
 import { getOrCreateVerifiedPatientPortalUrl, getVerifiedFormRequestPortalUrl } from './patient-auth'
 import { getSendgridClient } from './sendgrid'
-import { getTwilioClient } from './twilio'
+import { getSmsClient } from './sms'
 import { renderEmailFromJson } from './marketing/render-email'
 import { replaceVariables } from './marketing/variables'
 import type { VariableContext } from './marketing/types'
@@ -1079,8 +1079,8 @@ export async function requestFormCompletion(
           }
 
           const messageBody = replaceVariables(notificationTemplate.bodyText, context)
-          const twilioClient = await getTwilioClient(params.clinicId)
-          const result = await twilioClient.sendSms({
+          const smsClient = await getSmsClient(params.clinicId)
+          const result = await smsClient.sendSms({
             to: phoneNumber,
             body: messageBody,
           })
@@ -1306,9 +1306,9 @@ If you did not expect this message, you can ignore it.
       return { success: false, message: 'Patient phone number is missing.' }
     }
 
-    const twilioClient = await getTwilioClient(params.clinicId)
+    const smsClient = await getSmsClient(params.clinicId)
     const message = `Secure Patient Portal link:\n${urlResult.url}\nExpires ${urlResult.expiresAt.toLocaleDateString()}.`
-    const result = await twilioClient.sendSms({
+    const result = await smsClient.sendSms({
       to: phone,
       body: message,
     })
@@ -1405,8 +1405,8 @@ export async function sendSms(
       }
     }
 
-    const twilioClient = await getTwilioClient(params.clinicId)
-    const result = await twilioClient.sendSms({
+    const smsClient = await getSmsClient(params.clinicId)
+    const result = await smsClient.sendSms({
       to: phone,
       body: params.message,
     })

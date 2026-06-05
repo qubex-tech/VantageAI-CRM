@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
 import { testSendSmsSchema } from '@/lib/validations'
 import { renderSmsText } from '@/lib/marketing/render-sms'
-import { getTwilioClient } from '@/lib/twilio'
+import { getSmsClient } from '@/lib/sms'
 import { createMarketingAuditLog } from '@/lib/marketing/audit'
 import { quietHoursCheck } from '@/lib/marketing/lint'
 import { VariableContext } from '@/lib/marketing/types'
@@ -117,8 +117,8 @@ export async function POST(
     // Send SMS via provider
     const from = brandProfile?.defaultSmsSenderId || 'PRACTICE'
     
-    const twilioClient = await getTwilioClient(user.practiceId)
-    const result = await twilioClient.sendSms({
+    const smsClient = await getSmsClient(user.practiceId)
+    const result = await smsClient.sendSms({
       to,
       body: message,
       from,

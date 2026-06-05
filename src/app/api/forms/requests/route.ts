@@ -7,7 +7,7 @@ import { renderEmailFromJson } from '@/lib/marketing/render-email'
 import { replaceVariables } from '@/lib/marketing/variables'
 import type { VariableContext } from '@/lib/marketing/types'
 import { getSendgridClient } from '@/lib/sendgrid'
-import { getTwilioClient } from '@/lib/twilio'
+import { getSmsClient } from '@/lib/sms'
 
 export async function GET(req: NextRequest) {
   try {
@@ -268,8 +268,8 @@ export async function POST(req: NextRequest) {
           }
 
           const messageBody = replaceVariables(template.bodyText, context)
-          const twilioClient = await getTwilioClient(user.practiceId)
-          const result = await twilioClient.sendSms({
+          const smsClient = await getSmsClient(user.practiceId)
+          const result = await smsClient.sendSms({
             to: phoneNumber,
             body: messageBody,
           })

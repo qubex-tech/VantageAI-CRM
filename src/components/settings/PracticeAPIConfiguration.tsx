@@ -14,6 +14,7 @@ import { CalSettings } from './CalSettings'
 import { RetellSettings } from './RetellSettings'
 import { ResendSettings } from './SendgridSettings'
 import { TwilioSettings } from './TwilioSettings'
+import { TelnyxSettings } from './TelnyxSettings'
 import { EhrIntegrationsSettings } from './EhrIntegrationsSettings'
 import { OutboundCustomerNotificationsSettings } from './OutboundCustomerNotificationsSettings'
 
@@ -31,6 +32,7 @@ export function PracticeAPIConfiguration() {
   const [retellIntegration, setRetellIntegration] = useState<any>(null)
   const [resendIntegration, setResendIntegration] = useState<any>(null)
   const [twilioIntegration, setTwilioIntegration] = useState<any>(null)
+  const [telnyxIntegration, setTelnyxIntegration] = useState<any>(null)
   const [eventTypeMappings, setEventTypeMappings] = useState<any[]>([])
 
   // Fetch all practices
@@ -60,6 +62,7 @@ export function PracticeAPIConfiguration() {
       setRetellIntegration(null)
       setResendIntegration(null)
       setTwilioIntegration(null)
+      setTelnyxIntegration(null)
       setEventTypeMappings([])
       return
     }
@@ -100,6 +103,12 @@ export function PracticeAPIConfiguration() {
         if (twilioResponse.ok) {
           const twilioData = await twilioResponse.json()
           setTwilioIntegration(twilioData.integration)
+        }
+
+        const telnyxResponse = await fetch(`/api/settings/telnyx?practiceId=${selectedPracticeId}`)
+        if (telnyxResponse.ok) {
+          const telnyxData = await telnyxResponse.json()
+          setTelnyxIntegration(telnyxData.integration)
         }
       } catch (error) {
         console.error('Error fetching integrations:', error)
@@ -199,6 +208,10 @@ export function PracticeAPIConfiguration() {
                 practiceId={selectedPracticeId}
                 initialIntegration={twilioIntegration}
               />
+              <TelnyxSettingsWithPracticeId
+                practiceId={selectedPracticeId}
+                initialIntegration={telnyxIntegration}
+              />
               <EhrIntegrationsSettings practiceId={selectedPracticeId} />
             </>
           )}
@@ -259,4 +272,14 @@ function TwilioSettingsWithPracticeId({
   initialIntegration: any
 }) {
   return <TwilioSettings initialIntegration={initialIntegration} practiceId={practiceId} />
+}
+
+function TelnyxSettingsWithPracticeId({
+  practiceId,
+  initialIntegration,
+}: {
+  practiceId: string
+  initialIntegration: any
+}) {
+  return <TelnyxSettings initialIntegration={initialIntegration} practiceId={practiceId} />
 }
