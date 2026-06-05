@@ -121,6 +121,8 @@ export async function POST(request: NextRequest) {
       actorType: (request.headers.get('x-actor-type') as 'agent' | 'user' | 'system') || 'agent',
       purpose: request.headers.get('x-purpose') || '',
       allowUnmasked: request.headers.get('x-allow-unmasked') === 'true',
+      logRoute: '/mcp/tools',
+      logSource: 'http',
     })
     const latency = Date.now() - start
 

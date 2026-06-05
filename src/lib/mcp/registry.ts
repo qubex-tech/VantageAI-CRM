@@ -1,6 +1,7 @@
 import * as schemas from './schemas'
 import * as handlers from './handlers'
 import type { RequestContext } from './handlers'
+import { buildToolLogFromInvocation, logMcpToolCall } from './request-log'
 
 export const TOOL_DEFINITIONS = [
   {
@@ -106,11 +107,34 @@ const toolMap = new Map<string, (typeof TOOL_DEFINITIONS)[number]>(
 export async function invokeTool(
   toolName: string,
   input: unknown,
-  ctx: RequestContext
+  ctx: RequestContext & { logRoute?: string; logSource?: 'http' | 'in_process' }
 ): Promise<{ output: object; error?: { code: string; message: string } }> {
+  const logRoute = ctx.logRoute ?? 'invoke'
+  const logSource = ctx.logSource ?? 'in_process'
+  const started = Date.now()
+
+  const finish = (
+    output: object,
+    invokeError?: { code: string; message: string }
+  ): { output: object; error?: { code: string; message: string } } => {
+    logMcpToolCall(
+      buildToolLogFromInvocation({
+        route: logRoute,
+        tool: toolName,
+        input,
+        output,
+        ctx,
+        latencyMs: Date.now() - started,
+        invokeError,
+        source: logSource,
+      })
+    )
+    return invokeError ? { output, error: invokeError } : { output }
+  }
+
   const tool = toolMap.get(toolName)
   if (!tool) {
-    return { output: {}, error: { code: 'UNKNOWN_TOOL', message: `Unknown tool: ${toolName}` } }
+    return finish({}, { code: 'UNKNOWN_TOOL', message: `Unknown tool: ${toolName}` })
   }
   const parsed = tool.inputSchema.safeParse(input)
   if (!parsed.success) {
@@ -118,16 +142,16 @@ export async function invokeTool(
     const msg = Object.entries(fieldErrors)
       .map(([k, v]) => `${k}: ${Array.isArray(v) ? v[0] : v}`)
       .join('; ')
-    return { output: {}, error: { code: 'VALIDATION_ERROR', message: msg } }
+    return finish({}, { code: 'VALIDATION_ERROR', message: msg })
   }
   try {
     const result = await (tool.handler as (input: unknown, ctx: RequestContext) => Promise<{ output: object }>)(
       parsed.data,
       ctx
     )
-    return { output: result.output }
+    return finish(result.output)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal error'
-    return { output: {}, error: { code: 'EXECUTION_ERROR', message } }
+    return finish({}, { code: 'EXECUTION_ERROR', message })
   }
 }

@@ -35,7 +35,7 @@ export async function initiateInsuranceOutboundCall(input: InitiateInsuranceOutb
         include_rx: true,
         strict_minimum_necessary: true,
       },
-      ctx
+      { ...ctx, logRoute: 'outbound-insurance-call', logSource: 'in_process' }
     )
 
   let contextResult = await invokeVerificationContext({ includePolicyId: true })

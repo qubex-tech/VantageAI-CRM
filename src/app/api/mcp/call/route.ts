@@ -48,6 +48,8 @@ export async function POST(request: NextRequest) {
     actorType: auth.ctx.actorType,
     purpose: auth.ctx.purpose,
     allowUnmasked: auth.ctx.allowUnmasked,
+    logRoute: '/mcp/call',
+    logSource: 'http',
   })
   const latency = Date.now() - start
 

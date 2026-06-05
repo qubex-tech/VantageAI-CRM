@@ -529,6 +529,7 @@ export async function callRetellMcpTool(params: {
     // Best-effort initialize handshake for MCP servers that expect lifecycle calls.
     await postJsonRpc(url, { jsonrpc: '2.0', id: `${rpcId}-init`, method: 'initialize', params: {} }, headers).catch(() => null)
 
+    const callStarted = Date.now()
     const callResponse = await postJsonRpc<{
       content?: unknown
       output?: Record<string, unknown>
@@ -547,6 +548,10 @@ export async function callRetellMcpTool(params: {
         },
       },
       headers
+    )
+
+    console.info(
+      `[MCP] retell_http tools/call tool=${toolName} url=${url} latencyMs=${Date.now() - callStarted} hasError=${Boolean(callResponse.error)}`
     )
 
     if (callResponse.error) {

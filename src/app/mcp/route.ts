@@ -155,6 +155,8 @@ export async function POST(request: NextRequest) {
     // Retell may send explicit nulls for optional fields (ids, zip, etc.).
     input = normalizeNullableArgs(input)
 
+    logMcpRequest('/mcp', request, { auth: 'ok', jsonRpcMethod: 'tools/call', method: toolName })
+
     const start = Date.now()
     const result = await invokeTool(toolName, input, {
       requestId: auth.ctx.requestId,
@@ -162,11 +164,13 @@ export async function POST(request: NextRequest) {
       actorType: auth.ctx.actorType,
       purpose: auth.ctx.purpose,
       allowUnmasked: auth.ctx.allowUnmasked,
+      logRoute: '/mcp',
+      logSource: 'http',
     })
     const latency = Date.now() - start
 
     if (result.error) {
-      logMcpRequest('/mcp', request, { auth: 'ok', status: 200 })
+      logMcpRequest('/mcp', request, { auth: 'ok', status: 200, jsonRpcMethod: 'tools/call' })
       const errorPayload = {
         error: result.error,
         output: result.output,
@@ -188,7 +192,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    logMcpRequest('/mcp', request, { auth: 'ok', status: 200 })
+    logMcpRequest('/mcp', request, { auth: 'ok', status: 200, jsonRpcMethod: 'tools/call' })
     return applyCors(
       NextResponse.json({
         jsonrpc: '2.0',
@@ -204,6 +208,6 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  logMcpRequest('/mcp', request, { auth: 'ok', status: 200 })
+  logMcpRequest('/mcp', request, { auth: 'ok', status: 200, jsonRpcMethod: method || '-' })
   return applyCors(NextResponse.json(jsonRpcError(id, -32601, `Method not found: ${method}`)), request)
 }
