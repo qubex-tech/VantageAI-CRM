@@ -1,9 +1,10 @@
 /**
  * Structured logging for MCP endpoints (Vercel function logs).
- * Never log PHI values — only ids (truncated), keys, codes, and counts.
+ * Insurance identifiers are logged masked (last 4) or as already-masked display values.
  */
 import type { NextRequest } from 'next/server'
 import { collectFieldPaths } from './audit'
+import { maskLast4 } from './masking'
 
 export type McpLogAuth = 'ok' | 'public' | 'preflight' | string
 
@@ -12,6 +13,23 @@ export interface McpRequestLogMeta {
   status?: number
   method?: string
   jsonRpcMethod?: string
+}
+
+export interface InsuranceFieldPassed {
+  passed: boolean
+  /** Masked display only (e.g. ****1234) — never full member/group in logs */
+  display?: string
+}
+
+export interface InsurancePassedSummary {
+  payer_name?: string
+  plan_name?: string
+  plan_type?: string
+  is_primary?: boolean
+  insurer_phone?: string
+  policy_id_prefix?: string
+  member_id: InsuranceFieldPassed
+  group_number: InsuranceFieldPassed
 }
 
 export interface McpToolLogMeta {
@@ -28,12 +46,83 @@ export interface McpToolLogMeta {
   policyIdPrefix?: string
   fieldPathCount?: number
   hasVerificationBundle?: boolean
+  /** Insurance fields returned or forwarded (masked where sensitive) */
+  passedData?: InsurancePassedSummary
   source?: 'http' | 'in_process'
 }
 
 function truncateId(id: string | undefined | null): string | undefined {
   if (!id || typeof id !== 'string') return undefined
   return id.length > 8 ? `${id.slice(0, 8)}…` : id
+}
+
+function safeLogDisplay(value: unknown): string | undefined {
+  if (value == null || value === '') return undefined
+  const s = String(value).trim()
+  if (!s || s === '—') return undefined
+  if (s.startsWith('****')) return s
+  return maskLast4(s)
+}
+
+function fieldPassed(value: unknown): InsuranceFieldPassed {
+  const display = safeLogDisplay(value)
+  return { passed: Boolean(display), display }
+}
+
+function insuranceFromBlock(block: unknown): InsurancePassedSummary | null {
+  if (!block || typeof block !== 'object' || Array.isArray(block)) return null
+  const ins = block as Record<string, unknown>
+  const groupRaw =
+    ins.group_number_masked ?? ins.group_number ?? ins.group_id ?? ins.groupNumber
+  const memberRaw =
+    ins.member_id_masked ?? ins.member_id ?? ins.memberId
+  return {
+    payer_name: typeof ins.payer_name_raw === 'string' ? ins.payer_name_raw : undefined,
+    plan_name: typeof ins.plan_name === 'string' ? ins.plan_name : undefined,
+    plan_type: typeof ins.plan_type === 'string' ? ins.plan_type : undefined,
+    is_primary: typeof ins.is_primary === 'boolean' ? ins.is_primary : undefined,
+    insurer_phone:
+      typeof ins.insurer_phone === 'string'
+        ? ins.insurer_phone
+        : typeof ins.insurerPhone === 'string'
+          ? ins.insurerPhone
+          : undefined,
+    policy_id_prefix: truncateId(
+      typeof ins.policy_id === 'string' ? ins.policy_id : undefined
+    ),
+    member_id: fieldPassed(memberRaw),
+    group_number: fieldPassed(groupRaw),
+  }
+}
+
+/** Extract insurance fields from MCP tool output or Retell payload objects. */
+export function summarizeInsurancePassedData(payload: unknown): InsurancePassedSummary | undefined {
+  if (!payload || typeof payload !== 'object') return undefined
+  const record = payload as Record<string, unknown>
+
+  const candidates: unknown[] = [
+    (record.verification_bundle as Record<string, unknown> | undefined)?.insurance,
+    record.insurance,
+    Array.isArray(record.policies) && record.policies.length > 0
+      ? (record.policies as unknown[])[0]
+      : undefined,
+  ]
+
+  for (const candidate of candidates) {
+    const summary = insuranceFromBlock(candidate)
+    if (summary && (summary.group_number.passed || summary.member_id.passed || summary.payer_name)) {
+      return summary
+    }
+  }
+
+  const fallback = insuranceFromBlock(record)
+  if (
+    fallback &&
+    (fallback.group_number.passed || fallback.member_id.passed || fallback.payer_name)
+  ) {
+    return fallback
+  }
+  return undefined
 }
 
 function summarizeInputKeys(input: unknown): {
@@ -61,6 +150,7 @@ export function summarizeMcpToolOutput(output: object): {
   hasVerificationBundle: boolean
   domainErrorCode?: string
   topLevelKeys: string[]
+  passedData?: InsurancePassedSummary
 } {
   const record = output as Record<string, unknown>
   const paths = collectFieldPaths(output)
@@ -73,6 +163,7 @@ export function summarizeMcpToolOutput(output: object): {
     hasVerificationBundle: paths.some((p) => p.startsWith('verification_bundle')),
     domainErrorCode: domainError,
     topLevelKeys: Object.keys(record),
+    passedData: summarizeInsurancePassedData(output),
   }
 }
 
@@ -102,6 +193,35 @@ export function logMcpToolCall(meta: McpToolLogMeta): void {
     ...meta,
   }
   console.log(`[MCP] tool ${JSON.stringify(payload)}`)
+}
+
+/** Log insurance fields sent to Retell (e.g. dynamic variables). */
+export function logRetellInsurancePassed(params: {
+  route: string
+  retellCallId?: string | null
+  patientIdPrefix?: string
+  policyIdPrefix?: string
+  verificationBundle?: unknown
+  contextPolicy?: unknown
+}): void {
+  const fromBundle = summarizeInsurancePassedData({
+    verification_bundle: params.verificationBundle,
+    insurance: params.contextPolicy,
+  })
+  console.log(
+    `[MCP] retell_passed ${JSON.stringify({
+      event: 'retell_insurance_passed',
+      ts: new Date().toISOString(),
+      route: params.route,
+      retellCallId: params.retellCallId ?? null,
+      patientIdPrefix: params.patientIdPrefix,
+      policyIdPrefix: params.policyIdPrefix,
+      passedData: fromBundle ?? {
+        member_id: { passed: false },
+        group_number: { passed: false },
+      },
+    })}`
+  )
 }
 
 export function buildToolLogFromInvocation(params: {
@@ -147,6 +267,7 @@ export function buildToolLogFromInvocation(params: {
     policyIdPrefix: inputSummary.policyIdPrefix,
     fieldPathCount: outputSummary.fieldPathCount,
     hasVerificationBundle: outputSummary.hasVerificationBundle,
+    passedData: outputSummary.passedData,
     source: params.source,
   }
 }

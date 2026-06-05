@@ -3,6 +3,7 @@ import { createAuditLog } from '@/lib/audit'
 import { invokeTool } from '@/lib/mcp/registry'
 import { normalizePhoneForDialing } from '@/lib/phone'
 import { callRetellMcpTool, getRetellIntegrationConfig } from '@/lib/retell-api'
+import { logRetellInsurancePassed } from '@/lib/mcp/request-log'
 
 export interface InitiateInsuranceOutboundCallInput {
   practiceId: string
@@ -186,6 +187,14 @@ export async function initiateInsuranceOutboundCall(input: InitiateInsuranceOutb
     (toolArgs.retell_llm_dynamic_variables as Record<string, unknown> | undefined) ||
     (toolArgs.dynamic_variables as Record<string, unknown> | undefined) ||
     {}
+  logRetellInsurancePassed({
+    route: 'outbound-insurance-call',
+    patientIdPrefix: resolvedPatientId?.slice(0, 8),
+    policyIdPrefix: selectedPolicyId?.slice(0, 8),
+    verificationBundle,
+    contextPolicy: verificationBundle?.insurance ?? null,
+  })
+
   console.info('[OutboundCall][RetellDebug] Prepared outbound payload', {
     practiceId,
     patientId,
@@ -247,6 +256,15 @@ export async function initiateInsuranceOutboundCall(input: InitiateInsuranceOutb
         toolName,
       },
     },
+  })
+
+  logRetellInsurancePassed({
+    route: 'outbound-insurance-call-complete',
+    retellCallId: mcpResult.callId || null,
+    patientIdPrefix: patientId.slice(0, 8),
+    policyIdPrefix: selectedPolicyId?.slice(0, 8),
+    verificationBundle,
+    contextPolicy: verificationBundle?.insurance ?? null,
   })
 
   console.info('[OutboundCall] MCP call completed', {
