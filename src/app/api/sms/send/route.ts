@@ -4,6 +4,7 @@ import { getSmsClient } from '@/lib/sms'
 import { prisma } from '@/lib/db'
 import { logPatientActivity } from '@/lib/patient-activity'
 import { logOutboundCommunication } from '@/lib/communications/logging'
+import { resolveSmsPracticeId } from '@/lib/resolve-sms-practice-id'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,13 +25,17 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    if (!user.practiceId) {
+    const practiceId = await resolveSmsPracticeId(user, {
+      patientId: typeof patientId === 'string' ? patientId : null,
+      queryPracticeId: req.nextUrl.searchParams.get('practiceId'),
+    })
+
+    if (!practiceId) {
       return NextResponse.json(
         { error: 'Practice ID is required for this operation' },
         { status: 400 }
       )
     }
-    const practiceId = user.practiceId
 
     let smsClient
     try {

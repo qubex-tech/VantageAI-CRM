@@ -168,7 +168,7 @@ export const twilioIntegrationSchema = z.object({
 })
 
 export const telnyxIntegrationSchema = z.object({
-  apiKey: z.string().min(1, 'API key is required'),
+  apiKey: z.string().optional().or(z.literal('')).transform(val => val === '' ? undefined : val),
   fromNumber: z.string().min(1, 'Phone number is required'),
   phoneNumberId: z.string().optional().or(z.literal('')).transform(val => val === '' ? undefined : val),
   messagingProfileId: z.string().optional().or(z.literal('')).transform(val => val === '' ? undefined : val),

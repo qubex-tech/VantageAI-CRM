@@ -7,6 +7,7 @@ import { getChannelAdapter } from '@/lib/communications/adapters'
 import type { DeliveryStatus } from '@/lib/communications/types'
 import { getSmsClient } from '@/lib/sms'
 import { getSendgridClient } from '@/lib/sendgrid'
+import { resolveSmsPracticeId } from '@/lib/resolve-sms-practice-id'
 import { generateConversationSummary } from '@/lib/communications/summaryService'
 
 export const dynamic = 'force-dynamic'
@@ -172,17 +173,21 @@ export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req)
 
-    if (!user.practiceId) {
-      return NextResponse.json({ error: 'Practice ID is required for this operation' }, { status: 400 })
-    }
-
     if (!rateLimit(`${user.id}:conversations:start`, 60, 60000)) {
       return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 })
     }
 
     const body = await req.json()
     const validated = communicationStartSchema.parse(body)
-    const practiceId = user.practiceId
+
+    const practiceId = await resolveSmsPracticeId(user, {
+      patientId: validated.patientId,
+      queryPracticeId: req.nextUrl.searchParams.get('practiceId'),
+    })
+
+    if (!practiceId) {
+      return NextResponse.json({ error: 'Practice ID is required for this operation' }, { status: 400 })
+    }
 
     const patient = await prisma.patient.findFirst({
       where: {

@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
 import { isVantageAdmin } from '@/lib/permissions'
 import { telnyxIntegrationSchema } from '@/lib/validations'
-import { TelnyxApiClient } from '@/lib/telnyx'
+import { TelnyxApiClient, isMaskedTelnyxApiKey, normalizeTelnyxApiKey } from '@/lib/telnyx'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,7 +50,16 @@ export async function GET(req: NextRequest) {
       const integration = await prisma.telnyxIntegration.findUnique({
         where: { practiceId },
       })
-      return NextResponse.json({ integration })
+      if (!integration) {
+        return NextResponse.json({ integration: null })
+      }
+      return NextResponse.json({
+        integration: {
+          ...integration,
+          apiKey: '',
+          apiKeyConfigured: Boolean(integration.apiKey),
+        },
+      })
     } catch (error) {
       console.error('Error fetching Telnyx integration (table may not exist):', error)
       return NextResponse.json({ integration: null })
@@ -81,7 +90,24 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const validated = telnyxIntegrationSchema.parse(body)
 
-    const testClient = new TelnyxApiClient(validated.apiKey, validated.fromNumber)
+    const existing = await prisma.telnyxIntegration.findUnique({
+      where: { practiceId },
+    })
+
+    let apiKey = validated.apiKey
+    if (!apiKey || isMaskedTelnyxApiKey(apiKey)) {
+      apiKey = existing?.apiKey
+    }
+    if (!apiKey) {
+      return NextResponse.json({ error: 'API key is required' }, { status: 400 })
+    }
+    apiKey = normalizeTelnyxApiKey(apiKey)
+
+    const testClient = new TelnyxApiClient(
+      apiKey,
+      validated.fromNumber,
+      validated.messagingProfileId || existing?.messagingProfileId || undefined
+    )
     const isValid = await testClient.testConnection()
     if (!isValid) {
       return NextResponse.json({ error: 'Invalid Telnyx API key or connection failed' }, { status: 400 })
@@ -109,7 +135,7 @@ export async function POST(req: NextRequest) {
       where: { practiceId },
       create: {
         practiceId,
-        apiKey: validated.apiKey,
+        apiKey,
         fromNumber: validated.fromNumber,
         phoneNumberId: validated.phoneNumberId || selected.id || null,
         messagingProfileId:
@@ -118,7 +144,7 @@ export async function POST(req: NextRequest) {
         isActive: true,
       },
       update: {
-        apiKey: validated.apiKey,
+        apiKey,
         fromNumber: validated.fromNumber,
         phoneNumberId: validated.phoneNumberId || selected.id || null,
         messagingProfileId:

@@ -134,16 +134,24 @@ export function ComposeSms({
         errorMessage = data?.error || 'Failed to send SMS'
         if (
           errorMessage.includes('Twilio integration not configured') ||
-          errorMessage.includes('Twilio integration not found')
+          errorMessage.includes('Twilio integration not found') ||
+          errorMessage.includes('Telnyx integration not configured') ||
+          errorMessage.includes('SMS integration is not configured')
         ) {
-          errorMessage = 'SMS service is not configured. Please configure Twilio in Settings → Twilio SMS Integration.'
+          errorMessage = 'SMS is not configured for this practice. Configure Telnyx in Settings → Practice API Configuration.'
+        } else if (
+          errorMessage.includes('Telnyx rejected the API key') ||
+          errorMessage.includes('Authenticate') ||
+          errorMessage.includes('Invalid Telnyx API key')
+        ) {
+          errorMessage = 'Telnyx API key is invalid. Re-save the practice Telnyx settings with your KEY_… API key (not the webhook public key).'
         } else if (
           errorMessage.includes('Invalid') ||
           errorMessage.includes('Unauthorized') ||
           errorMessage.includes('401') ||
           errorMessage.includes('403')
         ) {
-          errorMessage = 'Invalid SMS service configuration. Please check your Twilio credentials in Settings.'
+          errorMessage = 'Invalid SMS service configuration. Check Telnyx settings for this practice.'
         }
         throw new Error(errorMessage)
       }

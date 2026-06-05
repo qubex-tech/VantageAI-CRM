@@ -55,15 +55,62 @@ function normalizePhoneDigits(phone: string): string {
   return phone.replace(/[^\d]/g, '')
 }
 
+export function normalizeTelnyxApiKey(apiKey: string): string {
+  const trimmed = apiKey.trim()
+  if (trimmed.toLowerCase().startsWith('bearer ')) {
+    return trimmed.slice(7).trim()
+  }
+  return trimmed
+}
+
+export function isMaskedTelnyxApiKey(apiKey: string): boolean {
+  const trimmed = apiKey.trim()
+  return trimmed.length === 0 || trimmed.includes('•') || trimmed === '********'
+}
+
+function parseTelnyxError(errorBody: string, status: number): string {
+  try {
+    const parsed = JSON.parse(errorBody) as {
+      errors?: Array<{ code?: string; title?: string; detail?: string }>
+      error?: { message?: string }
+    }
+    const err = parsed?.errors?.[0]
+    const code = err?.code
+    const detail = err?.detail?.trim()
+    const title = err?.title?.trim()
+
+    if (
+      status === 401 ||
+      code === '10009' ||
+      code === '20001' ||
+      title === 'Authenticate'
+    ) {
+      return 'Telnyx rejected the API key. In Settings, paste your Telnyx API key (starts with KEY_), not the webhook public key.'
+    }
+
+    if (detail && title && detail !== title) {
+      return `${title}: ${detail}`
+    }
+
+    return detail || title || parsed?.error?.message || 'Telnyx API request failed'
+  } catch {
+    if (status === 401 || status === 403) {
+      return 'Invalid Telnyx API key or insufficient permissions.'
+    }
+    return 'Telnyx API request failed'
+  }
+}
+
 async function telnyxFetch<T>(
   apiKey: string,
   path: string,
   init?: RequestInit
 ): Promise<{ ok: true; data: T } | { ok: false; status: number; error: string }> {
+  const normalizedKey = normalizeTelnyxApiKey(apiKey)
   const response = await fetch(`https://api.telnyx.com/v2${path}`, {
     ...init,
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${normalizedKey}`,
       'Content-Type': 'application/json',
       ...(init?.headers || {}),
     },
@@ -71,22 +118,7 @@ async function telnyxFetch<T>(
 
   if (!response.ok) {
     const errorBody = await response.text()
-    let errorMessage = 'Telnyx API request failed'
-    try {
-      const parsed = JSON.parse(errorBody)
-      const detail =
-        parsed?.errors?.[0]?.detail ||
-        parsed?.errors?.[0]?.title ||
-        parsed?.error?.message
-      if (detail) {
-        errorMessage = String(detail)
-      }
-    } catch {
-      if (response.status === 401 || response.status === 403) {
-        errorMessage = 'Invalid Telnyx API key or insufficient permissions.'
-      }
-    }
-    return { ok: false, status: response.status, error: errorMessage }
+    return { ok: false, status: response.status, error: parseTelnyxError(errorBody, response.status) }
   }
 
   const data = (await response.json()) as T
@@ -122,10 +154,16 @@ async function fetchAllPages<T>(
 export class TelnyxApiClient {
   private apiKey: string
   private defaultFromNumber?: string
+  private messagingProfileId?: string
 
-  constructor(apiKey: string, defaultFromNumber?: string) {
-    this.apiKey = apiKey
+  constructor(
+    apiKey: string,
+    defaultFromNumber?: string,
+    messagingProfileId?: string
+  ) {
+    this.apiKey = normalizeTelnyxApiKey(apiKey)
     this.defaultFromNumber = defaultFromNumber || undefined
+    this.messagingProfileId = messagingProfileId || undefined
   }
 
   async testConnection(): Promise<boolean> {
@@ -225,16 +263,21 @@ export class TelnyxApiClient {
     }
 
     try {
+      const payload: Record<string, string> = {
+        from: formatE164(from),
+        to: formatE164(params.to),
+        text: params.body,
+      }
+      if (this.messagingProfileId) {
+        payload.messaging_profile_id = this.messagingProfileId
+      }
+
       const result = await telnyxFetch<{ data: { id?: string } }>(
         this.apiKey,
         '/messages',
         {
           method: 'POST',
-          body: JSON.stringify({
-            from: formatE164(from),
-            to: formatE164(params.to),
-            text: params.body,
-          }),
+          body: JSON.stringify(payload),
         }
       )
 
@@ -295,7 +338,11 @@ export async function getTelnyxClient(practiceId: string) {
     )
   }
 
-  return new TelnyxApiClient(integration.apiKey, integration.fromNumber)
+  return new TelnyxApiClient(
+    integration.apiKey,
+    integration.fromNumber,
+    integration.messagingProfileId || undefined
+  )
 }
 
 export function phoneNumbersMatch(a: string, b: string): boolean {

@@ -38,7 +38,8 @@ export function TelnyxSettings({ initialIntegration, practiceId }: TelnyxSetting
     return path
   }
 
-  const [apiKey, setApiKey] = useState(initialIntegration?.apiKey || '')
+  const [apiKey, setApiKey] = useState('')
+  const [apiKeyConfigured, setApiKeyConfigured] = useState(Boolean(initialIntegration?.apiKeyConfigured))
   const [fromNumber, setFromNumber] = useState(initialIntegration?.fromNumber || '')
   const [phoneNumberId, setPhoneNumberId] = useState(initialIntegration?.phoneNumberId || '')
   const [messagingProfileId, setMessagingProfileId] = useState(
@@ -54,6 +55,14 @@ export function TelnyxSettings({ initialIntegration, practiceId }: TelnyxSetting
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [webhookUrl, setWebhookUrl] = useState('')
+
+  useEffect(() => {
+    setApiKeyConfigured(Boolean(initialIntegration?.apiKeyConfigured))
+    setFromNumber(initialIntegration?.fromNumber || '')
+    setPhoneNumberId(initialIntegration?.phoneNumberId || '')
+    setMessagingProfileId(initialIntegration?.messagingProfileId || '')
+    setWebhookPublicKey(initialIntegration?.webhookPublicKey || '')
+  }, [initialIntegration])
 
   useEffect(() => {
     const fetchWebhookUrl = async () => {
@@ -126,7 +135,7 @@ export function TelnyxSettings({ initialIntegration, practiceId }: TelnyxSetting
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          apiKey,
+          apiKey: apiKey || undefined,
           fromNumber,
           phoneNumberId: phoneNumberId || undefined,
           messagingProfileId: messagingProfileId || undefined,
@@ -204,9 +213,11 @@ export function TelnyxSettings({ initialIntegration, practiceId }: TelnyxSetting
               type="password"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder="KEYxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-              required
+              placeholder={apiKeyConfigured ? 'API key saved — enter a new key to replace' : 'KEYxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'}
             />
+            {apiKeyConfigured && !apiKey && (
+              <p className="text-xs text-green-700">A Telnyx API key is already saved for this practice.</p>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -214,7 +225,7 @@ export function TelnyxSettings({ initialIntegration, practiceId }: TelnyxSetting
               type="button"
               variant="outline"
               onClick={handleTestConnection}
-              disabled={testingConnection || !apiKey}
+              disabled={testingConnection || (!apiKey && !apiKeyConfigured)}
             >
               {testingConnection ? 'Testing...' : 'Test Connection'}
             </Button>
@@ -222,7 +233,7 @@ export function TelnyxSettings({ initialIntegration, practiceId }: TelnyxSetting
               type="button"
               variant="outline"
               onClick={handleLoadPhoneNumbers}
-              disabled={loadingNumbers || !apiKey}
+              disabled={loadingNumbers || (!apiKey && !apiKeyConfigured)}
             >
               {loadingNumbers ? 'Loading numbers...' : 'Load Phone Numbers'}
             </Button>
@@ -299,8 +310,8 @@ export function TelnyxSettings({ initialIntegration, practiceId }: TelnyxSetting
               type="submit"
               disabled={
                 loading ||
-                !apiKey ||
                 !fromNumber ||
+                (!apiKey && !apiKeyConfigured) ||
                 Boolean(selectedNumber && !selectedNumber.messagingReady)
               }
             >

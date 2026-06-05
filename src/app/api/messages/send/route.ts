@@ -10,6 +10,7 @@ import { getSendgridClient } from '@/lib/sendgrid'
 import { emitCommunicationEvent } from '@/lib/communications/events'
 import { ensureCommunicationRuntime } from '@/lib/communications/runtime'
 import { generateConversationSummary } from '@/lib/communications/summaryService'
+import { resolveSmsPracticeId } from '@/lib/resolve-sms-practice-id'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,17 +18,21 @@ export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req)
 
-    if (!user.practiceId) {
+    const body = await req.json()
+    const validated = communicationMessageSendSchema.parse(body)
+
+    const practiceId = await resolveSmsPracticeId(user, {
+      conversationId: validated.conversationId,
+      queryPracticeId: req.nextUrl.searchParams.get('practiceId'),
+    })
+
+    if (!practiceId) {
       return NextResponse.json({ error: 'Practice ID is required for this operation' }, { status: 400 })
     }
-    const practiceId = user.practiceId
 
     if (!rateLimit(`${user.id}:messages:send`, 60, 60000)) {
       return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 })
     }
-
-    const body = await req.json()
-    const validated = communicationMessageSendSchema.parse(body)
 
     const conversation = await prisma.communicationConversation.findFirst({
       where: {
