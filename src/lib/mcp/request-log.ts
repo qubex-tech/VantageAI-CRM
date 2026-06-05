@@ -1,10 +1,8 @@
 /**
  * Structured logging for MCP endpoints (Vercel function logs).
- * Insurance identifiers are logged masked (last 4) or as already-masked display values.
  */
 import type { NextRequest } from 'next/server'
 import { collectFieldPaths } from './audit'
-import { maskLast4 } from './masking'
 
 export type McpLogAuth = 'ok' | 'public' | 'preflight' | string
 
@@ -17,8 +15,7 @@ export interface McpRequestLogMeta {
 
 export interface InsuranceFieldPassed {
   passed: boolean
-  /** Masked display only (e.g. ****1234) — never full member/group in logs */
-  display?: string
+  value?: string
 }
 
 export interface InsurancePassedSummary {
@@ -56,26 +53,19 @@ function truncateId(id: string | undefined | null): string | undefined {
   return id.length > 8 ? `${id.slice(0, 8)}…` : id
 }
 
-function safeLogDisplay(value: unknown): string | undefined {
-  if (value == null || value === '') return undefined
-  const s = String(value).trim()
-  if (!s || s === '—') return undefined
-  if (s.startsWith('****')) return s
-  return maskLast4(s)
-}
-
-function fieldPassed(value: unknown): InsuranceFieldPassed {
-  const display = safeLogDisplay(value)
-  return { passed: Boolean(display), display }
+function fieldPassed(...values: unknown[]): InsuranceFieldPassed {
+  for (const value of values) {
+    if (value == null || value === '') continue
+    const s = String(value).trim()
+    if (!s || s === '—') continue
+    return { passed: true, value: s }
+  }
+  return { passed: false }
 }
 
 function insuranceFromBlock(block: unknown): InsurancePassedSummary | null {
   if (!block || typeof block !== 'object' || Array.isArray(block)) return null
   const ins = block as Record<string, unknown>
-  const groupRaw =
-    ins.group_number_masked ?? ins.group_number ?? ins.group_id ?? ins.groupNumber
-  const memberRaw =
-    ins.member_id_masked ?? ins.member_id ?? ins.memberId
   return {
     payer_name: typeof ins.payer_name_raw === 'string' ? ins.payer_name_raw : undefined,
     plan_name: typeof ins.plan_name === 'string' ? ins.plan_name : undefined,
@@ -90,8 +80,13 @@ function insuranceFromBlock(block: unknown): InsurancePassedSummary | null {
     policy_id_prefix: truncateId(
       typeof ins.policy_id === 'string' ? ins.policy_id : undefined
     ),
-    member_id: fieldPassed(memberRaw),
-    group_number: fieldPassed(groupRaw),
+    member_id: fieldPassed(ins.member_id, ins.member_id_masked, ins.memberId),
+    group_number: fieldPassed(
+      ins.group_number,
+      ins.group_number_masked,
+      ins.group_id,
+      ins.groupNumber
+    ),
   }
 }
 

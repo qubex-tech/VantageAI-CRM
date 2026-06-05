@@ -41,7 +41,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'list_insurance_policies',
-    description: 'List insurance policies for a patient. Returns payer, primary flag, masked member ID, completeness.',
+    description: 'List insurance policies for a patient. Returns payer, member ID, group number, plan name, and completeness.',
     input_schema: {
       type: 'object',
       properties: { patient_id: { type: 'string', format: 'uuid' } },
@@ -52,7 +52,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'get_insurance_policy_details',
-    description: 'Get full policy details: payer, member/group (masked by default), subscriber, BCBS routing, optional Rx and card refs.',
+    description: 'Get full policy details: payer, member ID, group number, plan name, subscriber, BCBS routing, optional Rx and card refs.',
     input_schema: {
       type: 'object',
       properties: {

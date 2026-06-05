@@ -23,7 +23,7 @@ export async function initiateInsuranceOutboundCall(input: InitiateInsuranceOutb
     actorId: userId,
     actorType: 'user' as const,
     purpose: 'insurance verification outbound call',
-    allowUnmasked: false,
+    allowUnmasked: true,
   }
 
   const invokeVerificationContext = async (opts: { includePolicyId: boolean }) =>
@@ -127,9 +127,15 @@ export async function initiateInsuranceOutboundCall(input: InitiateInsuranceOutb
     }
   }
   const verificationBundle = contextOutput?.verification_bundle || {}
+  const bundleInsurance = (verificationBundle?.insurance || {}) as Record<string, unknown>
   const readiness = verificationBundle?.readiness || {}
   const patientFullName = [patientIdentity.first_name, patientIdentity.last_name].filter(Boolean).join(' ').trim()
   const resolvedPatientId = patientIdentity.patient_id || patientId
+  const memberId =
+    String(bundleInsurance.member_id || bundleInsurance.member_id_masked || '').trim()
+  const groupNumber =
+    String(bundleInsurance.group_number || bundleInsurance.group_number_masked || '').trim()
+  const planName = String(bundleInsurance.plan_name || '').trim()
   const dynamicVariables: Record<string, string> = {
     practice_name: practiceName,
     provider_name: practiceName,
@@ -143,6 +149,12 @@ export async function initiateInsuranceOutboundCall(input: InitiateInsuranceOutb
     last_name: patientIdentity.last_name || '',
     dob: patientIdentity.date_of_birth || '',
     policy_id: selectedPolicyId || '',
+    member_id: memberId,
+    group_number: groupNumber,
+    plan_name: planName,
+    insurance_member_id: memberId,
+    insurance_group_number: groupNumber,
+    insurance_plan_name: planName,
     verification_bundle: JSON.stringify(verificationBundle || {}),
     verification_bundle_patient_first_name: patientIdentity.first_name || '',
     verification_bundle_patient_last_name: patientIdentity.last_name || '',

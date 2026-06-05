@@ -1,5 +1,4 @@
 import * as db from './db'
-import { maskLast4 } from './masking'
 import { computeReadiness } from './readiness'
 import { writeMcpAuditLog, collectFieldPaths } from './audit'
 import type {
@@ -40,6 +39,28 @@ function getPatientNameParts(patient: {
   return {
     firstName: first || fromName?.first || '',
     lastName: last || fromName?.last || '',
+  }
+}
+
+/** Full insurance identifiers for verification agents (no masking). */
+function insuranceIdentifierFields(policy: {
+  memberId: string
+  groupNumber?: string | null
+  planName?: string | null
+  planType?: string | null
+}) {
+  const memberId = policy.memberId?.trim() || undefined
+  const groupNumber = policy.groupNumber?.trim() || undefined
+  const planName = policy.planName?.trim() || undefined
+  const planType = policy.planType?.trim() || undefined
+  return {
+    member_id: memberId,
+    group_number: groupNumber,
+    plan_name: planName,
+    plan_type: planType,
+    // Legacy keys — same full values for existing Retell tool schemas
+    member_id_masked: memberId,
+    group_number_masked: groupNumber,
   }
 }
 
@@ -94,8 +115,7 @@ export async function handleListInsurancePolicies(
     payer_name_raw: p.payerNameRaw,
     insurer_phone: p.insurerPhoneRaw ?? undefined,
     is_primary: p.isPrimary,
-    plan_type: p.planType ?? undefined,
-    member_id_masked: maskLast4(p.memberId),
+    ...insuranceIdentifierFields(p),
     completeness: {
       status: readiness[i].status,
       missing_fields: readiness[i].missing_fields,
@@ -124,20 +144,13 @@ export async function handleGetInsurancePolicyDetails(
       policyId: input.policy_id,
     }
   }
-  const memberIdDisplay = ctx.allowUnmasked ? policy.memberId : maskLast4(policy.memberId)
-  const groupNumberDisplay = ctx.allowUnmasked
-    ? (policy.groupNumber ?? undefined)
-    : (policy.groupNumber ? maskLast4(policy.groupNumber) : undefined)
   const output: Record<string, unknown> = {
     policy_id: policy.id,
     patient_id: policy.patientId,
     payer_name_raw: policy.payerNameRaw,
     insurer_phone: policy.insurerPhoneRaw ?? undefined,
-    plan_name: policy.planName ?? undefined,
-    plan_type: policy.planType ?? undefined,
     is_primary: policy.isPrimary,
-    member_id_masked: memberIdDisplay,
-    group_number_masked: groupNumberDisplay,
+    ...insuranceIdentifierFields(policy),
     subscriber: {
       subscriber_is_patient: policy.subscriberIsPatient,
       first_name: policy.subscriberFirstName ?? undefined,
@@ -214,10 +227,6 @@ export async function handleGetVerificationBundle(
     }
   }
 
-  const memberIdDisplay = ctx.allowUnmasked ? policy.memberId : maskLast4(policy.memberId)
-  const groupNumberDisplay = ctx.allowUnmasked
-    ? (policy.groupNumber ?? undefined)
-    : (policy.groupNumber ? maskLast4(policy.groupNumber) : undefined)
   const nameParts = getPatientNameParts(patient)
   const readiness = computeReadiness(policy, patient)
   const patientPhone = 'primaryPhone' in patient ? patient.primaryPhone : (patient as { phone?: string }).phone
@@ -229,13 +238,11 @@ export async function handleGetVerificationBundle(
       phone: patientPhone ?? undefined,
     },
     insurance: {
+      policy_id: policy.id,
       payer_name_raw: policy.payerNameRaw,
       insurer_phone: policy.insurerPhoneRaw ?? undefined,
-      member_id_masked: memberIdDisplay,
-      group_number_masked: groupNumberDisplay,
-      plan_name: policy.planName ?? undefined,
-      plan_type: policy.planType ?? undefined,
       is_primary: policy.isPrimary,
+      ...insuranceIdentifierFields(policy),
     },
     subscriber: {
       subscriber_is_patient: policy.subscriberIsPatient,
@@ -388,9 +395,7 @@ export async function handleGetInsuranceVerificationContext(
       payer_name_raw: p.payerNameRaw,
       insurer_phone: p.insurerPhoneRaw ?? undefined,
       is_primary: p.isPrimary,
-      plan_name: p.planName ?? undefined,
-      plan_type: p.planType ?? undefined,
-      member_id_masked: ctx.allowUnmasked ? p.memberId : maskLast4(p.memberId),
+      ...insuranceIdentifierFields(p),
       completeness: {
         status: readiness.status,
         missing_fields: readiness.missing_fields,
@@ -424,13 +429,8 @@ export async function handleGetInsuranceVerificationContext(
         policy_id: selectedPolicy.id,
         payer_name_raw: selectedPolicy.payerNameRaw,
         insurer_phone: selectedPolicy.insurerPhoneRaw ?? undefined,
-        member_id_masked: ctx.allowUnmasked ? selectedPolicy.memberId : maskLast4(selectedPolicy.memberId),
-        group_number_masked: ctx.allowUnmasked
-          ? (selectedPolicy.groupNumber ?? undefined)
-          : (selectedPolicy.groupNumber ? maskLast4(selectedPolicy.groupNumber) : undefined),
-        plan_name: selectedPolicy.planName ?? undefined,
-        plan_type: selectedPolicy.planType ?? undefined,
         is_primary: selectedPolicy.isPrimary,
+        ...insuranceIdentifierFields(selectedPolicy),
       },
       subscriber: {
         subscriber_is_patient: selectedPolicy.subscriberIsPatient,

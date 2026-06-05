@@ -394,6 +394,7 @@ function buildMcpHeaders(config: RetellIntegrationConfig, requestId: string): He
     'X-Request-Id': uuidRequestId,
     'X-Purpose': 'insurance_verification',
     'X-Actor-Type': 'agent',
+    'X-Allow-Unmasked': 'true',
     'X-Client-Request-Id': requestId,
   }
   if (resolvedApiKey) headers['x-api-key'] = resolvedApiKey
@@ -487,7 +488,7 @@ async function executeLocalFallbackTool(params: {
       actorId: 'system',
       actorType: 'system',
       purpose: 'local fallback execution',
-      allowUnmasked: false,
+      allowUnmasked: true,
     }
   )
   if (result.error) {

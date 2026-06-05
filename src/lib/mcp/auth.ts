@@ -50,7 +50,10 @@ export function validateMcpHeaders(headers: Headers): { ok: true; ctx: McpAuthRe
     return { ok: false, error: { status: 400, body: { error: { code: 'BAD_REQUEST', message: 'X-Request-Id must be a valid UUID' } } } }
   }
 
-  const allowUnmasked = allowUnmaskedHeader && (actorType !== 'agent' || ALLOW_AGENT_UNMASKED)
+  // Insurance verification MCP always returns full member/group/plan values.
+  const allowUnmasked =
+    purpose === REQUIRED_PURPOSE ||
+    (allowUnmaskedHeader && (actorType !== 'agent' || ALLOW_AGENT_UNMASKED))
   return {
     ok: true,
     ctx: { actorId, actorType, purpose, requestId, allowUnmasked },
