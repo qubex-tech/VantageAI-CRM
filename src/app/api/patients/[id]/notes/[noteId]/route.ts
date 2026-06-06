@@ -2,26 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
 import { createAuditLog } from '@/lib/audit'
+import { syncPatientNoteToEhr } from '@/lib/integrations/ehr/patientNoteSync'
+import { isPatientNoteType, PATIENT_NOTE_TYPES } from '@/lib/patient-note-types'
 
 export const dynamic = 'force-dynamic'
-
-const NOTE_TYPES = [
-  'general',
-  'medical',
-  'administrative',
-  'billing',
-  'appointment',
-  'medication',
-  'allergy',
-  'contact',
-  'insurance',
-  'telephone_encounter',
-  'online_visit',
-  'onsite_visit',
-  'other',
-] as const
-
-type NoteType = typeof NOTE_TYPES[number]
 
 /**
  * PATCH /api/patients/[id]/notes/[noteId]
@@ -62,9 +46,9 @@ export async function PATCH(
     // Build update data
     const updateData: any = {}
     if (type !== undefined) {
-      if (!NOTE_TYPES.includes(type as NoteType)) {
+      if (!isPatientNoteType(type)) {
         return NextResponse.json(
-          { error: `Invalid note type. Must be one of: ${NOTE_TYPES.join(', ')}` },
+          { error: `Invalid note type. Must be one of: ${PATIENT_NOTE_TYPES.join(', ')}` },
           { status: 400 }
         )
       }
@@ -108,7 +92,20 @@ export async function PATCH(
       },
     })
 
-    return NextResponse.json({ note })
+    let ehrSync: Awaited<ReturnType<typeof syncPatientNoteToEhr>> | undefined
+    try {
+      ehrSync = await syncPatientNoteToEhr({
+        practiceId: user.practiceId,
+        patientId,
+        noteType: note.type,
+        content: note.content,
+        actorUserId: user.id,
+      })
+    } catch (error) {
+      console.error('Failed to sync updated note to eCW:', error)
+    }
+
+    return NextResponse.json({ note, ehrSync })
   } catch (error) {
     console.error('Error updating patient note:', error)
     return NextResponse.json(

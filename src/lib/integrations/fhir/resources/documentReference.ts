@@ -33,6 +33,10 @@ export async function createDraftDocumentReference(params: {
   capabilityStatement: any
   skipCapabilityCheck?: boolean
   useTransaction?: boolean
+  /** Defaults to "Telephone encounter" for Retell drafts. */
+  categoryText?: string
+  title?: string
+  description?: string
 }) {
   if (
     !params.skipCapabilityCheck &&
@@ -68,16 +72,17 @@ export async function createDraftDocumentReference(params: {
     resourceType: 'DocumentReference',
     status,
     type: { text: 'Clinical note' },
-    category: [{ text: 'Telephone encounter' }],
+    category: [{ text: params.categoryText || 'Telephone encounter' }],
     subject: { reference: `Patient/${params.patientId}` },
     date: new Date().toISOString(),
     description:
+      params.description ||
       'AI-generated draft note created by Vantage AI; requires clinician review and signature.',
     content: [{ attachment }],
   }
 
   if (!params.preferPreliminary) {
-    resource.title = 'DRAFT - AI Generated Note'
+    resource.title = params.title || 'DRAFT - AI Generated Note'
   }
 
   if (params.authorReference) {

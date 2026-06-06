@@ -1,6 +1,13 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import {
+  PATIENT_NOTE_TYPES,
+  PATIENT_NOTE_TYPE_LABELS,
+  EHR_PATIENT_NOTE_SYNC_MODE_LABELS,
+  resolveEhrSyncModeForNoteType,
+  type EhrPatientNoteSyncMode,
+} from '@/lib/patient-note-ehr-sync'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -38,6 +45,7 @@ type EhrSettings = {
   ehrWritebackOnExistingPatientUpdate?: boolean
   ehrRetellWritebackEncounterAndNotesWhenNewPatient?: boolean
   ehrRetellWritebackEncounterAndNotesWhenExistingPatient?: boolean
+  ehrPatientNoteSyncByType?: Record<string, 'none' | 'telephone_encounter' | 'document_reference'>
 }
 
 type StatusResponse = {
@@ -223,6 +231,7 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
             data.settings.ehrRetellWritebackEncounterAndNotesWhenNewPatient ?? true,
           ehrRetellWritebackEncounterAndNotesWhenExistingPatient:
             data.settings.ehrRetellWritebackEncounterAndNotesWhenExistingPatient ?? true,
+          ehrPatientNoteSyncByType: data.settings.ehrPatientNoteSyncByType || {},
         })
       }
     }
@@ -766,6 +775,52 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
                   className="shrink-0"
                 />
               </div>
+            </div>
+          </div>
+          <div className="rounded border border-gray-200 bg-gray-50/80 p-4 space-y-3">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Patient profile notes → eCW</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                All notes are always saved in Vantage. Choose which Vantage note types also write to eCW
+                when staff adds them from the patient profile.
+              </p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {PATIENT_NOTE_TYPES.map((noteType) => {
+                const effective = resolveEhrSyncModeForNoteType(settings.ehrPatientNoteSyncByType, noteType)
+                const configured = settings.ehrPatientNoteSyncByType?.[noteType]
+                const value = configured ?? effective
+                return (
+                  <div
+                    key={noteType}
+                    className="flex items-center justify-between gap-2 rounded border border-gray-200 bg-white p-2"
+                  >
+                    <span className="text-sm text-gray-800">{PATIENT_NOTE_TYPE_LABELS[noteType]}</span>
+                    <select
+                      className="rounded border border-gray-200 px-2 py-1 text-xs max-w-[11rem]"
+                      value={value}
+                      onChange={(event) => {
+                        const mode = event.target.value as EhrPatientNoteSyncMode
+                        setSettings((prev) => ({
+                          ...prev,
+                          ehrPatientNoteSyncByType: {
+                            ...(prev.ehrPatientNoteSyncByType || {}),
+                            [noteType]: mode,
+                          },
+                        }))
+                      }}
+                    >
+                      {(Object.keys(EHR_PATIENT_NOTE_SYNC_MODE_LABELS) as EhrPatientNoteSyncMode[]).map(
+                        (mode) => (
+                          <option key={mode} value={mode}>
+                            {EHR_PATIENT_NOTE_SYNC_MODE_LABELS[mode]}
+                          </option>
+                        )
+                      )}
+                    </select>
+                  </div>
+                )
+              })}
             </div>
           </div>
           <div className="space-y-1">

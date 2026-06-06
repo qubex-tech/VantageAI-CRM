@@ -21,6 +21,7 @@ import type { RetellCall } from '@/lib/retell-api'
 import { Prisma } from '@prisma/client'
 import { randomUUID } from 'crypto'
 import { refreshBackendConnectionIfNeeded } from '@/lib/integrations/ehr/backendTokens'
+import { formatPatientNoteForEhr, isPatientNoteType } from '@/lib/patient-note-types'
 
 const WRITEBACK_PROVIDER_ID = 'ecw_write'
 const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.326070'
@@ -92,12 +93,6 @@ export function getEcwDefaultLocationOrganizationForIssuer(issuer: string): {
   }
   return null
 }
-
-const ENCOUNTER_NOTE_TYPES = [
-  'telephone_encounter',
-  'online_visit',
-  'onsite_visit',
-] as const
 
 type WritebackResult = {
   status: 'skipped' | 'success' | 'error'
@@ -639,15 +634,10 @@ export function buildTelephoneEncounterBundle(params: {
 }
 
 function formatEncounterNote(type: string, content: string) {
-  const label =
-    type === 'telephone_encounter'
-      ? 'Telephone Encounter Notes'
-      : type === 'online_visit'
-        ? 'Online Visit Notes'
-        : type === 'onsite_visit'
-          ? 'Onsite Visit Notes'
-          : 'Note'
-  return `${label}\n\n${content}`
+  if (isPatientNoteType(type)) {
+    return formatPatientNoteForEhr(type, content)
+  }
+  return `Note\n\n${content}`
 }
 
 function isPlaceholderDob(date: Date | null | undefined) {
@@ -1443,9 +1433,6 @@ export async function syncPatientNoteToEhrEncounter(params: {
   actorUserId: string
 }) {
   const { practiceId, patientId, noteType, content, actorUserId } = params
-  if (!ENCOUNTER_NOTE_TYPES.includes(noteType as any)) {
-    return { status: 'skipped', reason: 'note_type_not_supported' }
-  }
   const settings = await getEhrSettings(practiceId)
   if (!settings?.enabledProviders?.includes(WRITEBACK_PROVIDER_ID as any)) {
     return { status: 'skipped', reason: 'provider_not_enabled' }

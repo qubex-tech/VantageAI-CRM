@@ -2,27 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
 import { createAuditLog } from '@/lib/audit'
-import { syncPatientNoteToEhrEncounter } from '@/lib/integrations/ehr/writeback'
+import { syncPatientNoteToEhr } from '@/lib/integrations/ehr/patientNoteSync'
+import { isPatientNoteType, PATIENT_NOTE_TYPES } from '@/lib/patient-note-types'
 
 export const dynamic = 'force-dynamic'
-
-const NOTE_TYPES = [
-  'general',
-  'medical',
-  'administrative',
-  'billing',
-  'appointment',
-  'medication',
-  'allergy',
-  'contact',
-  'insurance',
-  'telephone_encounter',
-  'online_visit',
-  'onsite_visit',
-  'other',
-] as const
-
-type NoteType = typeof NOTE_TYPES[number]
 
 /**
  * GET /api/patients/[id]/notes
@@ -43,7 +26,6 @@ export async function GET(
       )
     }
 
-    // Verify patient belongs to practice
     const patient = await prisma.patient.findFirst({
       where: {
         id: patientId,
@@ -56,7 +38,6 @@ export async function GET(
       return NextResponse.json({ error: 'Patient not found' }, { status: 404 })
     }
 
-    // Get notes (excluding soft-deleted)
     const notes = await prisma.patientNote.findMany({
       where: {
         patientId,
@@ -89,7 +70,7 @@ export async function GET(
 
 /**
  * POST /api/patients/[id]/notes
- * Create a new note for a patient
+ * Create a new note for a patient (always saved in Vantage; eCW sync per practice config).
  */
 export async function POST(
   req: NextRequest,
@@ -109,7 +90,6 @@ export async function POST(
     const body = await req.json()
     const { type, content } = body
 
-    // Validate input
     if (!type || !content || typeof content !== 'string' || content.trim().length === 0) {
       return NextResponse.json(
         { error: 'Type and content are required' },
@@ -117,14 +97,13 @@ export async function POST(
       )
     }
 
-    if (!NOTE_TYPES.includes(type as NoteType)) {
+    if (!isPatientNoteType(type)) {
       return NextResponse.json(
-        { error: `Invalid note type. Must be one of: ${NOTE_TYPES.join(', ')}` },
+        { error: `Invalid note type. Must be one of: ${PATIENT_NOTE_TYPES.join(', ')}` },
         { status: 400 }
       )
     }
 
-    // Verify patient belongs to practice
     const patient = await prisma.patient.findFirst({
       where: {
         id: patientId,
@@ -137,13 +116,12 @@ export async function POST(
       return NextResponse.json({ error: 'Patient not found' }, { status: 404 })
     }
 
-    // Create note
     const note = await prisma.patientNote.create({
       data: {
         patientId,
         practiceId: user.practiceId,
         userId: user.id,
-        type: type as NoteType,
+        type,
         content: content.trim(),
       },
       include: {
@@ -157,7 +135,6 @@ export async function POST(
       },
     })
 
-    // Audit log
     await createAuditLog({
       practiceId: user.practiceId,
       userId: user.id,
@@ -167,21 +144,21 @@ export async function POST(
       changes: { after: { noteType: type, content: content.trim() } },
     })
 
-    if (['telephone_encounter', 'online_visit', 'onsite_visit'].includes(type)) {
-      try {
-        await syncPatientNoteToEhrEncounter({
-          practiceId: user.practiceId,
-          patientId,
-          noteType: type,
-          content: content.trim(),
-          actorUserId: user.id,
-        })
-      } catch (error) {
-        console.error('Failed to sync note to EHR encounter:', error)
-      }
+    let ehrSync: Awaited<ReturnType<typeof syncPatientNoteToEhr>> | undefined
+    try {
+      ehrSync = await syncPatientNoteToEhr({
+        practiceId: user.practiceId,
+        patientId,
+        noteType: type,
+        content: content.trim(),
+        actorUserId: user.id,
+      })
+    } catch (error) {
+      console.error('Failed to sync note to eCW:', error)
+      ehrSync = { status: 'error', mode: 'none', reason: 'sync_exception' }
     }
 
-    return NextResponse.json({ note }, { status: 201 })
+    return NextResponse.json({ note, ehrSync }, { status: 201 })
   } catch (error) {
     console.error('Error creating patient note:', error)
     return NextResponse.json(
@@ -190,4 +167,3 @@ export async function POST(
     )
   }
 }
-

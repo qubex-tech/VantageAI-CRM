@@ -20,22 +20,16 @@ import {
 } from '@/components/ui/select'
 import { FileText, Edit2, Trash2, X, CheckCircle2, AlertCircle } from 'lucide-react'
 import { format } from 'date-fns'
-
-const NOTE_TYPES = [
-  { value: 'general', label: 'General' },
-  { value: 'medical', label: 'Medical' },
-  { value: 'administrative', label: 'Administrative' },
-  { value: 'billing', label: 'Billing' },
-  { value: 'appointment', label: 'Appointment' },
-  { value: 'medication', label: 'Medication' },
-  { value: 'allergy', label: 'Allergy' },
-  { value: 'contact', label: 'Contact' },
-  { value: 'insurance', label: 'Insurance' },
-  { value: 'telephone_encounter', label: 'Telephone Encounter Notes' },
-  { value: 'online_visit', label: 'Online Visit Notes' },
-  { value: 'onsite_visit', label: 'Onsite Visit Notes' },
-  { value: 'other', label: 'Other' },
-] as const
+import {
+  PATIENT_NOTE_TYPES,
+  PATIENT_NOTE_TYPE_LABELS,
+  type PatientNoteType,
+} from '@/lib/patient-note-types'
+import {
+  resolveEhrSyncModeForNoteType,
+  EHR_PATIENT_NOTE_SYNC_MODE_LABELS,
+  type EhrPatientNoteSyncByType,
+} from '@/lib/patient-note-ehr-sync'
 
 interface PatientNote {
   id: string
@@ -71,13 +65,32 @@ export function PatientNotes({
   const [formContent, setFormContent] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [ehrSyncByType, setEhrSyncByType] = useState<EhrPatientNoteSyncByType | undefined>()
+  const [ehrSyncMessage, setEhrSyncMessage] = useState<string | null>(null)
+
+  const selectedSyncMode =
+    (PATIENT_NOTE_TYPES as readonly string[]).includes(formType)
+      ? resolveEhrSyncModeForNoteType(ehrSyncByType, formType as PatientNoteType)
+      : 'none'
 
   // Fetch notes when dialog opens
   useEffect(() => {
     if (open && patientId) {
       fetchNotes()
+      void fetchEhrNoteSyncConfig()
     }
   }, [open, patientId])
+
+  const fetchEhrNoteSyncConfig = async () => {
+    try {
+      const response = await fetch('/api/integrations/ehr/config')
+      if (!response.ok) return
+      const data = await response.json()
+      setEhrSyncByType(data.settings?.ehrPatientNoteSyncByType)
+    } catch {
+      /* optional hint only */
+    }
+  }
 
   // Reset form when dialog closes
   useEffect(() => {
@@ -87,6 +100,7 @@ export function PatientNotes({
         setFormType('general')
         setFormContent('')
         setError('')
+        setEhrSyncMessage(null)
         setDeleteConfirm(null)
       }, 300)
     }
@@ -113,6 +127,7 @@ export function PatientNotes({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setEhrSyncMessage(null)
     setSubmitting(true)
 
     try {
@@ -132,6 +147,21 @@ export function PatientNotes({
       if (!response.ok) {
         const errorData = await response.json()
         throw new Error(errorData.error || 'Failed to save note')
+      }
+
+      const saved = await response.json()
+      if (saved.ehrSync) {
+        if (saved.ehrSync.status === 'success') {
+          setEhrSyncMessage('Note saved and synced to eCW.')
+        } else if (saved.ehrSync.status === 'skipped' && saved.ehrSync.reason === 'sync_disabled_for_type') {
+          setEhrSyncMessage('Note saved in Vantage (this type is not configured to sync to eCW).')
+        } else if (saved.ehrSync.status === 'skipped') {
+          setEhrSyncMessage(`Note saved in Vantage. eCW sync skipped: ${saved.ehrSync.reason}.`)
+        } else if (saved.ehrSync.status === 'error') {
+          setEhrSyncMessage(`Note saved in Vantage. eCW sync failed: ${saved.ehrSync.reason}.`)
+        }
+      } else {
+        setEhrSyncMessage('Note saved in Vantage.')
       }
 
       // Reset form and refresh notes
@@ -212,6 +242,13 @@ export function PatientNotes({
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto min-h-0">
+          {ehrSyncMessage && (
+            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md flex items-center gap-2 text-green-800 text-sm">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              {ehrSyncMessage}
+            </div>
+          )}
+
           {/* Error message */}
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-center gap-2 text-red-800 text-sm">
@@ -239,7 +276,7 @@ export function PatientNotes({
                       <span
                         className={`px-2 py-1 text-xs font-medium rounded ${getTypeColor(note.type)}`}
                       >
-                        {NOTE_TYPES.find((t) => t.value === note.type)?.label || note.type}
+                        {PATIENT_NOTE_TYPE_LABELS[note.type as PatientNoteType] || note.type}
                       </span>
                       <span className="text-xs text-gray-500">
                         {format(new Date(note.createdAt), 'MMM d, yyyy h:mm a')}
@@ -317,13 +354,19 @@ export function PatientNotes({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {NOTE_TYPES.map((type) => (
-                      <SelectItem key={type.value} value={type.value}>
-                        {type.label}
+                    {PATIENT_NOTE_TYPES.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {PATIENT_NOTE_TYPE_LABELS[type]}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="mt-1 text-xs text-gray-500">
+                  {EHR_PATIENT_NOTE_SYNC_MODE_LABELS[selectedSyncMode]}
+                  {selectedSyncMode === 'none' && (
+                    <> — configure per-type eCW sync under Settings → EHR Integrations.</>
+                  )}
+                </p>
               </div>
               <div>
                 <Label htmlFor="note-content">Content</Label>

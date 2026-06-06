@@ -64,4 +64,27 @@ export type EhrSettings = {
    * (still subject to global encounter/notes toggles). Default true.
    */
   ehrRetellWritebackEncounterAndNotesWhenExistingPatient?: boolean
+  /**
+   * Per Vantage patient-note-type mapping to eCW write mode.
+   * Omitted types default to CRM-only except telephone_encounter / online_visit / onsite_visit
+   * (telephone encounter bundle). Set `general: "document_reference"` to push General notes to eCW.
+   */
+  ehrPatientNoteSyncByType?: Partial<
+    Record<
+      | 'general'
+      | 'medical'
+      | 'administrative'
+      | 'billing'
+      | 'appointment'
+      | 'medication'
+      | 'allergy'
+      | 'contact'
+      | 'insurance'
+      | 'telephone_encounter'
+      | 'online_visit'
+      | 'onsite_visit'
+      | 'other',
+      'none' | 'telephone_encounter' | 'document_reference'
+    >
+  >
 }
