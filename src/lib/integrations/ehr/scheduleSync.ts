@@ -10,6 +10,7 @@ import { createClientAssertion } from '@/lib/integrations/ehr/smartEngine'
 import { FhirClient } from '@/lib/integrations/fhir/fhirClient'
 import { refreshBackendConnectionIfNeeded } from '@/lib/integrations/ehr/backendTokens'
 import { getEcwDefaultLocationOrganizationForIssuer } from '@/lib/integrations/ehr/writeback'
+import { enrichPatientsAfterScheduleSync } from '@/lib/integrations/ehr/enrichScheduleSyncPatients'
 
 const WRITEBACK_PROVIDER_ID = 'ecw_write'
 const STALE_SYNC_WINDOW_MS = 12 * 60 * 60 * 1000
@@ -992,28 +993,11 @@ export async function syncEhrAppointmentsForPractice(practiceId: string, options
     }
   }
 
-  let enrichEventsQueued = 0
-  if (touchedPatientIds.size > 0) {
-    try {
-      const { inngest } = await import('@/inngest/client')
-      const events = Array.from(touchedPatientIds).map((patientId) => ({
-        name: 'ehr/patient.enrich' as const,
-        data: {
-          practiceId,
-          patientId,
-          source: 'schedule_sync' as const,
-        },
-      }))
-      await inngest.send(events)
-      enrichEventsQueued = events.length
-    } catch (error) {
-      console.error('[scheduleSync] Failed to queue patient enrich events', {
-        practiceId,
-        touchedPatientCount: touchedPatientIds.size,
-        error: error instanceof Error ? error.message : String(error),
-      })
-    }
-  }
+  const insuranceEnrich = await enrichPatientsAfterScheduleSync({
+    practiceId,
+    patientIds: touchedPatientIds,
+    preferInline: force,
+  })
 
   const syncMetadata = {
     businessDays: options.businessDays ?? configBusinessDays,
@@ -1027,7 +1011,7 @@ export async function syncEhrAppointmentsForPractice(practiceId: string, options
     skipped,
     dayErrors,
     touchedPatientCount: touchedPatientIds.size,
-    enrichEventsQueued,
+    insuranceEnrich,
   }
 
   await logEhrAudit({

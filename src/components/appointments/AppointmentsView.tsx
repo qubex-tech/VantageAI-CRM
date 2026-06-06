@@ -207,6 +207,18 @@ export function AppointmentsView({ initialAppointments, practitioners }: Appoint
           message =
             'EHR sync finished but no appointments were returned. Verify ECW schedule and practitioner configuration.'
         }
+        const insurance = result?.insuranceEnrich
+        if (insurance && insurance.eligiblePatientCount > 0) {
+          const parts: string[] = []
+          if (insurance.enriched > 0) parts.push(`${insurance.enriched} insurance profile(s) updated`)
+          if (insurance.partial > 0) parts.push(`${insurance.partial} partial`)
+          if (insurance.queued > 0) parts.push(`${insurance.queued} queued for background sync`)
+          if (insurance.skipped > 0) parts.push(`${insurance.skipped} skipped`)
+          if (insurance.failed > 0) parts.push(`${insurance.failed} failed`)
+          if (parts.length > 0) {
+            message += ` Insurance: ${parts.join(', ')}.`
+          }
+        }
         setSyncMessage(message)
       }
 
@@ -271,7 +283,7 @@ export function AppointmentsView({ initialAppointments, practitioners }: Appoint
               className="gap-2 w-full sm:w-auto"
             >
               <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
-              {isSyncing ? 'Syncing...' : 'Sync EHR'}
+              {isSyncing ? 'Syncing schedule & insurance…' : 'Sync EHR'}
             </Button>
             <Link href="/appointments/new" className="w-full sm:w-auto">
               <Button size="sm" className="gap-2 w-full sm:w-auto">

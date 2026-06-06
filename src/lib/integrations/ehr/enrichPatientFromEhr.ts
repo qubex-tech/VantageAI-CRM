@@ -29,9 +29,17 @@ export async function enrichPatientFromEhr(params: {
     patientId,
     actorUserId = 'system',
     source = 'manual',
-    skipIfFreshWithinHours = DEFAULT_FRESHNESS_HOURS,
     force = false,
   } = params
+
+  const skipIfFreshWithinHours =
+    params.skipIfFreshWithinHours !== undefined
+      ? params.skipIfFreshWithinHours
+      : source === 'schedule_sync'
+        ? null
+        : DEFAULT_FRESHNESS_HOURS
+
+  const effectiveForce = force || source === 'schedule_sync'
 
   const patient = await prisma.patient.findFirst({
     where: { id: patientId, practiceId, deletedAt: null },
@@ -46,7 +54,7 @@ export async function enrichPatientFromEhr(params: {
     return { status: 'skipped', reason: 'patient_not_linked_to_ehr' }
   }
 
-  if (!force && skipIfFreshWithinHours != null && skipIfFreshWithinHours > 0 && patient.lastInsuranceVerifiedAt) {
+  if (!effectiveForce && skipIfFreshWithinHours != null && skipIfFreshWithinHours > 0 && patient.lastInsuranceVerifiedAt) {
     const ageMs = Date.now() - patient.lastInsuranceVerifiedAt.getTime()
     if (ageMs < skipIfFreshWithinHours * 60 * 60 * 1000) {
       return { status: 'skipped', reason: 'recently_enriched' }

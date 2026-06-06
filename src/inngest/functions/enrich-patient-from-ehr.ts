@@ -24,12 +24,14 @@ export const enrichPatientFromEhrJob = inngest.createFunction(
       return { error: 'Missing practiceId or patientId' }
     }
 
+    const resolvedSource = source || 'schedule_sync'
     const result = await enrichPatientFromEhr({
       practiceId,
       patientId,
       actorUserId: 'system',
-      source: source || 'schedule_sync',
-      force: force === true,
+      source: resolvedSource,
+      force: force === true || resolvedSource === 'schedule_sync',
+      skipIfFreshWithinHours: resolvedSource === 'schedule_sync' ? null : undefined,
     })
 
     return { practiceId, patientId, result }
