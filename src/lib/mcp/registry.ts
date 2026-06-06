@@ -6,7 +6,8 @@ import { buildToolLogFromInvocation, logMcpToolCall } from './request-log'
 export const TOOL_DEFINITIONS = [
   {
     name: 'get_insurance_verification_context',
-    description: 'Single-call tool: resolve patient by id/policy/demographics, list policies, and return full verification bundle.',
+    description:
+      'Single-call tool: resolve patient and return verification fields for the voice agent: patient_first_name, patient_last_name, patient_dob (YYYY-MM-DD), member_id, group_number.',
     input_schema: {
       type: 'object',
       properties: {
@@ -67,7 +68,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'get_verification_bundle',
-    description: 'Get the complete minimal verification bundle for a patient and policy (or primary policy). Use for eligibility/verification workflows.',
+    description:
+      'Get the verification bundle with agent template fields: patient_first_name, patient_last_name, patient_dob (YYYY-MM-DD), member_id, group_number.',
     input_schema: {
       type: 'object',
       properties: {

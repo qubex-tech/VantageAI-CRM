@@ -95,6 +95,17 @@ export function summarizeInsurancePassedData(payload: unknown): InsurancePassedS
   if (!payload || typeof payload !== 'object') return undefined
   const record = payload as Record<string, unknown>
 
+  const topLevelMember = fieldPassed(record.member_id)
+  const topLevelGroup = fieldPassed(record.group_number)
+  if (topLevelMember.passed || topLevelGroup.passed || record.patient_first_name) {
+    return {
+      payer_name: undefined,
+      plan_name: typeof record.plan_name === 'string' ? record.plan_name : undefined,
+      member_id: topLevelMember,
+      group_number: topLevelGroup,
+    }
+  }
+
   const candidates: unknown[] = [
     (record.verification_bundle as Record<string, unknown> | undefined)?.insurance,
     record.insurance,

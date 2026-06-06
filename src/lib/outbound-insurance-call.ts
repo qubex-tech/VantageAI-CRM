@@ -4,6 +4,7 @@ import { invokeTool } from '@/lib/mcp/registry'
 import { normalizePhoneForDialing } from '@/lib/phone'
 import { callRetellMcpTool, getRetellIntegrationConfig } from '@/lib/retell-api'
 import { logRetellInsurancePassed } from '@/lib/mcp/request-log'
+import { buildVerificationAgentFields, formatPatientDob } from '@/lib/mcp/verification-fields'
 
 export interface InitiateInsuranceOutboundCallInput {
   practiceId: string
@@ -122,46 +123,69 @@ export async function initiateInsuranceOutboundCall(input: InitiateInsuranceOutb
       if (!patientIdentity.first_name) patientIdentity.first_name = fallbackFirst
       if (!patientIdentity.last_name) patientIdentity.last_name = fallbackLast
       if (!patientIdentity.date_of_birth) {
-        patientIdentity.date_of_birth = patient.dateOfBirth ? patient.dateOfBirth.toISOString().slice(0, 10) : ''
+        patientIdentity.date_of_birth = patient.dateOfBirth ? formatPatientDob(patient.dateOfBirth) : ''
+      }
+      if (!patientIdentity.patient_dob) {
+        patientIdentity.patient_dob = patientIdentity.date_of_birth
       }
     }
   }
   const verificationBundle = contextOutput?.verification_bundle || {}
   const bundleInsurance = (verificationBundle?.insurance || {}) as Record<string, unknown>
   const readiness = verificationBundle?.readiness || {}
-  const patientFullName = [patientIdentity.first_name, patientIdentity.last_name].filter(Boolean).join(' ').trim()
+  const agentFields = buildVerificationAgentFields({
+    firstName:
+      (contextOutput.patient_first_name as string | undefined) ||
+      patientIdentity.patient_first_name ||
+      patientIdentity.first_name,
+    lastName:
+      (contextOutput.patient_last_name as string | undefined) ||
+      patientIdentity.patient_last_name ||
+      patientIdentity.last_name,
+    dateOfBirth:
+      (contextOutput.patient_dob as string | undefined) ||
+      patientIdentity.patient_dob ||
+      patientIdentity.date_of_birth,
+    memberId:
+      (contextOutput.member_id as string | undefined) ||
+      String(bundleInsurance.member_id || bundleInsurance.member_id_masked || ''),
+    groupNumber:
+      (contextOutput.group_number as string | undefined) ||
+      String(bundleInsurance.group_number || bundleInsurance.group_number_masked || ''),
+  })
+  const patientFullName = [agentFields.patient_first_name, agentFields.patient_last_name]
+    .filter(Boolean)
+    .join(' ')
+    .trim()
   const resolvedPatientId = patientIdentity.patient_id || patientId
-  const memberId =
-    String(bundleInsurance.member_id || bundleInsurance.member_id_masked || '').trim()
-  const groupNumber =
-    String(bundleInsurance.group_number || bundleInsurance.group_number_masked || '').trim()
   const planName = String(bundleInsurance.plan_name || '').trim()
   const dynamicVariables: Record<string, string> = {
+    ...agentFields,
     practice_name: practiceName,
     provider_name: practiceName,
     patient_id: resolvedPatientId || '',
     patient_name: patientFullName || '',
     patient_full_name: patientFullName || '',
-    patient_dob: patientIdentity.date_of_birth || '',
-    patient_first_name: patientIdentity.first_name || '',
-    patient_last_name: patientIdentity.last_name || '',
-    first_name: patientIdentity.first_name || '',
-    last_name: patientIdentity.last_name || '',
-    dob: patientIdentity.date_of_birth || '',
+    patient_dob: agentFields.patient_dob,
+    patient_first_name: agentFields.patient_first_name,
+    patient_last_name: agentFields.patient_last_name,
+    first_name: agentFields.patient_first_name,
+    last_name: agentFields.patient_last_name,
+    dob: agentFields.patient_dob,
     policy_id: selectedPolicyId || '',
-    member_id: memberId,
-    group_number: groupNumber,
+    member_id: agentFields.member_id,
+    group_number: agentFields.group_number,
     plan_name: planName,
-    insurance_member_id: memberId,
-    insurance_group_number: groupNumber,
+    insurance_member_id: agentFields.member_id,
+    insurance_group_number: agentFields.group_number,
     insurance_plan_name: planName,
     verification_bundle: JSON.stringify(verificationBundle || {}),
-    verification_bundle_patient_first_name: patientIdentity.first_name || '',
-    verification_bundle_patient_last_name: patientIdentity.last_name || '',
-    verification_bundle_patient_dob: patientIdentity.date_of_birth || '',
-    'verification_bundle.patient.first_name': patientIdentity.first_name || '',
-    'verification_bundle.patient.last_name': patientIdentity.last_name || '',
-    'verification_bundle.patient.dob': patientIdentity.date_of_birth || '',
+    verification_bundle_patient_first_name: agentFields.patient_first_name,
+    verification_bundle_patient_last_name: agentFields.patient_last_name,
+    verification_bundle_patient_dob: agentFields.patient_dob,
+    'verification_bundle.patient.first_name': agentFields.patient_first_name,
+    'verification_bundle.patient.last_name': agentFields.patient_last_name,
+    'verification_bundle.patient.dob': agentFields.patient_dob,
   }
 
   const toolArgs: Record<string, unknown> = {
@@ -178,7 +202,12 @@ export async function initiateInsuranceOutboundCall(input: InitiateInsuranceOutb
       patient: {
         id: resolvedPatientId || undefined,
         full_name: patientFullName,
-        date_of_birth: patientIdentity.date_of_birth,
+        first_name: agentFields.patient_first_name || undefined,
+        last_name: agentFields.patient_last_name || undefined,
+        date_of_birth: agentFields.patient_dob || undefined,
+        patient_first_name: agentFields.patient_first_name || undefined,
+        patient_last_name: agentFields.patient_last_name || undefined,
+        patient_dob: agentFields.patient_dob || undefined,
       },
       policy: verificationBundle?.insurance || null,
       subscriber: verificationBundle?.subscriber || null,

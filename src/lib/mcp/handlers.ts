@@ -1,6 +1,7 @@
 import * as db from './db'
 import { computeReadiness } from './readiness'
 import { writeMcpAuditLog, collectFieldPaths } from './audit'
+import { buildVerificationAgentFields, formatPatientDob } from './verification-fields'
 import type {
   GetPatientIdentityInput,
   ListInsurancePoliciesInput,
@@ -77,7 +78,12 @@ export async function handleGetPatientIdentity(
     patient_id: patient.id,
     first_name: nameParts.firstName || undefined,
     last_name: nameParts.lastName || undefined,
-    date_of_birth: patient.dateOfBirth?.toISOString().slice(0, 10),
+    date_of_birth: formatPatientDob(patient.dateOfBirth) || undefined,
+    ...buildVerificationAgentFields({
+      firstName: nameParts.firstName,
+      lastName: nameParts.lastName,
+      dateOfBirth: patient.dateOfBirth,
+    }),
     phone: patient.primaryPhone || patient.phone || undefined,
     email: patient.email || undefined,
   }
@@ -230,11 +236,22 @@ export async function handleGetVerificationBundle(
   const nameParts = getPatientNameParts(patient)
   const readiness = computeReadiness(policy, patient)
   const patientPhone = 'primaryPhone' in patient ? patient.primaryPhone : (patient as { phone?: string }).phone
+  const agentFields = buildVerificationAgentFields({
+    firstName: nameParts.firstName,
+    lastName: nameParts.lastName,
+    dateOfBirth: patient.dateOfBirth,
+    memberId: policy.memberId,
+    groupNumber: policy.groupNumber,
+  })
   const output: Record<string, unknown> = {
+    ...agentFields,
     patient: {
       first_name: nameParts.firstName || undefined,
       last_name: nameParts.lastName || undefined,
-      dob: patient.dateOfBirth?.toISOString().slice(0, 10),
+      dob: agentFields.patient_dob || undefined,
+      patient_first_name: agentFields.patient_first_name || undefined,
+      patient_last_name: agentFields.patient_last_name || undefined,
+      patient_dob: agentFields.patient_dob || undefined,
       phone: patientPhone ?? undefined,
     },
     insurance: {
@@ -370,11 +387,15 @@ export async function handleGetInsuranceVerificationContext(
 
   const nameParts = getPatientNameParts(patient)
   const patientPhone = patient.primaryPhone || patient.phone || undefined
+  const patientDob = formatPatientDob(patient.dateOfBirth)
   const identity: Record<string, unknown> = {
     patient_id: patient.id,
     first_name: nameParts.firstName || undefined,
     last_name: nameParts.lastName || undefined,
-    date_of_birth: patient.dateOfBirth?.toISOString().slice(0, 10),
+    date_of_birth: patientDob || undefined,
+    patient_first_name: nameParts.firstName || undefined,
+    patient_last_name: nameParts.lastName || undefined,
+    patient_dob: patientDob || undefined,
     phone: patientPhone,
     email: patient.email || undefined,
   }
@@ -405,13 +426,29 @@ export async function handleGetInsuranceVerificationContext(
   })
 
   let verificationBundle: Record<string, unknown> | null = null
+  let agentFields = buildVerificationAgentFields({
+    firstName: nameParts.firstName,
+    lastName: nameParts.lastName,
+    dateOfBirth: patient.dateOfBirth,
+  })
   if (selectedPolicy) {
     const readiness = computeReadiness(selectedPolicy, patient)
+    agentFields = buildVerificationAgentFields({
+      firstName: nameParts.firstName,
+      lastName: nameParts.lastName,
+      dateOfBirth: patient.dateOfBirth,
+      memberId: selectedPolicy.memberId,
+      groupNumber: selectedPolicy.groupNumber,
+    })
     verificationBundle = {
+      ...agentFields,
       patient: {
         first_name: nameParts.firstName || undefined,
         last_name: nameParts.lastName || undefined,
-        dob: patient.dateOfBirth?.toISOString().slice(0, 10),
+        dob: agentFields.patient_dob || undefined,
+        patient_first_name: agentFields.patient_first_name || undefined,
+        patient_last_name: agentFields.patient_last_name || undefined,
+        patient_dob: agentFields.patient_dob || undefined,
         phone: patientPhone,
         ...(input.include_address
           ? {
@@ -461,6 +498,7 @@ export async function handleGetInsuranceVerificationContext(
   }
 
   const output: Record<string, unknown> = {
+    ...agentFields,
     resolution: {
       matched_by: matchedBy,
       patient_id: patient.id,
