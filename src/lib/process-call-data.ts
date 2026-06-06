@@ -17,6 +17,7 @@ import {
 } from './curogram'
 import { looksLikePhoneNumber } from './retell-patient-identity'
 import { maybeNotifyUnsuccessfulTransfer } from './outbound-customer-notifications'
+import { persistInsuranceVerificationNote } from './insurance-verification-note'
 
 function metadataObjectFromRow(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -65,6 +66,7 @@ export interface ExtractedCallData {
 
 type EscalationConversation = {
   id: string
+  patientId?: string | null
   metadata: Prisma.JsonValue | null
   callerPhone: string
   retellCallId: string | null
@@ -1245,5 +1247,25 @@ export async function processRetellCallData(
     })
   }
 
-  return { patientId, extractedData }
+  let resolvedPatientId = patientId || conversationForEscalation?.patientId || null
+  if (extractedData.insurance_verification) {
+    const noteResult = await persistInsuranceVerificationNote({
+      practiceId,
+      call,
+      extractedData,
+      knownPatientId: resolvedPatientId,
+    })
+    console.log('[processRetellCallData] Insurance verification note result', {
+      callId: call.call_id,
+      status: noteResult.status,
+      reason: 'reason' in noteResult ? noteResult.reason : undefined,
+      noteId: noteResult.status === 'created' ? noteResult.noteId : undefined,
+      patientId: noteResult.patientId || resolvedPatientId,
+    })
+    if (noteResult.status === 'created') {
+      resolvedPatientId = noteResult.patientId
+    }
+  }
+
+  return { patientId: resolvedPatientId, extractedData }
 }
