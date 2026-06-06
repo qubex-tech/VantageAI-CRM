@@ -828,6 +828,7 @@ async function upsertAppointmentFromEncounter(params: {
   encounter: FhirEncounter
   practitionerRef: string
   patientCache: Map<string, string>
+  touchedPatientIds?: Set<string>
 }): Promise<'created' | 'updated' | 'skipped'> {
   const { practiceId, client, encounter, practitionerRef, patientCache } = params
   if (!encounter.id) return 'skipped'
@@ -850,6 +851,7 @@ async function upsertAppointmentFromEncounter(params: {
     patientId: patientEhrId,
     cache: patientCache,
   })
+  params.touchedPatientIds?.add(patientId)
   const providerRef = encounter.participant?.[0]?.individual?.reference || practitionerRef
 
   const existing = await prisma.appointment.findUnique({
@@ -931,6 +933,7 @@ export async function syncEhrAppointmentsForPractice(practiceId: string, options
 
   const encounteredIds = new Set<string>()
   const patientCache = new Map<string, string>()
+  const touchedPatientIds = new Set<string>()
 
   let synced = 0
   let created = 0
@@ -976,6 +979,7 @@ export async function syncEhrAppointmentsForPractice(practiceId: string, options
           encounter,
           practitionerRef,
           patientCache,
+          touchedPatientIds,
         })
         if (outcome === 'skipped') {
           skipped += 1
@@ -985,6 +989,29 @@ export async function syncEhrAppointmentsForPractice(practiceId: string, options
         if (outcome === 'updated') updated += 1
         else created += 1
       }
+    }
+  }
+
+  let enrichEventsQueued = 0
+  if (touchedPatientIds.size > 0) {
+    try {
+      const { inngest } = await import('@/inngest/client')
+      const events = Array.from(touchedPatientIds).map((patientId) => ({
+        name: 'ehr/patient.enrich' as const,
+        data: {
+          practiceId,
+          patientId,
+          source: 'schedule_sync' as const,
+        },
+      }))
+      await inngest.send(events)
+      enrichEventsQueued = events.length
+    } catch (error) {
+      console.error('[scheduleSync] Failed to queue patient enrich events', {
+        practiceId,
+        touchedPatientCount: touchedPatientIds.size,
+        error: error instanceof Error ? error.message : String(error),
+      })
     }
   }
 
@@ -999,6 +1026,8 @@ export async function syncEhrAppointmentsForPractice(practiceId: string, options
     updated,
     skipped,
     dayErrors,
+    touchedPatientCount: touchedPatientIds.size,
+    enrichEventsQueued,
   }
 
   await logEhrAudit({

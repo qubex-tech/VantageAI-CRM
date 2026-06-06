@@ -1016,6 +1016,7 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
               <InsuranceTab
                 patientId={patient.id}
                 practiceId={patient.practiceId ?? ''}
+                externalEhrId={patient.externalEhrId}
                 patient={{
                   id: patient.id,
                   firstName: patient.firstName,

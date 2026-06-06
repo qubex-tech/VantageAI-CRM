@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { computeInsuranceCompleteness, maskMemberId } from '@/lib/insurance-completeness'
 import { InsurancePolicyFormModal } from './InsurancePolicyFormModal'
-import { Shield, Plus, Pencil, Trash2, User, UserCircle } from 'lucide-react'
+import { Shield, Plus, Pencil, Trash2, User, UserCircle, RefreshCw } from 'lucide-react'
 
 type InsurancePolicy = {
   id: string
@@ -46,6 +46,7 @@ interface InsuranceTabProps {
   practiceId: string
   patient: Patient
   policies: InsurancePolicy[]
+  externalEhrId?: string | null
   onRefresh: () => void
 }
 
@@ -54,10 +55,41 @@ export function InsuranceTab({
   practiceId,
   patient,
   policies,
+  externalEhrId,
   onRefresh,
 }: InsuranceTabProps) {
   const [modalOpen, setModalOpen] = useState(false)
   const [editingPolicy, setEditingPolicy] = useState<InsurancePolicy | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [syncError, setSyncError] = useState<string | null>(null)
+  const autoSyncAttempted = useRef(false)
+
+  const syncFromEhr = useCallback(async () => {
+    if (!externalEhrId?.trim()) {
+      setSyncError('Patient is not linked to eCW.')
+      return
+    }
+    setSyncing(true)
+    setSyncError(null)
+    try {
+      const res = await fetch(`/api/patients/${patientId}/insurance/sync-from-ehr`, { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data?.message || data?.error || `Sync failed (${res.status})`)
+      }
+      onRefresh()
+    } catch (err) {
+      setSyncError(err instanceof Error ? err.message : 'Failed to sync from eCW')
+    } finally {
+      setSyncing(false)
+    }
+  }, [externalEhrId, patientId, onRefresh])
+
+  useEffect(() => {
+    if (!externalEhrId?.trim() || autoSyncAttempted.current) return
+    autoSyncAttempted.current = true
+    void syncFromEhr()
+  }, [externalEhrId, syncFromEhr])
 
   const sortedPolicies = [...policies].sort((a, b) => (a.isPrimary === b.isPrimary ? 0 : a.isPrimary ? -1 : 1))
 
@@ -91,13 +123,33 @@ export function InsuranceTab({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold text-gray-900">Insurance</h2>
-        <Button onClick={handleAdd} size="sm" className="gap-2">
-          <Plus className="h-4 w-4" />
-          Add Insurance
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {externalEhrId?.trim() && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => void syncFromEhr()}
+              disabled={syncing}
+            >
+              <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? 'Syncing from eCW…' : 'Sync from eCW'}
+            </Button>
+          )}
+          <Button onClick={handleAdd} size="sm" className="gap-2">
+            <Plus className="h-4 w-4" />
+            Add Insurance
+          </Button>
+        </div>
       </div>
+
+      {syncError && (
+        <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          {syncError}
+        </p>
+      )}
 
       {sortedPolicies.length === 0 ? (
         <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-8 text-center">
@@ -143,6 +195,7 @@ export function InsuranceTab({
                       {policy.groupNumber && (
                         <span>Group #: {policy.groupNumber}</span>
                       )}
+                      {policy.planName && <span>Plan: {policy.planName}</span>}
                       <span className="inline-flex items-center gap-1">
                         Subscriber: {policy.subscriberIsPatient ? (
                           <>

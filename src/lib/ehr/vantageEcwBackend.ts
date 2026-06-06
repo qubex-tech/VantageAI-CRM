@@ -404,7 +404,8 @@ async function fetchAccessToken(practiceId?: string): Promise<string> {
 
   const tokenEndpoint = await discoverTokenEndpoint(fhirBase)
   const scope =
-    getScopeOverride() || 'system/DocumentReference.read system/Patient.read'
+    getScopeOverride() ||
+    'system/Patient.read system/DocumentReference.read system/Coverage.read system/Organization.read'
 
   const body = new URLSearchParams({
     grant_type: 'client_credentials',
@@ -518,4 +519,211 @@ export async function fetchPatientDocumentReferences(
   }
 
   return { raw: merged, patientParam }
+}
+
+export type EcwPayorOrganization = {
+  id: string
+  name?: string
+  phone?: string
+  addressText?: string
+  raw: Record<string, unknown>
+}
+
+export type EcwPatientCoverage = {
+  coverageId: string
+  status?: string
+  memberId: string
+  subscriberId?: string
+  eligibilityStatus?: string
+  coverageType?: string
+  groupNumber?: string
+  planCode?: string
+  planName?: string
+  isPrimary: boolean
+  subscriberIsPatient: boolean
+  relationshipToPatient?: string
+  payorOrganizationId?: string
+  payorName?: string
+  payorPhone?: string
+  payorAddress?: string
+  rawCoverage: Record<string, unknown>
+  rawPayor?: Record<string, unknown>
+}
+
+function coverageClassValue(
+  resource: Record<string, unknown>,
+  classCode: string
+): { value?: string; name?: string } | undefined {
+  const classes = Array.isArray(resource.class) ? resource.class : []
+  for (const row of classes) {
+    const coding = (row as { type?: { coding?: Array<{ code?: string }> } }).type?.coding || []
+    if (coding.some((c) => c.code === classCode)) {
+      const r = row as { value?: string; name?: string }
+      return { value: r.value, name: r.name }
+    }
+  }
+  return undefined
+}
+
+function parseEcwCoverageResource(resource: Record<string, unknown>): Omit<
+  EcwPatientCoverage,
+  'payorName' | 'payorPhone' | 'payorAddress' | 'rawPayor'
+> | null {
+  const id = typeof resource.id === 'string' ? resource.id : null
+  if (!id) return null
+
+  const extensions = Array.isArray(resource.extension) ? resource.extension : []
+  const eligibility = extensions.find((e) =>
+    typeof (e as { url?: string }).url === 'string'
+      ? (e as { url: string }).url.includes('coverage-eligibilityStatus')
+      : false
+  ) as { valueString?: string } | undefined
+
+  const identifiers = Array.isArray(resource.identifier) ? resource.identifier : []
+  const memberFromIdentifier = identifiers
+    .map((i) => (i as { value?: string }).value?.trim())
+    .find(Boolean)
+  const subscriberId =
+    typeof resource.subscriberId === 'string' ? resource.subscriberId.trim() : undefined
+  const memberId = subscriberId || memberFromIdentifier || ''
+  if (!memberId) return null
+
+  const relationshipCoding = (
+    resource.relationship as { coding?: Array<{ code?: string; display?: string }>; text?: string } | undefined
+  )?.coding?.[0]
+  const relationshipText =
+    (resource.relationship as { text?: string } | undefined)?.text?.trim() ||
+    relationshipCoding?.display
+  const subscriberIsPatient = relationshipCoding?.code === 'self' || /self/i.test(relationshipText || '')
+
+  const payorRef = (Array.isArray(resource.payor) ? resource.payor[0] : null) as { reference?: string } | null
+  const payorOrganizationId = payorRef?.reference?.replace(/^Organization\//i, '').split('|')[0]
+
+  const group = coverageClassValue(resource, 'group')
+  const plan = coverageClassValue(resource, 'plan')
+  const order = typeof resource.order === 'number' ? resource.order : undefined
+
+  return {
+    coverageId: id,
+    status: typeof resource.status === 'string' ? resource.status : undefined,
+    memberId,
+    subscriberId,
+    eligibilityStatus: eligibility?.valueString,
+    coverageType: (resource.type as { text?: string } | undefined)?.text?.trim(),
+    groupNumber: group?.value,
+    planCode: plan?.value,
+    planName: plan?.name || plan?.value,
+    isPrimary: order === 1,
+    subscriberIsPatient,
+    relationshipToPatient: subscriberIsPatient ? undefined : relationshipText,
+    payorOrganizationId,
+    rawCoverage: resource,
+  }
+}
+
+function parseEcwOrganizationResource(resource: Record<string, unknown>): EcwPayorOrganization {
+  const id = typeof resource.id === 'string' ? resource.id : ''
+  const telecom = Array.isArray(resource.telecom) ? resource.telecom : []
+  const phone = telecom.find((t) => (t as { system?: string }).system === 'phone') as { value?: string } | undefined
+  const address = Array.isArray(resource.address) ? resource.address[0] : null
+  const addressText =
+    (address as { text?: string } | null)?.text ||
+    [
+      ...(((address as { line?: string[] } | null)?.line) || []),
+      (address as { city?: string } | null)?.city,
+      (address as { state?: string } | null)?.state,
+      (address as { postalCode?: string } | null)?.postalCode,
+    ]
+      .filter(Boolean)
+      .join(', ')
+
+  return {
+    id,
+    name: (resource.name as string | undefined)?.trim(),
+    phone: phone?.value?.trim(),
+    addressText: addressText || undefined,
+    raw: resource,
+  }
+}
+
+async function ecwFhirGetJson(
+  practiceId: string | undefined,
+  path: string
+): Promise<Record<string, unknown>> {
+  const { fhirBase } = await resolveDocumentationFhirClient(practiceId)
+  if (!fhirBase) throw new Error('FHIR base URL is not set (env or practice EhrConnection)')
+  const token = await fetchAccessToken(practiceId)
+  const url = `${trimTrailingSlash(fhirBase)}/${path.replace(/^\//, '')}`
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/fhir+json' },
+    cache: 'no-store',
+  })
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '')
+    throw new Error(`FHIR ${path} failed (${res.status}): ${errText.slice(0, 500)}`)
+  }
+  return (await res.json()) as Record<string, unknown>
+}
+
+export async function fetchEcwOrganizationById(
+  organizationId: string,
+  practiceId?: string
+): Promise<EcwPayorOrganization> {
+  const id = organizationId.trim().replace(/^Organization\//i, '').split('/')[0]
+  const resource = await ecwFhirGetJson(practiceId, `Organization/${encodeURIComponent(id)}`)
+  return parseEcwOrganizationResource(resource)
+}
+
+/** Coverage search + payor Organization for a linked eCW patient. */
+export async function fetchEcwPatientCoverages(
+  externalPatientId: string,
+  practiceId?: string
+): Promise<{ coverages: EcwPatientCoverage[]; patientParam: string }> {
+  const patientParam = patientQueryParam(externalPatientId)
+  const bundle = await ecwFhirGetJson(
+    practiceId,
+    `Coverage?${new URLSearchParams({ patient: patientParam }).toString()}`
+  )
+  const entries = Array.isArray(bundle.entry) ? bundle.entry : []
+  const parsed: EcwPatientCoverage[] = []
+
+  for (const entry of entries) {
+    const resource = (entry as { resource?: Record<string, unknown> }).resource
+    if (!resource || resource.resourceType !== 'Coverage') continue
+    const base = parseEcwCoverageResource(resource)
+    if (!base) continue
+
+    let payorName: string | undefined
+    let payorPhone: string | undefined
+    let payorAddress: string | undefined
+    let rawPayor: Record<string, unknown> | undefined
+
+    if (base.payorOrganizationId) {
+      try {
+        const org = await fetchEcwOrganizationById(base.payorOrganizationId, practiceId)
+        payorName = org.name
+        payorPhone = org.phone
+        payorAddress = org.addressText
+        rawPayor = org.raw
+      } catch {
+        /* payor org optional if Organization.read unavailable */
+      }
+    }
+
+    parsed.push({
+      ...base,
+      payorName,
+      payorPhone,
+      payorAddress,
+      rawPayor,
+    })
+  }
+
+  if (parsed.length === 1) {
+    parsed[0].isPrimary = true
+  } else if (parsed.length > 1 && !parsed.some((c) => c.isPrimary)) {
+    parsed[0].isPrimary = true
+  }
+
+  return { coverages: parsed, patientParam }
 }

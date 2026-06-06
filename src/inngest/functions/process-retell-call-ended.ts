@@ -2,6 +2,7 @@ import { inngest } from '../client'
 import { getRetellClient } from '@/lib/retell-api'
 import { processRetellCallData } from '@/lib/process-call-data'
 import { writeBackRetellCallToEhr } from '@/lib/integrations/ehr/writeback'
+import { enrichPatientFromEhr } from '@/lib/integrations/ehr/enrichPatientFromEhr'
 import { hasRetellPostCallCustomAnalysis } from '@/lib/outbound-customer-notifications'
 import type { RetellCall } from '@/lib/retell-api'
 
@@ -72,6 +73,17 @@ export const processRetellCallEnded = inngest.createFunction(
         patientId,
         call: fullCall,
         extractedData,
+      })
+    })
+
+    await step.run('enrich-from-ehr', async () => {
+      if (!patientId) return { skipped: true, reason: 'no_patient_id' }
+      return enrichPatientFromEhr({
+        practiceId,
+        patientId,
+        actorUserId: 'system',
+        source: 'call',
+        skipIfFreshWithinHours: null,
       })
     })
 

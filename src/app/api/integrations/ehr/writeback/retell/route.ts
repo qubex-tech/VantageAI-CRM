@@ -5,6 +5,7 @@ import { prisma } from '@/lib/db'
 import { getRetellClient } from '@/lib/retell-api'
 import { processRetellCallData } from '@/lib/process-call-data'
 import { writeBackRetellCallToEhr } from '@/lib/integrations/ehr/writeback'
+import { enrichPatientFromEhr } from '@/lib/integrations/ehr/enrichPatientFromEhr'
 
 const bodySchema = z.object({
   callId: z.string().min(1),
@@ -44,6 +45,17 @@ export async function POST(req: NextRequest) {
       extractedData,
     })
 
+    let enrichResult: Awaited<ReturnType<typeof enrichPatientFromEhr>> | undefined
+    if (patientId) {
+      enrichResult = await enrichPatientFromEhr({
+        practiceId,
+        patientId,
+        actorUserId: 'system',
+        source: 'call',
+        skipIfFreshWithinHours: null,
+      })
+    }
+
     let writebackMeta: Record<string, unknown> | undefined
     if (isApiKeyAuth) {
       const conversation = await prisma.voiceConversation.findFirst({
@@ -68,6 +80,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       status: result.status,
       reason: result.reason,
+      enrichStatus: enrichResult?.status,
       ...(writebackMeta ? { writebackMeta } : {}),
     })
   } catch (error) {

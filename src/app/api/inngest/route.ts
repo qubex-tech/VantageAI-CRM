@@ -7,6 +7,7 @@ import {
   syncEhrAppointmentsDaily,
   handleOpenSlotCreated,
   checkOpenSlotStatus,
+  enrichPatientFromEhrJob,
 } from '@/inngest/functions'
 
 // Export runtime configuration for Edge/Serverless
@@ -25,6 +26,7 @@ const handler = serve({
     syncEhrAppointmentsDaily,
     handleOpenSlotCreated,
     checkOpenSlotStatus,
+    enrichPatientFromEhrJob,
   ],
 })
 

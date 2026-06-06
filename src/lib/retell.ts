@@ -10,6 +10,7 @@ import { redactPHI } from './phi'
 import { createAuditLog } from './audit'
 import { processRetellCallData } from './process-call-data'
 import { writeBackRetellCallToEhr } from './integrations/ehr/writeback'
+import { enrichPatientFromEhr } from './integrations/ehr/enrichPatientFromEhr'
 
 /**
  * RetellAI webhook payload - matches https://docs.retellai.com/features/webhook-overview
@@ -227,6 +228,15 @@ export async function processRetellWebhook(
             call: fullCall,
             extractedData,
           })
+          if (patientId) {
+            await enrichPatientFromEhr({
+              practiceId,
+              patientId,
+              actorUserId: 'system',
+              source: 'call',
+              skipIfFreshWithinHours: null,
+            })
+          }
           if (conversation) {
             const refreshed = await prisma.voiceConversation.findUnique({
               where: { id: conversation.id },
