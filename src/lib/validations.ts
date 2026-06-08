@@ -187,6 +187,7 @@ export const telnyxTestSchema = z.object({
 
 export const smsFromNumberSchema = z.object({
   fromNumber: z.string().min(1, 'From number is required'),
+  fromNumberSource: z.enum(['telnyx_inventory', 'custom']).optional().default('telnyx_inventory'),
   phoneNumberId: z.string().optional().or(z.literal('')).transform(val => val === '' ? undefined : val),
   messagingProfileId: z.string().optional().or(z.literal('')).transform(val => val === '' ? undefined : val),
 })

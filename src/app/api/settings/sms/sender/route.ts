@@ -22,6 +22,21 @@ function resolvePracticeId(
   return user.practiceId
 }
 
+function formatE164(phone: string): string {
+  const trimmed = phone.trim()
+  if (trimmed.startsWith('+')) {
+    return trimmed
+  }
+  const digits = trimmed.replace(/[^\d]/g, '')
+  if (digits.length === 10) {
+    return `+1${digits}`
+  }
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return `+${digits}`
+  }
+  return trimmed
+}
+
 function formatZodError(error: unknown) {
   if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
     const zodError = error as unknown as { issues: Array<{ path: (string | number)[]; message: string }> }
@@ -33,6 +48,16 @@ function formatZodError(error: unknown) {
       .join(', ')
   }
   return null
+}
+
+async function clearTwilioPreferForSmsOutbound(practiceId: string) {
+  const twilio = await prisma.twilioIntegration.findUnique({ where: { practiceId } })
+  if (twilio?.preferForSmsOutbound) {
+    await prisma.twilioIntegration.update({
+      where: { practiceId },
+      data: { preferForSmsOutbound: false },
+    })
+  }
 }
 
 /**
@@ -48,6 +73,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({
         activeProvider: null,
         fromNumber: null,
+        fromNumberSource: null,
         telnyxConfigured: false,
         twilioConfigured: false,
       })
@@ -72,6 +98,7 @@ export async function GET(req: NextRequest) {
           isActive: true,
           accountSid: true,
           authToken: true,
+          preferForSmsOutbound: true,
         },
       }),
       getActiveSmsProvider(practiceId),
@@ -87,8 +114,19 @@ export async function GET(req: NextRequest) {
         (twilio.messagingServiceSid || twilio.fromNumber)
     )
 
+    const fromNumberSource =
+      twilio?.preferForSmsOutbound && twilio.fromNumber
+        ? 'custom'
+        : telnyxConfigured
+          ? 'telnyx_inventory'
+          : twilio?.fromNumber
+            ? 'custom'
+            : null
+
     let fromNumber: string | null = null
-    if (activeProvider === 'telnyx' && telnyx?.fromNumber) {
+    if (fromNumberSource === 'custom' && twilio?.fromNumber) {
+      fromNumber = twilio.fromNumber
+    } else if (activeProvider === 'telnyx' && telnyx?.fromNumber) {
       fromNumber = telnyx.fromNumber
     } else if (activeProvider === 'twilio' && twilio?.fromNumber) {
       fromNumber = twilio.fromNumber
@@ -101,6 +139,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       activeProvider,
       fromNumber,
+      fromNumberSource,
       telnyxConfigured,
       twilioConfigured,
       telnyx: telnyx
@@ -116,6 +155,7 @@ export async function GET(req: NextRequest) {
             fromNumber: twilio.fromNumber,
             messagingServiceSid: twilio.messagingServiceSid,
             configured: Boolean(twilio.accountSid && twilio.authToken),
+            preferForSmsOutbound: twilio.preferForSmsOutbound,
           }
         : null,
     })
@@ -145,44 +185,43 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json()
     const validated = smsFromNumberSchema.parse(body)
-    const activeProvider = await getActiveSmsProvider(practiceId)
+    const fromNumber = formatE164(validated.fromNumber)
 
-    if (activeProvider === 'telnyx' || !activeProvider) {
+    if (validated.fromNumberSource === 'custom') {
+      const twilio = await prisma.twilioIntegration.findUnique({
+        where: { practiceId },
+      })
+
+      if (twilio?.accountSid && twilio.authToken) {
+        const updated = await prisma.twilioIntegration.update({
+          where: { practiceId },
+          data: {
+            fromNumber,
+            preferForSmsOutbound: true,
+            isActive: true,
+          },
+        })
+
+        return NextResponse.json({
+          success: true,
+          provider: 'twilio',
+          fromNumberSource: 'custom',
+          fromNumber: updated.fromNumber,
+        })
+      }
+
       const telnyx = await prisma.telnyxIntegration.findUnique({
         where: { practiceId },
       })
 
       if (telnyx?.apiKey) {
-        const client = new TelnyxApiClient(
-          telnyx.apiKey,
-          validated.fromNumber,
-          validated.messagingProfileId || telnyx.messagingProfileId || undefined
-        )
-        const numbers = await client.listPhoneNumbers()
-        const selected = numbers.find((entry) => entry.phoneNumber === validated.fromNumber)
-        if (!selected) {
-          return NextResponse.json(
-            { error: 'Selected phone number was not found in your Telnyx account' },
-            { status: 400 }
-          )
-        }
-        if (!selected.messagingReady) {
-          return NextResponse.json(
-            {
-              error:
-                'Selected phone number is not messaging-ready. Assign it to a messaging profile in Telnyx first.',
-            },
-            { status: 400 }
-          )
-        }
-
+        await clearTwilioPreferForSmsOutbound(practiceId)
         const updated = await prisma.telnyxIntegration.update({
           where: { practiceId },
           data: {
-            fromNumber: validated.fromNumber,
-            phoneNumberId: validated.phoneNumberId || selected.id || null,
-            messagingProfileId:
-              validated.messagingProfileId || selected.messagingProfileId || null,
+            fromNumber,
+            phoneNumberId: validated.phoneNumberId || null,
+            messagingProfileId: validated.messagingProfileId || telnyx.messagingProfileId || null,
             isActive: true,
           },
         })
@@ -190,9 +229,72 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({
           success: true,
           provider: 'telnyx',
+          fromNumberSource: 'custom',
           fromNumber: updated.fromNumber,
+          warning:
+            'Twilio is not configured. This number will be sent via Telnyx and must be routable on your Telnyx account.',
         })
       }
+
+      return NextResponse.json(
+        {
+          error:
+            'Configure Twilio credentials to use a custom non-Telnyx From Number, or configure Telnyx for manual sender entry.',
+        },
+        { status: 400 }
+      )
+    }
+
+    await clearTwilioPreferForSmsOutbound(practiceId)
+
+    const telnyx = await prisma.telnyxIntegration.findUnique({
+      where: { practiceId },
+    })
+
+    if (telnyx?.apiKey) {
+      const client = new TelnyxApiClient(
+        telnyx.apiKey,
+        fromNumber,
+        validated.messagingProfileId || telnyx.messagingProfileId || undefined
+      )
+      const numbers = await client.listPhoneNumbers()
+      const selected = numbers.find((entry) => entry.phoneNumber === fromNumber)
+      if (!selected) {
+        return NextResponse.json(
+          {
+            error:
+              'Selected phone number was not found in your Telnyx account. Use "Custom number" if this sender is not a Telnyx number.',
+          },
+          { status: 400 }
+        )
+      }
+      if (!selected.messagingReady) {
+        return NextResponse.json(
+          {
+            error:
+              'Selected phone number is not messaging-ready. Assign it to a messaging profile in Telnyx first.',
+          },
+          { status: 400 }
+        )
+      }
+
+      const updated = await prisma.telnyxIntegration.update({
+        where: { practiceId },
+        data: {
+          fromNumber,
+          phoneNumberId: validated.phoneNumberId || selected.id || null,
+          messagingProfileId:
+            validated.messagingProfileId || selected.messagingProfileId || null,
+          isActive: true,
+        },
+      })
+
+      return NextResponse.json({
+        success: true,
+        provider: 'telnyx',
+        fromNumberSource: 'telnyx_inventory',
+        fromNumber: updated.fromNumber,
+      })
     }
 
     const twilio = await prisma.twilioIntegration.findUnique({
@@ -203,7 +305,8 @@ export async function POST(req: NextRequest) {
       const updated = await prisma.twilioIntegration.update({
         where: { practiceId },
         data: {
-          fromNumber: validated.fromNumber,
+          fromNumber,
+          preferForSmsOutbound: false,
           isActive: true,
         },
       })
@@ -211,6 +314,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: true,
         provider: 'twilio',
+        fromNumberSource: 'custom',
         fromNumber: updated.fromNumber,
       })
     }

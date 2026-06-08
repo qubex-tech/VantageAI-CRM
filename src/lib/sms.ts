@@ -27,12 +27,30 @@ export interface SmsClient {
 export async function getSmsClient(practiceId: string): Promise<SmsClient> {
   const { prisma } = await import('@/lib/db')
 
-  const telnyxIntegration = await prisma.telnyxIntegration.findFirst({
-    where: {
-      practiceId,
-      isActive: true,
-    },
-  })
+  const [twilioIntegration, telnyxIntegration] = await Promise.all([
+    prisma.twilioIntegration.findFirst({
+      where: { practiceId, isActive: true },
+    }),
+    prisma.telnyxIntegration.findFirst({
+      where: { practiceId, isActive: true },
+    }),
+  ])
+
+  if (
+    twilioIntegration?.preferForSmsOutbound &&
+    twilioIntegration.fromNumber &&
+    twilioIntegration.accountSid &&
+    twilioIntegration.authToken
+  ) {
+    const twilioClient = await getTwilioClient(practiceId)
+    return {
+      provider: 'twilio',
+      sendSms: async (params) => {
+        const result = await twilioClient.sendSms(params)
+        return { ...result, provider: 'twilio' as const }
+      },
+    }
+  }
 
   if (telnyxIntegration?.apiKey && telnyxIntegration.fromNumber) {
     const telnyxClient = await getTelnyxClient(practiceId)
@@ -82,18 +100,36 @@ export async function getSmsClient(practiceId: string): Promise<SmsClient> {
 export async function getActiveSmsProvider(practiceId: string): Promise<SmsProvider | null> {
   const { prisma } = await import('@/lib/db')
 
-  const telnyxIntegration = await prisma.telnyxIntegration.findFirst({
-    where: { practiceId, isActive: true },
-    select: { apiKey: true, fromNumber: true },
-  })
+  const [twilioIntegration, telnyxIntegration] = await Promise.all([
+    prisma.twilioIntegration.findFirst({
+      where: { practiceId, isActive: true },
+      select: {
+        accountSid: true,
+        authToken: true,
+        messagingServiceSid: true,
+        fromNumber: true,
+        preferForSmsOutbound: true,
+      },
+    }),
+    prisma.telnyxIntegration.findFirst({
+      where: { practiceId, isActive: true },
+      select: { apiKey: true, fromNumber: true },
+    }),
+  ])
+
+  if (
+    twilioIntegration?.preferForSmsOutbound &&
+    twilioIntegration.fromNumber &&
+    twilioIntegration.accountSid &&
+    twilioIntegration.authToken
+  ) {
+    return 'twilio'
+  }
+
   if (telnyxIntegration?.apiKey && telnyxIntegration.fromNumber) {
     return 'telnyx'
   }
 
-  const twilioIntegration = await prisma.twilioIntegration.findFirst({
-    where: { practiceId, isActive: true },
-    select: { accountSid: true, authToken: true, messagingServiceSid: true, fromNumber: true },
-  })
   if (
     twilioIntegration?.accountSid &&
     twilioIntegration.authToken &&

@@ -34,6 +34,7 @@ model Practice {
   sendgridIntegrations       SendgridIntegration[]
   twilioIntegrations         TwilioIntegration[]
   telnyxIntegrations         TelnyxIntegration[]
+  openDentalConnections      OpenDentalConnection[]
   ehrConnections             EhrConnection[]
   practiceSettings           PracticeSettings?
   integrationAuditLogs       IntegrationAuditLog[]
@@ -500,6 +501,7 @@ model TwilioIntegration {
   authToken           String
   messagingServiceSid String?
   fromNumber          String?
+  preferForSmsOutbound Boolean @default(false)
   isActive            Boolean  @default(true)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -528,6 +530,33 @@ model TelnyxIntegration {
   @@index([fromNumber])
   @@index([messagingProfileId])
   @@map("telnyx_integrations")
+}
+
+model OpenDentalConnection {
+  id                   String    @id @default(uuid())
+  practiceId           String    @unique
+  displayName          String
+  customerKeyEncrypted String
+  apiMode              String    @default("remote")
+  baseUrl              String    @default("https://api.opendental.com/api/v1")
+  fallbackBaseUrls     Json?
+  status               String    @default("pending")
+  lastHealthCheckAt    DateTime?
+  lastSuccessfulSyncAt DateTime?
+  lastSyncStatus       String?
+  lastSyncError        String?
+  odVersion            String?
+  enabledPermissions   Json?
+  capabilityMetadata   Json?
+  isActive             Boolean   @default(true)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId])
+  @@index([status])
+  @@map("open_dental_connections")
 }
 
 model PracticeSettings {
