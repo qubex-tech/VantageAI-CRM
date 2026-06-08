@@ -125,6 +125,13 @@ export function TelnyxSettings({ initialIntegration, practiceId }: TelnyxSetting
     }
   }
 
+  useEffect(() => {
+    if (apiKeyConfigured && (practiceId || !initialIntegration)) {
+      void handleLoadPhoneNumbers()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiKeyConfigured, practiceId])
+
   const handleNumberChange = (value: string) => {
     setFromNumber(value)
     const match = phoneNumbers.find((entry) => entry.phoneNumber === value)
@@ -275,7 +282,7 @@ export function TelnyxSettings({ initialIntegration, practiceId }: TelnyxSetting
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="telnyxFromNumber">Practice SMS Number *</Label>
+            <Label htmlFor="telnyxFromNumber">From Number *</Label>
             {phoneNumbers.length > 0 ? (
               <Select value={fromNumber} onValueChange={handleNumberChange}>
                 <SelectTrigger id="telnyxFromNumber">

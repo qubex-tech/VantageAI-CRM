@@ -185,6 +185,12 @@ export const telnyxTestSchema = z.object({
   messagingProfileId: z.string().optional().or(z.literal('')).transform(val => val === '' ? undefined : val),
 })
 
+export const smsFromNumberSchema = z.object({
+  fromNumber: z.string().min(1, 'From number is required'),
+  phoneNumberId: z.string().optional().or(z.literal('')).transform(val => val === '' ? undefined : val),
+  messagingProfileId: z.string().optional().or(z.literal('')).transform(val => val === '' ? undefined : val),
+})
+
 export const bookAppointmentSchema = z.object({
   patientId: z.string().uuid(),
   eventTypeId: z.string().min(1, 'Event type ID is required'),

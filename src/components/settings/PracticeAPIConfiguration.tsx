@@ -15,6 +15,7 @@ import { RetellSettings } from './RetellSettings'
 import { ResendSettings } from './SendgridSettings'
 import { TwilioSettings } from './TwilioSettings'
 import { TelnyxSettings } from './TelnyxSettings'
+import { SmsFromNumberSettings } from './SmsFromNumberSettings'
 import { EhrIntegrationsSettings } from './EhrIntegrationsSettings'
 import { OutboundCustomerNotificationsSettings } from './OutboundCustomerNotificationsSettings'
 
@@ -219,6 +220,7 @@ export function PracticeAPIConfiguration() {
             </div>
           ) : (
             <>
+              <SmsFromNumberSettings practiceId={selectedPracticeId} />
               <CalSettingsWithPracticeId 
                 practiceId={selectedPracticeId}
                 initialIntegration={calIntegration}

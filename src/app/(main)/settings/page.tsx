@@ -9,6 +9,7 @@ import { RetellSettings } from '@/components/settings/RetellSettings'
 import { ResendSettings } from '@/components/settings/SendgridSettings'
 import { TwilioSettings } from '@/components/settings/TwilioSettings'
 import { TelnyxSettings } from '@/components/settings/TelnyxSettings'
+import { SmsFromNumberSettings } from '@/components/settings/SmsFromNumberSettings'
 import { PracticeManagement } from '@/components/settings/PracticeManagement'
 import { PracticeAPIConfiguration } from '@/components/settings/PracticeAPIConfiguration'
 import { PreChartTemplateSettings } from '@/components/settings/PreChartTemplateSettings'
@@ -185,6 +186,8 @@ export default async function SettingsPage() {
           {hasApiTab && (
             <TabsContent value="api" className="mt-6">
               <div className="space-y-6">
+                <SmsFromNumberSettings practiceId={user.practiceId ?? undefined} />
+
                 <CalSettings 
                   initialIntegration={calIntegration} 
                   initialMappings={calIntegration?.eventTypeMappings || []}
