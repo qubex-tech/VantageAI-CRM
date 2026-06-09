@@ -5,6 +5,11 @@ import { isVantageAdmin } from '@/lib/permissions'
 import { getActiveSmsProvider } from '@/lib/sms'
 import { smsFromNumberSchema } from '@/lib/validations'
 import { TelnyxApiClient } from '@/lib/telnyx'
+import { TwilioApiClient } from '@/lib/twilio'
+import {
+  buildTelnyxSenderNotOnAccountError,
+  buildTwilioSenderNotOnAccountError,
+} from '@/lib/sms-sender-validation'
 
 export const dynamic = 'force-dynamic'
 
@@ -193,11 +198,29 @@ export async function POST(req: NextRequest) {
       })
 
       if (twilio?.accountSid && twilio.authToken) {
+        const client = new TwilioApiClient(
+          twilio.accountSid,
+          twilio.authToken,
+          twilio.messagingServiceSid || undefined,
+          fromNumber
+        )
+        const senderStatus = await client.resolveSenderOnAccount(fromNumber)
+
+        if (!senderStatus.onAccount && !senderStatus.inMessagingService) {
+          return NextResponse.json(
+            { error: buildTwilioSenderNotOnAccountError(fromNumber) },
+            { status: 400 }
+          )
+        }
+
+        const useMessagingServiceOnly =
+          senderStatus.inMessagingService && !senderStatus.onAccount && Boolean(twilio.messagingServiceSid)
+
         const updated = await prisma.twilioIntegration.update({
           where: { practiceId },
           data: {
             fromNumber,
-            preferForSmsOutbound: true,
+            preferForSmsOutbound: !useMessagingServiceOnly,
             isActive: true,
           },
         })
@@ -207,6 +230,7 @@ export async function POST(req: NextRequest) {
           provider: 'twilio',
           fromNumberSource: 'custom',
           fromNumber: updated.fromNumber,
+          sendVia: useMessagingServiceOnly ? 'messaging_service' : 'explicit_from',
         })
       }
 
@@ -215,13 +239,38 @@ export async function POST(req: NextRequest) {
       })
 
       if (telnyx?.apiKey) {
+        const client = new TelnyxApiClient(
+          telnyx.apiKey,
+          fromNumber,
+          validated.messagingProfileId || telnyx.messagingProfileId || undefined
+        )
+        const numbers = await client.listPhoneNumbers()
+        const selected = numbers.find((entry) => entry.phoneNumber === fromNumber)
+
+        if (!selected) {
+          return NextResponse.json(
+            { error: buildTelnyxSenderNotOnAccountError(fromNumber) },
+            { status: 400 }
+          )
+        }
+        if (!selected.messagingReady) {
+          return NextResponse.json(
+            {
+              error:
+                'Selected phone number is not messaging-ready. Assign it to a Telnyx messaging profile first.',
+            },
+            { status: 400 }
+          )
+        }
+
         await clearTwilioPreferForSmsOutbound(practiceId)
         const updated = await prisma.telnyxIntegration.update({
           where: { practiceId },
           data: {
             fromNumber,
-            phoneNumberId: validated.phoneNumberId || null,
-            messagingProfileId: validated.messagingProfileId || telnyx.messagingProfileId || null,
+            phoneNumberId: validated.phoneNumberId || selected.id || null,
+            messagingProfileId:
+              validated.messagingProfileId || selected.messagingProfileId || null,
             isActive: true,
           },
         })
@@ -231,8 +280,6 @@ export async function POST(req: NextRequest) {
           provider: 'telnyx',
           fromNumberSource: 'custom',
           fromNumber: updated.fromNumber,
-          warning:
-            'Twilio is not configured. This number will be sent via Telnyx and must be routable on your Telnyx account.',
         })
       }
 

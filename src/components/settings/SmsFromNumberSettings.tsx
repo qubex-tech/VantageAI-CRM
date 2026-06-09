@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Loader2 } from 'lucide-react'
+import { SMS_HOSTED_NUMBER_HELP } from '@/lib/sms-sender-validation'
 
 type FromNumberSource = 'telnyx_inventory' | 'custom'
 
@@ -302,29 +303,61 @@ export function SmsFromNumberSettings({ practiceId }: SmsFromNumberSettingsProps
                 </div>
               </>
             ) : (
-              <div className="space-y-2">
-                <Label htmlFor="smsFromNumberCustom">From Number *</Label>
-                <Input
-                  id="smsFromNumberCustom"
-                  type="text"
-                  value={fromNumber}
-                  onChange={(e) => setFromNumber(e.target.value)}
-                  placeholder="+15551234567"
-                  required
-                />
-                <p className="text-xs text-gray-500">
-                  {senderState?.twilio?.configured
-                    ? 'Outbound SMS will use Twilio with this number. It must be verified or owned on your Twilio account.'
-                    : senderState?.telnyx?.apiKeyConfigured
-                      ? 'Configure Twilio credentials below to send from a non-Telnyx number. Without Twilio, the number is saved on Telnyx only and must still be routable there.'
-                      : 'Enter your verified SMS sender in E.164 format (e.g. +15551234567). Configure Twilio or Telnyx below first.'}
-                </p>
-                {customNeedsTwilio && (
-                  <p className="text-xs text-amber-700">
-                    Twilio is not configured yet. Add Twilio credentials in the section below to
-                    actually send from a non-Telnyx number.
+              <div className="space-y-3">
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  <p className="font-medium">Your practice line must be on your SMS provider first</p>
+                  <p className="mt-1">{SMS_HOSTED_NUMBER_HELP.summary}</p>
+                  <ul className="mt-2 list-disc space-y-1 pl-4">
+                    <li>
+                      <strong>Telnyx Hosted SMS</strong> (recommended if you use Telnyx): voice stays
+                      with your carrier, SMS routes through Telnyx.{' '}
+                      <a
+                        href={SMS_HOSTED_NUMBER_HELP.telnyxHostedSmsDocs}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline"
+                      >
+                        Setup guide
+                      </a>
+                    </li>
+                    <li>
+                      <strong>Twilio Hosted SMS</strong>: same idea for Twilio.{' '}
+                      <a
+                        href={SMS_HOSTED_NUMBER_HELP.twilioHostedSmsDocs}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline"
+                      >
+                        Setup guide
+                      </a>
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="smsFromNumberCustom">From Number *</Label>
+                  <Input
+                    id="smsFromNumberCustom"
+                    type="text"
+                    value={fromNumber}
+                    onChange={(e) => setFromNumber(e.target.value)}
+                    placeholder="+15551234567"
+                    required
+                  />
+                  <p className="text-xs text-gray-500">
+                    {senderState?.twilio?.configured
+                      ? 'Enter a number already on your Twilio account (purchased, ported, or hosted). We verify it before saving.'
+                      : senderState?.telnyx?.apiKeyConfigured
+                        ? 'Prefer Telnyx Hosted SMS for your practice line, then pick it under "Telnyx account number". Or configure Twilio and host the number there.'
+                        : 'Configure Telnyx or Twilio below, host your practice number on that provider, then enter it here.'}
                   </p>
-                )}
+                  {customNeedsTwilio && (
+                    <p className="text-xs text-amber-700">
+                      Twilio is not configured yet. Add Twilio credentials below, host your number on
+                      Twilio, then save it here.
+                    </p>
+                  )}
+                </div>
               </div>
             )}
 

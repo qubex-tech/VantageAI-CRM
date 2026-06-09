@@ -39,25 +39,33 @@ function buildBasicAuthHeader(accountSid: string, authToken: string): string {
   return `Basic ${token}`
 }
 
+function phoneNumbersMatch(a: string, b: string): boolean {
+  const digits = (value: string) => value.replace(/[^\d]/g, '')
+  return digits(a) === digits(b)
+}
+
 export class TwilioApiClient {
   private accountSid: string
   private authToken: string
   private baseUrl: string
   private messagingServiceSid?: string
   private defaultFromNumber?: string
+  private preferExplicitFrom: boolean
 
   constructor(
     accountSid: string,
     authToken: string,
     messagingServiceSid?: string,
     defaultFromNumber?: string,
-    baseUrl: string = 'https://api.twilio.com/2010-04-01'
+    baseUrl: string = 'https://api.twilio.com/2010-04-01',
+    preferExplicitFrom: boolean = false
   ) {
     this.accountSid = accountSid
     this.authToken = authToken
     this.messagingServiceSid = messagingServiceSid || undefined
     this.defaultFromNumber = defaultFromNumber || undefined
     this.baseUrl = baseUrl
+    this.preferExplicitFrom = preferExplicitFrom
   }
 
   async testConnection(): Promise<boolean> {
@@ -96,6 +104,98 @@ export class TwilioApiClient {
     }
   }
 
+  async listIncomingPhoneNumbers(): Promise<Array<{ sid: string; phoneNumber: string }>> {
+    const numbers: Array<{ sid: string; phoneNumber: string }> = []
+    let url: string | null =
+      `${this.baseUrl}/Accounts/${this.accountSid}/IncomingPhoneNumbers.json?PageSize=1000`
+
+    while (url) {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Authorization: buildBasicAuthHeader(this.accountSid, this.authToken),
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to list Twilio phone numbers')
+      }
+
+      const data = (await response.json()) as {
+        incoming_phone_numbers?: Array<{ sid: string; phone_number: string }>
+        next_page_uri?: string | null
+      }
+
+      for (const entry of data.incoming_phone_numbers || []) {
+        numbers.push({
+          sid: entry.sid,
+          phoneNumber: entry.phone_number,
+        })
+      }
+
+      url = data.next_page_uri ? `https://api.twilio.com${data.next_page_uri}` : null
+    }
+
+    return numbers
+  }
+
+  async listMessagingServicePhoneNumbers(): Promise<Array<{ sid: string; phoneNumber: string }>> {
+    if (!this.messagingServiceSid) {
+      return []
+    }
+
+    const numbers: Array<{ sid: string; phoneNumber: string }> = []
+    let url: string | null =
+      `https://messaging.twilio.com/v1/Services/${this.messagingServiceSid}/PhoneNumbers?PageSize=1000`
+
+    while (url) {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Authorization: buildBasicAuthHeader(this.accountSid, this.authToken),
+        },
+      })
+
+      if (!response.ok) {
+        return numbers
+      }
+
+      const data = (await response.json()) as {
+        phone_numbers?: Array<{ sid: string; phone_number: string }>
+        meta?: { next_page_url?: string | null }
+      }
+
+      for (const entry of data.phone_numbers || []) {
+        numbers.push({
+          sid: entry.sid,
+          phoneNumber: entry.phone_number,
+        })
+      }
+
+      url = data.meta?.next_page_url || null
+    }
+
+    return numbers
+  }
+
+  async resolveSenderOnAccount(fromNumber: string): Promise<{
+    onAccount: boolean
+    inMessagingService: boolean
+  }> {
+    const normalized = formatE164(fromNumber)
+    const [incoming, messagingService] = await Promise.all([
+      this.listIncomingPhoneNumbers(),
+      this.listMessagingServicePhoneNumbers(),
+    ])
+
+    const onAccount = incoming.some((entry) => phoneNumbersMatch(entry.phoneNumber, normalized))
+    const inMessagingService = messagingService.some((entry) =>
+      phoneNumbersMatch(entry.phoneNumber, normalized)
+    )
+
+    return { onAccount, inMessagingService }
+  }
+
   async sendSms(params: SendSmsParams): Promise<SendSmsResult> {
     try {
       const messagingServiceSid = params.messagingServiceSid || this.messagingServiceSid
@@ -115,7 +215,9 @@ export class TwilioApiClient {
         form.set('StatusCallback', params.statusCallback)
       }
 
-      if (messagingServiceSid) {
+      if (this.preferExplicitFrom && from) {
+        form.set('From', formatE164(from))
+      } else if (messagingServiceSid) {
         form.set('MessagingServiceSid', messagingServiceSid)
       } else if (from) {
         form.set('From', formatE164(from))
@@ -140,6 +242,13 @@ export class TwilioApiClient {
           const errorJson = JSON.parse(errorBody)
           if (errorJson.message) {
             errorMessage = errorJson.message
+            if (
+              typeof errorJson.message === 'string' &&
+              errorJson.message.toLowerCase().includes('not a twilio phone number')
+            ) {
+              errorMessage +=
+                ' Host or port this number on Twilio first (Hosted SMS keeps voice with your current carrier).'
+            }
           }
         } catch {
           if (response.status === 401 || response.status === 403) {
@@ -194,6 +303,8 @@ export async function getTwilioClient(practiceId: string) {
     integration.accountSid,
     integration.authToken,
     integration.messagingServiceSid || undefined,
-    integration.fromNumber || undefined
+    integration.fromNumber || undefined,
+    'https://api.twilio.com/2010-04-01',
+    Boolean(integration.preferForSmsOutbound && integration.fromNumber)
   )
 }
