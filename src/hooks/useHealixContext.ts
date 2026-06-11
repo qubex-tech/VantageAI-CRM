@@ -17,6 +17,13 @@ export interface HealixContextPayload {
   dashboardContext?: {
     windowStart?: string
     windowEnd?: string
+    frontDeskMetrics?: {
+      days: number
+      callsHandled: number
+      transfersAttempted: number
+      transfersSuccessful: number
+      transfersUnsuccessful: number
+    }
     recentPatients?: Array<{
       id: string
       name: string
