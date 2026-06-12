@@ -3,6 +3,7 @@ import { getSupabaseSession } from '@/lib/auth-supabase'
 import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
 import { prisma } from '@/lib/db'
 import { TasksList } from '@/components/tasks/TasksList'
+import { PageIntro } from '@/components/layout/PageIntro'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,11 +47,8 @@ export default async function TasksPage({
   // Practice-specific feature - require practiceId
   if (!user.practiceId) {
     return (
-      <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
-        <div className="mb-8">
-          <h1 className="text-2xl font-semibold text-gray-900 mb-1">Tasks</h1>
-          <p className="text-sm text-gray-500">Task management</p>
-        </div>
+      <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 pb-24 md:pb-6">
+        <PageIntro description="Task management" />
         <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
           <p className="text-sm text-gray-600">No tasks available.</p>
         </div>
@@ -203,7 +201,7 @@ export default async function TasksPage({
   })
 
   return (
-    <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
+    <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 pb-24 md:pb-6">
       <TasksList 
         initialTasks={tasks} 
         currentUserId={user.id} 

@@ -22,6 +22,7 @@ function formatScreenTitle(pathname: string): string {
     calls: 'Calls',
     settings: 'Settings',
     workflows: 'Workflow Automations',
+    automations: 'Workflows',
   }
 
   const segments = pathname.split('/').filter(Boolean)

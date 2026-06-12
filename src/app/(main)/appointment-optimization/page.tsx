@@ -4,6 +4,7 @@ import { getSupabaseSession } from '@/lib/auth-supabase'
 import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
 import { canManagePractice, isVantageAdmin } from '@/lib/permissions'
 import { AppointmentOptimizationDashboard } from '@/components/appointment-optimization/AppointmentOptimizationDashboard'
+import { PageIntro } from '@/components/layout/PageIntro'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,21 +28,15 @@ export default async function AppointmentOptimizationPage() {
   }
 
   return (
-    <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
-      <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900 mb-1">Appointment Optimization</h1>
-          <p className="text-sm text-gray-500">
-            Open slots, outreach waves, and fill status. Patients reschedule via the portal only.
-          </p>
-        </div>
-        <Link
-          href="/settings"
-          className="text-sm text-blue-600 hover:underline"
-        >
-          Outbound agent settings
-        </Link>
-      </div>
+    <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 pb-24 md:pb-6">
+      <PageIntro
+        description="Open slots, outreach waves, and fill status. Patients reschedule via the portal only."
+        actions={
+          <Link href="/settings" className="text-sm text-blue-600 hover:underline">
+            Outbound agent settings
+          </Link>
+        }
+      />
       <AppointmentOptimizationDashboard />
     </div>
   )

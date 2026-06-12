@@ -205,7 +205,7 @@ export default async function CallsPage({
   }
 
   return (
-    <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
+    <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 pb-24 md:pb-6">
       <CallsList initialCalls={calls} initialReviewedCallIds={reviewedCallIds} error={error} />
     </div>
   )

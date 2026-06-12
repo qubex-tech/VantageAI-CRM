@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { Plus } from 'lucide-react'
 import { WorkflowsTable } from '@/components/workflows/WorkflowsTable'
+import { PageIntro } from '@/components/layout/PageIntro'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,19 +39,18 @@ export default async function WorkflowsPage() {
     if (!user.practiceId) {
       // Return empty workflows list for users without practiceId
       return (
-        <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="text-2xl font-semibold text-gray-900 mb-1">Workflows</h1>
-              <p className="text-sm text-gray-500">Create automations to streamline your practice</p>
-            </div>
-            <Link href="/automations/workflows/new">
-              <Button className="bg-gray-900 hover:bg-gray-800 text-white font-medium">
-                <Plus className="mr-2 h-4 w-4" />
-                New workflow
-              </Button>
-            </Link>
-          </div>
+        <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 pb-24 md:pb-6">
+          <PageIntro
+            description="Create automations to streamline your practice"
+            actions={
+              <Link href="/automations/workflows/new">
+                <Button className="bg-gray-900 hover:bg-gray-800 text-white font-medium">
+                  <Plus className="mr-2 h-4 w-4" />
+                  New workflow
+                </Button>
+              </Link>
+            }
+          />
           <WorkflowsTable workflows={[]} />
         </div>
       )
@@ -242,19 +242,18 @@ export default async function WorkflowsPage() {
   })
 
   return (
-    <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900 mb-1">Workflows</h1>
-          <p className="text-sm text-gray-500">Create automations to streamline your practice</p>
-        </div>
-        <Link href="/automations/workflows/new">
-          <Button className="bg-gray-900 hover:bg-gray-800 text-white font-medium">
-            <Plus className="mr-2 h-4 w-4" />
-            New workflow
-          </Button>
-        </Link>
-      </div>
+    <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 pb-24 md:pb-6">
+      <PageIntro
+        description="Create automations to streamline your practice"
+        actions={
+          <Link href="/automations/workflows/new">
+            <Button className="bg-gray-900 hover:bg-gray-800 text-white font-medium">
+              <Plus className="mr-2 h-4 w-4" />
+              New workflow
+            </Button>
+          </Link>
+        }
+      />
 
       <WorkflowsTable workflows={workflowsWithStats} />
     </div>

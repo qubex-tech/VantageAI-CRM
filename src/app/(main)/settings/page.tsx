@@ -15,6 +15,7 @@ import { PracticeAPIConfiguration } from '@/components/settings/PracticeAPIConfi
 import { PreChartTemplateSettings } from '@/components/settings/PreChartTemplateSettings'
 import { OutboundAgentsSettings } from '@/components/settings/OutboundAgentsSettings'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { PageIntro } from '@/components/layout/PageIntro'
 
 export const dynamic = 'force-dynamic'
 
@@ -129,11 +130,8 @@ export default async function SettingsPage() {
           : undefined
 
   return (
-    <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8 max-w-4xl">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-gray-900 mb-1">Settings</h1>
-        <p className="text-sm text-gray-500">Manage your practice settings</p>
-      </div>
+    <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 pb-24 md:pb-6 max-w-4xl">
+      <PageIntro description="Manage your practice settings" />
 
       {hasAnyTab ? (
         <Tabs defaultValue={defaultTab} className="w-full">

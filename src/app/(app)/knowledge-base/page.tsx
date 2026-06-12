@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { PageIntro } from '@/components/layout/PageIntro'
 import { Textarea } from '@/components/ui/textarea'
 
 interface Article {
@@ -84,13 +85,8 @@ export default function KnowledgeBasePage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-6 py-8">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Knowledge Base</h1>
-        <p className="mt-2 text-sm text-slate-500">
-          Add clinic-approved information that Healix can use for drafts and summaries.
-        </p>
-      </div>
+    <div className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-6 pb-8">
+      <PageIntro description="Add clinic-approved information that Healix can use for drafts and summaries." />
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="grid gap-4">

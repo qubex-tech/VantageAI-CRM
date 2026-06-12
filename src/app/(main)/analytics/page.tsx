@@ -6,6 +6,7 @@ import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
 import { prisma } from '@/lib/db'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { AnalyticsTabs } from '@/components/analytics/AnalyticsTabs'
+import { PageIntro } from '@/components/layout/PageIntro'
 import { isInboundAgentCall } from '@/lib/analytics/voiceConversationInbound'
 import type { AnalyticsCallRow } from '@/lib/analytics/callSort'
 import { last7DaysStartUtc, resolveCallDateRangeUtc } from '@/lib/analytics/callDateRangeUtc'
@@ -65,11 +66,8 @@ export default async function AnalyticsPage({
 
   if (!user.practiceId) {
     return (
-      <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
-        <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-gray-900">Analytics</h1>
-          <p className="text-sm text-gray-500">Practice analytics are not available for this account.</p>
-        </div>
+      <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 pb-24 md:pb-6">
+        <PageIntro description="Practice analytics are not available for this account." />
       </div>
     )
   }
@@ -193,14 +191,8 @@ export default async function AnalyticsPage({
   const callRangeLabel = `${callRangeStart.toLocaleDateString('en-US', utcDateFmt)} – ${callRangeEnd.toLocaleDateString('en-US', utcDateFmt)} (UTC)`
 
   return (
-    <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-gray-900">Analytics</h1>
-        <p className="text-sm text-gray-500">
-          Call date range uses UTC calendar days so counts align with Retell timestamps. Scheduling
-          below still uses the last 30 days in server local time.
-        </p>
-      </div>
+    <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 pb-24 md:pb-6">
+      <PageIntro description="Call date range uses UTC calendar days so counts align with Retell timestamps. Scheduling below still uses the last 30 days in server local time." />
 
       <div className="space-y-10">
         <Suspense

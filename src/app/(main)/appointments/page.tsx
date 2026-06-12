@@ -6,6 +6,7 @@ import { format } from 'date-fns'
 import { getCalClient } from '@/lib/cal'
 import { syncBookingToPatient } from '@/lib/sync-booking-to-patient'
 import { AppointmentsView } from '@/components/appointments/AppointmentsView'
+import { PageIntro } from '@/components/layout/PageIntro'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   listEhrPractitionersForPractice,
@@ -66,13 +67,10 @@ export default async function AppointmentsPage({
   if (!user.practiceId) {
     // If no practiceId, return empty appointments list
     return (
-      <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
-        <div className="mb-8">
-          <h1 className="text-2xl font-semibold text-gray-900 mb-1">Appointments</h1>
-          <p className="text-sm text-gray-500">
-            {date ? format(date, 'MMMM d, yyyy') : 'Upcoming appointments'}
-          </p>
-        </div>
+      <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 pb-24 md:pb-6">
+        <PageIntro
+          description={date ? format(date, 'MMMM d, yyyy') : 'Upcoming appointments'}
+        />
         <Card className="border border-gray-200">
           <CardContent className="py-12 text-center">
             <p className="text-sm text-gray-500">No appointments scheduled</p>
@@ -316,13 +314,10 @@ export default async function AppointmentsPage({
   }))
 
   return (
-    <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-gray-900 mb-1">Appointments</h1>
-        <p className="text-sm text-gray-500">
-          {date ? format(date, 'MMMM d, yyyy') : 'Manage and view all appointments'}
-        </p>
-      </div>
+    <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 pb-24 md:pb-6">
+      <PageIntro
+        description={date ? format(date, 'MMMM d, yyyy') : 'Manage and view all appointments'}
+      />
 
       <AppointmentsView initialAppointments={transformedAppointments} practitioners={practitioners} />
     </div>

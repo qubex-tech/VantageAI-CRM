@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { PageIntro } from '@/components/layout/PageIntro'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { format } from 'date-fns'
 import Link from 'next/link'
@@ -159,24 +160,21 @@ export function CallsList({ initialCalls, initialReviewedCallIds = [], error: in
   return (
     <div>
       {/* Header with refresh button */}
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900 mb-1">Calls</h1>
-          <p className="text-sm text-gray-500">
-            Voice agent calls from RetellAI
-          </p>
-        </div>
-        <Button
-          onClick={() => refreshCalls(true)}
-          disabled={isRefreshing}
-          variant="outline"
-          size="sm"
-          className="gap-2"
-        >
-          <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-          {isRefreshing ? 'Refreshing...' : 'Refresh'}
-        </Button>
-      </div>
+      <PageIntro
+        description="Voice agent calls from RetellAI"
+        actions={
+          <Button
+            onClick={() => refreshCalls(true)}
+            disabled={isRefreshing}
+            variant="outline"
+            size="sm"
+            className="gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            {isRefreshing ? 'Refreshing...' : 'Refresh'}
+          </Button>
+        }
+      />
 
       {error ? (
         <Card className="border border-red-200 bg-red-50">

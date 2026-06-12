@@ -5,6 +5,7 @@ import { prisma } from '@/lib/db'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
+import { PageIntro } from '@/components/layout/PageIntro'
 import { Mail, MessageSquare, Settings, Play, FileText } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
@@ -66,11 +67,8 @@ export default async function MarketingPage() {
   })
 
   return (
-    <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-gray-900 mb-1">Marketing</h1>
-        <p className="text-sm text-gray-500">Manage templates, branding, and communications</p>
-      </div>
+    <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 pb-24 md:pb-6">
+      <PageIntro description="Manage templates, branding, and communications" />
 
       {/* Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

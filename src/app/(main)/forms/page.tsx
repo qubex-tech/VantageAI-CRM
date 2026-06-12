@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PageIntro } from '@/components/layout/PageIntro'
 import { redirect } from 'next/navigation'
 import { getSupabaseSession } from '@/lib/auth-supabase'
 import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
@@ -53,21 +54,20 @@ export default async function FormsPage() {
   ])
 
   return (
-    <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
-      <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900 mb-1">Forms</h1>
-          <p className="text-sm text-gray-500">Create, send, and track patient forms</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link href="/forms/templates/new">
-            <Button variant="outline">Create template</Button>
-          </Link>
-          <Link href="/forms/requests/new">
-            <Button className="bg-gray-900 hover:bg-gray-800 text-white">Send form</Button>
-          </Link>
-        </div>
-      </div>
+    <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 pb-24 md:pb-6">
+      <PageIntro
+        description="Create, send, and track patient forms"
+        actions={
+          <>
+            <Link href="/forms/templates/new">
+              <Button variant="outline">Create template</Button>
+            </Link>
+            <Link href="/forms/requests/new">
+              <Button className="bg-gray-900 hover:bg-gray-800 text-white">Send form</Button>
+            </Link>
+          </>
+        }
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
         <Card>
