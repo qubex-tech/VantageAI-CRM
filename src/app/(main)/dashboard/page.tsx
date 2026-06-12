@@ -203,9 +203,7 @@ export default async function DashboardPage({
       <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 pb-24 md:pb-6">
         <DashboardPageHeader
           userName={user.name || 'User'}
-          days={initialDays}
           rangeLabel="Practice analytics unavailable"
-          onDaysChange={() => {}}
         />
         <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-lg shadow-gray-200/50">
           <p className="text-sm text-gray-600">
@@ -220,7 +218,7 @@ export default async function DashboardPage({
   const metrics = await loadDashboardMetrics(user.practiceId, user.id, timeZone)
 
   return (
-    <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 pt-4 pb-24 md:pb-6 min-w-0 max-w-full">
+    <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 pb-24 md:pb-6 min-w-0 max-w-full">
       <Suspense fallback={null}>
         <DashboardView
           userName={user.name || user.email || 'User'}

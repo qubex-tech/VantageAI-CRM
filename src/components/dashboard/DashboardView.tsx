@@ -1,10 +1,12 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { HealixCommandCenter } from '@/components/healix/HealixCommandCenter'
 import { DashboardFrontDeskMetrics } from '@/components/dashboard/DashboardFrontDeskMetrics'
+import { DashboardDateRangeToggle } from '@/components/dashboard/DashboardDateRangeToggle'
 import { DashboardPageHeader } from '@/components/dashboard/DashboardPageHeader'
+import { usePageHeaderExtras } from '@/components/layout/PageHeaderExtrasContext'
 import type { DashboardMetricsPayload } from '@/components/dashboard/types'
 import type { HealixContextPayload } from '@/hooks/useHealixContext'
 
@@ -18,15 +20,25 @@ export function DashboardView({ userName, metrics, initialDays = 7 }: DashboardV
   const searchParams = useSearchParams()
   const urlDays = searchParams.get('days') === '30' ? 30 : 7
   const [days, setDays] = useState<7 | 30>(initialDays ?? urlDays)
+  const { setExtras } = usePageHeaderExtras()
 
   const active = metrics.periods[days]
 
   const setDaysInstant = useCallback((value: 7 | 30) => {
-    if (value === days) return
-    setDays(value)
-    const url = value === 7 ? '/dashboard' : '/dashboard?days=30'
-    window.history.replaceState(null, '', url)
-  }, [days])
+    setDays((current) => {
+      if (value === current) return current
+      const url = value === 7 ? '/dashboard' : '/dashboard?days=30'
+      window.history.replaceState(null, '', url)
+      return value
+    })
+  }, [])
+
+  useEffect(() => {
+    setExtras(
+      <DashboardDateRangeToggle days={days} onDaysChange={setDaysInstant} />
+    )
+    return () => setExtras(null)
+  }, [days, setDaysInstant, setExtras])
 
   const healixContext = useMemo<HealixContextPayload>(() => ({
     route: '/dashboard',
@@ -48,12 +60,7 @@ export function DashboardView({ userName, metrics, initialDays = 7 }: DashboardV
 
   return (
     <>
-      <DashboardPageHeader
-        userName={userName}
-        days={days}
-        rangeLabel={active.rangeLabel}
-        onDaysChange={setDaysInstant}
-      />
+      <DashboardPageHeader userName={userName} rangeLabel={active.rangeLabel} />
 
       <div className="mb-6">
         <HealixCommandCenter
