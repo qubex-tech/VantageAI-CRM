@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation'
-import { getSupabaseSession } from '@/lib/auth-supabase'
-import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
+import { requirePracticeUser } from '@/lib/auth-server'
 import { prisma } from '@/lib/db'
 import { FlowBuilderPage } from '@/components/automations/FlowBuilderPage'
 
@@ -11,24 +10,8 @@ interface AutomationFlowPageProps {
 }
 
 export default async function AutomationFlowPage({ searchParams }: AutomationFlowPageProps) {
-  const supabaseSession = await getSupabaseSession()
-  
-  if (!supabaseSession) {
-    redirect('/login')
-  }
+    const user = await requirePracticeUser()
 
-  const supabaseUser = supabaseSession.user
-  let user
-  try {
-    user = await syncSupabaseUserToPrisma(supabaseUser)
-  } catch (error) {
-    console.error('Error syncing user to Prisma:', error)
-    redirect('/login')
-  }
-  
-  if (!user || !user.practiceId) {
-    redirect('/login?error=Practice access required')
-  }
 
   const params = await searchParams
   const ruleId = params.id

@@ -1,6 +1,5 @@
 import { redirect, notFound } from 'next/navigation'
-import { getSupabaseSession } from '@/lib/auth-supabase'
-import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
+import { requirePracticeUser } from '@/lib/auth-server'
 import { prisma } from '@/lib/db'
 import { TaskForm } from '@/components/tasks/TaskForm'
 import { TaskDetailView } from '@/components/tasks/TaskDetailView'
@@ -13,24 +12,8 @@ export default async function TaskDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const supabaseSession = await getSupabaseSession()
-  
-  if (!supabaseSession) {
-    redirect('/login')
-  }
+    const user = await requirePracticeUser()
 
-  const supabaseUser = supabaseSession.user
-  let user
-  try {
-    user = await syncSupabaseUserToPrisma(supabaseUser)
-  } catch (error) {
-    console.error('Error syncing user to Prisma:', error)
-    redirect('/login')
-  }
-  
-  if (!user || !user.practiceId) {
-    redirect('/login')
-  }
 
   const practiceId = user.practiceId
 

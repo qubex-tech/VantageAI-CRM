@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation'
-import { getSupabaseSession } from '@/lib/auth-supabase'
-import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
+import { requireAuthenticatedUser } from '@/lib/auth-server'
 import { prisma } from '@/lib/db'
 import { ScheduleAppointmentForm } from '@/components/appointments/ScheduleAppointmentForm'
 
@@ -12,29 +11,7 @@ export default async function NewAppointmentPage({
   searchParams: Promise<{ patientId?: string }>
 }) {
   const params = await searchParams
-  const supabaseSession = await getSupabaseSession()
-  
-  if (!supabaseSession) {
-    redirect('/login')
-  }
-
-  const supabaseUser = supabaseSession.user
-  let user
-  try {
-    user = await syncSupabaseUserToPrisma(supabaseUser)
-  } catch (error) {
-    console.error('Error syncing user to Prisma:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    console.error('Error details:', errorMessage)
-    const safeErrorMessage = errorMessage.length > 100 
-      ? errorMessage.substring(0, 100) + '...'
-      : errorMessage
-    redirect(`/login?error=${encodeURIComponent(`Failed to sync user account: ${safeErrorMessage}`)}`)
-  }
-  
-  if (!user) {
-    redirect('/login?error=User account not found.')
-  }
+  const user = await requireAuthenticatedUser()
 
   // Require patientId
   if (!params.patientId) {

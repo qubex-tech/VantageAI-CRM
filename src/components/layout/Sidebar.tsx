@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils'
 import { useEffect, useRef, useState } from 'react'
 import { LogoutButton } from './LogoutButton'
 import { useSidebar } from './SidebarProvider'
+import { useAppUser } from './AppUserProvider'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: Home },
@@ -46,9 +47,9 @@ const navItems = [
 export function Sidebar() {
   const pathname = usePathname()
   const { isOpen, setIsOpen, isCollapsed, setIsCollapsed, isPreVisitFocus } = useSidebar()
+  const { practiceName } = useAppUser()
   const [inboxUnread, setInboxUnread] = useState(0)
   const lastUnreadRef = useRef(0)
-  const [practiceName, setPracticeName] = useState<string | null>(null)
 
   // Close mobile menu when route changes
   useEffect(() => {
@@ -93,22 +94,6 @@ export function Sidebar() {
     return () => {
       window.removeEventListener('storage', handleUpdate)
       window.removeEventListener('inbox-unread-updated', handleUpdate)
-    }
-  }, [])
-
-  // Fetch practice name for white-label sidebar
-  useEffect(() => {
-    let cancelled = false
-    fetch('/api/user/me')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!cancelled && data?.practiceName != null) {
-          setPracticeName(data.practiceName)
-        }
-      })
-      .catch(() => {})
-    return () => {
-      cancelled = true
     }
   }, [])
 

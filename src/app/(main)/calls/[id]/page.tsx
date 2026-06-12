@@ -1,6 +1,5 @@
 import { redirect, notFound } from 'next/navigation'
-import { getSupabaseSession } from '@/lib/auth-supabase'
-import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
+import { requireAuthenticatedUser } from '@/lib/auth-server'
 import { canAccessPractice } from '@/lib/permissions'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { MarkCallReviewed } from '@/components/calls/MarkCallReviewed'
@@ -18,29 +17,7 @@ export default async function CallDetailPage({
 }) {
   const { id: callId } = await params
   const query = await searchParams
-  const supabaseSession = await getSupabaseSession()
-  
-  if (!supabaseSession) {
-    redirect('/login')
-  }
-
-  const supabaseUser = supabaseSession.user
-  let user
-  try {
-    user = await syncSupabaseUserToPrisma(supabaseUser)
-  } catch (error) {
-    console.error('Error syncing user to Prisma:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    console.error('Error details:', errorMessage)
-    const safeErrorMessage = errorMessage.length > 100 
-      ? errorMessage.substring(0, 100) + '...'
-      : errorMessage
-    redirect(`/login?error=${encodeURIComponent(`Failed to sync user account: ${safeErrorMessage}`)}`)
-  }
-  
-  if (!user) {
-    redirect('/login?error=User account not found.')
-  }
+  const user = await requireAuthenticatedUser()
 
   const queryPracticeId = typeof query?.practiceId === 'string' ? query.practiceId.trim() : ''
   const userForAccess = {

@@ -1,31 +1,14 @@
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/db'
-import { getSupabaseSession } from '@/lib/auth-supabase'
-import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
+import { requirePracticeUser } from '@/lib/auth-server'
 import { FormTemplateBuilder } from '@/components/forms/FormTemplateBuilder'
 import { FormTemplateActions } from '@/components/forms/FormTemplateActions'
 
 export const dynamic = 'force-dynamic'
 
 export default async function FormTemplateDetailPage({ params }: { params: { id: string } }) {
-  const supabaseSession = await getSupabaseSession()
+    const user = await requirePracticeUser()
 
-  if (!supabaseSession) {
-    redirect('/login')
-  }
-
-  const supabaseUser = supabaseSession.user
-  let user
-  try {
-    user = await syncSupabaseUserToPrisma(supabaseUser)
-  } catch (error) {
-    console.error('Error syncing user to Prisma:', error)
-    redirect('/login')
-  }
-
-  if (!user || !user.practiceId) {
-    redirect('/login')
-  }
 
   const template = await prisma.formTemplate.findFirst({
     where: {

@@ -1,8 +1,6 @@
 import Link from 'next/link'
 import { PageIntro } from '@/components/layout/PageIntro'
-import { redirect } from 'next/navigation'
-import { getSupabaseSession } from '@/lib/auth-supabase'
-import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
+import { requirePracticeUser } from '@/lib/auth-server'
 import { prisma } from '@/lib/db'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -11,25 +9,7 @@ import { seedDefaultFormTemplates } from '@/lib/form-templates'
 export const dynamic = 'force-dynamic'
 
 export default async function FormsPage() {
-  const supabaseSession = await getSupabaseSession()
-
-  if (!supabaseSession) {
-    redirect('/login')
-  }
-
-  const supabaseUser = supabaseSession.user
-  let user
-  try {
-    user = await syncSupabaseUserToPrisma(supabaseUser)
-  } catch (error) {
-    console.error('Error syncing user to Prisma:', error)
-    redirect('/login')
-  }
-
-  if (!user || !user.practiceId) {
-    redirect('/login')
-  }
-
+  const user = await requirePracticeUser()
   const practiceId = user.practiceId
 
   await seedDefaultFormTemplates(practiceId, user.id)

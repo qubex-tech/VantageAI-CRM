@@ -1,11 +1,18 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // Serverless-friendly configuration
   experimental: {
     serverActions: {
       bodySizeLimit: '2mb',
     },
+    optimizePackageImports: [
+      'lucide-react',
+      '@radix-ui/react-dialog',
+      '@radix-ui/react-dropdown-menu',
+      '@radix-ui/react-select',
+      '@radix-ui/react-tabs',
+      'date-fns',
+    ],
   },
   // Exclude scripts directory from compilation
   webpack: (config, { isServer }) => {

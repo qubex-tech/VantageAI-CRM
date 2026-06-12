@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation'
-import { getSupabaseSession } from '@/lib/auth-supabase'
-import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
+import { requirePracticeUser } from '@/lib/auth-server'
 import { prisma } from '@/lib/db'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -11,30 +10,8 @@ import { Mail, MessageSquare, Settings, Play, FileText } from 'lucide-react'
 export const dynamic = 'force-dynamic'
 
 export default async function MarketingPage() {
-  const supabaseSession = await getSupabaseSession()
-  
-  if (!supabaseSession) {
-    redirect('/login')
-  }
+    const user = await requirePracticeUser()
 
-  const supabaseUser = supabaseSession.user
-  let user
-  try {
-    user = await syncSupabaseUserToPrisma(supabaseUser)
-  } catch (error) {
-    console.error('Error syncing user to Prisma:', error)
-    redirect('/login')
-  }
-  
-  if (!user || !user.practiceId) {
-    return (
-      <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
-        <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
-          <p className="text-sm text-gray-600">Marketing features require a practice account.</p>
-        </div>
-      </div>
-    )
-  }
 
   // Get stats
   const [templatesCount, brandProfile] = await Promise.all([

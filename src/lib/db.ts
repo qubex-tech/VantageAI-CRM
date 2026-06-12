@@ -65,9 +65,7 @@ if (databaseUrl) {
 // For Transaction Mode (6543): Prisma automatically handles the lack of prepared statements
 // For Session Mode (5432): Prepared statements work normally
 const prismaClientOptions: Prisma.PrismaClientOptions = {
-  log: process.env.NODE_ENV === 'development' 
-    ? ['query', 'error', 'warn'] as Prisma.LogLevel[]
-    : ['error'] as Prisma.LogLevel[],
+  log: ['error', 'warn'] as Prisma.LogLevel[],
   datasources: {
     db: {
       url: databaseUrl || process.env.DATABASE_URL,

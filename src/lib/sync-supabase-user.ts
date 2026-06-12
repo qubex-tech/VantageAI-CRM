@@ -1,5 +1,12 @@
 import { prisma } from './db'
 import { User as SupabaseUser } from '@supabase/supabase-js'
+import type { Practice, User } from '@prisma/client'
+
+const userWithPracticeInclude = {
+  practice: true,
+} as const
+
+type UserWithPractice = User & { practice: Practice | null }
 
 /**
  * Sync a Supabase user to Prisma User table
@@ -8,7 +15,7 @@ import { User as SupabaseUser } from '@supabase/supabase-js'
  */
 export async function syncSupabaseUserToPrisma(
   supabaseUser: SupabaseUser
-) {
+): Promise<UserWithPractice> {
   const userEmail = supabaseUser.email
   
   if (!userEmail) {
@@ -16,18 +23,12 @@ export async function syncSupabaseUserToPrisma(
   }
 
   try {
-    // Check if user already exists
-    // Use findFirst instead of findUnique to avoid potential connection issues
-    let user = await prisma.user.findFirst({
+    let user = await prisma.user.findUnique({
       where: { email: userEmail },
-      include: {
-        practice: true,
-      },
+      include: userWithPracticeInclude,
     })
 
     if (user) {
-      // Verify practice still exists (in case it was deleted)
-      // Only check practice if user has a practiceId (not for Vantage Admins)
       if (!user.practice && user.practiceId) {
         console.error(`User ${userEmail} exists but practice ${user.practiceId} is missing`)
         // Try to find or create a practice for this user
@@ -68,11 +69,8 @@ export async function syncSupabaseUserToPrisma(
         }
       }
       
-      console.log(`User ${userEmail} already exists in Prisma`)
       return user
     }
-
-    console.log(`Creating new user in Prisma for ${userEmail}`)
 
     // Get user's name from metadata
     const name = (supabaseUser.user_metadata?.name as string) || 
@@ -126,6 +124,7 @@ export async function syncSupabaseUserToPrisma(
         // Unique constraint violation - user might have been created by another request
         const existingUser = await prisma.user.findUnique({
           where: { email: userEmail },
+          include: userWithPracticeInclude,
         })
         if (existingUser) {
           console.log(`User ${userEmail} was created by another request, returning existing user`)

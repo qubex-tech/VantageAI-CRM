@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { getSupabaseSession } from '@/lib/auth-supabase'
-import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
+import { requireAuthenticatedUser } from '@/lib/auth-server'
 import { canManagePractice, isVantageAdmin } from '@/lib/permissions'
 import { AppointmentOptimizationDashboard } from '@/components/appointment-optimization/AppointmentOptimizationDashboard'
 import { PageIntro } from '@/components/layout/PageIntro'
@@ -9,11 +8,8 @@ import { PageIntro } from '@/components/layout/PageIntro'
 export const dynamic = 'force-dynamic'
 
 export default async function AppointmentOptimizationPage() {
-  const supabaseSession = await getSupabaseSession()
-  if (!supabaseSession) redirect('/login')
-
-  const user = await syncSupabaseUserToPrisma(supabaseSession.user)
-  if (!user?.practiceId) redirect('/login')
+  const user = await requireAuthenticatedUser()
+  if (!user.practiceId) redirect('/login')
 
   const permissionsUser = {
     id: user.id,
