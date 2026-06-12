@@ -59,24 +59,6 @@ export async function countRetellInboundCallsForRange(params: {
 }
 
 /**
- * Count all Retell calls in range for the practice API key (all agents, all directions).
- * Matches the Retell dashboard "past N days" total.
- */
-export async function countRetellCallsForDashboardRange(params: {
-  practiceId: string
-  startMs: number
-  endMs: number
-}): Promise<number> {
-  const calls = await listCallsForRange({
-    practiceId: params.practiceId,
-    agentId: null,
-    startMs: params.startMs,
-    endMs: params.endMs,
-  })
-  return calls.length
-}
-
-/**
  * Import only Retell calls missing from voice_conversations.
  */
 export async function syncMissingRetellInboundCallsForRange(params: {

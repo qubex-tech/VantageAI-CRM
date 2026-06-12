@@ -9,7 +9,8 @@ import {
   formatDashboardRangeLabel,
   resolveDashboardRangeInTimeZone,
 } from '@/lib/analytics/dashboardDateRange'
-import { countRetellCallsForDashboardRange } from '@/lib/analytics/retellCallSync'
+import { countRetellInboundCallsForRange } from '@/lib/analytics/retellCallSync'
+import { getRetellIntegrationConfig } from '@/lib/retell-api'
 import { normalizeTimeZone, resolveTimeZone } from '@/lib/timezone'
 import type { DashboardMetricsPayload, DashboardPeriodMetrics } from '@/components/dashboard/types'
 
@@ -91,14 +92,17 @@ async function loadDashboardMetrics(
   let retellCount30: number | null = null
 
   try {
+    const integration = await getRetellIntegrationConfig(practiceId)
     ;[retellCount7, retellCount30] = await Promise.all([
-      countRetellCallsForDashboardRange({
+      countRetellInboundCallsForRange({
         practiceId,
+        agentId: integration.agentId,
         startMs: range7.startMs,
         endMs: range7.endMs,
       }),
-      countRetellCallsForDashboardRange({
+      countRetellInboundCallsForRange({
         practiceId,
+        agentId: integration.agentId,
         startMs: range30.startMs,
         endMs: range30.endMs,
       }),

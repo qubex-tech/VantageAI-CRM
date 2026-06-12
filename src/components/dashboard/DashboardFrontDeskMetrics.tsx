@@ -58,9 +58,9 @@ export function DashboardFrontDeskMetrics({
         transfersAttempted > 0
           ? `${formatPercent(failedPctOfAttempts)} of ${transfersAttempted} transfer attempts`
           : 'No transfer attempts in range',
-      accent: 'text-red-500',
+      accent: 'text-red-600',
       iconBg: 'bg-red-50',
-      iconColor: 'text-red-500',
+      iconColor: 'text-red-600',
     },
   ]
 

@@ -113,9 +113,9 @@ export function HealixCommandCenter({ context, frontDeskStats }: HealixCommandCe
               </span>
               <span className="text-gray-300 hidden sm:inline">·</span>
               <span className="flex items-center gap-1">
-                <PhoneOff className="h-3.5 w-3.5 text-red-500" />
+                <PhoneOff className="h-3.5 w-3.5 text-red-600" />
                 <span>
-                  <span className="font-medium text-red-500">{frontDeskStats.transfersUnsuccessful}</span>{' '}
+                  <span className="font-medium text-red-600">{frontDeskStats.transfersUnsuccessful}</span>{' '}
                   failed to transfer
                 </span>
               </span>
