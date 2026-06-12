@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/middleware'
 import { getRetellIntegrationConfig } from '@/lib/retell-api'
-import { resolveRetellRollingRange } from '@/lib/analytics/dashboardDateRange'
+import { resolveDashboardRangeInTimeZone } from '@/lib/analytics/dashboardDateRange'
 import { syncMissingRetellInboundCallsForRange } from '@/lib/analytics/retellCallSync'
 import { prisma } from '@/lib/db'
 import { normalizeTimeZone } from '@/lib/timezone'
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
 
     const timeZone =
       normalizeTimeZone(practice?.brandProfile?.timezone) ?? DEFAULT_PRACTICE_TIMEZONE
-    const range30 = resolveRetellRollingRange(30)
+    const range30 = resolveDashboardRangeInTimeZone(30, timeZone)
     const integration = await getRetellIntegrationConfig(user.practiceId)
 
     const result = await syncMissingRetellInboundCallsForRange({

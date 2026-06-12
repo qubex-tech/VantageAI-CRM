@@ -4,11 +4,12 @@ import { getRetellClient } from '@/lib/retell-api'
 const LIST_PAGE_LIMIT = 1000
 const MAX_LIST_PAGES = 50
 
-async function listInboundCallsForRange(params: {
+async function listCallsForRange(params: {
   practiceId: string
-  agentId: string | null
+  agentId?: string | null
   startMs: number
   endMs: number
+  directionInboundOnly?: boolean
 }) {
   const retellClient = await getRetellClient(params.practiceId)
   const allCalls: Awaited<ReturnType<typeof retellClient.listCalls>>['calls'] = []
@@ -22,7 +23,7 @@ async function listInboundCallsForRange(params: {
       startTimestamp: params.startMs,
       endTimestamp: params.endMs,
       paginationKey,
-      directionInboundOnly: true,
+      directionInboundOnly: params.directionInboundOnly,
     })
 
     const batch = result.calls || []
@@ -43,31 +44,35 @@ async function listInboundCallsForRange(params: {
   return allCalls
 }
 
-/**
- * Count inbound Retell calls in range — uses Retell v3 `include_total` when available.
- */
+/** Count inbound calls for a specific agent (transfer sync, agent-scoped views). */
 export async function countRetellInboundCallsForRange(params: {
   practiceId: string
   agentId: string | null
   startMs: number
   endMs: number
 }): Promise<number> {
-  const retellClient = await getRetellClient(params.practiceId)
-
-  const withTotal = await retellClient.listCalls({
-    agentId: params.agentId ?? undefined,
-    limit: 1,
-    startTimestamp: params.startMs,
-    endTimestamp: params.endMs,
+  const calls = await listCallsForRange({
+    ...params,
     directionInboundOnly: true,
-    includeTotal: true,
   })
+  return calls.length
+}
 
-  if (typeof withTotal.total === 'number') {
-    return withTotal.total
-  }
-
-  const calls = await listInboundCallsForRange(params)
+/**
+ * Count all Retell calls in range for the practice API key (all agents, all directions).
+ * Matches the Retell dashboard "past N days" total.
+ */
+export async function countRetellCallsForDashboardRange(params: {
+  practiceId: string
+  startMs: number
+  endMs: number
+}): Promise<number> {
+  const calls = await listCallsForRange({
+    practiceId: params.practiceId,
+    agentId: null,
+    startMs: params.startMs,
+    endMs: params.endMs,
+  })
   return calls.length
 }
 
@@ -83,7 +88,10 @@ export async function syncMissingRetellInboundCallsForRange(params: {
 }): Promise<{ fetched: number; imported: number; failed: number }> {
   const retellClient = await getRetellClient(params.practiceId)
   const { processRetellCallData } = await import('@/lib/process-call-data')
-  const calls = await listInboundCallsForRange(params)
+  const calls = await listCallsForRange({
+    ...params,
+    directionInboundOnly: true,
+  })
 
   let imported = 0
   let failed = 0

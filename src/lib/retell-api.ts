@@ -66,6 +66,105 @@ export class RetellApiClient {
     this.baseUrl = baseUrl
   }
 
+  private buildListCallsRequestBodies(params?: {
+    agentId?: string
+    limit?: number
+    startTimestamp?: number
+    endTimestamp?: number
+    paginationKey?: string
+    directionInboundOnly?: boolean
+    includeTotal?: boolean
+  }): { v3: Record<string, unknown>; v2: Record<string, unknown> } {
+    const shared: Record<string, unknown> = {
+      sort_order: 'descending',
+    }
+    if (params?.limit) shared.limit = params.limit
+    if (params?.paginationKey) shared.pagination_key = params.paginationKey
+    if (params?.includeTotal) shared.include_total = true
+
+    const v3Filter: Record<string, unknown> = {}
+    const v2Filter: Record<string, unknown> = {}
+
+    if (params?.agentId) {
+      v3Filter.agent = [{ agent_id: params.agentId }]
+      v2Filter.agent_id = [params.agentId]
+    }
+    if (params?.startTimestamp != null && params?.endTimestamp != null) {
+      v3Filter.start_timestamp = {
+        type: 'range',
+        op: 'bt',
+        value: [params.startTimestamp, params.endTimestamp],
+      }
+      v2Filter.start_timestamp = {
+        lower_threshold: params.startTimestamp,
+        upper_threshold: params.endTimestamp,
+      }
+    }
+    if (params?.directionInboundOnly) {
+      v3Filter.direction = {
+        type: 'enum',
+        op: 'in',
+        value: ['inbound'],
+      }
+      v2Filter.direction = ['inbound']
+    }
+
+    const v3: Record<string, unknown> = { ...shared }
+    const v2: Record<string, unknown> = { ...shared }
+    if (Object.keys(v3Filter).length > 0) v3.filter_criteria = v3Filter
+    if (Object.keys(v2Filter).length > 0) v2.filter_criteria = v2Filter
+
+    return { v3, v2 }
+  }
+
+  private parseListCallsResponse(data: unknown): {
+    calls: RetellCallListItem[]
+    total?: number
+    hasMore?: boolean
+    paginationKey?: string
+  } {
+    if (Array.isArray(data)) {
+      return { calls: data }
+    }
+
+    if (!data || typeof data !== 'object') {
+      throw new Error('Invalid response format from RetellAI list calls API')
+    }
+
+    const payload = data as Record<string, unknown>
+    const calls = (payload.items ?? payload.calls) as RetellCallListItem[] | undefined
+    if (!calls || !Array.isArray(calls)) {
+      throw new Error('Invalid response format from RetellAI list calls API')
+    }
+
+    return {
+      calls,
+      total:
+        typeof payload.total === 'number'
+          ? payload.total
+          : typeof payload.total === 'string' && payload.total.trim() !== ''
+            ? Number(payload.total)
+            : undefined,
+      hasMore: typeof payload.has_more === 'boolean' ? payload.has_more : undefined,
+      paginationKey:
+        typeof payload.pagination_key === 'string' ? payload.pagination_key : undefined,
+    }
+  }
+
+  private async postListCalls(
+    url: string,
+    body: Record<string, unknown>
+  ): Promise<Response> {
+    return fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    })
+  }
+
   /**
    * Get a list of calls
    * Documentation: https://docs.retellai.com/api-references/list-calls
@@ -89,51 +188,11 @@ export class RetellApiClient {
     paginationKey?: string
   }> {
     try {
-      const body: Record<string, unknown> = {
-        sort_order: 'descending',
-      }
+      const { v3, v2 } = this.buildListCallsRequestBodies(params)
 
-      const filter: Record<string, unknown> = {}
-      if (params?.agentId) {
-        filter.agent_id = [params.agentId]
-      }
-      if (params?.startTimestamp != null && params?.endTimestamp != null) {
-        filter.start_timestamp = {
-          lower_threshold: params.startTimestamp,
-          upper_threshold: params.endTimestamp,
-        }
-      }
-      if (params?.directionInboundOnly) {
-        filter.direction = ['inbound']
-      }
-      if (Object.keys(filter).length > 0) {
-        body.filter_criteria = filter
-      }
-
-      if (params?.limit) {
-        body.limit = params.limit
-      }
-
-      if (params?.paginationKey) {
-        body.pagination_key = params.paginationKey
-      }
-
-      if (params?.includeTotal) {
-        body.include_total = true
-      }
-
-      const requestInit = {
-        method: 'POST' as const,
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      }
-
-      let response = await fetch('https://api.retellai.com/v3/list-calls', requestInit)
-      if (!response.ok && (response.status === 404 || response.status === 405)) {
-        response = await fetch(`${this.baseUrl}/list-calls`, requestInit)
+      let response = await this.postListCalls('https://api.retellai.com/v3/list-calls', v3)
+      if (!response.ok) {
+        response = await this.postListCalls(`${this.baseUrl}/list-calls`, v2)
       }
 
       if (!response.ok) {
@@ -150,6 +209,11 @@ export class RetellApiClient {
             errorMessage = typeof errorJson.error === 'string'
               ? errorJson.error
               : JSON.stringify(errorJson.error)
+          } else if (errorJson.error_message) {
+            errorMessage =
+              typeof errorJson.error_message === 'string'
+                ? errorJson.error_message
+                : JSON.stringify(errorJson.error_message)
           }
         } catch {
           errorMessage = errorText || errorMessage
@@ -158,23 +222,7 @@ export class RetellApiClient {
       }
 
       const data = await response.json()
-
-      if (Array.isArray(data)) {
-        return { calls: data }
-      }
-
-      const calls = (data.items ?? data.calls) as RetellCallListItem[] | undefined
-      if (calls && Array.isArray(calls)) {
-        return {
-          calls,
-          total: typeof data.total === 'number' ? data.total : undefined,
-          hasMore: typeof data.has_more === 'boolean' ? data.has_more : undefined,
-          paginationKey:
-            typeof data.pagination_key === 'string' ? data.pagination_key : undefined,
-        }
-      }
-
-      throw new Error('Invalid response format from RetellAI list calls API')
+      return this.parseListCallsResponse(data)
     } catch (error) {
       console.error('Error listing RetellAI calls:', error)
       throw error

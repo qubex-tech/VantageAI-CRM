@@ -113,27 +113,29 @@ export function rollingRangeSpanDays(from: Date, to: Date): number {
 }
 
 /**
- * Rolling window aligned with Retell "past N days" (N × 24h ending at `now`).
+ * Dashboard / Retell window: today plus the previous (days - 1) calendar days in `timeZone`.
+ * Matches Retell dashboard "past N days" and the prior 178-call alignment.
  */
-export function resolveRetellRollingRange(
-  days: number,
-  now: Date = new Date()
-): { from: Date; to: Date; startMs: number; endMs: number } {
-  const endMs = now.getTime()
-  const startMs = endMs - days * MS_PER_DAY
-  return {
-    from: new Date(startMs),
-    to: new Date(endMs),
-    startMs,
-    endMs,
-  }
-}
-
-export function formatRetellRollingRangeLabel(
+export function resolveDashboardRangeInTimeZone(
   days: number,
   timeZone: string,
   now: Date = new Date()
+): { from: Date; to: Date; startMs: number; endMs: number; timeZone: string } {
+  const { from, to, timeZone: tz } = resolveRollingDayRangeInTimeZone(days, timeZone, now)
+  return {
+    from,
+    to,
+    startMs: from.getTime(),
+    endMs: to.getTime(),
+    timeZone: tz,
+  }
+}
+
+export function formatDashboardRangeLabel(
+  days: number,
+  from: Date,
+  to: Date,
+  timeZone: string
 ): string {
-  const { from, to } = resolveRetellRollingRange(days, now)
   return `Last ${days} days · ${formatRollingRangeLabel(from, to, timeZone)}`
 }

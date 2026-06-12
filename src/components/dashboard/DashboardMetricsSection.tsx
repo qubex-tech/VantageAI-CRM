@@ -6,11 +6,10 @@ import { isInboundAgentCall } from '@/lib/analytics/voiceConversationInbound'
 import type { AnalyticsCallRow } from '@/lib/analytics/callSort'
 import { computeInboundTransferMetrics } from '@/lib/analytics/transferMetrics'
 import {
-  formatRetellRollingRangeLabel,
-  resolveRetellRollingRange,
+  formatDashboardRangeLabel,
+  resolveDashboardRangeInTimeZone,
 } from '@/lib/analytics/dashboardDateRange'
-import { countRetellInboundCallsForRange } from '@/lib/analytics/retellCallSync'
-import { getRetellIntegrationConfig } from '@/lib/retell-api'
+import { countRetellCallsForDashboardRange } from '@/lib/analytics/retellCallSync'
 import { normalizeTimeZone, resolveTimeZone } from '@/lib/timezone'
 import type { DashboardMetricsPayload, DashboardPeriodMetrics } from '@/components/dashboard/types'
 
@@ -70,7 +69,7 @@ function buildPeriodMetrics(
 
   return {
     days,
-    rangeLabel: formatRetellRollingRangeLabel(days, timeZone, rangeEnd),
+    rangeLabel: formatDashboardRangeLabel(days, rangeStart, rangeEnd, timeZone),
     rangeStart: rangeStart.toISOString(),
     rangeEnd: rangeEnd.toISOString(),
     callsHandled: retellCallsHandled ?? inboundCalls.length,
@@ -85,24 +84,21 @@ async function loadDashboardMetrics(
   timeZone: string
 ): Promise<DashboardMetricsPayload> {
   const now = new Date()
-  const range7 = resolveRetellRollingRange(7, now)
-  const range30 = resolveRetellRollingRange(30, now)
+  const range7 = resolveDashboardRangeInTimeZone(7, timeZone, now)
+  const range30 = resolveDashboardRangeInTimeZone(30, timeZone, now)
 
   let retellCount7: number | null = null
   let retellCount30: number | null = null
 
   try {
-    const integration = await getRetellIntegrationConfig(practiceId)
     ;[retellCount7, retellCount30] = await Promise.all([
-      countRetellInboundCallsForRange({
+      countRetellCallsForDashboardRange({
         practiceId,
-        agentId: integration.agentId,
         startMs: range7.startMs,
         endMs: range7.endMs,
       }),
-      countRetellInboundCallsForRange({
+      countRetellCallsForDashboardRange({
         practiceId,
-        agentId: integration.agentId,
         startMs: range30.startMs,
         endMs: range30.endMs,
       }),

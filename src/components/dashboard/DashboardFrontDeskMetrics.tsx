@@ -45,9 +45,9 @@ export function DashboardFrontDeskMetrics({
       icon: PhoneForwarded,
       value: transfersSuccessful,
       detail: `${formatPercent(transferredPctOfHandled)} of calls handled`,
-      accent: 'text-lime-500',
-      iconBg: 'bg-lime-50',
-      iconColor: 'text-lime-600',
+      accent: 'text-orange-400',
+      iconBg: 'bg-orange-50',
+      iconColor: 'text-orange-400',
     },
     {
       title: 'Failed Transfers',
@@ -58,7 +58,7 @@ export function DashboardFrontDeskMetrics({
         transfersAttempted > 0
           ? `${formatPercent(failedPctOfAttempts)} of ${transfersAttempted} transfer attempts`
           : 'No transfer attempts in range',
-      accent: 'text-lime-500',
+      accent: 'text-red-500',
       iconBg: 'bg-red-50',
       iconColor: 'text-red-500',
     },
