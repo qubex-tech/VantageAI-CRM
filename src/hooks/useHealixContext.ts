@@ -19,6 +19,7 @@ export interface HealixContextPayload {
     windowEnd?: string
     frontDeskMetrics?: {
       days: number
+      timeZone?: string
       callsHandled: number
       transfersAttempted: number
       transfersSuccessful: number

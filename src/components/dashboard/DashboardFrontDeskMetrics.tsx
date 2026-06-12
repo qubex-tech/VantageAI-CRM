@@ -1,14 +1,10 @@
 'use client'
 
-import { format } from 'date-fns'
 import { Phone, PhoneForwarded, PhoneOff } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { DashboardDateRangeToggle } from '@/components/dashboard/DashboardDateRangeToggle'
 
 export interface DashboardFrontDeskMetricsProps {
   days: 7 | 30
-  rangeStart: string
-  rangeEnd: string
   callsHandled: number
   transfersSuccessful: number
   transfersUnsuccessful: number
@@ -22,8 +18,6 @@ function formatPercent(value: number): string {
 
 export function DashboardFrontDeskMetrics({
   days,
-  rangeStart,
-  rangeEnd,
   callsHandled,
   transfersSuccessful,
   transfersUnsuccessful,
@@ -33,8 +27,6 @@ export function DashboardFrontDeskMetrics({
     callsHandled > 0 ? (transfersSuccessful / callsHandled) * 100 : 0
   const failedPctOfAttempts =
     transfersAttempted > 0 ? (transfersUnsuccessful / transfersAttempted) * 100 : 0
-
-  const rangeLabel = `${format(new Date(rangeStart), 'MMM d')} – ${format(new Date(rangeEnd), 'MMM d, yyyy')}`
 
   const metrics = [
     {
@@ -73,45 +65,38 @@ export function DashboardFrontDeskMetrics({
   ]
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-xs text-gray-500">{rangeLabel}</p>
-        <DashboardDateRangeToggle days={days} />
-      </div>
-
-      <div className="grid gap-5 md:grid-cols-3">
-        {metrics.map((metric) => {
-          const Icon = metric.icon
-          return (
-            <Card
-              key={metric.title}
-              className="border border-gray-100 bg-white shadow-lg shadow-gray-200/50 transition-shadow hover:shadow-xl hover:shadow-gray-200/60"
-            >
-              <CardHeader className="pb-2">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <CardTitle className="text-sm font-medium text-gray-600">
-                      {metric.title}
-                    </CardTitle>
-                    <CardDescription className="text-xs leading-relaxed">
-                      {metric.description}
-                    </CardDescription>
-                  </div>
-                  <div className={`rounded-lg p-2 ${metric.iconBg}`}>
-                    <Icon className={`h-4 w-4 ${metric.iconColor}`} />
-                  </div>
+    <div className="grid gap-5 md:grid-cols-3">
+      {metrics.map((metric) => {
+        const Icon = metric.icon
+        return (
+          <Card
+            key={metric.title}
+            className="border border-gray-100 bg-white shadow-lg shadow-gray-200/50 transition-shadow hover:shadow-xl hover:shadow-gray-200/60"
+          >
+            <CardHeader className="pb-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <CardTitle className="text-sm font-medium text-gray-600">
+                    {metric.title}
+                  </CardTitle>
+                  <CardDescription className="text-xs leading-relaxed">
+                    {metric.description}
+                  </CardDescription>
                 </div>
-              </CardHeader>
-              <CardContent>
-                <div className={`text-4xl font-bold tracking-tight ${metric.accent}`}>
-                  {metric.value.toLocaleString()}
+                <div className={`rounded-lg p-2 ${metric.iconBg}`}>
+                  <Icon className={`h-4 w-4 ${metric.iconColor}`} />
                 </div>
-                <p className="mt-2 text-xs text-gray-500">{metric.detail}</p>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className={`text-4xl font-bold tracking-tight ${metric.accent}`}>
+                {metric.value.toLocaleString()}
+              </div>
+              <p className="mt-2 text-xs text-gray-500">{metric.detail}</p>
+            </CardContent>
+          </Card>
+        )
+      })}
     </div>
   )
 }
