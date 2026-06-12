@@ -1,0 +1,4850 @@
+{
+    "version": "1.0.0",
+    "generatedAt": "2026-06-06T20:36:33.163Z",
+    "sourceUrl": "https://www.opendental.com/site/apipermissions.html",
+    "totalOperations": 347,
+    "operations": [
+        {
+            "resource": "AccountModules",
+            "operation": "GetAging",
+            "httpMethod": "GET",
+            "path": "/accountmodules/aging",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "AccountModules",
+            "operation": "GetPatientBalances",
+            "httpMethod": "GET",
+            "path": "/accountmodules/patientbalances",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "AccountModules",
+            "operation": "GetServiceDateView",
+            "httpMethod": "GET",
+            "path": "/accountmodules/servicedateview",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Adjustments",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/adjustments",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Adjustments",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Adjustments",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/adjustments",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Adjustments",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Allergies",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/allergies",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Allergies",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Allergies",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/allergies",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Allergies",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Allergies",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "AllergyDefs",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/allergydefs",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "AllergyDefs",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "AllergyDefs",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/allergydefs",
+            "permissionTier": "Setup",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "AllergyDefs",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "Setup",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Appointments",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/appointments",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Appointments",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Appointments",
+            "operation": "GetSlotsWebSched",
+            "httpMethod": "GET",
+            "path": "/slotswebsched",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Appointments",
+            "operation": "GetSlots",
+            "httpMethod": "GET",
+            "path": "/slots",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Appointments",
+            "operation": "GetASAP",
+            "httpMethod": "GET",
+            "path": "/asap",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Appointments",
+            "operation": "GetWebSched",
+            "httpMethod": "GET",
+            "path": "/websched",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Appointments",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/appointments",
+            "permissionTier": "Appointments",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Appointments",
+            "operation": "CreatePlanned",
+            "httpMethod": "POST",
+            "path": "/planned",
+            "permissionTier": "Appointments",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Appointments",
+            "operation": "CreateSchedulePlanned",
+            "httpMethod": "POST",
+            "path": "/scheduleplanned",
+            "permissionTier": "Appointments",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Appointments",
+            "operation": "CreateWebSched",
+            "httpMethod": "POST",
+            "path": "/websched",
+            "permissionTier": "Appointments",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Appointments",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "Appointments",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Appointments",
+            "operation": "Break",
+            "httpMethod": "PUT",
+            "path": "/{id}/break",
+            "permissionTier": "Comm",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Appointments",
+            "operation": "Confirm",
+            "httpMethod": "PUT",
+            "path": "/{id}/confirm",
+            "permissionTier": "Comm",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Appointments",
+            "operation": "UpdateNote",
+            "httpMethod": "PUT",
+            "path": "/{id}/note",
+            "permissionTier": "Comm",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "AppointmentTypes",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/appointmenttypes",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "AppointmentTypes",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ApptFieldDefs",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/apptfielddefs",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ApptFieldDefs",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ApptFieldDefs",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/apptfielddefs",
+            "permissionTier": "Setup",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ApptFieldDefs",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ApptFields",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/apptfields",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ApptFields",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/apptfields",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ApptFields",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "Comm",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ApptFields",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "AsapComms",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/asapcomms",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "AsapComms",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "AsapComms",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/asapcomms",
+            "permissionTier": "TextingASAP",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "AutoNoteControls",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/autonotecontrols",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "AutoNoteControls",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/autonotecontrols",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "AutoNoteControls",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "AutoNotes",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/autonotes",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "AutoNotes",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/autonotes",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "AutoNotes",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Benefits",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/benefits",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Benefits",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Benefits",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/benefits",
+            "permissionTier": "Insurance",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Benefits",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "Insurance",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Benefits",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "Insurance",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Carriers",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/carriers",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Carriers",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Carriers",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/carriers",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Carriers",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ChartModules",
+            "operation": "GetProgNotes",
+            "httpMethod": "GET",
+            "path": "/chartmodules/prognotes",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ChartModules",
+            "operation": "GetPatientInfo",
+            "httpMethod": "GET",
+            "path": "/chartmodules/patientinfo",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ChartModules",
+            "operation": "GetPlannedAppts",
+            "httpMethod": "GET",
+            "path": "/chartmodules/plannedappts",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ClaimForms",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/claimforms",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ClaimForms",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ClaimProcs",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/claimprocs",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ClaimProcs",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ClaimProcs",
+            "operation": "CreateInsAdjust",
+            "httpMethod": "POST",
+            "path": "/insadjust",
+            "permissionTier": "InsuranceSimple",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ClaimProcs",
+            "operation": "UpdateInsAdjust",
+            "httpMethod": "PUT",
+            "path": "/insadjust",
+            "permissionTier": "InsuranceSimple",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ClaimProcs",
+            "operation": "CreateSupplemental",
+            "httpMethod": "POST",
+            "path": "/supplemental",
+            "permissionTier": "Insurance",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ClaimProcs",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "Insurance",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ClaimPayments",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/claimpayments",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ClaimPayments",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ClaimPayments",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/claimpayments",
+            "permissionTier": "Insurance",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ClaimPayments",
+            "operation": "CreateBatch",
+            "httpMethod": "POST",
+            "path": "/batch",
+            "permissionTier": "Insurance",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ClaimPayments",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "Insurance",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ClaimPayments",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "Insurance",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Claims",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/claims",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Claims",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Claims",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/claims",
+            "permissionTier": "Insurance",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Claims",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "Insurance",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Claims",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "Insurance",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Claims",
+            "operation": "UpdateStatus",
+            "httpMethod": "PUT",
+            "path": "/{id}/status",
+            "permissionTier": "Insurance",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Claims",
+            "operation": "Split",
+            "httpMethod": "PUT",
+            "path": "/{id}/split",
+            "permissionTier": "Insurance",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ClaimTrackings",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/claimtrackings",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ClaimTrackings",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/claimtrackings",
+            "permissionTier": "Insurance",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ClaimTrackings",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "Insurance",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Clinics",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/clinics",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Clinics",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "Setup",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ClockEvents",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/clockevents",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ClockEvents",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "CodeGroups",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/codegroups",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "CodeGroups",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Commlogs",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/commlogs",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Commlogs",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Commlogs",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/commlogs",
+            "permissionTier": "Comm",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Computers",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/computers",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "CovCats",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/covcats",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "CovCats",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "CovCats",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/covcats",
+            "permissionTier": "Setup",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "CovCats",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "Setup",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "CovSpans",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/covspans",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "CovSpans",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "CovSpans",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/covspans",
+            "permissionTier": "Setup",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "CovSpans",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "Setup",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "CovSpans",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "Setup",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Definitions",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/definitions",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Definitions",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/definitions",
+            "permissionTier": "Setup",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Deposits",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/deposits",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Deposits",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Deposits",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/deposits",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Deposits",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Deposits",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "DiscountPlans",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/discountplans",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "DiscountPlans",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/discountplans",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "DiscountPlans",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "DiscountPlanSubs",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/discountplansubs",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "DiscountPlanSubs",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/discountplansubs",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "DiscountPlanSubs",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "DiscountPlanSubs",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Diseases",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/diseases",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Diseases",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Diseases",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/diseases",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Diseases",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Diseases",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "DiseaseDefs",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/diseasedefs",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "DiseaseDefs",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "DiseaseDefs",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/diseasedefs",
+            "permissionTier": "Setup",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Documents",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/documents",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Documents",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Documents",
+            "operation": "Upload",
+            "httpMethod": "POST",
+            "path": "/upload",
+            "permissionTier": "Documents",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Documents",
+            "operation": "DownloadSftp",
+            "httpMethod": "POST",
+            "path": "/downloadsftp",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Documents",
+            "operation": "SetByUrl",
+            "httpMethod": "POST",
+            "path": "/setbyurl",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Documents",
+            "operation": "UploadSftp",
+            "httpMethod": "POST",
+            "path": "/uploadsftp",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Documents",
+            "operation": "Thumbnails",
+            "httpMethod": "POST",
+            "path": "/thumbnails",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Documents",
+            "operation": "DownloadMount",
+            "httpMethod": "POST",
+            "path": "/downloadmount",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Documents",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Documents",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "EhrPatients",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/ehrpatients",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "EhrPatients",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "EobAttaches",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/eobattaches",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "EobAttaches",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/eobattaches",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "EobAttaches",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "EobAttaches",
+            "operation": "DownloadSftp",
+            "httpMethod": "POST",
+            "path": "/downloadsftp",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "EobAttaches",
+            "operation": "UploadSftp",
+            "httpMethod": "POST",
+            "path": "/uploadsftp",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Employees",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/employees",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Employees",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Employees",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/employees",
+            "permissionTier": "Setup",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Employees",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "Setup",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Employers",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/employers",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Employers",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Employers",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/employers",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Employers",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Employers",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "EtransMessageTexts",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/etransmessagetexts",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Etranss",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/etranss",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "FamilyModules",
+            "operation": "GetInsurance",
+            "httpMethod": "GET",
+            "path": "/familymodules/insurance",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Fees",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/fees",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Fees",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Fees",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/fees",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Fees",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Fees",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "FeeScheds",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/feescheds",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "FeeScheds",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/feescheds",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "FeeScheds",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Guardians",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/guardians",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Guardians",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Guardians",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/guardians",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Guardians",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "HistAppointments",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/histappointments",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "InsPlans",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/insplans",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "InsPlans",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "InsPlans",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/insplans",
+            "permissionTier": "Insurance",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "InsPlans",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "Insurance",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "InsSubs",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/inssubs",
+            "permissionTier": "InsuranceSimple",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "InsSubs",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "InsuranceSimple",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "InsSubs",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "InsuranceSimple",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "InsVerifies",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "InsuranceSimple",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "LabCases",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/labcases",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "LabCases",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "LabCases",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/labcases",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "LabCases",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "LabCases",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Laboratories",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/laboratories",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Laboratories",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Laboratories",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/laboratories",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Laboratories",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "LabTurnarounds",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/labturnarounds",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "LabTurnarounds",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "LabTurnarounds",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/labturnarounds",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "LabTurnarounds",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Medications",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/medications",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Medications",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Medications",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/medications",
+            "permissionTier": "Setup",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Medications",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "Setup",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Medications",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "Setup",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "MedicationPats",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/medicationpats",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "MedicationPats",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/medicationpats",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "MedicationPats",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Operatories",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/operatories",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Operatories",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PatFieldDefs",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/patfielddefs",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PatFieldDefs",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/patfielddefs",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PatFieldDefs",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PatFieldDefs",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PatFields",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/patfields",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PatFields",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PatientNotes",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/patientnotes",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PatientNotes",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PatientRaces",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/patientraces",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Patients",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/patients",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": true,
+            "lastModifiedField": "DateTStamp"
+        },
+        {
+            "resource": "Patients",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Patients",
+            "operation": "GetSimple",
+            "httpMethod": "GET",
+            "path": "/simple",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Patients",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/patients",
+            "permissionTier": "Patients",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Patients",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "Patients",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PatPlans",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/patplans",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PatPlans",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/patplans",
+            "permissionTier": "InsuranceSimple",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PatPlans",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "InsuranceSimple",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PatRestrictions",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/patrestrictions",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PatRestrictions",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PatRestrictions",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/patrestrictions",
+            "permissionTier": "Patients",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PatRestrictions",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "Patients",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Payments",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/payments",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Payments",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/payments",
+            "permissionTier": "Payments",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Payments",
+            "operation": "CreateRefund",
+            "httpMethod": "POST",
+            "path": "/refund",
+            "permissionTier": "Payments",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Payments",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "Payments",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Payments",
+            "operation": "UpdatePartial",
+            "httpMethod": "PUT",
+            "path": "/{id}/partial",
+            "permissionTier": "Payments",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PayPlanCharges",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/payplancharges",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PayPlanLinks",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/payplanlinks",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PayPlanLinks",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PayPlanLinks",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/payplanlinks",
+            "permissionTier": "PayPlans",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PayPlanLinks",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "PayPlans",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PayPlanLinks",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "PayPlans",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PayPlans",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/payplans",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PayPlans",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PayPlans",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/payplans",
+            "permissionTier": "PayPlans",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false,
+            "notes": "Deprecated in version 23.3"
+        },
+        {
+            "resource": "PayPlans",
+            "operation": "CreateDynamic",
+            "httpMethod": "POST",
+            "path": "/dynamic",
+            "permissionTier": "PayPlans",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PayPlans",
+            "operation": "UpdateDynamic",
+            "httpMethod": "PUT",
+            "path": "/{id}/dynamic",
+            "permissionTier": "PayPlans",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PaySplits",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/paysplits",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PaySplits",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "Payments",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PerioExams",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/perioexams",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PerioExams",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/perioexams",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PerioExams",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PerioExams",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PerioMeasures",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/periomeasures",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PerioMeasures",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/periomeasures",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PerioMeasures",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "PerioMeasures",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Pharmacies",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/pharmacies",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Pharmacies",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Popups",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/popups",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Popups",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/popups",
+            "permissionTier": "Comm",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Popups",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "Comm",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Preferences",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/preferences",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ProcedureCodes",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/procedurecodes",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ProcedureCodes",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ProcedureCodes",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/procedurecodes",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ProcedureCodes",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ProcedureLogs",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/procedurelogs",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ProcedureLogs",
+            "operation": "GetInsuranceHistory",
+            "httpMethod": "GET",
+            "path": "/insurancehistory",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ProcedureLogs",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/procedurelogs",
+            "permissionTier": "ProcedureLogs",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ProcedureLogs",
+            "operation": "CreateInsuranceHistory",
+            "httpMethod": "POST",
+            "path": "/insurancehistory",
+            "permissionTier": "ProcedureLogs",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ProcedureLogs",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "ProcedureLogs",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ProcedureLogs",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "ProcedureLogs",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ProcedureLogs",
+            "operation": "CreateGroupNote",
+            "httpMethod": "POST",
+            "path": "/groupnote",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ProcedureLogs",
+            "operation": "UpdateGroupNote",
+            "httpMethod": "PUT",
+            "path": "/groupnote",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ProcedureLogs",
+            "operation": "DeleteGroupNote",
+            "httpMethod": "DELETE",
+            "path": "/groupnote",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ProcNotes",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/procnotes",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ProcNotes",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/procnotes",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ProcTPs",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/proctps",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ProcTPs",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ProcTPs",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Providers",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/providers",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Providers",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Providers",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/providers",
+            "permissionTier": "Setup",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Providers",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "Setup",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "QuickPasteCats",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/quickpastecats",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "QuickPasteCats",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "QuickPasteNotes",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/quickpastenotes",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "QuickPasteNotes",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Recalls",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/recalls",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Recalls",
+            "operation": "GetList",
+            "httpMethod": "GET",
+            "path": "/list",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Recalls",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/recalls",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Recalls",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Recalls",
+            "operation": "UpdateStatus",
+            "httpMethod": "PUT",
+            "path": "/{id}/status",
+            "permissionTier": "Comm",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Recalls",
+            "operation": "SwitchType",
+            "httpMethod": "PUT",
+            "path": "/{id}/switchtype",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "RecallTypes",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/recalltypes",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "RecallTypes",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "RefAttaches",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/refattaches",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "RefAttaches",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/refattaches",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "RefAttaches",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "RefAttaches",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Referrals",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/referrals",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Referrals",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Referrals",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/referrals",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Referrals",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Reports",
+            "operation": "GetAging",
+            "httpMethod": "GET",
+            "path": "/reports/aging",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Reports",
+            "operation": "GetFinanceCharges",
+            "httpMethod": "GET",
+            "path": "/reports/financecharges",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "RxPats",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/rxpats",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "RxPats",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "SecurityLogs",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/securitylogs",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "SecurityPerms",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/securityperms",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ScheduleOps",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/scheduleops",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Schedules",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/schedules",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Schedules",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "SheetDefs",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/sheetdefs",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Sheets",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/sheets",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Sheets",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/sheets",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Sheets",
+            "operation": "DownloadSftp",
+            "httpMethod": "POST",
+            "path": "/downloadsftp",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "SheetFieldDefs",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/sheetfielddefs",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "SheetFieldDefs",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "SheetFields",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/sheetfields",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Signalods",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/signalods",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": true,
+            "lastModifiedField": "SigDateTime"
+        },
+        {
+            "resource": "Statements",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/statements",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Statements",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Statements",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/statements",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Statements",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Subscriptions",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/subscriptions",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Subscriptions",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/subscriptions",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Subscriptions",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "SubstitutionLinks",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/substitutionlinks",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "SubstitutionLinks",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/substitutionlinks",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "SubstitutionLinks",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "SubstitutionLinks",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "TaskLists",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/tasklists",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "TaskNotes",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/tasknotes",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "TaskNotes",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "TaskNotes",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/tasknotes",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "TaskNotes",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Tasks",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/tasks",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Tasks",
+            "operation": "GetSingle",
+            "httpMethod": "GET",
+            "path": "/{id}",
+            "permissionTier": "ReadAll",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Tasks",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/tasks",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Tasks",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ToothInitials",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/toothinitials",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ToothInitials",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/toothinitials",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "ToothInitials",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "TreatPlanAttaches",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/treatplanattaches",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "TreatPlans",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/treatplans",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "TreatPlans",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/treatplans",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "TreatPlans",
+            "operation": "CreateSaved",
+            "httpMethod": "POST",
+            "path": "/saved",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "TreatPlans",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "TreatPlans",
+            "operation": "Delete",
+            "httpMethod": "DELETE",
+            "path": "/{id}",
+            "permissionTier": "AllOthers",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "UserGroupAttaches",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/usergroupattaches",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "UserGroups",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/usergroups",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Userods",
+            "operation": "Get",
+            "httpMethod": "GET",
+            "path": "/userods",
+            "permissionTier": "ReadAll",
+            "supportsPagination": true,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Userods",
+            "operation": "Create",
+            "httpMethod": "POST",
+            "path": "/userods",
+            "permissionTier": "Setup",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Userods",
+            "operation": "Update",
+            "httpMethod": "PUT",
+            "path": "/{id}",
+            "permissionTier": "Setup",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Queries",
+            "operation": "Post",
+            "httpMethod": "POST",
+            "path": "/queries",
+            "permissionTier": "Queries",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        },
+        {
+            "resource": "Queries",
+            "operation": "ShortQuery",
+            "httpMethod": "PUT",
+            "path": "/shortquery",
+            "permissionTier": "Queries",
+            "supportsPagination": false,
+            "supportsIncrementalSync": false
+        }
+    ],
+    "syncCapabilities": {
+        "AccountModules": {
+            "uniqueId": "AccountModulesNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": false,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "GetAging",
+                "GetPatientBalances",
+                "GetServiceDateView"
+            ]
+        },
+        "Adjustments": {
+            "uniqueId": "AdjustmentsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Update"
+            ]
+        },
+        "Allergies": {
+            "uniqueId": "AllergiesNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Update",
+                "Delete"
+            ]
+        },
+        "AllergyDefs": {
+            "uniqueId": "AllergyDefsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Update"
+            ]
+        },
+        "Appointments": {
+            "uniqueId": "AppointmentsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "GetSlotsWebSched",
+                "GetSlots",
+                "GetASAP",
+                "GetWebSched",
+                "Create",
+                "CreatePlanned",
+                "CreateSchedulePlanned",
+                "CreateWebSched",
+                "Update",
+                "Break",
+                "Confirm",
+                "UpdateNote"
+            ]
+        },
+        "AppointmentTypes": {
+            "uniqueId": "AppointmentTypesNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle"
+            ]
+        },
+        "ApptFieldDefs": {
+            "uniqueId": "ApptFieldDefsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Update"
+            ]
+        },
+        "ApptFields": {
+            "uniqueId": "ApptFieldsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Create",
+                "Update",
+                "Delete"
+            ]
+        },
+        "AsapComms": {
+            "uniqueId": "AsapCommsNum",
+            "search": true,
+            "create": true,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create"
+            ]
+        },
+        "AutoNoteControls": {
+            "uniqueId": "AutoNoteControlsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Create",
+                "Update"
+            ]
+        },
+        "AutoNotes": {
+            "uniqueId": "AutoNotesNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Create",
+                "Update"
+            ]
+        },
+        "Benefits": {
+            "uniqueId": "BenefitsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Update",
+                "Delete"
+            ]
+        },
+        "Carriers": {
+            "uniqueId": "CarriersNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Update"
+            ]
+        },
+        "ChartModules": {
+            "uniqueId": "ChartModulesNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": false,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "GetProgNotes",
+                "GetPatientInfo",
+                "GetPlannedAppts"
+            ]
+        },
+        "ClaimForms": {
+            "uniqueId": "ClaimFormsNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle"
+            ]
+        },
+        "ClaimProcs": {
+            "uniqueId": "ClaimProcsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "CreateInsAdjust",
+                "UpdateInsAdjust",
+                "CreateSupplemental",
+                "Update"
+            ]
+        },
+        "ClaimPayments": {
+            "uniqueId": "ClaimPaymentsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "CreateBatch",
+                "Update",
+                "Delete"
+            ]
+        },
+        "Claims": {
+            "uniqueId": "ClaimsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Update",
+                "Delete",
+                "UpdateStatus",
+                "Split"
+            ]
+        },
+        "ClaimTrackings": {
+            "uniqueId": "ClaimTrackingsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Create",
+                "Update"
+            ]
+        },
+        "Clinics": {
+            "uniqueId": "ClinicsNum",
+            "search": true,
+            "create": false,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Update"
+            ]
+        },
+        "ClockEvents": {
+            "uniqueId": "ClockEventsNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle"
+            ]
+        },
+        "CodeGroups": {
+            "uniqueId": "CodeGroupsNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle"
+            ]
+        },
+        "Commlogs": {
+            "uniqueId": "CommlogsNum",
+            "search": true,
+            "create": true,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create"
+            ]
+        },
+        "Computers": {
+            "uniqueId": "ComputersNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get"
+            ]
+        },
+        "CovCats": {
+            "uniqueId": "CovCatsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Update"
+            ]
+        },
+        "CovSpans": {
+            "uniqueId": "CovSpansNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Update",
+                "Delete"
+            ]
+        },
+        "Definitions": {
+            "uniqueId": "DefinitionsNum",
+            "search": true,
+            "create": true,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Create"
+            ]
+        },
+        "Deposits": {
+            "uniqueId": "DepositsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Update",
+                "Delete"
+            ]
+        },
+        "DiscountPlans": {
+            "uniqueId": "DiscountPlansNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Create",
+                "Update"
+            ]
+        },
+        "DiscountPlanSubs": {
+            "uniqueId": "DiscountPlanSubsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Create",
+                "Update",
+                "Delete"
+            ]
+        },
+        "Diseases": {
+            "uniqueId": "DiseasesNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Update",
+                "Delete"
+            ]
+        },
+        "DiseaseDefs": {
+            "uniqueId": "DiseaseDefsNum",
+            "search": true,
+            "create": true,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create"
+            ]
+        },
+        "Documents": {
+            "uniqueId": "DocumentsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Upload",
+                "DownloadSftp",
+                "SetByUrl",
+                "UploadSftp",
+                "Thumbnails",
+                "DownloadMount",
+                "Update",
+                "Delete"
+            ]
+        },
+        "EhrPatients": {
+            "uniqueId": "EhrPatientsNum",
+            "search": true,
+            "create": false,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Update"
+            ]
+        },
+        "EobAttaches": {
+            "uniqueId": "EobAttachesNum",
+            "search": true,
+            "create": true,
+            "update": false,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Create",
+                "Delete",
+                "DownloadSftp",
+                "UploadSftp"
+            ]
+        },
+        "Employees": {
+            "uniqueId": "EmployeesNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Update"
+            ]
+        },
+        "Employers": {
+            "uniqueId": "EmployersNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Update",
+                "Delete"
+            ]
+        },
+        "EtransMessageTexts": {
+            "uniqueId": "EtransMessageTextsNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get"
+            ]
+        },
+        "Etranss": {
+            "uniqueId": "EtranssNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get"
+            ]
+        },
+        "FamilyModules": {
+            "uniqueId": "FamilyModulesNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": false,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "GetInsurance"
+            ]
+        },
+        "Fees": {
+            "uniqueId": "FeesNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Update",
+                "Delete"
+            ]
+        },
+        "FeeScheds": {
+            "uniqueId": "FeeSchedsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Create",
+                "Update"
+            ]
+        },
+        "Guardians": {
+            "uniqueId": "GuardiansNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Update"
+            ]
+        },
+        "HistAppointments": {
+            "uniqueId": "HistAppointmentsNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get"
+            ]
+        },
+        "InsPlans": {
+            "uniqueId": "InsPlansNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Update"
+            ]
+        },
+        "InsSubs": {
+            "uniqueId": "InsSubsNum",
+            "search": false,
+            "create": true,
+            "update": true,
+            "delete": true,
+            "bulkRead": false,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Create",
+                "Update",
+                "Delete"
+            ]
+        },
+        "InsVerifies": {
+            "uniqueId": "InsVerifiesNum",
+            "search": false,
+            "create": false,
+            "update": true,
+            "delete": false,
+            "bulkRead": false,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Update"
+            ]
+        },
+        "LabCases": {
+            "uniqueId": "LabCasesNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Update",
+                "Delete"
+            ]
+        },
+        "Laboratories": {
+            "uniqueId": "LaboratoriesNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Update"
+            ]
+        },
+        "LabTurnarounds": {
+            "uniqueId": "LabTurnaroundsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Update"
+            ]
+        },
+        "Medications": {
+            "uniqueId": "MedicationsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Update",
+                "Delete"
+            ]
+        },
+        "MedicationPats": {
+            "uniqueId": "MedicationPatsNum",
+            "search": true,
+            "create": true,
+            "update": false,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Create",
+                "Delete"
+            ]
+        },
+        "Operatories": {
+            "uniqueId": "OperatoriesNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle"
+            ]
+        },
+        "PatFieldDefs": {
+            "uniqueId": "PatFieldDefsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Create",
+                "Update",
+                "Delete"
+            ]
+        },
+        "PatFields": {
+            "uniqueId": "PatFieldsNum",
+            "search": true,
+            "create": false,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Update"
+            ]
+        },
+        "PatientNotes": {
+            "uniqueId": "PatientNotesNum",
+            "search": true,
+            "create": false,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Update"
+            ]
+        },
+        "PatientRaces": {
+            "uniqueId": "PatientRacesNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get"
+            ]
+        },
+        "Patients": {
+            "uniqueId": "PatientsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": true,
+            "lastModifiedField": "DateTStamp",
+            "operations": [
+                "Get",
+                "GetSingle",
+                "GetSimple",
+                "Create",
+                "Update"
+            ]
+        },
+        "PatPlans": {
+            "uniqueId": "PatPlansNum",
+            "search": true,
+            "create": true,
+            "update": false,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Create",
+                "Delete"
+            ]
+        },
+        "PatRestrictions": {
+            "uniqueId": "PatRestrictionsNum",
+            "search": true,
+            "create": true,
+            "update": false,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Delete"
+            ]
+        },
+        "Payments": {
+            "uniqueId": "PaymentsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Create",
+                "CreateRefund",
+                "Update",
+                "UpdatePartial"
+            ]
+        },
+        "PayPlanCharges": {
+            "uniqueId": "PayPlanChargesNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get"
+            ]
+        },
+        "PayPlanLinks": {
+            "uniqueId": "PayPlanLinksNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Update",
+                "Delete"
+            ]
+        },
+        "PayPlans": {
+            "uniqueId": "PayPlansNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "CreateDynamic",
+                "UpdateDynamic"
+            ]
+        },
+        "PaySplits": {
+            "uniqueId": "PaySplitsNum",
+            "search": true,
+            "create": false,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Update"
+            ]
+        },
+        "PerioExams": {
+            "uniqueId": "PerioExamsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Create",
+                "Update",
+                "Delete"
+            ]
+        },
+        "PerioMeasures": {
+            "uniqueId": "PerioMeasuresNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Create",
+                "Update",
+                "Delete"
+            ]
+        },
+        "Pharmacies": {
+            "uniqueId": "PharmaciesNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle"
+            ]
+        },
+        "Popups": {
+            "uniqueId": "PopupsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Create",
+                "Update"
+            ]
+        },
+        "Preferences": {
+            "uniqueId": "PreferencesNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get"
+            ]
+        },
+        "ProcedureCodes": {
+            "uniqueId": "ProcedureCodesNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Update"
+            ]
+        },
+        "ProcedureLogs": {
+            "uniqueId": "ProcedureLogsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetInsuranceHistory",
+                "Create",
+                "CreateInsuranceHistory",
+                "Update",
+                "Delete",
+                "CreateGroupNote",
+                "UpdateGroupNote",
+                "DeleteGroupNote"
+            ]
+        },
+        "ProcNotes": {
+            "uniqueId": "ProcNotesNum",
+            "search": true,
+            "create": true,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Create"
+            ]
+        },
+        "ProcTPs": {
+            "uniqueId": "ProcTPsNum",
+            "search": true,
+            "create": false,
+            "update": true,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Update",
+                "Delete"
+            ]
+        },
+        "Providers": {
+            "uniqueId": "ProvidersNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Update"
+            ]
+        },
+        "QuickPasteCats": {
+            "uniqueId": "QuickPasteCatsNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle"
+            ]
+        },
+        "QuickPasteNotes": {
+            "uniqueId": "QuickPasteNotesNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle"
+            ]
+        },
+        "Recalls": {
+            "uniqueId": "RecallsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetList",
+                "Create",
+                "Update",
+                "UpdateStatus",
+                "SwitchType"
+            ]
+        },
+        "RecallTypes": {
+            "uniqueId": "RecallTypesNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle"
+            ]
+        },
+        "RefAttaches": {
+            "uniqueId": "RefAttachesNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Create",
+                "Update",
+                "Delete"
+            ]
+        },
+        "Referrals": {
+            "uniqueId": "ReferralsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Update"
+            ]
+        },
+        "Reports": {
+            "uniqueId": "ReportsNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": false,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "GetAging",
+                "GetFinanceCharges"
+            ]
+        },
+        "RxPats": {
+            "uniqueId": "RxPatsNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle"
+            ]
+        },
+        "SecurityLogs": {
+            "uniqueId": "SecurityLogsNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get"
+            ]
+        },
+        "SecurityPerms": {
+            "uniqueId": "SecurityPermsNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get"
+            ]
+        },
+        "ScheduleOps": {
+            "uniqueId": "ScheduleOpsNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get"
+            ]
+        },
+        "Schedules": {
+            "uniqueId": "SchedulesNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle"
+            ]
+        },
+        "SheetDefs": {
+            "uniqueId": "SheetDefsNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get"
+            ]
+        },
+        "Sheets": {
+            "uniqueId": "SheetsNum",
+            "search": true,
+            "create": true,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Create",
+                "DownloadSftp"
+            ]
+        },
+        "SheetFieldDefs": {
+            "uniqueId": "SheetFieldDefsNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle"
+            ]
+        },
+        "SheetFields": {
+            "uniqueId": "SheetFieldsNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get"
+            ]
+        },
+        "Signalods": {
+            "uniqueId": "SignalodsNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": true,
+            "lastModifiedField": "SigDateTime",
+            "operations": [
+                "Get"
+            ]
+        },
+        "Statements": {
+            "uniqueId": "StatementsNum",
+            "search": true,
+            "create": true,
+            "update": false,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Delete"
+            ]
+        },
+        "Subscriptions": {
+            "uniqueId": "SubscriptionsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Create",
+                "Update"
+            ]
+        },
+        "SubstitutionLinks": {
+            "uniqueId": "SubstitutionLinksNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Create",
+                "Update",
+                "Delete"
+            ]
+        },
+        "TaskLists": {
+            "uniqueId": "TaskListsNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get"
+            ]
+        },
+        "TaskNotes": {
+            "uniqueId": "TaskNotesNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Update"
+            ]
+        },
+        "Tasks": {
+            "uniqueId": "TasksNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "GetSingle",
+                "Create",
+                "Update"
+            ]
+        },
+        "ToothInitials": {
+            "uniqueId": "ToothInitialsNum",
+            "search": true,
+            "create": true,
+            "update": false,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Create",
+                "Delete"
+            ]
+        },
+        "TreatPlanAttaches": {
+            "uniqueId": "TreatPlanAttachesNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get"
+            ]
+        },
+        "TreatPlans": {
+            "uniqueId": "TreatPlansNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": true,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Create",
+                "CreateSaved",
+                "Update",
+                "Delete"
+            ]
+        },
+        "UserGroupAttaches": {
+            "uniqueId": "UserGroupAttachesNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get"
+            ]
+        },
+        "UserGroups": {
+            "uniqueId": "UserGroupsNum",
+            "search": true,
+            "create": false,
+            "update": false,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get"
+            ]
+        },
+        "Userods": {
+            "uniqueId": "UserodsNum",
+            "search": true,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": true,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Get",
+                "Create",
+                "Update"
+            ]
+        },
+        "Queries": {
+            "uniqueId": "QueriesNum",
+            "search": false,
+            "create": true,
+            "update": true,
+            "delete": false,
+            "bulkRead": false,
+            "incrementalRead": false,
+            "lastModifiedField": null,
+            "operations": [
+                "Post",
+                "ShortQuery"
+            ]
+        }
+    },
+    "resources": [
+        "AccountModules",
+        "Adjustments",
+        "Allergies",
+        "AllergyDefs",
+        "AppointmentTypes",
+        "Appointments",
+        "ApptFieldDefs",
+        "ApptFields",
+        "AsapComms",
+        "AutoNoteControls",
+        "AutoNotes",
+        "Benefits",
+        "Carriers",
+        "ChartModules",
+        "ClaimForms",
+        "ClaimPayments",
+        "ClaimProcs",
+        "ClaimTrackings",
+        "Claims",
+        "Clinics",
+        "ClockEvents",
+        "CodeGroups",
+        "Commlogs",
+        "Computers",
+        "CovCats",
+        "CovSpans",
+        "Definitions",
+        "Deposits",
+        "DiscountPlanSubs",
+        "DiscountPlans",
+        "DiseaseDefs",
+        "Diseases",
+        "Documents",
+        "EhrPatients",
+        "Employees",
+        "Employers",
+        "EobAttaches",
+        "EtransMessageTexts",
+        "Etranss",
+        "FamilyModules",
+        "FeeScheds",
+        "Fees",
+        "Guardians",
+        "HistAppointments",
+        "InsPlans",
+        "InsSubs",
+        "InsVerifies",
+        "LabCases",
+        "LabTurnarounds",
+        "Laboratories",
+        "MedicationPats",
+        "Medications",
+        "Operatories",
+        "PatFieldDefs",
+        "PatFields",
+        "PatPlans",
+        "PatRestrictions",
+        "PatientNotes",
+        "PatientRaces",
+        "Patients",
+        "PayPlanCharges",
+        "PayPlanLinks",
+        "PayPlans",
+        "PaySplits",
+        "Payments",
+        "PerioExams",
+        "PerioMeasures",
+        "Pharmacies",
+        "Popups",
+        "Preferences",
+        "ProcNotes",
+        "ProcTPs",
+        "ProcedureCodes",
+        "ProcedureLogs",
+        "Providers",
+        "Queries",
+        "QuickPasteCats",
+        "QuickPasteNotes",
+        "RecallTypes",
+        "Recalls",
+        "RefAttaches",
+        "Referrals",
+        "Reports",
+        "RxPats",
+        "ScheduleOps",
+        "Schedules",
+        "SecurityLogs",
+        "SecurityPerms",
+        "SheetDefs",
+        "SheetFieldDefs",
+        "SheetFields",
+        "Sheets",
+        "Signalods",
+        "Statements",
+        "Subscriptions",
+        "SubstitutionLinks",
+        "TaskLists",
+        "TaskNotes",
+        "Tasks",
+        "ToothInitials",
+        "TreatPlanAttaches",
+        "TreatPlans",
+        "UserGroupAttaches",
+        "UserGroups",
+        "Userods"
+    ]
+}

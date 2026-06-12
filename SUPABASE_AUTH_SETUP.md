@@ -81,12 +81,31 @@ In your Supabase Dashboard:
 - Set new password from email link
 - Password confirmation
 
+## Data access architecture (Supabase #45329)
+
+This project uses Supabase for **Auth** and as the **Postgres host** only. Application data is read and written through **Prisma** and `DATABASE_URL` (direct/pooled Postgres), not through the Supabase Data API (PostgREST / `supabase.from()`).
+
+| Concern | How this repo handles it |
+|--------|---------------------------|
+| Auth | `@supabase/ssr` / `supabase.auth.*` |
+| CRM data | Prisma in API routes and server components |
+| Mobile login | `POST /auth/v1/token` via [`src/app/api/mobile/auth/route.ts`](src/app/api/mobile/auth/route.ts) |
+
+**Do not** add `supabase.from()` or `/rest/v1/` calls for app data without explicit Postgres `GRANT`s and RLS policies. Blanket grants on every Prisma migration would widen PostgREST exposure without benefit.
+
+Supabase is changing defaults so new `public` tables are not auto-exposed to the Data API ([discussion #45329](https://github.com/orgs/supabase/discussions/45329)). That rollout does **not** affect Prisma. Enforcement on existing projects: **October 30, 2026**.
+
+- Dashboard review: [`docs/supabase-45329-dashboard-checklist.md`](docs/supabase-45329-dashboard-checklist.md)
+- Optional project hardening SQL: [`scripts/sql/supabase-45329-revoke-default-privileges.sql`](scripts/sql/supabase-45329-revoke-default-privileges.sql)
+- Existing defense-in-depth: `REVOKE` migrations on `_prisma_migrations` and `form_templates`
+
 ## Integration Notes
 
 - Supabase Auth handles all password hashing and session management
 - No need to store passwords in your database
 - Sessions are managed by Supabase
 - Email sending is handled by Supabase
+- Prisma `User` records are synced from Supabase via [`src/lib/sync-supabase-user.ts`](src/lib/sync-supabase-user.ts)
 
 ## Next Steps (Optional)
 

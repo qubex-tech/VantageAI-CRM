@@ -1,0 +1,1 @@
+{"version":3,"file":"UserGroupAttachesService.js","sourceRoot":"","sources":["../../../src/services/generated/UserGroupAttachesService.ts"],"names":[],"mappings":";;;AAAA,iEAA6D;AAE7D,wCAAwC;AACxC,MAAa,wBAAyB,SAAQ,qCAAiB;IAC1C,YAAY,GAAG,mBAAmB,CAAA;IAErD,6BAA6B;IAC7B,KAAK,CAAC,IAAI,CAAC,MAAqE;QAC9E,OAAO,IAAI,CAAC,OAAO,CAA0B,MAAM,CAAC,CAAA;IACtD,CAAC;CACF;AAPD,4DAOC"}

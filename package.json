@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest",
+    "test:opendental": "cd packages/opendental-sdk && npm test",
+    "opendental:build": "cd packages/opendental-sdk && npm run build",
     "test:watch": "vitest --watch",
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate dev",
@@ -58,7 +60,8 @@
     "reactflow": "^11.11.4",
     "tailwind-merge": "^2.5.2",
     "tailwindcss-animate": "^1.0.7",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "@vantage/opendental-sdk": "file:packages/opendental-sdk"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

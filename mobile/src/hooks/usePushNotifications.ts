@@ -46,25 +46,30 @@ export function usePushNotifications(handlers?: PushNotificationHandlers) {
       // If the user tapped a notification that launched the app from a killed
       // state the response arrives *before* the listener above is registered.
       // Expo stores the last response so we can pick it up here.
-      try {
-        const lastResponse = await Notifications.getLastNotificationResponseAsync()
-        if (lastResponse) {
-          // Only handle recent taps (within last 60 s) to avoid re-navigating
-          // on a normal app launch long after the notification was tapped.
-          const ageSecs = Date.now() / 1000 - lastResponse.notification.date
-          if (ageSecs < 60) {
-            // Deliver async so the navigator tree is ready before we navigate.
-            setTimeout(() => {
-              handlersRef.current?.onResponse?.(lastResponse)
-              // Dismiss so the same notification doesn't re-navigate next launch.
-              Notifications.dismissNotificationAsync(
-                lastResponse.notification.request.identifier
-              ).catch(() => null)
-            }, 600)
+      // Note: getLastNotificationResponseAsync is only available in standalone
+      // builds (EAS / bare workflow), not in Expo Go — skip gracefully.
+      if (typeof Notifications.getLastNotificationResponseAsync === 'function') {
+        try {
+          const lastResponse = await Notifications.getLastNotificationResponseAsync()
+          if (lastResponse) {
+            // Only handle recent taps (within last 60 s) to avoid re-navigating
+            // on a normal app launch long after the notification was tapped.
+            const ageSecs = Date.now() / 1000 - lastResponse.notification.date
+            if (ageSecs < 60) {
+              // Deliver async so the navigator tree is ready before we navigate.
+              setTimeout(() => {
+                handlersRef.current?.onResponse?.(lastResponse)
+                // Dismiss so the same notification doesn't re-navigate next launch.
+                Notifications.dismissNotificationAsync(
+                  lastResponse.notification.request.identifier
+                ).catch(() => null)
+              }, 600)
+            }
           }
+        } catch (err) {
+          // Non-fatal — cold-start deep-link simply won't fire in this environment
+          console.log('[PushNotifications] getLastNotificationResponseAsync unavailable:', (err as any)?.message)
         }
-      } catch (err) {
-        console.warn('[PushNotifications] getLastNotificationResponseAsync error', err)
       }
 
       const token = await registerForPushNotificationsAsync(Notifications)

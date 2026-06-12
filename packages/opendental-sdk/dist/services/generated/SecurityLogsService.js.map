@@ -1,0 +1,1 @@
+{"version":3,"file":"SecurityLogsService.js","sourceRoot":"","sources":["../../../src/services/generated/SecurityLogsService.ts"],"names":[],"mappings":";;;AAAA,iEAA6D;AAE7D,mCAAmC;AACnC,MAAa,mBAAoB,SAAQ,qCAAiB;IACrC,YAAY,GAAG,cAAc,CAAA;IAEhD,wBAAwB;IACxB,KAAK,CAAC,IAAI,CAAC,MAAqE;QAC9E,OAAO,IAAI,CAAC,OAAO,CAA0B,MAAM,CAAC,CAAA;IACtD,CAAC;CACF;AAPD,kDAOC"}

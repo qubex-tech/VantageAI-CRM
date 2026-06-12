@@ -1,0 +1,218 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.createServiceRegistry = createServiceRegistry;
+const AccountModulesService_1 = require("./generated/AccountModulesService");
+const AdjustmentsService_1 = require("./generated/AdjustmentsService");
+const AllergiesService_1 = require("./generated/AllergiesService");
+const AllergyDefsService_1 = require("./generated/AllergyDefsService");
+const AppointmentsService_1 = require("./generated/AppointmentsService");
+const AppointmentTypesService_1 = require("./generated/AppointmentTypesService");
+const ApptFieldDefsService_1 = require("./generated/ApptFieldDefsService");
+const ApptFieldsService_1 = require("./generated/ApptFieldsService");
+const AsapCommsService_1 = require("./generated/AsapCommsService");
+const AutoNoteControlsService_1 = require("./generated/AutoNoteControlsService");
+const AutoNotesService_1 = require("./generated/AutoNotesService");
+const BenefitsService_1 = require("./generated/BenefitsService");
+const CarriersService_1 = require("./generated/CarriersService");
+const ChartModulesService_1 = require("./generated/ChartModulesService");
+const ClaimFormsService_1 = require("./generated/ClaimFormsService");
+const ClaimPaymentsService_1 = require("./generated/ClaimPaymentsService");
+const ClaimProcsService_1 = require("./generated/ClaimProcsService");
+const ClaimsService_1 = require("./generated/ClaimsService");
+const ClaimTrackingsService_1 = require("./generated/ClaimTrackingsService");
+const ClinicsService_1 = require("./generated/ClinicsService");
+const ClockEventsService_1 = require("./generated/ClockEventsService");
+const CodeGroupsService_1 = require("./generated/CodeGroupsService");
+const CommlogsService_1 = require("./generated/CommlogsService");
+const ComputersService_1 = require("./generated/ComputersService");
+const CovCatsService_1 = require("./generated/CovCatsService");
+const CovSpansService_1 = require("./generated/CovSpansService");
+const DefinitionsService_1 = require("./generated/DefinitionsService");
+const DepositsService_1 = require("./generated/DepositsService");
+const DiscountPlansService_1 = require("./generated/DiscountPlansService");
+const DiscountPlanSubsService_1 = require("./generated/DiscountPlanSubsService");
+const DiseasesService_1 = require("./generated/DiseasesService");
+const DiseaseDefsService_1 = require("./generated/DiseaseDefsService");
+const DocumentsService_1 = require("./generated/DocumentsService");
+const EhrPatientsService_1 = require("./generated/EhrPatientsService");
+const EobAttachesService_1 = require("./generated/EobAttachesService");
+const EmployeesService_1 = require("./generated/EmployeesService");
+const EmployersService_1 = require("./generated/EmployersService");
+const EtransMessageTextsService_1 = require("./generated/EtransMessageTextsService");
+const EtranssService_1 = require("./generated/EtranssService");
+const FamilyModulesService_1 = require("./generated/FamilyModulesService");
+const FeesService_1 = require("./generated/FeesService");
+const FeeSchedsService_1 = require("./generated/FeeSchedsService");
+const GuardiansService_1 = require("./generated/GuardiansService");
+const HistAppointmentsService_1 = require("./generated/HistAppointmentsService");
+const InsPlansService_1 = require("./generated/InsPlansService");
+const InsSubsService_1 = require("./generated/InsSubsService");
+const InsVerifiesService_1 = require("./generated/InsVerifiesService");
+const LabCasesService_1 = require("./generated/LabCasesService");
+const LaboratoriesService_1 = require("./generated/LaboratoriesService");
+const LabTurnaroundsService_1 = require("./generated/LabTurnaroundsService");
+const MedicationsService_1 = require("./generated/MedicationsService");
+const MedicationPatsService_1 = require("./generated/MedicationPatsService");
+const OperatoriesService_1 = require("./generated/OperatoriesService");
+const PatFieldDefsService_1 = require("./generated/PatFieldDefsService");
+const PatFieldsService_1 = require("./generated/PatFieldsService");
+const PatientNotesService_1 = require("./generated/PatientNotesService");
+const PatientRacesService_1 = require("./generated/PatientRacesService");
+const PatientsService_1 = require("./generated/PatientsService");
+const PatPlansService_1 = require("./generated/PatPlansService");
+const PatRestrictionsService_1 = require("./generated/PatRestrictionsService");
+const PaymentsService_1 = require("./generated/PaymentsService");
+const PayPlanChargesService_1 = require("./generated/PayPlanChargesService");
+const PayPlanLinksService_1 = require("./generated/PayPlanLinksService");
+const PayPlansService_1 = require("./generated/PayPlansService");
+const PaySplitsService_1 = require("./generated/PaySplitsService");
+const PerioExamsService_1 = require("./generated/PerioExamsService");
+const PerioMeasuresService_1 = require("./generated/PerioMeasuresService");
+const PharmaciesService_1 = require("./generated/PharmaciesService");
+const PopupsService_1 = require("./generated/PopupsService");
+const PreferencesService_1 = require("./generated/PreferencesService");
+const ProcedureCodesService_1 = require("./generated/ProcedureCodesService");
+const ProcedureLogsService_1 = require("./generated/ProcedureLogsService");
+const ProcNotesService_1 = require("./generated/ProcNotesService");
+const ProcTPsService_1 = require("./generated/ProcTPsService");
+const ProvidersService_1 = require("./generated/ProvidersService");
+const QueriesService_1 = require("./generated/QueriesService");
+const QuickPasteCatsService_1 = require("./generated/QuickPasteCatsService");
+const QuickPasteNotesService_1 = require("./generated/QuickPasteNotesService");
+const RecallsService_1 = require("./generated/RecallsService");
+const RecallTypesService_1 = require("./generated/RecallTypesService");
+const RefAttachesService_1 = require("./generated/RefAttachesService");
+const ReferralsService_1 = require("./generated/ReferralsService");
+const ReportsService_1 = require("./generated/ReportsService");
+const RxPatsService_1 = require("./generated/RxPatsService");
+const SchedulesService_1 = require("./generated/SchedulesService");
+const ScheduleOpsService_1 = require("./generated/ScheduleOpsService");
+const SecurityLogsService_1 = require("./generated/SecurityLogsService");
+const SecurityPermsService_1 = require("./generated/SecurityPermsService");
+const SheetDefsService_1 = require("./generated/SheetDefsService");
+const SheetFieldsService_1 = require("./generated/SheetFieldsService");
+const SheetFieldDefsService_1 = require("./generated/SheetFieldDefsService");
+const SheetsService_1 = require("./generated/SheetsService");
+const SignalodsService_1 = require("./generated/SignalodsService");
+const StatementsService_1 = require("./generated/StatementsService");
+const SubscriptionsService_1 = require("./generated/SubscriptionsService");
+const SubstitutionLinksService_1 = require("./generated/SubstitutionLinksService");
+const TaskListsService_1 = require("./generated/TaskListsService");
+const TaskNotesService_1 = require("./generated/TaskNotesService");
+const TasksService_1 = require("./generated/TasksService");
+const ToothInitialsService_1 = require("./generated/ToothInitialsService");
+const TreatPlanAttachesService_1 = require("./generated/TreatPlanAttachesService");
+const TreatPlansService_1 = require("./generated/TreatPlansService");
+const UserGroupAttachesService_1 = require("./generated/UserGroupAttachesService");
+const UserGroupsService_1 = require("./generated/UserGroupsService");
+const UserodsService_1 = require("./generated/UserodsService");
+function createServiceRegistry(client, context) {
+    return {
+        accountModules: new AccountModulesService_1.AccountModulesService(client, context),
+        adjustments: new AdjustmentsService_1.AdjustmentsService(client, context),
+        allergies: new AllergiesService_1.AllergiesService(client, context),
+        allergyDefs: new AllergyDefsService_1.AllergyDefsService(client, context),
+        appointments: new AppointmentsService_1.AppointmentsService(client, context),
+        appointmentTypes: new AppointmentTypesService_1.AppointmentTypesService(client, context),
+        apptFieldDefs: new ApptFieldDefsService_1.ApptFieldDefsService(client, context),
+        apptFields: new ApptFieldsService_1.ApptFieldsService(client, context),
+        asapComms: new AsapCommsService_1.AsapCommsService(client, context),
+        autoNoteControls: new AutoNoteControlsService_1.AutoNoteControlsService(client, context),
+        autoNotes: new AutoNotesService_1.AutoNotesService(client, context),
+        benefits: new BenefitsService_1.BenefitsService(client, context),
+        carriers: new CarriersService_1.CarriersService(client, context),
+        chartModules: new ChartModulesService_1.ChartModulesService(client, context),
+        claimForms: new ClaimFormsService_1.ClaimFormsService(client, context),
+        claimPayments: new ClaimPaymentsService_1.ClaimPaymentsService(client, context),
+        claimProcs: new ClaimProcsService_1.ClaimProcsService(client, context),
+        claims: new ClaimsService_1.ClaimsService(client, context),
+        claimTrackings: new ClaimTrackingsService_1.ClaimTrackingsService(client, context),
+        clinics: new ClinicsService_1.ClinicsService(client, context),
+        clockEvents: new ClockEventsService_1.ClockEventsService(client, context),
+        codeGroups: new CodeGroupsService_1.CodeGroupsService(client, context),
+        commlogs: new CommlogsService_1.CommlogsService(client, context),
+        computers: new ComputersService_1.ComputersService(client, context),
+        covCats: new CovCatsService_1.CovCatsService(client, context),
+        covSpans: new CovSpansService_1.CovSpansService(client, context),
+        definitions: new DefinitionsService_1.DefinitionsService(client, context),
+        deposits: new DepositsService_1.DepositsService(client, context),
+        discountPlans: new DiscountPlansService_1.DiscountPlansService(client, context),
+        discountPlanSubs: new DiscountPlanSubsService_1.DiscountPlanSubsService(client, context),
+        diseases: new DiseasesService_1.DiseasesService(client, context),
+        diseaseDefs: new DiseaseDefsService_1.DiseaseDefsService(client, context),
+        documents: new DocumentsService_1.DocumentsService(client, context),
+        ehrPatients: new EhrPatientsService_1.EhrPatientsService(client, context),
+        eobAttaches: new EobAttachesService_1.EobAttachesService(client, context),
+        employees: new EmployeesService_1.EmployeesService(client, context),
+        employers: new EmployersService_1.EmployersService(client, context),
+        etransMessageTexts: new EtransMessageTextsService_1.EtransMessageTextsService(client, context),
+        etranss: new EtranssService_1.EtranssService(client, context),
+        familyModules: new FamilyModulesService_1.FamilyModulesService(client, context),
+        fees: new FeesService_1.FeesService(client, context),
+        feeScheds: new FeeSchedsService_1.FeeSchedsService(client, context),
+        guardians: new GuardiansService_1.GuardiansService(client, context),
+        histAppointments: new HistAppointmentsService_1.HistAppointmentsService(client, context),
+        insPlans: new InsPlansService_1.InsPlansService(client, context),
+        insSubs: new InsSubsService_1.InsSubsService(client, context),
+        insVerifies: new InsVerifiesService_1.InsVerifiesService(client, context),
+        labCases: new LabCasesService_1.LabCasesService(client, context),
+        laboratories: new LaboratoriesService_1.LaboratoriesService(client, context),
+        labTurnarounds: new LabTurnaroundsService_1.LabTurnaroundsService(client, context),
+        medications: new MedicationsService_1.MedicationsService(client, context),
+        medicationPats: new MedicationPatsService_1.MedicationPatsService(client, context),
+        operatories: new OperatoriesService_1.OperatoriesService(client, context),
+        patFieldDefs: new PatFieldDefsService_1.PatFieldDefsService(client, context),
+        patFields: new PatFieldsService_1.PatFieldsService(client, context),
+        patientNotes: new PatientNotesService_1.PatientNotesService(client, context),
+        patientRaces: new PatientRacesService_1.PatientRacesService(client, context),
+        patients: new PatientsService_1.PatientsService(client, context),
+        patPlans: new PatPlansService_1.PatPlansService(client, context),
+        patRestrictions: new PatRestrictionsService_1.PatRestrictionsService(client, context),
+        payments: new PaymentsService_1.PaymentsService(client, context),
+        payPlanCharges: new PayPlanChargesService_1.PayPlanChargesService(client, context),
+        payPlanLinks: new PayPlanLinksService_1.PayPlanLinksService(client, context),
+        payPlans: new PayPlansService_1.PayPlansService(client, context),
+        paySplits: new PaySplitsService_1.PaySplitsService(client, context),
+        perioExams: new PerioExamsService_1.PerioExamsService(client, context),
+        perioMeasures: new PerioMeasuresService_1.PerioMeasuresService(client, context),
+        pharmacies: new PharmaciesService_1.PharmaciesService(client, context),
+        popups: new PopupsService_1.PopupsService(client, context),
+        preferences: new PreferencesService_1.PreferencesService(client, context),
+        procedureCodes: new ProcedureCodesService_1.ProcedureCodesService(client, context),
+        procedureLogs: new ProcedureLogsService_1.ProcedureLogsService(client, context),
+        procNotes: new ProcNotesService_1.ProcNotesService(client, context),
+        procTPs: new ProcTPsService_1.ProcTPsService(client, context),
+        providers: new ProvidersService_1.ProvidersService(client, context),
+        queries: new QueriesService_1.QueriesService(client, context),
+        quickPasteCats: new QuickPasteCatsService_1.QuickPasteCatsService(client, context),
+        quickPasteNotes: new QuickPasteNotesService_1.QuickPasteNotesService(client, context),
+        recalls: new RecallsService_1.RecallsService(client, context),
+        recallTypes: new RecallTypesService_1.RecallTypesService(client, context),
+        refAttaches: new RefAttachesService_1.RefAttachesService(client, context),
+        referrals: new ReferralsService_1.ReferralsService(client, context),
+        reports: new ReportsService_1.ReportsService(client, context),
+        rxPats: new RxPatsService_1.RxPatsService(client, context),
+        schedules: new SchedulesService_1.SchedulesService(client, context),
+        scheduleOps: new ScheduleOpsService_1.ScheduleOpsService(client, context),
+        securityLogs: new SecurityLogsService_1.SecurityLogsService(client, context),
+        securityPerms: new SecurityPermsService_1.SecurityPermsService(client, context),
+        sheetDefs: new SheetDefsService_1.SheetDefsService(client, context),
+        sheetFields: new SheetFieldsService_1.SheetFieldsService(client, context),
+        sheetFieldDefs: new SheetFieldDefsService_1.SheetFieldDefsService(client, context),
+        sheets: new SheetsService_1.SheetsService(client, context),
+        signalods: new SignalodsService_1.SignalodsService(client, context),
+        statements: new StatementsService_1.StatementsService(client, context),
+        subscriptions: new SubscriptionsService_1.SubscriptionsService(client, context),
+        substitutionLinks: new SubstitutionLinksService_1.SubstitutionLinksService(client, context),
+        taskLists: new TaskListsService_1.TaskListsService(client, context),
+        taskNotes: new TaskNotesService_1.TaskNotesService(client, context),
+        tasks: new TasksService_1.TasksService(client, context),
+        toothInitials: new ToothInitialsService_1.ToothInitialsService(client, context),
+        treatPlanAttaches: new TreatPlanAttachesService_1.TreatPlanAttachesService(client, context),
+        treatPlans: new TreatPlansService_1.TreatPlansService(client, context),
+        userGroupAttaches: new UserGroupAttachesService_1.UserGroupAttachesService(client, context),
+        userGroups: new UserGroupsService_1.UserGroupsService(client, context),
+        userods: new UserodsService_1.UserodsService(client, context),
+    };
+}
+//# sourceMappingURL=ServiceRegistry.js.map

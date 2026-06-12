@@ -1,0 +1,1 @@
+{"version":3,"file":"UserGroupsService.js","sourceRoot":"","sources":["../../../src/services/generated/UserGroupsService.ts"],"names":[],"mappings":";;;AAAA,iEAA6D;AAE7D,iCAAiC;AACjC,MAAa,iBAAkB,SAAQ,qCAAiB;IACnC,YAAY,GAAG,YAAY,CAAA;IAE9C,sBAAsB;IACtB,KAAK,CAAC,IAAI,CAAC,MAAqE;QAC9E,OAAO,IAAI,CAAC,OAAO,CAA0B,MAAM,CAAC,CAAA;IACtD,CAAC;CACF;AAPD,8CAOC"}

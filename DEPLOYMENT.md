@@ -70,6 +70,7 @@ CAL_WEBHOOK_SECRET=your-cal-webhook-secret
 - Set `NEXTAUTH_URL` to your production domain once you have it
 - Generate a new `NEXTAUTH_SECRET` for production: `openssl rand -base64 32`
 - For **Environment**, select **Production**, **Preview**, and **Development** (or just Production for now)
+- **Supabase #45329:** App data uses `DATABASE_URL` + Prisma only, not PostgREST. Before Oct 30, 2026, complete the [dashboard checklist](docs/supabase-45329-dashboard-checklist.md). See [SUPABASE_AUTH_SETUP.md](SUPABASE_AUTH_SETUP.md#data-access-architecture-supabase-45329).
 
 ### 2.3 Deploy
 

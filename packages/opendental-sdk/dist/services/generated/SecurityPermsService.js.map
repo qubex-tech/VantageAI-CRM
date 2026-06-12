@@ -1,0 +1,1 @@
+{"version":3,"file":"SecurityPermsService.js","sourceRoot":"","sources":["../../../src/services/generated/SecurityPermsService.ts"],"names":[],"mappings":";;;AAAA,iEAA6D;AAE7D,oCAAoC;AACpC,MAAa,oBAAqB,SAAQ,qCAAiB;IACtC,YAAY,GAAG,eAAe,CAAA;IAEjD,yBAAyB;IACzB,KAAK,CAAC,IAAI,CAAC,MAAqE;QAC9E,OAAO,IAAI,CAAC,OAAO,CAA0B,MAAM,CAAC,CAAA;IACtD,CAAC;CACF;AAPD,oDAOC"}
