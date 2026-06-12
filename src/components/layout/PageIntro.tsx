@@ -13,7 +13,7 @@ export function PageIntro({ description, actions, className }: PageIntroProps) {
   return (
     <div
       className={cn(
-        'mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between',
+        'pt-5 mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between',
         className
       )}
     >

@@ -7,7 +7,7 @@ interface DashboardPageHeaderProps {
 
 export function DashboardPageHeader({ userName, rangeLabel }: DashboardPageHeaderProps) {
   return (
-    <p className="mb-5 text-sm text-gray-500">
+    <p className="pt-5 mb-5 text-sm text-gray-500">
       Welcome back, {userName}
       <span className="text-gray-300 mx-2">·</span>
       <span className="text-gray-400">{rangeLabel}</span>
