@@ -80,9 +80,15 @@ export class RetellApiClient {
     paginationKey?: string
     /** When true, only inbound calls (typical inbound agent + Retell analytics) */
     directionInboundOnly?: boolean
-  }): Promise<{ calls: RetellCallListItem[], total?: number }> {
+    /** v3: return aggregate total matching filter_criteria */
+    includeTotal?: boolean
+  }): Promise<{
+    calls: RetellCallListItem[]
+    total?: number
+    hasMore?: boolean
+    paginationKey?: string
+  }> {
     try {
-      // Build request body per https://docs.retellai.com/api-references/list-calls
       const body: Record<string, unknown> = {
         sort_order: 'descending',
       }
@@ -112,16 +118,23 @@ export class RetellApiClient {
         body.pagination_key = params.paginationKey
       }
 
-      const url = `${this.baseUrl}/list-calls`
+      if (params?.includeTotal) {
+        body.include_total = true
+      }
 
-      const response = await fetch(url, {
-        method: 'POST',
+      const requestInit = {
+        method: 'POST' as const,
         headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
+          Authorization: `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),
-      })
+      }
+
+      let response = await fetch('https://api.retellai.com/v3/list-calls', requestInit)
+      if (!response.ok && (response.status === 404 || response.status === 405)) {
+        response = await fetch(`${this.baseUrl}/list-calls`, requestInit)
+      }
 
       if (!response.ok) {
         const errorText = await response.text()
@@ -130,29 +143,37 @@ export class RetellApiClient {
         try {
           const errorJson = JSON.parse(errorText)
           if (errorJson.message) {
-            errorMessage = typeof errorJson.message === 'string' 
-              ? errorJson.message 
+            errorMessage = typeof errorJson.message === 'string'
+              ? errorJson.message
               : JSON.stringify(errorJson.message)
           } else if (errorJson.error) {
             errorMessage = typeof errorJson.error === 'string'
               ? errorJson.error
               : JSON.stringify(errorJson.error)
           }
-        } catch (parseError) {
+        } catch {
           errorMessage = errorText || errorMessage
         }
         throw new Error(errorMessage)
       }
 
       const data = await response.json()
-      
-      // RetellAI API returns calls in a list format
+
       if (Array.isArray(data)) {
         return { calls: data }
-      } else if (data.calls && Array.isArray(data.calls)) {
-        return { calls: data.calls, total: data.total }
       }
-      
+
+      const calls = (data.items ?? data.calls) as RetellCallListItem[] | undefined
+      if (calls && Array.isArray(calls)) {
+        return {
+          calls,
+          total: typeof data.total === 'number' ? data.total : undefined,
+          hasMore: typeof data.has_more === 'boolean' ? data.has_more : undefined,
+          paginationKey:
+            typeof data.pagination_key === 'string' ? data.pagination_key : undefined,
+        }
+      }
+
       throw new Error('Invalid response format from RetellAI list calls API')
     } catch (error) {
       console.error('Error listing RetellAI calls:', error)

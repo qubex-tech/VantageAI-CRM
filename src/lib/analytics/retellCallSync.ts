@@ -13,8 +13,9 @@ async function listInboundCallsForRange(params: {
   const retellClient = await getRetellClient(params.practiceId)
   const allCalls: Awaited<ReturnType<typeof retellClient.listCalls>>['calls'] = []
   let paginationKey: string | undefined
+  let hasMore = true
 
-  for (let page = 0; page < MAX_LIST_PAGES; page++) {
+  for (let page = 0; page < MAX_LIST_PAGES && hasMore; page++) {
     const result = await retellClient.listCalls({
       agentId: params.agentId ?? undefined,
       limit: LIST_PAGE_LIMIT,
@@ -27,29 +28,51 @@ async function listInboundCallsForRange(params: {
     const batch = result.calls || []
     allCalls.push(...batch)
 
-    if (batch.length < LIST_PAGE_LIMIT) break
-    const last = batch[batch.length - 1]
-    if (!last?.call_id) break
-    paginationKey = last.call_id
+    if (typeof result.hasMore === 'boolean') {
+      hasMore = result.hasMore
+      paginationKey = result.paginationKey
+    } else {
+      hasMore = batch.length >= LIST_PAGE_LIMIT
+      const last = batch[batch.length - 1]
+      paginationKey = last?.call_id
+      if (batch.length < LIST_PAGE_LIMIT) hasMore = false
+      if (!paginationKey) hasMore = false
+    }
   }
 
   return allCalls
 }
 
-/** Count inbound Retell calls in range (matches Retell dashboard list-calls filter). */
+/**
+ * Count inbound Retell calls in range — uses Retell v3 `include_total` when available.
+ */
 export async function countRetellInboundCallsForRange(params: {
   practiceId: string
   agentId: string | null
   startMs: number
   endMs: number
 }): Promise<number> {
+  const retellClient = await getRetellClient(params.practiceId)
+
+  const withTotal = await retellClient.listCalls({
+    agentId: params.agentId ?? undefined,
+    limit: 1,
+    startTimestamp: params.startMs,
+    endTimestamp: params.endMs,
+    directionInboundOnly: true,
+    includeTotal: true,
+  })
+
+  if (typeof withTotal.total === 'number') {
+    return withTotal.total
+  }
+
   const calls = await listInboundCallsForRange(params)
   return calls.length
 }
 
 /**
- * Import only Retell calls missing from voice_conversations so transfer metadata stays current
- * without reprocessing the full history on every dashboard load.
+ * Import only Retell calls missing from voice_conversations.
  */
 export async function syncMissingRetellInboundCallsForRange(params: {
   practiceId: string
@@ -65,11 +88,7 @@ export async function syncMissingRetellInboundCallsForRange(params: {
   let imported = 0
   let failed = 0
 
-  const ended = calls.filter(
-    (c) => c.call_status === 'ended' || c.call_status === 'completed'
-  )
-
-  for (const call of ended) {
+  for (const call of calls) {
     const existing = await prisma.voiceConversation.findFirst({
       where: {
         practiceId: params.practiceId,
@@ -110,8 +129,9 @@ export async function syncRetellInboundCallsForRange(params: {
   let processed = 0
   let failed = 0
   let paginationKey: string | undefined
+  let hasMore = true
 
-  for (let page = 0; page < MAX_LIST_PAGES; page++) {
+  for (let page = 0; page < MAX_LIST_PAGES && hasMore; page++) {
     const result = await retellClient.listCalls({
       agentId: params.agentId ?? undefined,
       limit: LIST_PAGE_LIMIT,
@@ -125,11 +145,7 @@ export async function syncRetellInboundCallsForRange(params: {
     pages += 1
     fetched += batch.length
 
-    const ended = batch.filter(
-      (c) => c.call_status === 'ended' || c.call_status === 'completed'
-    )
-
-    for (const c of ended) {
+    for (const c of batch) {
       try {
         const full = await retellClient.getCall(c.call_id)
         await processRetellCallData(params.practiceId, full, params.userId)
@@ -139,10 +155,16 @@ export async function syncRetellInboundCallsForRange(params: {
       }
     }
 
-    if (batch.length < LIST_PAGE_LIMIT) break
-    const last = batch[batch.length - 1]
-    if (!last?.call_id) break
-    paginationKey = last.call_id
+    if (typeof result.hasMore === 'boolean') {
+      hasMore = result.hasMore
+      paginationKey = result.paginationKey
+    } else {
+      hasMore = batch.length >= LIST_PAGE_LIMIT
+      const last = batch[batch.length - 1]
+      paginationKey = last?.call_id
+      if (batch.length < LIST_PAGE_LIMIT) hasMore = false
+      if (!paginationKey) hasMore = false
+    }
   }
 
   return { pages, fetched, processed, failed }

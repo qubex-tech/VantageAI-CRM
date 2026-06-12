@@ -111,3 +111,29 @@ export function formatRollingRangeLabel(
 export function rollingRangeSpanDays(from: Date, to: Date): number {
   return Math.max(1, Math.round((to.getTime() - from.getTime()) / MS_PER_DAY) + 1)
 }
+
+/**
+ * Rolling window aligned with Retell "past N days" (N × 24h ending at `now`).
+ */
+export function resolveRetellRollingRange(
+  days: number,
+  now: Date = new Date()
+): { from: Date; to: Date; startMs: number; endMs: number } {
+  const endMs = now.getTime()
+  const startMs = endMs - days * MS_PER_DAY
+  return {
+    from: new Date(startMs),
+    to: new Date(endMs),
+    startMs,
+    endMs,
+  }
+}
+
+export function formatRetellRollingRangeLabel(
+  days: number,
+  timeZone: string,
+  now: Date = new Date()
+): string {
+  const { from, to } = resolveRetellRollingRange(days, now)
+  return `Last ${days} days · ${formatRollingRangeLabel(from, to, timeZone)}`
+}

@@ -3,8 +3,8 @@ import { requireAuthenticatedUser } from '@/lib/auth-server'
 import { DashboardPageHeader } from '@/components/dashboard/DashboardPageHeader'
 import {
   DashboardMetricsSection,
-  DashboardMetricsSkeleton,
 } from '@/components/dashboard/DashboardMetricsSection'
+import { DashboardMetricsSkeleton } from '@/components/dashboard/DashboardMetricsSkeleton'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,7 +41,7 @@ export default async function DashboardPage({
 
   return (
     <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 pb-24 md:pb-6 min-w-0 max-w-full">
-      <Suspense fallback={<DashboardMetricsSkeleton />}>
+      <Suspense fallback={<DashboardMetricsSkeleton userName={userName} />}>
         <DashboardMetricsSection
           practiceId={user.practiceId}
           userId={user.id}
