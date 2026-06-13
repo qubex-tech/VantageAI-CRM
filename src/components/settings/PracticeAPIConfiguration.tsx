@@ -16,7 +16,7 @@ import { ResendSettings } from './SendgridSettings'
 import { TwilioSettings } from './TwilioSettings'
 import { TelnyxSettings } from './TelnyxSettings'
 import { SmsFromNumberSettings } from './SmsFromNumberSettings'
-import { EhrIntegrationsSettings } from './EhrIntegrationsSettings'
+import { ClinicalIntegrationsSettings } from './ClinicalIntegrationsSettings'
 import { OutboundCustomerNotificationsSettings } from './OutboundCustomerNotificationsSettings'
 
 interface Practice {
@@ -220,6 +220,7 @@ export function PracticeAPIConfiguration() {
             </div>
           ) : (
             <>
+              <ClinicalIntegrationsSettings practiceId={selectedPracticeId} />
               <SmsFromNumberSettings practiceId={selectedPracticeId} />
               <CalSettingsWithPracticeId 
                 practiceId={selectedPracticeId}
@@ -250,7 +251,6 @@ export function PracticeAPIConfiguration() {
                 practiceId={selectedPracticeId}
                 initialIntegration={telnyxIntegration}
               />
-              <EhrIntegrationsSettings practiceId={selectedPracticeId} />
             </>
           )}
         </div>

@@ -564,6 +564,7 @@ model PracticeSettings {
   practiceId                     String   @unique
   smartFhir                      Json?
   ehrIntegrations                Json?
+  clinicalIntegrations           Json?
   healixPreChartTemplate         Json?
   outboundCustomerNotifications  Json?
   outboundAgents                 Json?

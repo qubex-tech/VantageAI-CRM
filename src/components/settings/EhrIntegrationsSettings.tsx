@@ -139,7 +139,13 @@ const fallbackProviders: Provider[] = [
   },
 ]
 
-export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string }) {
+export function EhrIntegrationsSettings({
+  practiceId,
+  embedded = false,
+}: {
+  practiceId?: string
+  embedded?: boolean
+}) {
   const [providers, setProviders] = useState<Provider[]>([])
   const [settings, setSettings] = useState<EhrSettings>({
     enabledProviders: [],
@@ -490,14 +496,18 @@ export function EhrIntegrationsSettings({ practiceId }: { practiceId?: string })
     <div className="space-y-6">
       <Card className="border border-gray-200">
         <CardHeader>
-          <CardTitle className="text-lg font-semibold text-gray-900">EHR Integrations</CardTitle>
+          <CardTitle className="text-lg font-semibold text-gray-900">
+            {embedded ? 'FHIR provider configuration' : 'EHR Integrations'}
+          </CardTitle>
           <CardDescription className="text-sm text-gray-500">
-            Configure SMART on FHIR connections per provider.
+            {embedded
+              ? 'Configure SMART on FHIR providers, credentials, and writeback options.'
+              : 'Configure SMART on FHIR connections per provider.'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {error && <div className="text-sm text-red-600">{error}</div>}
-          {!practiceId && (
+          {!practiceId && !embedded && (
             <div className="space-y-1">
               <label className="text-sm font-medium text-gray-700">Select practice</label>
               <select

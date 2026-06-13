@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { getSupabaseSession } from '@/lib/auth-supabase'
 import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
 import { canConfigureAPIs } from '@/lib/permissions'
-import { EhrIntegrationsSettings } from '@/components/settings/EhrIntegrationsSettings'
+import { ClinicalIntegrationsSettings } from '@/components/settings/ClinicalIntegrationsSettings'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,12 +38,12 @@ export default async function EhrIntegrationsPage() {
   return (
     <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8 max-w-5xl">
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-gray-900 mb-1">EHR Integrations</h1>
+        <h1 className="text-2xl font-semibold text-gray-900 mb-1">Clinical integrations</h1>
         <p className="text-sm text-gray-500">
-          Configure SMART on FHIR providers per practice.
+          Select the practice clinical system and configure provider-specific settings.
         </p>
       </div>
-      <EhrIntegrationsSettings />
+      <ClinicalIntegrationsSettings />
     </div>
   )
 }
