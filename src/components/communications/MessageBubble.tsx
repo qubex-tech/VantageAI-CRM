@@ -1,6 +1,6 @@
 "use client"
 
-import { format } from 'date-fns'
+import { UserDateTime } from '@/components/ui/UserDateTime'
 import type { ElementType } from 'react'
 import { Lock, Mail, MessageSquare, Phone, Video } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -44,7 +44,7 @@ export function MessageBubble({ message }: { message: Message }) {
         </div>
         <div className="whitespace-pre-wrap">{message.body}</div>
         <div className="mt-2 text-[11px] text-slate-400 opacity-0 transition group-hover:opacity-100">
-          {format(new Date(message.createdAt), 'MMM d · h:mm a')}
+          <UserDateTime value={message.createdAt} />
         </div>
       </div>
     </div>

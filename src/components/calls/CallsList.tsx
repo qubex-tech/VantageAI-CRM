@@ -6,7 +6,7 @@ import { RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PageIntro } from '@/components/layout/PageIntro'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { format } from 'date-fns'
+import { UserDateTime } from '@/components/ui/UserDateTime'
 import Link from 'next/link'
 
 interface RetellCallListItem {
@@ -228,7 +228,7 @@ export function CallsList({ initialCalls, initialReviewedCallIds = [], error: in
                     <div className="flex items-center gap-4 text-sm text-gray-600">
                       {call.start_timestamp && (
                         <span>
-                          {format(new Date(call.start_timestamp), 'MMM d, yyyy h:mm a')}
+                          <UserDateTime value={call.start_timestamp} />
                         </span>
                       )}
                       {call.duration_ms && (

@@ -1,6 +1,73 @@
 const DEFAULT_LOCALE = 'en-US'
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24
 
+/** Fallback when practice brand timezone is unset (Lonestar / central US default). */
+export const DEFAULT_PRACTICE_TIMEZONE = 'America/Chicago'
+
+export type UserFacingDateTimeOptions = {
+  /** Omit on the client to use the browser timezone; set on the server (e.g. practice TZ). */
+  timeZone?: string
+  locale?: string
+  dateStyle?: Intl.DateTimeFormatOptions['dateStyle']
+  timeStyle?: Intl.DateTimeFormatOptions['timeStyle']
+  /** When true, omit time-of-day (date only). */
+  dateOnly?: boolean
+  /** When true, omit calendar date (time only). */
+  timeOnly?: boolean
+}
+
+function toDate(value: string | number | Date): Date | null {
+  const date = value instanceof Date ? value : new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+/**
+ * Format an instant for display. Never emits ISO/UTC strings — uses Intl with an
+ * explicit IANA zone or the runtime default (browser local on the client).
+ */
+export function formatUserFacingDateTime(
+  value: string | number | Date,
+  options: UserFacingDateTimeOptions = {}
+): string {
+  const date = toDate(value)
+  if (!date) return 'Invalid date'
+
+  if (options.dateOnly) {
+    return new Intl.DateTimeFormat(options.locale || DEFAULT_LOCALE, {
+      timeZone: options.timeZone,
+      dateStyle: options.dateStyle || 'medium',
+    }).format(date)
+  }
+
+  if (options.timeOnly) {
+    return new Intl.DateTimeFormat(options.locale || DEFAULT_LOCALE, {
+      timeZone: options.timeZone,
+      timeStyle: options.timeStyle || 'short',
+    }).format(date)
+  }
+
+  return new Intl.DateTimeFormat(options.locale || DEFAULT_LOCALE, {
+    timeZone: options.timeZone,
+    dateStyle: options.dateStyle || 'medium',
+    timeStyle: options.timeStyle || 'short',
+  }).format(date)
+}
+
+/** Short label for analytics ranges, e.g. "Jun 1, 2026 – Jun 11, 2026". */
+export function formatUserFacingDateRange(
+  from: Date,
+  to: Date,
+  timeZone?: string
+): string {
+  const fmt: Intl.DateTimeFormatOptions = {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone,
+  }
+  return `${from.toLocaleDateString(DEFAULT_LOCALE, fmt)} – ${to.toLocaleDateString(DEFAULT_LOCALE, fmt)}`
+}
+
 const timezoneCache = new Map<string, { value: string; expiresAt: number }>()
 
 export function normalizeTimeZone(value?: string | null): string | undefined {

@@ -79,13 +79,13 @@ export function AnalyticsCallDateRangeBar({ callFrom, callTo, callRangeLabel }: 
         <p className="text-xs text-gray-500">{callRangeLabel}</p>
       </div>
       <p className="text-xs text-gray-500">
-        Dates are interpreted as UTC calendar days (same basis as Retell call timestamps). Applies to
-        Call analytics and Reporting.
+        Select calendar dates for call analytics and reporting. Times in tables and exports use your
+        local timezone.
       </p>
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
         <div className="flex flex-col gap-1">
           <label htmlFor="analytics-call-from" className="text-xs font-medium text-gray-600">
-            From (UTC)
+            From
           </label>
           <input
             id="analytics-call-from"
@@ -97,7 +97,7 @@ export function AnalyticsCallDateRangeBar({ callFrom, callTo, callRangeLabel }: 
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="analytics-call-to" className="text-xs font-medium text-gray-600">
-            To (UTC)
+            To
           </label>
           <input
             id="analytics-call-to"

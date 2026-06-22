@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { format } from 'date-fns'
+import { UserDateTime } from '@/components/ui/UserDateTime'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import type { AnalyticsCallRow } from '@/lib/analytics/callSort'
 import {
@@ -274,7 +274,7 @@ export function CallAnalyticsSection({
                           {call.callerPhone ? call.callerPhone : 'Unknown caller'}
                         </p>
                         <p className="text-xs text-gray-500">
-                          {format(new Date(call.startedAt), 'MMM d, h:mm a')}
+                          <UserDateTime value={call.startedAt} />
                         </p>
                       </div>
                       <span className="text-xs px-2 py-1 rounded-md bg-gray-100 text-gray-700 capitalize shrink-0">

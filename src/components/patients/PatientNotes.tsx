@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { FileText, Edit2, Trash2, X, CheckCircle2, AlertCircle } from 'lucide-react'
-import { format } from 'date-fns'
+import { UserDateTime } from '@/components/ui/UserDateTime'
 import {
   PATIENT_NOTE_TYPES,
   PATIENT_NOTE_TYPE_LABELS,
@@ -279,7 +279,7 @@ export function PatientNotes({
                         {PATIENT_NOTE_TYPE_LABELS[note.type as PatientNoteType] || note.type}
                       </span>
                       <span className="text-xs text-gray-500">
-                        {format(new Date(note.createdAt), 'MMM d, yyyy h:mm a')}
+                        <UserDateTime value={note.createdAt} />
                       </span>
                     </div>
                     {deleteConfirm === note.id ? (
@@ -329,7 +329,10 @@ export function PatientNotes({
                   <p className="text-xs text-gray-500">
                     By {note.user.name}
                     {new Date(note.updatedAt).getTime() !== new Date(note.createdAt).getTime() && (
-                      <span> • Edited {format(new Date(note.updatedAt), 'MMM d, yyyy h:mm a')}</span>
+                      <span>
+                        {' '}
+                        • Edited <UserDateTime value={note.updatedAt} />
+                      </span>
                     )}
                   </p>
                 </div>

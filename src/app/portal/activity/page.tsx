@@ -2,10 +2,9 @@ import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
 import { getPatientSession } from '@/lib/portal-session'
 import { prisma } from '@/lib/db'
-import { format } from 'date-fns'
 import { BackButton } from '@/components/portal/BackButton'
 import { formatAppointmentDate, formatAppointmentTime } from '@/lib/portal-date-utils'
-import { resolveTimeZone } from '@/lib/timezone'
+import { DEFAULT_PRACTICE_TIMEZONE, formatUserFacingDateTime, resolveTimeZone } from '@/lib/timezone'
 
 /**
  * Portal Activity Page
@@ -20,7 +19,7 @@ export default async function PortalActivityPage() {
   
   // Detect user's timezone from IP address
   const headersList = await headers()
-  const userTimezone = await resolveTimeZone(headersList) || 'UTC'
+  const userTimezone = (await resolveTimeZone(headersList)) || DEFAULT_PRACTICE_TIMEZONE
   
   // Get timeline entries (similar to CRM) - exclude notes
   const timelineEntries = await prisma.patientTimelineEntry.findMany({
@@ -178,8 +177,14 @@ export default async function PortalActivityPage() {
           <div className="bg-white rounded-lg shadow">
             <div className="divide-y divide-gray-200">
               {events.map((event) => {
-                const date = format(new Date(event.timestamp), 'MMM d, yyyy')
-                const time = format(new Date(event.timestamp), 'h:mm a')
+                const date = formatUserFacingDateTime(event.timestamp, {
+                  timeZone: userTimezone,
+                  dateOnly: true,
+                })
+                const time = formatUserFacingDateTime(event.timestamp, {
+                  timeZone: userTimezone,
+                  timeOnly: true,
+                })
                 
                 return (
                   <div key={`${event.type}-${event.id}`} className="p-6 hover:bg-gray-50 transition-colors">

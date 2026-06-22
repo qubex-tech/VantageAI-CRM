@@ -84,23 +84,15 @@ export const EXTRACTED_FIELD_SORT_KEYS = [
   'existing_patient_update',
 ] as const
 
+// Detailed benefit values now live in retell_custom_data (surfaced as "Retell
+// custom" columns). These keep the high-level verification summary sortable.
 export const INSURANCE_VERIFICATION_SORT_KEYS = [
-  'insurance_verification.provider_name',
-  'insurance_verification.npi',
-  'insurance_verification.tax_id',
-  'insurance_verification.member_id',
-  'insurance_verification.patient_first_name',
-  'insurance_verification.patient_last_name',
+  'insurance_verification.summary',
+  'insurance_verification.sentiment',
+  'insurance_verification.call_successful',
+  'insurance_verification.voicemail',
   'insurance_verification.patient_dob',
-  'insurance_verification.coverage_effective_date',
-  'insurance_verification.policy_active',
-  'insurance_verification.specialist_office_visit_benefits',
-  'insurance_verification.telehealth_benefits',
-  'insurance_verification.referral_required',
-  'insurance_verification.cob_primary_plan',
-  'insurance_verification.cob_secondary_plan',
-  'insurance_verification.insurance_agent_name',
-  'insurance_verification.reference_number',
+  'insurance_verification.member_id',
 ] as const
 
 export const COLUMN_SORT_KEYS = [

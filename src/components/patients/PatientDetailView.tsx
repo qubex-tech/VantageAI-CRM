@@ -48,6 +48,7 @@ import { useRouter } from 'next/navigation'
 import { InsuranceTab } from './InsuranceTab'
 import { PreVisitChartAskSidebar, PreVisitChartTab } from './PreVisitChartTab'
 import { format, formatDistanceToNow } from 'date-fns'
+import { UserDateTime } from '@/components/ui/UserDateTime'
 import { formatDateOnly, formatDateOnlyForInput, calculateAgeFromDateOnly } from '@/lib/date'
 import { Button } from '@/components/ui/button'
 import {
@@ -1507,7 +1508,7 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                                 {note.type.charAt(0).toUpperCase() + note.type.slice(1)}
                               </span>
                               <span className="text-xs text-gray-500">
-                                {format(new Date(note.createdAt), 'MMM d, yyyy')}
+                                <UserDateTime value={note.createdAt} dateOnly />
                               </span>
                             </div>
                             <p className="text-sm text-gray-900 whitespace-pre-wrap break-words min-w-0 line-clamp-2">

@@ -6,6 +6,8 @@ import { syncPatientNoteToEhr } from '@/lib/integrations/ehr/patientNoteSync'
 import type { ExtractedCallData } from '@/lib/process-call-data'
 import type { RetellCall } from '@/lib/retell-api'
 import type { Prisma } from '@prisma/client'
+import { getPracticeTimeZone } from '@/lib/practice-timezone'
+import { formatUserFacingDateTime } from '@/lib/timezone'
 
 export type InsuranceVerificationData = NonNullable<ExtractedCallData['insurance_verification']>
 
@@ -21,77 +23,46 @@ function asNonEmptyString(value: unknown): string | undefined {
   return text.length > 0 ? text : undefined
 }
 
-function formatFieldLabel(field: string): string {
-  return field
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (char) => char.toUpperCase())
-}
-
-function formatValue(value: unknown): string {
-  if (value === null || value === undefined) return '—'
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
-  const text = String(value).trim()
-  return text.length > 0 ? text : '—'
-}
-
 export function formatInsuranceVerificationNoteContent(params: {
   callId?: string
   verification: InsuranceVerificationData
-  missingFields?: string[]
   callSummary?: string
   verifiedAt?: Date
+  timeZone?: string
 }): string {
-  const { callId, verification, missingFields, callSummary, verifiedAt } = params
+  const { callId, verification, callSummary, verifiedAt, timeZone } = params
   const lines: string[] = ['Insurance Verification']
 
   if (callId) lines.push(`Retell Call ID: ${callId}`)
   if (verifiedAt) {
-    lines.push(`Verified at: ${verifiedAt.toISOString()}`)
+    lines.push(
+      `Verified at: ${formatUserFacingDateTime(verifiedAt, { timeZone, dateStyle: 'medium', timeStyle: 'short' })}`
+    )
   }
 
-  lines.push('')
-  lines.push('Provider Information')
-  lines.push(`- Provider / Practice: ${formatValue(verification.provider_name)}`)
-  lines.push(`- NPI: ${formatValue(verification.npi)}`)
-  lines.push(`- Tax ID: ${formatValue(verification.tax_id)}`)
-
-  lines.push('')
-  lines.push('Patient Information')
-  const patientName = [verification.patient_first_name, verification.patient_last_name]
-    .filter(Boolean)
-    .join(' ')
-    .trim()
-  lines.push(`- Name: ${formatValue(patientName)}`)
-  lines.push(`- Date of Birth: ${formatValue(verification.patient_dob)}`)
-  lines.push(`- Member ID: ${formatValue(verification.member_id)}`)
-
-  lines.push('')
-  lines.push('Coverage Details')
-  lines.push(`- Coverage Effective Date: ${formatValue(verification.coverage_effective_date)}`)
-  lines.push(`- Policy Active: ${formatValue(verification.policy_active)}`)
-  lines.push(`- Specialist / Office Visit Benefits: ${formatValue(verification.specialist_office_visit_benefits)}`)
-  lines.push(`- Telehealth Benefits: ${formatValue(verification.telehealth_benefits)}`)
-  lines.push(`- Referral Required: ${formatValue(verification.referral_required)}`)
-  lines.push(`- COB Primary Plan: ${formatValue(verification.cob_primary_plan)}`)
-  lines.push(`- COB Secondary Plan: ${formatValue(verification.cob_secondary_plan)}`)
-
-  lines.push('')
-  lines.push('Insurance Representative')
-  lines.push(`- Agent Name: ${formatValue(verification.insurance_agent_name)}`)
-  lines.push(`- Reference Number: ${formatValue(verification.reference_number)}`)
-
-  if (missingFields && missingFields.length > 0) {
+  const summary = (verification.summary || callSummary || '').trim()
+  if (summary) {
     lines.push('')
-    lines.push('Missing Fields')
-    for (const field of missingFields) {
-      lines.push(`- ${formatFieldLabel(field)}`)
+    lines.push('Summary')
+    lines.push(summary)
+  }
+
+  const status: string[] = []
+  if (verification.sentiment) status.push(`Sentiment: ${verification.sentiment}`)
+  if (verification.call_successful) status.push(`Call Successful: ${verification.call_successful}`)
+  if (verification.voicemail) status.push(`Voicemail: ${verification.voicemail}`)
+  if (status.length > 0) {
+    lines.push('')
+    for (const line of status) lines.push(line)
+  }
+
+  const fields = verification.fields || []
+  if (fields.length > 0) {
+    lines.push('')
+    lines.push('Extracted Data')
+    for (const field of fields) {
+      lines.push(`- ${field.label}: ${field.value}`)
     }
-  }
-
-  if (callSummary?.trim()) {
-    lines.push('')
-    lines.push('Call Summary')
-    lines.push(callSummary.trim())
   }
 
   return lines.join('\n')
@@ -221,9 +192,9 @@ export async function persistInsuranceVerificationNote(params: {
     return { status: 'skipped', reason: 'no_insurance_verification_data' }
   }
 
-  const hasCapturedField = Object.values(verification).some(
-    (value) => value !== null && value !== undefined && String(value).trim() !== ''
-  )
+  const hasCapturedField =
+    (verification.fields?.length ?? 0) > 0 ||
+    Boolean(verification.summary || verification.sentiment || verification.call_successful || verification.voicemail)
   if (!hasCapturedField) {
     return { status: 'skipped', reason: 'empty_insurance_verification_data' }
   }
@@ -268,12 +239,13 @@ export async function persistInsuranceVerificationNote(params: {
     }
   }
 
+  const practiceTimeZone = await getPracticeTimeZone(practiceId)
   const noteContent = formatInsuranceVerificationNoteContent({
     callId,
     verification,
-    missingFields: extractedData.insurance_verification_missing_fields,
     callSummary: extractedData.call_summary || extractedData.detailed_call_summary,
     verifiedAt: call.end_timestamp ? new Date(call.end_timestamp) : new Date(),
+    timeZone: practiceTimeZone,
   })
 
   const automationUserId = await getOrCreateAutomationUserId(practiceId)
@@ -314,7 +286,7 @@ export async function persistInsuranceVerificationNote(params: {
         noteId: note.id,
         retellCallId: callId || null,
         source: 'retell_insurance_verification',
-        missingFields: extractedData.insurance_verification_missing_fields || [],
+        capturedFieldLabels: (verification.fields || []).map((f) => f.label),
       },
       userId: automationUserId,
     })
@@ -329,9 +301,7 @@ export async function persistInsuranceVerificationNote(params: {
             ...conversationMetadata,
             insuranceVerificationNoteId: note.id,
             insuranceVerificationCapturedAt: new Date().toISOString(),
-            insurance_verification: verification as Prisma.InputJsonObject,
-            insurance_verification_missing_fields:
-              extractedData.insurance_verification_missing_fields || [],
+            insurance_verification: verification as unknown as Prisma.InputJsonObject,
           } as Prisma.InputJsonObject,
         },
         select: { id: true, metadata: true, outcome: true },
@@ -355,7 +325,7 @@ export async function persistInsuranceVerificationNote(params: {
       patientId,
       noteId: note.id,
       callId: callId || null,
-      missingFields: extractedData.insurance_verification_missing_fields || [],
+      capturedFieldCount: (verification.fields || []).length,
     })
 
     return { status: 'created', noteId: note.id, patientId }

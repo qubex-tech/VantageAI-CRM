@@ -3,7 +3,7 @@ import { headers } from 'next/headers'
 import { getPatientSession } from '@/lib/portal-session'
 import { prisma } from '@/lib/db'
 import { formatAppointmentDate, formatAppointmentTime } from '@/lib/portal-date-utils'
-import { resolveTimeZone } from '@/lib/timezone'
+import { DEFAULT_PRACTICE_TIMEZONE, resolveTimeZone } from '@/lib/timezone'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,7 +20,7 @@ export default async function PortalHomePage() {
   
   // Detect user's timezone from IP address
   const headersList = await headers()
-  const userTimezone = await resolveTimeZone(headersList) || 'UTC'
+  const userTimezone = (await resolveTimeZone(headersList)) || DEFAULT_PRACTICE_TIMEZONE
   
   // Get patient info
   const patient = await prisma.patient.findUnique({

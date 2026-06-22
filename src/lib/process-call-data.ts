@@ -44,24 +44,22 @@ export interface ExtractedCallData {
   existing_patient_update?: boolean
   retell_custom_data?: Record<string, unknown>
   insurance_verification?: {
-    provider_name?: string
-    npi?: string
-    tax_id?: string
-    member_id?: string
+    /** Retell call analysis summary. */
+    summary?: string
+    /** Retell user sentiment (e.g. "Positive"). */
+    sentiment?: string
+    /** "Yes" / "No" from Retell call_successful. */
+    call_successful?: string
+    /** "Yes" / "No" from Retell in_voicemail. */
+    voicemail?: string
+    /** Convenience identity fields (used for patient resolution, not display schema). */
     patient_first_name?: string
     patient_last_name?: string
     patient_dob?: string
-    coverage_effective_date?: string
-    policy_active?: string | boolean
-    specialist_office_visit_benefits?: string
-    telehealth_benefits?: string
-    referral_required?: string | boolean
-    cob_primary_plan?: string
-    cob_secondary_plan?: string
-    insurance_agent_name?: string
-    reference_number?: string
+    member_id?: string
+    /** Extracted Data key/value pairs exactly as returned by Retell custom analysis. */
+    fields?: Array<{ label: string; value: string }>
   }
-  insurance_verification_missing_fields?: string[]
 }
 
 type EscalationConversation = {
@@ -672,99 +670,108 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
     )
   }
 
-  const insuranceVerification = {
-    provider_name: firstNonEmptyString(
+  // Only build the insurance verification snapshot for outbound insurance
+  // verification calls so we never attach it to ordinary inbound calls.
+  const callPurpose = firstNonEmptyString(
+    firstDefined(
+      metadata.call_purpose,
+      (metadata as Record<string, unknown>).callPurpose,
+      customData.call_purpose,
+      root.call_purpose,
+      normalizedMetadata.call_purpose,
+      normalizedCustom.call_purpose
+    )
+  )
+  const isInsuranceVerificationCall =
+    typeof callPurpose === 'string' && callPurpose.toLowerCase().includes('insurance')
+
+  if (isInsuranceVerificationCall) {
+    // Capture Retell's "Extracted Data" exactly as returned (label + value),
+    // preserving Retell's ordering. Nothing is invented or back-filled.
+    const verificationFields: Array<{ label: string; value: string }> = []
+    for (const [rawKey, rawValue] of Object.entries(customData)) {
+      if (rawValue === null || rawValue === undefined) continue
+      const label = String(rawKey).trim()
+      if (!label) continue
+      const value =
+        typeof rawValue === 'boolean'
+          ? rawValue
+            ? 'Yes'
+            : 'No'
+          : typeof rawValue === 'object'
+            ? JSON.stringify(rawValue)
+            : String(rawValue).trim()
+      if (!value) continue
+      verificationFields.push({ label, value })
+    }
+
+    const summary = firstNonEmptyString(firstDefined(analysisRoot.call_summary, customData.summary))
+    const sentiment = firstNonEmptyString(firstDefined(analysisRoot.user_sentiment, customData.sentiment))
+    const callSuccessful =
+      analysisRoot.call_successful === undefined || analysisRoot.call_successful === null
+        ? undefined
+        : analysisRoot.call_successful
+          ? 'Yes'
+          : 'No'
+    const voicemail =
+      analysisRoot.in_voicemail === undefined || analysisRoot.in_voicemail === null
+        ? undefined
+        : analysisRoot.in_voicemail
+          ? 'Yes'
+          : 'No'
+
+    const convenienceFirst = firstNonEmptyString(
       firstDefined(
-        customData.provider_name,
-        customData.practice_name,
-        customData.clinic_name,
-        metadata.provider_name,
-        metadata.practice_name,
-        root.provider_name
+        customData.patient_first_name,
+        customData['Patient First Name'],
+        customData.first_name,
+        metadata.patient_first_name,
+        normalizedMetadata.patient_first_name
       )
-    ),
-    npi: firstNonEmptyString(
-      firstDefined(customData.npi, customData.provider_npi, metadata.npi, analysisRoot.npi, root.npi)
-    ),
-    tax_id: firstNonEmptyString(
-      firstDefined(customData.tax_id, customData.taxid, customData.tin, metadata.tax_id, analysisRoot.tax_id, root.tax_id)
-    ),
-    member_id: firstNonEmptyString(
-      firstDefined(customData.member_id, customData.insurance_id, metadata.member_id, analysisRoot.member_id, root.member_id)
-    ),
-    patient_first_name: firstNonEmptyString(
-      firstDefined(customData.patient_first_name, customData.first_name, metadata.patient_first_name, analysisRoot.patient_first_name)
-    ),
-    patient_last_name: firstNonEmptyString(
-      firstDefined(customData.patient_last_name, customData.last_name, metadata.patient_last_name, analysisRoot.patient_last_name)
-    ),
-    patient_dob: firstNonEmptyString(
-      firstDefined(customData.patient_dob, customData.dob, metadata.patient_dob, analysisRoot.patient_dob, root.patient_dob)
-    ),
-    coverage_effective_date: firstNonEmptyString(
-      firstDefined(customData.coverage_effective_date, customData.effective_date, metadata.coverage_effective_date, analysisRoot.coverage_effective_date)
-    ),
-    policy_active: firstDefined(
-      customData.policy_active,
-      customData.is_policy_active,
-      metadata.policy_active,
-      analysisRoot.policy_active
-    ) as string | boolean | undefined,
-    specialist_office_visit_benefits: firstNonEmptyString(
-      firstDefined(customData.specialist_office_visit_benefits, customData.specialist_benefits, metadata.specialist_office_visit_benefits)
-    ),
-    telehealth_benefits: firstNonEmptyString(
-      firstDefined(customData.telehealth_benefits, customData.televisit_benefits, metadata.telehealth_benefits)
-    ),
-    referral_required: firstDefined(
-      customData.referral_required,
-      customData.specialist_referral_required,
-      metadata.referral_required,
-      analysisRoot.referral_required
-    ) as string | boolean | undefined,
-    cob_primary_plan: firstNonEmptyString(
-      firstDefined(customData.cob_primary_plan, customData.primary_plan, metadata.cob_primary_plan)
-    ),
-    cob_secondary_plan: firstNonEmptyString(
-      firstDefined(customData.cob_secondary_plan, customData.secondary_plan, metadata.cob_secondary_plan)
-    ),
-    insurance_agent_name: firstNonEmptyString(
-      firstDefined(customData.insurance_agent_name, customData.representative_name, metadata.insurance_agent_name)
-    ),
-    reference_number: firstNonEmptyString(
-      firstDefined(customData.reference_number, customData.reference_no, metadata.reference_number, analysisRoot.reference_number)
-    ),
-  }
+    )
+    const convenienceLast = firstNonEmptyString(
+      firstDefined(
+        customData.patient_last_name,
+        customData['Patient Last Name'],
+        customData.last_name,
+        metadata.patient_last_name,
+        normalizedMetadata.patient_last_name
+      )
+    )
+    const convenienceDob = firstNonEmptyString(
+      firstDefined(
+        customData.patient_dob,
+        customData.dob,
+        customData['Patient DOB'],
+        metadata.patient_dob,
+        normalizedMetadata.patient_dob,
+        root.patient_dob
+      )
+    )
+    const convenienceMember = firstNonEmptyString(
+      firstDefined(customData.member_id, customData['Member ID'], customData.insurance_id)
+    )
 
-  const requiredInsuranceFields = [
-    'provider_name',
-    'npi',
-    'tax_id',
-    'member_id',
-    'patient_first_name',
-    'patient_last_name',
-    'patient_dob',
-    'coverage_effective_date',
-    'policy_active',
-    'specialist_office_visit_benefits',
-    'telehealth_benefits',
-    'referral_required',
-    'insurance_agent_name',
-    'reference_number',
-  ] as const
-  const missingInsuranceFields = requiredInsuranceFields.filter((field) => {
-    const value = insuranceVerification[field]
-    return value === null || value === undefined || String(value).trim() === ''
-  })
+    const hasAnything =
+      verificationFields.length > 0 || Boolean(summary || sentiment || callSuccessful || voicemail)
 
-  if (
-    Object.values(insuranceVerification).some((value) => value !== null && value !== undefined && String(value).trim() !== '')
-  ) {
-    extracted.insurance_verification = insuranceVerification
-    extracted.insurance_verification_missing_fields = missingInsuranceFields
-  }
-  if (!extracted.patient_name && insuranceVerification.patient_first_name && insuranceVerification.patient_last_name) {
-    extracted.patient_name = `${insuranceVerification.patient_first_name} ${insuranceVerification.patient_last_name}`.trim()
+    if (hasAnything) {
+      extracted.insurance_verification = {
+        summary,
+        sentiment,
+        call_successful: callSuccessful,
+        voicemail,
+        patient_first_name: convenienceFirst,
+        patient_last_name: convenienceLast,
+        patient_dob: convenienceDob,
+        member_id: convenienceMember,
+        fields: verificationFields,
+      }
+    }
+
+    if (!extracted.patient_name && convenienceFirst && convenienceLast) {
+      extracted.patient_name = `${convenienceFirst} ${convenienceLast}`.trim()
+    }
   }
 
   // PSTN leg when Retell analysis did not populate callback (may differ from patient-stated number).
@@ -1111,11 +1118,9 @@ export async function processRetellCallData(
   if (extractedData.insurance_verification) {
     console.log('[processRetellCallData] Insurance verification capture summary:', {
       callId: call.call_id,
-      capturedFields: Object.keys(extractedData.insurance_verification).filter((k) => {
-        const value = (extractedData.insurance_verification as Record<string, unknown>)[k]
-        return value !== null && value !== undefined && String(value).trim() !== ''
-      }),
-      missingFields: extractedData.insurance_verification_missing_fields || [],
+      capturedFieldLabels: (extractedData.insurance_verification.fields || []).map((f) => f.label),
+      hasSummary: Boolean(extractedData.insurance_verification.summary),
+      sentiment: extractedData.insurance_verification.sentiment || null,
     })
   }
 

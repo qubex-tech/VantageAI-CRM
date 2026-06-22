@@ -526,6 +526,11 @@ async function executeLocalFallbackTool(params: {
       overrideAgentId: (args.agent_id as string | undefined)?.trim() || config.agentId || undefined,
       metadata: {
         ...((args.context as Record<string, unknown> | undefined) || {}),
+        call_purpose:
+          (typeof args.call_purpose === 'string' && args.call_purpose.trim()
+            ? args.call_purpose.trim()
+            : undefined) ||
+          (toolName === 'create_outbound_call' ? 'insurance_verification' : undefined),
         patient_id: dynamicVariables.patient_id || undefined,
         patient_name: dynamicVariables.patient_name || undefined,
         patient_dob: dynamicVariables.patient_dob || undefined,

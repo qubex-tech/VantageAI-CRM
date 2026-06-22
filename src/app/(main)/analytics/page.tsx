@@ -10,6 +10,8 @@ import { isInboundAgentCall } from '@/lib/analytics/voiceConversationInbound'
 import type { AnalyticsCallRow } from '@/lib/analytics/callSort'
 import { last7DaysStartUtc, resolveCallDateRangeUtc } from '@/lib/analytics/callDateRangeUtc'
 import { computeInboundTransferMetrics } from '@/lib/analytics/transferMetrics'
+import { getPracticeTimeZone } from '@/lib/practice-timezone'
+import { formatUserFacingDateRange } from '@/lib/timezone'
 
 export const dynamic = 'force-dynamic'
 
@@ -157,19 +159,14 @@ export default async function AnalyticsPage({
 
   const recentAppointments = appointments.slice(0, 6)
 
+  const practiceTimeZone = await getPracticeTimeZone(practiceId)
   const callFromStr = callRangeStart.toISOString().slice(0, 10)
   const callToStr = callRangeEnd.toISOString().slice(0, 10)
-  const utcDateFmt: Intl.DateTimeFormatOptions = {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    timeZone: 'UTC',
-  }
-  const callRangeLabel = `${callRangeStart.toLocaleDateString('en-US', utcDateFmt)} – ${callRangeEnd.toLocaleDateString('en-US', utcDateFmt)} (UTC)`
+  const callRangeLabel = formatUserFacingDateRange(callRangeStart, callRangeEnd, practiceTimeZone)
 
   return (
     <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 pb-24 md:pb-6">
-      <PageIntro description="Call date range uses UTC calendar days so counts align with Retell timestamps. Scheduling below still uses the last 30 days in server local time." />
+      <PageIntro description="Call analytics and reporting use your practice timezone for displayed dates and times. Scheduling metrics below use the last 30 days." />
 
       <div className="space-y-10">
         <Suspense

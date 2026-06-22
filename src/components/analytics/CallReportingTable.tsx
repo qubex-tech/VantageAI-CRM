@@ -14,6 +14,7 @@ import {
   getCallSortValue,
   makeRetellCustomSortKey,
 } from '@/lib/analytics/callSort'
+import { formatUserFacingDateTime } from '@/lib/timezone'
 
 function humanizeColumnKey(key: string): string {
   if (key.startsWith('retell_custom_data:')) {
@@ -35,14 +36,9 @@ function callDurationSeconds(row: AnalyticsCallRow): number | null {
 }
 
 function callTimeLocalDisplay(row: AnalyticsCallRow): string {
-  const d = new Date(row.startedAt)
-  if (Number.isNaN(d.getTime())) return '—'
-  return d.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
+  return formatUserFacingDateTime(row.startedAt, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
   })
 }
 
@@ -143,7 +139,7 @@ export function CallReportingTable({ rows, callRangeLabel }: CallReportingTableP
       'Caller name',
       'Caller number',
       'Call duration',
-      'Call time (UTC)',
+      'Call time',
       ...dynamicKeys.map(humanizeColumnKey),
     ]
     const lines = [headers.map(escapeCsv).join(',')]
@@ -153,7 +149,7 @@ export function CallReportingTable({ rows, callRangeLabel }: CallReportingTableP
         getCallerDisplayName(row),
         row.callerPhone || '',
         dur != null ? `${Math.round(dur)}s` : '',
-        new Date(row.startedAt).toISOString(),
+        callTimeLocalDisplay(row),
         ...dynamicKeys.map((k) => cellDisplay(row, k)),
       ]
       lines.push(cells.map((c) => escapeCsv(String(c))).join(','))
@@ -162,7 +158,9 @@ export function CallReportingTable({ rows, callRangeLabel }: CallReportingTableP
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `vantage-call-report-${new Date().toISOString().slice(0, 10)}.csv`
+    const now = new Date()
+    const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    a.download = `vantage-call-report-${stamp}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
