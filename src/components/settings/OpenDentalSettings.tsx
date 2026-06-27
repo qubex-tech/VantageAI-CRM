@@ -51,11 +51,14 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
   const [disconnecting, setDisconnecting] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [syncingAppointments, setSyncingAppointments] = useState(false)
+  const [writingBack, setWritingBack] = useState(false)
+  const [writebackPatNum, setWritebackPatNum] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [testResult, setTestResult] = useState<string | null>(null)
   const [syncResult, setSyncResult] = useState<string | null>(null)
   const [appointmentSyncResult, setAppointmentSyncResult] = useState<string | null>(null)
+  const [writebackResult, setWritebackResult] = useState<string | null>(null)
 
   const hasCustomerKey = Boolean(connection?.hasCustomerKey)
 
@@ -275,6 +278,40 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
     }
   }
 
+  const handleTestWriteback = async () => {
+    setError('')
+    setSuccess('')
+    setWritebackResult(null)
+
+    const patNum = Number(writebackPatNum.trim())
+    if (!Number.isInteger(patNum) || patNum <= 0) {
+      setWritebackResult('Enter a valid Open Dental PatNum to test writeback.')
+      return
+    }
+
+    setWritingBack(true)
+    try {
+      const response = await fetch('/api/integrations/opendental/writeback/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ practiceId, patNum }),
+      })
+
+      const data = await response.json()
+      if (!response.ok || !data.ok) {
+        throw new Error(data.error || 'Test writeback failed')
+      }
+
+      setWritebackResult(
+        `Wrote test commlog to PatNum ${patNum}${data.commlogNum ? ` (CommlogNum ${data.commlogNum})` : ''}.`
+      )
+    } catch (err) {
+      setWritebackResult(err instanceof Error ? err.message : 'Test writeback failed')
+    } finally {
+      setWritingBack(false)
+    }
+  }
+
   const handleDisconnect = async () => {
     setError('')
     setSuccess('')
@@ -400,6 +437,11 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
               {appointmentSyncResult}
             </div>
           )}
+          {writebackResult && (
+            <div className="rounded-md border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+              {writebackResult}
+            </div>
+          )}
 
           <div className="flex flex-wrap gap-2">
             <Button type="submit" disabled={saving}>
@@ -455,6 +497,32 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
                 {disconnecting ? 'Disconnecting...' : 'Disconnect'}
               </Button>
             )}
+          </div>
+
+          <div className="space-y-2 rounded-md border border-gray-200 p-3">
+            <Label htmlFor="odWritebackPatNum">Test writeback (commlog)</Label>
+            <p className="text-xs text-gray-500">
+              Verify call note writeback by posting a test commlog to an Open Dental patient. Enter a
+              PatNum, then click Test writeback.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                id="odWritebackPatNum"
+                value={writebackPatNum}
+                onChange={(e) => setWritebackPatNum(e.target.value)}
+                placeholder="PatNum (e.g. 1)"
+                className="max-w-[180px]"
+                inputMode="numeric"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleTestWriteback}
+                disabled={writingBack || !connection?.isActive || !writebackPatNum.trim()}
+              >
+                {writingBack ? 'Writing...' : 'Test writeback'}
+              </Button>
+            </div>
           </div>
         </form>
       </CardContent>

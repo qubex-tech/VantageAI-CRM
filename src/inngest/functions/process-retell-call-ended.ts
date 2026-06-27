@@ -2,6 +2,7 @@ import { inngest } from '../client'
 import { getRetellClient } from '@/lib/retell-api'
 import { processRetellCallData } from '@/lib/process-call-data'
 import { writeBackRetellCallToEhr } from '@/lib/integrations/ehr/writeback'
+import { writeBackCallToOpenDental } from '@/lib/integrations/opendental/commlogWriteback'
 import { enrichPatientFromEhr } from '@/lib/integrations/ehr/enrichPatientFromEhr'
 import { hasRetellPostCallCustomAnalysis } from '@/lib/outbound-customer-notifications'
 import type { RetellCall } from '@/lib/retell-api'
@@ -69,6 +70,15 @@ export const processRetellCallEnded = inngest.createFunction(
 
     await step.run('ehr-writeback', async () => {
       await writeBackRetellCallToEhr({
+        practiceId,
+        patientId,
+        call: fullCall,
+        extractedData,
+      })
+    })
+
+    await step.run('opendental-writeback', async () => {
+      return writeBackCallToOpenDental({
         practiceId,
         patientId,
         call: fullCall,
