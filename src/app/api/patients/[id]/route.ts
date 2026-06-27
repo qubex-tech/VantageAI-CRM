@@ -8,6 +8,7 @@ import { logPatientChanges } from '@/lib/patient-activity'
 import { emitEvent } from '@/lib/outbox'
 import { syncPatientUpdateToEhr } from '@/lib/integrations/ehr/patientUpdate'
 import { syncOpenDentalCommlogsForPatient } from '@/lib/integrations/opendental/commlogSync'
+import { syncOpenDentalAppointmentsForPatient } from '@/lib/integrations/opendental/appointmentSync'
 import { normalizeDateOnly, parseDateOnlyString } from '@/lib/date'
 
 export const dynamic = 'force-dynamic'
@@ -75,6 +76,28 @@ export async function GET(
         }
       } catch (error) {
         console.warn('[Patient GET] Open Dental commlog pull failed', {
+          patientId: patient.id,
+          error: error instanceof Error ? error.message : 'unknown',
+        })
+      }
+
+      // Best-effort: pull the patient's latest Open Dental appointments so schedule
+      // changes made directly in Open Dental show up immediately on the profile.
+      try {
+        const apptSummary = await syncOpenDentalAppointmentsForPatient({
+          practiceId,
+          patientId: patient.id,
+          externalEhrId: patient.externalEhrId,
+        })
+        if (apptSummary.created > 0 || apptSummary.updated > 0) {
+          patient.appointments = await prisma.appointment.findMany({
+            where: { patientId: patient.id },
+            orderBy: { startTime: 'desc' },
+            take: 10,
+          })
+        }
+      } catch (error) {
+        console.warn('[Patient GET] Open Dental appointment pull failed', {
           patientId: patient.id,
           error: error instanceof Error ? error.message : 'unknown',
         })

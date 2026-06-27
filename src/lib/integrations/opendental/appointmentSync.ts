@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/db'
 import type { Appointment as OdAppointment } from '@vantage/opendental-sdk'
 import { getPracticeTimeZone } from '@/lib/practice-timezone'
-import { getOpenDentalServices } from './factory'
+import { getOpenDentalServices, getOpenDentalConnection } from './factory'
 import { recordSyncResult } from './connectionManager'
 import { logOpenDentalAudit } from './audit'
 import { ensureCrmPatientIdForPatNum } from './patientSync'
@@ -183,6 +183,79 @@ export type AppointmentSyncSummary = {
   skipped: number
   errors: number
   errorSamples: string[]
+}
+
+/**
+ * Pull appointments for a single Open Dental patient into the CRM appointment table.
+ *
+ * Self-gating: returns a zeroed summary when the practice has no active Open Dental
+ * connection or when the patient is not linked to Open Dental. Deduped/idempotent via
+ * the appointment's `calBookingId` (`opendental:apt:{AptNum}`), so repeated pulls update
+ * rather than duplicate. Designed to run on-demand (e.g. when a patient profile is
+ * opened); failures should be treated as best-effort by the caller.
+ */
+export async function syncOpenDentalAppointmentsForPatient(params: {
+  practiceId: string
+  patientId: string
+  externalEhrId?: string | null
+  patNum?: number
+}): Promise<AppointmentSyncSummary> {
+  const { practiceId, patientId } = params
+  const summary: AppointmentSyncSummary = {
+    fetched: 0,
+    created: 0,
+    updated: 0,
+    skipped: 0,
+    errors: 0,
+    errorSamples: [],
+  }
+
+  let patNum = params.patNum
+  if (!patNum) {
+    const externalEhrId =
+      params.externalEhrId ??
+      (
+        await prisma.patient.findFirst({
+          where: { id: patientId, practiceId, deletedAt: null },
+          select: { externalEhrId: true },
+        })
+      )?.externalEhrId
+    if (!externalEhrId || !externalEhrId.startsWith('opendental:')) return summary
+    const raw = externalEhrId.slice('opendental:'.length)
+    if (raw.startsWith('apt:')) return summary
+    const parsed = Number(raw)
+    if (!Number.isInteger(parsed) || parsed <= 0) return summary
+    patNum = parsed
+  }
+
+  const connection = await getOpenDentalConnection(practiceId)
+  if (!connection || !connection.isActive) return summary
+
+  const services = await getOpenDentalServices(practiceId)
+  const timeZone = await getPracticeTimeZone(practiceId)
+
+  const appts = (await services.appointments.list({ PatNum: patNum })) as OdAppointment[]
+  if (!Array.isArray(appts)) return summary
+
+  for (const od of appts) {
+    summary.fetched += 1
+    try {
+      if (!isSchedulableStatus(od.AptStatus) || !parseOdWallClock(od.AptDateTime)) {
+        summary.skipped += 1
+        continue
+      }
+      const outcome = await upsertAppointmentFromOpenDental({ practiceId, patientId, od, timeZone })
+      if (outcome === 'created') summary.created += 1
+      else summary.updated += 1
+    } catch (error) {
+      summary.errors += 1
+      if (summary.errorSamples.length < 5) {
+        summary.errorSamples.push(error instanceof Error ? error.message : 'unknown error')
+      }
+    }
+  }
+
+  return summary
 }
 
 /**
