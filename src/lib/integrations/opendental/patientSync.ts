@@ -105,10 +105,10 @@ export function mapOpenDentalPatient(od: OdPatient): MappedPatient {
 
 type UpsertOutcome = 'created' | 'updated' | 'linked'
 
-async function upsertPatientFromOpenDental(params: {
+export async function upsertPatientFromOpenDental(params: {
   practiceId: string
   mapped: MappedPatient
-}): Promise<UpsertOutcome> {
+}): Promise<{ id: string; outcome: UpsertOutcome }> {
   const { practiceId, mapped } = params
 
   const existing = await prisma.patient.findFirst({
@@ -141,7 +141,7 @@ async function upsertPatientFromOpenDental(params: {
         postalCode: mapped.postalCode ?? existing.postalCode,
       },
     })
-    return 'updated'
+    return { id: existing.id, outcome: 'updated' }
   }
 
   // Try to merge into an existing unlinked CRM patient before creating a new record.
@@ -174,7 +174,7 @@ async function upsertPatientFromOpenDental(params: {
     })
 
     if (mergeCandidate) {
-      await prisma.patient.update({
+      const linked = await prisma.patient.update({
         where: { id: mergeCandidate.id },
         data: {
           externalEhrId: mapped.externalEhrId,
@@ -197,11 +197,11 @@ async function upsertPatientFromOpenDental(params: {
           consentSource: mergeCandidate.consentSource || 'import',
         },
       })
-      return 'linked'
+      return { id: linked.id, outcome: 'linked' }
     }
   }
 
-  await prisma.patient.create({
+  const created = await prisma.patient.create({
     data: {
       practiceId,
       externalEhrId: mapped.externalEhrId,
@@ -225,7 +225,44 @@ async function upsertPatientFromOpenDental(params: {
       consentSource: 'import',
     },
   })
-  return 'created'
+  return { id: created.id, outcome: 'created' }
+}
+
+/**
+ * Resolve the CRM patient id for an Open Dental PatNum, fetching and creating the
+ * patient record on demand if it has not been synced yet. Returns null if the
+ * patient cannot be retrieved.
+ */
+export async function ensureCrmPatientIdForPatNum(params: {
+  practiceId: string
+  patNum: number
+  services: Awaited<ReturnType<typeof getOpenDentalServices>>
+  cache: Map<number, string>
+}): Promise<string | null> {
+  const { practiceId, patNum, services, cache } = params
+  const cached = cache.get(patNum)
+  if (cached) return cached
+
+  const externalId = buildExternalId(patNum)
+  const existing = await prisma.patient.findFirst({
+    where: { practiceId, deletedAt: null, externalEhrId: externalId },
+    select: { id: true },
+  })
+  if (existing) {
+    cache.set(patNum, existing.id)
+    return existing.id
+  }
+
+  try {
+    const od = (await services.patients.get(patNum)) as OdPatient | null
+    if (!od || !od.PatNum) return null
+    const mapped = mapOpenDentalPatient(od)
+    const { id } = await upsertPatientFromOpenDental({ practiceId, mapped })
+    cache.set(patNum, id)
+    return id
+  } catch {
+    return null
+  }
 }
 
 export type PatientSyncSummary = {
@@ -288,7 +325,7 @@ export async function syncOpenDentalPatients(params: {
         summary.fetched += 1
         try {
           const mapped = mapOpenDentalPatient(od)
-          const outcome = await upsertPatientFromOpenDental({ practiceId, mapped })
+          const { outcome } = await upsertPatientFromOpenDental({ practiceId, mapped })
           if (outcome === 'created') summary.created += 1
           else if (outcome === 'updated') summary.updated += 1
           else summary.linked += 1

@@ -50,10 +50,12 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
   const [healthChecking, setHealthChecking] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [syncingAppointments, setSyncingAppointments] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [testResult, setTestResult] = useState<string | null>(null)
   const [syncResult, setSyncResult] = useState<string | null>(null)
+  const [appointmentSyncResult, setAppointmentSyncResult] = useState<string | null>(null)
 
   const hasCustomerKey = Boolean(connection?.hasCustomerKey)
 
@@ -244,6 +246,35 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
     }
   }
 
+  const handleSyncAppointments = async () => {
+    setError('')
+    setSuccess('')
+    setAppointmentSyncResult(null)
+    setSyncingAppointments(true)
+
+    try {
+      const response = await fetch('/api/integrations/opendental/sync/appointments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ practiceId }),
+      })
+
+      const data = await response.json()
+      if (!response.ok || !data.ok) {
+        throw new Error(data.error || 'Appointment sync failed')
+      }
+
+      const s = data.summary
+      setAppointmentSyncResult(
+        `Synced ${s.fetched} appointment(s) — created ${s.created}, updated ${s.updated}, skipped ${s.skipped}, errors ${s.errors}.`
+      )
+    } catch (err) {
+      setAppointmentSyncResult(err instanceof Error ? err.message : 'Appointment sync failed')
+    } finally {
+      setSyncingAppointments(false)
+    }
+  }
+
   const handleDisconnect = async () => {
     setError('')
     setSuccess('')
@@ -364,6 +395,11 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
               {syncResult}
             </div>
           )}
+          {appointmentSyncResult && (
+            <div className="rounded-md border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+              {appointmentSyncResult}
+            </div>
+          )}
 
           <div className="flex flex-wrap gap-2">
             <Button type="submit" disabled={saving}>
@@ -400,6 +436,14 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
               disabled={syncing || !connection?.isActive}
             >
               {syncing ? 'Syncing patients...' : 'Sync patients'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleSyncAppointments}
+              disabled={syncingAppointments || !connection?.isActive}
+            >
+              {syncingAppointments ? 'Syncing appointments...' : 'Sync appointments'}
             </Button>
             {connection?.isActive && (
               <Button
