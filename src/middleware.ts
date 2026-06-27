@@ -118,6 +118,8 @@ export async function middleware(req: NextRequest) {
       '/api/integrations/ehr/bulk/status',
       '/api/integrations/ehr/bulk/import',
       '/api/integrations/ehr/writeback/retell',
+      // Retell custom-function endpoints (auth via signature/fail-open, not session)
+      '/api/check-do-not-schedule',
     ]
     const isPublicPath = publicPaths.some(path => pathname.startsWith(path))
     

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { verifyRetellSignature, rateLimit } from '@/lib/middleware'
-import { processRetellWebhook } from '@/lib/retell'
+import { processRetellWebhook, handleToolCall } from '@/lib/retell'
 
 /**
  * RetellAI webhook endpoint
@@ -136,6 +136,30 @@ export async function POST(req: NextRequest) {
 
     if (!practice) {
       return NextResponse.json({ error: 'Practice not found' }, { status: 404 })
+    }
+
+    // Retell custom-function calls arrive as `{ name, call, args }` (no `event`
+    // field). These expect a JSON result body the agent can read — unlike webhook
+    // events, which are fire-and-forget. Dispatch and return the tool result.
+    const fnName = typeof event?.name === 'string' ? event.name.trim() : ''
+    const isFunctionCall = !!fnName && !event?.event && !Array.isArray(event?.tool_calls)
+    if (isFunctionCall) {
+      const args =
+        event?.args && typeof event.args === 'object' && !Array.isArray(event.args)
+          ? (event.args as Record<string, unknown>)
+          : (event as Record<string, unknown>)
+      try {
+        const toolResult = await handleToolCall(practiceId, fnName, args)
+        // cancelAppointment resolves void; give the agent something to read back.
+        const payload = toolResult === undefined ? { success: true } : toolResult
+        return NextResponse.json(payload, { status: 200 })
+      } catch (error) {
+        console.error(`[RetellAI webhook] Tool "${fnName}" failed:`, error)
+        return NextResponse.json(
+          { error: error instanceof Error ? error.message : 'Tool execution failed' },
+          { status: 200 }
+        )
+      }
     }
 
     // Process webhook

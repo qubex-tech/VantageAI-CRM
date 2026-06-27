@@ -374,7 +374,7 @@ async function sendCallPushNotification(practiceId: string, call: any): Promise<
 /**
  * Handle individual tool calls from RetellAI
  */
-async function handleToolCall(
+export async function handleToolCall(
   practiceId: string,
   toolName: string,
   parameters: any
