@@ -3,7 +3,7 @@ import { getPracticeTimeZone } from '@/lib/practice-timezone'
 import { getOpenDentalServices, getOpenDentalConnection } from './factory'
 import { logOpenDentalAudit } from './audit'
 import { extractPatNumFromExternalId, formatOpenDentalLocalDateTime } from './commlogWriteback'
-import { buildAppointmentExternalId } from './appointmentSync'
+import { buildAppointmentExternalId, openDentalNaiveToInstant } from './appointmentSync'
 import { resolveCreatedId } from './apiResponse'
 
 const APPT_PREFIX = 'opendental:apt:'
@@ -183,4 +183,80 @@ export async function writeBackAppointmentToOpenDental(params: {
     const message = error instanceof Error ? error.message : 'Appointment writeback failed'
     return { status: 'error', reason: message }
   }
+}
+
+/** Naive "yyyy-MM-dd 10:00:00" for the next weekday in the given timezone. */
+function nextWeekdayTenAm(timeZone: string): string {
+  const todayStr = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
+  const d = new Date(`${todayStr}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + 2)
+  while (d.getUTCDay() === 0 || d.getUTCDay() === 6) {
+    d.setUTCDate(d.getUTCDate() + 1)
+  }
+  const y = d.getUTCFullYear()
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(d.getUTCDate()).padStart(2, '0')
+  return `${y}-${m}-${day} 10:00:00`
+}
+
+export type TestAppointmentResult = {
+  appointmentId: string
+  writeback: AppointmentWritebackResult
+  startTime: string
+}
+
+/**
+ * Create a throwaway CRM appointment for an Open Dental patient and run the real
+ * writeback path against it — used by the settings "Test appointment writeback" button.
+ */
+export async function writeTestAppointment(params: {
+  practiceId: string
+  patNum: number
+  actorUserId?: string
+  note?: string
+  lengthMinutes?: number
+}): Promise<TestAppointmentResult> {
+  const { practiceId, patNum, actorUserId } = params
+  const lengthMinutes = params.lengthMinutes && params.lengthMinutes > 0 ? params.lengthMinutes : 30
+
+  const patient = await prisma.patient.findFirst({
+    where: { practiceId, externalEhrId: `opendental:${patNum}`, deletedAt: null },
+    select: { id: true },
+  })
+  if (!patient) {
+    throw new Error(`No CRM patient is linked to Open Dental PatNum ${patNum} in this practice.`)
+  }
+
+  const timeZone = await getPracticeTimeZone(practiceId)
+  const naive = nextWeekdayTenAm(timeZone)
+  const start = openDentalNaiveToInstant(naive, timeZone)
+  if (!start) throw new Error('Failed to compute a test appointment time')
+  const end = new Date(start.getTime() + lengthMinutes * 60_000)
+
+  const appointment = await prisma.appointment.create({
+    data: {
+      practiceId,
+      patientId: patient.id,
+      status: 'scheduled',
+      startTime: start,
+      endTime: end,
+      timezone: timeZone,
+      visitType: 'Writeback test',
+      reason: params.note?.trim() || 'Vantage appointment writeback test',
+      notes: params.note?.trim() || 'Vantage appointment writeback test',
+    },
+  })
+
+  const writeback = await writeBackAppointmentToOpenDental({
+    practiceId,
+    appointmentId: appointment.id,
+    actorUserId,
+  })
+
+  return { appointmentId: appointment.id, writeback, startTime: naive }
 }

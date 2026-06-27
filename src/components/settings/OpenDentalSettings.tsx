@@ -54,6 +54,9 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
   const [syncingCommlogs, setSyncingCommlogs] = useState(false)
   const [writingBack, setWritingBack] = useState(false)
   const [writebackPatNum, setWritebackPatNum] = useState('')
+  const [writingBackAppt, setWritingBackAppt] = useState(false)
+  const [apptWritebackPatNum, setApptWritebackPatNum] = useState('')
+  const [apptWritebackResult, setApptWritebackResult] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [testResult, setTestResult] = useState<string | null>(null)
@@ -343,6 +346,42 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
     }
   }
 
+  const handleTestAppointmentWriteback = async () => {
+    setError('')
+    setSuccess('')
+    setApptWritebackResult(null)
+
+    const patNum = Number(apptWritebackPatNum.trim())
+    if (!Number.isInteger(patNum) || patNum <= 0) {
+      setApptWritebackResult('Enter a valid Open Dental PatNum to test appointment writeback.')
+      return
+    }
+
+    setWritingBackAppt(true)
+    try {
+      const response = await fetch('/api/integrations/opendental/writeback/test-appointment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ practiceId, patNum }),
+      })
+
+      const data = await response.json()
+      if (!response.ok || !data.ok) {
+        const reason = data.writeback?.reason ? ` (${data.writeback.reason})` : ''
+        throw new Error((data.error || 'Test appointment writeback failed') + reason)
+      }
+
+      const aptNum = data.writeback?.aptNum
+      setApptWritebackResult(
+        `Booked appointment in Open Dental for PatNum ${patNum} at ${data.startTime}${aptNum ? ` (AptNum ${aptNum})` : ''}.`
+      )
+    } catch (err) {
+      setApptWritebackResult(err instanceof Error ? err.message : 'Test appointment writeback failed')
+    } finally {
+      setWritingBackAppt(false)
+    }
+  }
+
   const handleDisconnect = async () => {
     setError('')
     setSuccess('')
@@ -567,6 +606,35 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
                 {writingBack ? 'Writing...' : 'Test writeback'}
               </Button>
             </div>
+          </div>
+
+          <div className="space-y-2 rounded-md border border-gray-200 p-3">
+            <Label htmlFor="odApptWritebackPatNum">Test appointment writeback</Label>
+            <p className="text-xs text-gray-500">
+              Create a test appointment in the CRM for an Open Dental patient and push it to the Open
+              Dental schedule. Enter a PatNum, then click Test appointment writeback.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                id="odApptWritebackPatNum"
+                value={apptWritebackPatNum}
+                onChange={(e) => setApptWritebackPatNum(e.target.value)}
+                placeholder="PatNum (e.g. 1)"
+                className="max-w-[180px]"
+                inputMode="numeric"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleTestAppointmentWriteback}
+                disabled={writingBackAppt || !connection?.isActive || !apptWritebackPatNum.trim()}
+              >
+                {writingBackAppt ? 'Booking...' : 'Test appointment writeback'}
+              </Button>
+            </div>
+            {apptWritebackResult && (
+              <p className="text-xs text-gray-600">{apptWritebackResult}</p>
+            )}
           </div>
         </form>
       </CardContent>
