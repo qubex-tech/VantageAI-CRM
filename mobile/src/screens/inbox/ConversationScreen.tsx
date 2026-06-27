@@ -40,8 +40,8 @@ export function ConversationScreen() {
   const [draft, setDraft]               = useState('')
   const [activeChannel, setActiveChannel] = useState<Channel>('sms')
 
-  const { data: conversation, isLoading: convLoading } = useConversation(conversationId)
-  const { data, isLoading: msgsLoading, refetch: refetchMessages, isRefetching } = useMessages(conversationId)
+  const { data: conversation } = useConversation(conversationId)
+  const { data: messages = [], isLoading: msgsLoading, refetch: refetchMessages, isRefetching } = useMessages(conversationId)
   const sendMutation = useSendMessage()
 
   // Refetch messages every time the screen comes into focus
@@ -49,8 +49,7 @@ export function ConversationScreen() {
     refetchMessages()
   }, [refetchMessages]))
 
-  const messages = Array.isArray(data) ? data : (data as any)?.messages ?? []
-  const patient  = (conversation as any)?.patient ?? null
+  const patient = conversation?.patient ?? null
   const name = patient
     ? (`${patient.firstName ?? ''} ${patient.lastName ?? ''}`.trim() || patient.name || 'Unknown')
     : 'Unknown Patient'
@@ -62,7 +61,7 @@ export function ConversationScreen() {
     }
   }, [conversation?.channel])
 
-  const hasPhone = Boolean(patient?.primaryPhone || patient?.phone)
+  const hasPhone = Boolean(patient?.primaryPhone)
   const hasEmail = Boolean(patient?.email)
   const channelDisabled = (ch: Channel) => (ch === 'sms' && !hasPhone) || (ch === 'email' && !hasEmail)
 
@@ -74,7 +73,7 @@ export function ConversationScreen() {
     setDraft('')
     await sendMutation.mutateAsync({
       conversationId,
-      patientId: (conversation as any).patient?.id ?? '',
+      patientId: conversation.patient?.id ?? '',
       channel: activeChannel,
       body,
     })

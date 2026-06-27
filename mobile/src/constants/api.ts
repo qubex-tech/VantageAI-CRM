@@ -1,5 +1,6 @@
-export const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000'
+import { getApiBaseUrl } from '@/lib/config'
+
+export const API_BASE_URL = getApiBaseUrl()
 
 export const ENDPOINTS = {
   // Auth
@@ -11,6 +12,7 @@ export const ENDPOINTS = {
 
   // Notifications & push
   pushTokens: '/api/mobile/push-tokens',
+  pushTokensTest: '/api/mobile/push-tokens/test',
   mobileNotifications: '/api/mobile/notifications',
 
   // Inbox

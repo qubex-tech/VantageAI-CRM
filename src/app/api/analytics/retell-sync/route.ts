@@ -39,12 +39,16 @@ export async function POST(req: NextRequest) {
     const startMs = from.getTime()
     const endMs = to.getTime()
 
-    const integration = await getRetellIntegrationConfig(user.practiceId)
+    // Validate the integration exists/active before syncing (throws if not configured).
+    await getRetellIntegrationConfig(user.practiceId)
 
+    // Sync inbound calls for the whole practice (every agent on the account), not a
+    // single configured agentId — agents get swapped/upgraded over time and analytics
+    // are associated to the practice, not to a specific agent version.
     const result = await syncRetellInboundCallsForRange({
       practiceId: user.practiceId,
       userId: user.id,
-      agentId: integration.agentId,
+      agentId: null,
       startMs,
       endMs,
     })
@@ -53,7 +57,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       startMs,
       endMs,
-      agentId: integration.agentId,
+      agentId: null,
       ...result,
     })
   } catch (e) {

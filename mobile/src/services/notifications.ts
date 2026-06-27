@@ -28,3 +28,18 @@ export async function registerPushToken(
 export async function unregisterPushToken(token: string): Promise<void> {
   await apiDelete(ENDPOINTS.pushTokens, { token })
 }
+
+import { supportsRemotePushNotifications } from '@/lib/expo-environment'
+
+export async function deregisterPushNotifications(): Promise<void> {
+  if (!supportsRemotePushNotifications()) return
+  try {
+    const Notifications = await import('expo-notifications')
+    const tokenData = await Notifications.getExpoPushTokenAsync().catch(() => null)
+    if (tokenData?.data) {
+      await unregisterPushToken(tokenData.data).catch(() => null)
+    }
+  } catch {
+    // no-op
+  }
+}

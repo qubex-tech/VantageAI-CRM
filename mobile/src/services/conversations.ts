@@ -4,7 +4,6 @@ import type {
   Conversation,
   Message,
   ConversationsResponse,
-  MessagesResponse,
   SendMessagePayload,
   Channel,
   ConversationStatus,
@@ -18,6 +17,34 @@ export interface ConversationFilters {
   limit?: number
 }
 
+interface ConversationDetailResponse {
+  data?: { conversation?: Conversation }
+  conversation?: Conversation
+}
+
+interface MessagesListResponse {
+  data?: { messages?: Message[] }
+  messages?: Message[]
+}
+
+function extractConversations(data: ConversationsResponse | Conversation[]): Conversation[] {
+  if (Array.isArray(data)) return data
+  return data.conversations ?? []
+}
+
+function extractConversation(data: ConversationDetailResponse | Conversation): Conversation {
+  if ('patient' in data || ('id' in data && !('conversation' in data) && !('data' in data))) {
+    return data as Conversation
+  }
+  const wrapped = data as ConversationDetailResponse
+  return wrapped.data?.conversation ?? wrapped.conversation ?? (data as Conversation)
+}
+
+function extractMessages(data: MessagesListResponse | Message[]): Message[] {
+  if (Array.isArray(data)) return data
+  return data.data?.messages ?? data.messages ?? []
+}
+
 export async function fetchConversations(filters: ConversationFilters = {}): Promise<Conversation[]> {
   const params: Record<string, unknown> = {}
   if (filters.status) params.status = filters.status
@@ -26,28 +53,18 @@ export async function fetchConversations(filters: ConversationFilters = {}): Pro
   if (filters.search) params.search = filters.search
   if (filters.limit) params.limit = filters.limit
 
-  const data = await apiGet<ConversationsResponse>(ENDPOINTS.conversations, params)
-
-  // API returns { data: { conversations: [...] } } — extract the array
-  const raw = Array.isArray(data)
-    ? data
-    : (data as any).data?.conversations
-      ?? (data as any).conversations
-      ?? []
-  return raw as Conversation[]
+  const data = await apiGet<ConversationsResponse | Conversation[]>(ENDPOINTS.conversations, params)
+  return extractConversations(data)
 }
 
 export async function fetchConversation(id: string): Promise<Conversation> {
-  const data = await apiGet<any>(ENDPOINTS.conversationById(id))
-  // API returns { data: { conversation: {...} } }
-  return (data?.data?.conversation ?? data?.conversation ?? data) as Conversation
+  const data = await apiGet<ConversationDetailResponse | Conversation>(ENDPOINTS.conversationById(id))
+  return extractConversation(data)
 }
 
 export async function fetchMessages(conversationId: string): Promise<Message[]> {
-  const data = await apiGet<any>(ENDPOINTS.conversationMessages(conversationId))
-  // API returns { data: { messages: [...] } }
-  if (Array.isArray(data)) return data
-  return data?.data?.messages ?? data?.messages ?? []
+  const data = await apiGet<MessagesListResponse | Message[]>(ENDPOINTS.conversationMessages(conversationId))
+  return extractMessages(data)
 }
 
 export async function sendMessage(payload: SendMessagePayload): Promise<Message> {

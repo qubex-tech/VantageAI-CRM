@@ -89,8 +89,6 @@ export async function POST(req: NextRequest) {
       ? await bcrypt.compare(password, user.passwordHash)
       : false
 
-    console.log(`[mobile/auth] user=${user.email} supabase=${supabaseValid} bcrypt=${bcryptValid} hasHash=${hasLocalHash}`)
-
     if (!supabaseValid && !bcryptValid) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
     }

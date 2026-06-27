@@ -47,7 +47,7 @@ export function CallAnalysisCard({ analysis }: Props) {
 
         {in_voicemail && (
           <View style={[styles.chip, styles.chipNeutral]}>
-            <Ionicons name="voicemail-outline" size={13} color={colors.textMuted} />
+            <Ionicons name="recording-outline" size={13} color={colors.textMuted} />
             <Text style={[styles.chipText, { color: colors.textMuted }]}>Voicemail</Text>
           </View>
         )}

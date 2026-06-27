@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
+import { CommonActions } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
 import { View, ActivityIndicator, StyleSheet } from 'react-native'
 
@@ -29,33 +30,33 @@ const TAB_ICONS: Record<keyof RootTabParamList, [string, string]> = {
 
 function MainTabs() {
   const { data: unreadCount = 0 } = useUnreadCount()
-  const navigation = useNavigation<any>()
+  const navigation = useNavigation()
 
   usePushNotifications({
     onResponse: (response) => {
-      const data = response.notification.request.content.data as Record<string, any> | undefined
+      const data = response.notification.request.content.data as Record<string, unknown> | undefined
       if (!data) return
 
-      if (data.type === 'call' && data.callId) {
-        // Deep-link to call detail screen.
-        // Use CommonActions.reset on the Calls stack so the correct callId
-        // is always shown — even if a previous CallDetail is already in the stack.
-        navigation.navigate('Calls', {
-          screen: 'CallsList',
-        })
-        // Small delay lets the Calls navigator mount before drilling into CallDetail
-        setTimeout(() => {
-          navigation.navigate('Calls', {
-            screen: 'CallDetail',
-            params: { callId: data.callId },
+      if (data.type === 'call' && typeof data.callId === 'string') {
+        navigation.dispatch(
+          CommonActions.navigate({
+            name: 'Calls',
+            params: {
+              screen: 'CallDetail',
+              params: { callId: data.callId },
+            },
           })
-        }, 100)
-      } else if (data.conversationId) {
-        // Deep-link to inbox conversation
-        navigation.navigate('Inbox', {
-          screen: 'ConversationDetail',
-          params: { conversationId: data.conversationId },
-        })
+        )
+      } else if (typeof data.conversationId === 'string') {
+        navigation.dispatch(
+          CommonActions.navigate({
+            name: 'Inbox',
+            params: {
+              screen: 'ConversationDetail',
+              params: { conversationId: data.conversationId },
+            },
+          })
+        )
       }
     },
   })
@@ -76,7 +77,7 @@ function MainTabs() {
         tabBarLabelStyle: { fontSize: 11, fontWeight: '500', marginBottom: 2 },
         tabBarIcon: ({ focused, color, size }) => {
           const [active, inactive] = TAB_ICONS[route.name as keyof RootTabParamList] ?? ['ellipse', 'ellipse-outline']
-          return <Ionicons name={(focused ? active : inactive) as any} size={size} color={color} />
+          return <Ionicons name={(focused ? active : inactive) as keyof typeof Ionicons.glyphMap} size={size} color={color} />
         },
       })}
     >

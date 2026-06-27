@@ -11,6 +11,7 @@ import { CallAnalysisCard } from '@/components/calls/CallAnalysisCard'
 import { CallTranscript } from '@/components/calls/CallTranscript'
 import { colors, spacing, radius, fontSize, fontWeight } from '@/constants/theme'
 import { useCall, useMarkCallReviewed } from '@/hooks/useCalls'
+import { getApiErrorMessage } from '@/services/apiClient'
 import type { CallsStackParamList } from '@/navigation/types'
 
 type RouteT = RouteProp<CallsStackParamList, 'CallDetail'>
@@ -31,6 +32,14 @@ const STATUS_COLOR: Record<string, string> = {
   error:     colors.error,
 }
 
+function getCallerLabel(call: NonNullable<ReturnType<typeof useCall>['data']>['call']): string {
+  const metadata = call.metadata as Record<string, unknown> | undefined
+  return call.from_number
+    ?? (typeof metadata?.from_number === 'string' ? metadata.from_number : undefined)
+    ?? (typeof metadata?.caller_id === 'string' ? metadata.caller_id : undefined)
+    ?? (call.call_type === 'web_call' ? 'Web call' : 'Unknown caller')
+}
+
 export function CallDetailScreen() {
   const navigation = useNavigation()
   const route = useRoute<RouteT>()
@@ -41,33 +50,20 @@ export function CallDetailScreen() {
   const { data, isLoading, error } = useCall(callId)
   const markReviewed = useMarkCallReviewed()
 
-  // Debug: log call fetch result
   useEffect(() => {
-    if (data !== undefined) {
-      console.log('[CallDetail] data received:', { callId, hasCall: !!data?.call, callStatus: data?.call?.call_status })
+    if (data?.call) {
+      markReviewed.mutate(callId)
     }
-    if (error) {
-      console.error('[CallDetail] fetch error:', { callId, error: (error as any)?.message })
-    }
-  }, [data, error, callId])
-
-  // Auto-mark reviewed when screen opens
-  useEffect(() => {
-    markReviewed.mutate(callId)
-  }, [callId])
+  }, [callId, data?.call])
 
   const call = data?.call
   const startTime = call?.start_timestamp ? format(new Date(call.start_timestamp), 'MMM d, yyyy · h:mm a') : '—'
   const duration = formatDuration(call?.duration_ms)
   const statusColor = STATUS_COLOR[call?.call_status ?? ''] ?? colors.textMuted
-  const callerId = call?.from_number
-    ?? (call?.metadata as any)?.from_number
-    ?? (call?.metadata as any)?.caller_id
-    ?? (call?.call_type === 'web_call' ? 'Web call' : 'Unknown caller')
+  const callerId = call ? getCallerLabel(call) : '—'
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      {/* Header */}
       <View style={[styles.header, isTablet && styles.headerTablet]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -97,18 +93,17 @@ export function CallDetailScreen() {
       ) : !call ? (
         <View style={styles.loader}>
           <Text style={styles.errorText}>
-            {error ? `Error: ${(error as any)?.message ?? 'Failed to load call'}` : 'Call not found'}
+            {error ? getApiErrorMessage(error, 'Failed to load call') : 'Call not found'}
           </Text>
-          <Text style={[styles.errorText, { fontSize: 11, marginTop: 4, color: colors.textMuted }]}>
-            ID: {callId}
-          </Text>
+          {__DEV__ && (
+            <Text style={[styles.errorText, styles.errorMeta]}>ID: {callId}</Text>
+          )}
         </View>
       ) : (
         <ScrollView
           contentContainerStyle={[styles.content, isTablet && styles.contentTablet]}
           showsVerticalScrollIndicator={false}
         >
-          {/* Meta cards */}
           <View style={styles.metaRow}>
             <View style={styles.metaCard}>
               <Text style={styles.metaLabel}>Status</Text>
@@ -129,15 +124,12 @@ export function CallDetailScreen() {
             </View>
           </View>
 
-          {/* AI Analysis */}
           {call.call_analysis && Object.keys(call.call_analysis).length > 0 && (
             <CallAnalysisCard analysis={call.call_analysis} />
           )}
 
-          {/* Transcript */}
           {call.transcript && <CallTranscript transcript={call.transcript} />}
 
-          {/* Links */}
           {call.public_log_url && (
             <TouchableOpacity
               style={styles.linkBtn}
@@ -180,7 +172,8 @@ const styles = StyleSheet.create({
   },
 
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  errorText: { fontSize: fontSize.base, color: colors.textMuted },
+  errorText: { fontSize: fontSize.base, color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.lg },
+  errorMeta: { fontSize: 11, marginTop: 4, color: colors.textMuted },
 
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxxl },
   contentTablet: { paddingHorizontal: spacing.xxl, maxWidth: 720, alignSelf: 'center', width: '100%' },

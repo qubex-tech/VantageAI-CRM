@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react'
 import * as Device from 'expo-device'
 import { Platform } from 'react-native'
 import Constants from 'expo-constants'
-import { registerPushToken, unregisterPushToken } from '@/services/notifications'
+import { registerPushToken } from '@/services/notifications'
+import { supportsRemotePushNotifications } from '@/lib/expo-environment'
 
 export interface PushNotificationHandlers {
   onNotification?: (notification: any) => void
@@ -11,25 +12,27 @@ export interface PushNotificationHandlers {
 
 export function usePushNotifications(handlers?: PushNotificationHandlers) {
   const tokenRef = useRef<string | null>(null)
-  // Keep a stable ref to the latest handlers so listeners always call the
-  // most-recent version even though the effect runs only once.
   const handlersRef = useRef(handlers)
   useEffect(() => {
     handlersRef.current = handlers
   })
 
   useEffect(() => {
+    if (!supportsRemotePushNotifications()) {
+      return
+    }
+
     let notificationListener: any
     let responseListener: any
 
     async function setup() {
-      // Lazily import expo-notifications so it doesn't touch native
-      // modules during module initialisation (crashes Expo Go).
       const Notifications = await import('expo-notifications')
 
       Notifications.setNotificationHandler({
         handleNotification: async () => ({
           shouldShowAlert: true,
+          shouldShowBanner: true,
+          shouldShowList: true,
           shouldPlaySound: true,
           shouldSetBadge: true,
         }),
@@ -42,33 +45,22 @@ export function usePushNotifications(handlers?: PushNotificationHandlers) {
         (r: any) => handlersRef.current?.onResponse?.(r)
       )
 
-      // ── Cold-start / killed-app case ──────────────────────────────────────
-      // If the user tapped a notification that launched the app from a killed
-      // state the response arrives *before* the listener above is registered.
-      // Expo stores the last response so we can pick it up here.
-      // Note: getLastNotificationResponseAsync is only available in standalone
-      // builds (EAS / bare workflow), not in Expo Go — skip gracefully.
       if (typeof Notifications.getLastNotificationResponseAsync === 'function') {
         try {
           const lastResponse = await Notifications.getLastNotificationResponseAsync()
           if (lastResponse) {
-            // Only handle recent taps (within last 60 s) to avoid re-navigating
-            // on a normal app launch long after the notification was tapped.
             const ageSecs = Date.now() / 1000 - lastResponse.notification.date
             if (ageSecs < 60) {
-              // Deliver async so the navigator tree is ready before we navigate.
               setTimeout(() => {
                 handlersRef.current?.onResponse?.(lastResponse)
-                // Dismiss so the same notification doesn't re-navigate next launch.
                 Notifications.dismissNotificationAsync(
                   lastResponse.notification.request.identifier
                 ).catch(() => null)
               }, 600)
             }
           }
-        } catch (err) {
-          // Non-fatal — cold-start deep-link simply won't fire in this environment
-          console.log('[PushNotifications] getLastNotificationResponseAsync unavailable:', (err as any)?.message)
+        } catch {
+          // Unavailable in some environments
         }
       }
 
@@ -76,9 +68,9 @@ export function usePushNotifications(handlers?: PushNotificationHandlers) {
       tokenRef.current = token ?? null
     }
 
-    setup().catch((err) =>
-      console.warn('[PushNotifications] setup error', err)
-    )
+    setup().catch((err) => {
+      if (__DEV__) console.warn('[PushNotifications] setup error', err)
+    })
 
     return () => {
       notificationListener?.remove()
@@ -92,10 +84,7 @@ export function usePushNotifications(handlers?: PushNotificationHandlers) {
 async function registerForPushNotificationsAsync(
   Notifications: typeof import('expo-notifications')
 ): Promise<string | undefined> {
-  if (!Device.isDevice) {
-    console.log('[PushNotifications] Physical device required')
-    return undefined
-  }
+  if (!Device.isDevice) return undefined
 
   const { status: existingStatus } = await Notifications.getPermissionsAsync()
   let finalStatus = existingStatus
@@ -105,17 +94,11 @@ async function registerForPushNotificationsAsync(
     finalStatus = status
   }
 
-  if (finalStatus !== 'granted') {
-    console.log('[PushNotifications] Permission denied')
-    return undefined
-  }
+  if (finalStatus !== 'granted') return undefined
 
   const projectId =
     Constants.expoConfig?.extra?.eas?.projectId ?? (Constants as any).easConfig?.projectId
-  if (!projectId) {
-    console.warn('[PushNotifications] No EAS project ID configured — skipping token registration')
-    return undefined
-  }
+  if (!projectId) return undefined
 
   const tokenData = await Notifications.getExpoPushTokenAsync({ projectId })
   const token = tokenData.data
@@ -132,20 +115,8 @@ async function registerForPushNotificationsAsync(
   try {
     await registerPushToken(token, Platform.OS === 'ios' ? 'ios' : 'android', Constants.expoConfig?.version)
   } catch (err) {
-    console.warn('[PushNotifications] Failed to register token', err)
+    if (__DEV__) console.warn('[PushNotifications] Failed to register token', err)
   }
 
   return token
-}
-
-export async function deregisterPushNotifications(): Promise<void> {
-  try {
-    const Notifications = await import('expo-notifications')
-    const tokenData = await Notifications.getExpoPushTokenAsync().catch(() => null)
-    if (tokenData?.data) {
-      await unregisterPushToken(tokenData.data).catch(() => null)
-    }
-  } catch {
-    // no-op
-  }
 }

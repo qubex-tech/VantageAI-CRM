@@ -6,12 +6,17 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
-  SafeAreaView,
   Platform,
   ActivityIndicator,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
+import Constants from 'expo-constants'
 import { useAuthStore } from '@/store/authStore'
+import { apiPost, getApiErrorMessage } from '@/services/apiClient'
+import { ENDPOINTS } from '@/constants/api'
+import { getApiBaseUrl } from '@/lib/config'
+import { supportsRemotePushNotifications } from '@/lib/expo-environment'
 import { colors, fontSize, fontWeight, radius, spacing, shadow, rs } from '@/constants/theme'
 
 function InitialAvatar({ name }: { name: string }) {
@@ -69,17 +74,15 @@ export function ProfileScreen() {
   const handleTestNotification = async () => {
     setTestingPush(true)
     try {
-      const { apiPost } = await import('@/services/apiClient')
       const res = await apiPost<{ success: boolean; tokenCount: number }>(
-        '/api/mobile/push-tokens/test'
+        ENDPOINTS.pushTokensTest
       )
       Alert.alert(
-        '✅ Notification sent',
+        'Notification sent',
         `Sent to ${res.tokenCount} device${res.tokenCount !== 1 ? 's' : ''}. Background the app to see the banner.`
       )
-    } catch (err: any) {
-      const msg = err?.response?.data?.error ?? err?.message ?? 'Unknown error'
-      Alert.alert('❌ Failed', msg)
+    } catch (err: unknown) {
+      Alert.alert('Failed', getApiErrorMessage(err, 'Unknown error'))
     } finally {
       setTestingPush(false)
     }
@@ -146,6 +149,10 @@ export function ProfileScreen() {
   const roleLabel = user.role
     ? user.role.charAt(0).toUpperCase() + user.role.slice(1).toLowerCase()
     : 'Member'
+  const appVersion = Constants.expoConfig?.version ?? '1.0.0'
+  const buildLabel = Constants.nativeBuildVersion
+    ? `Build ${Constants.nativeBuildVersion}`
+    : __DEV__ ? 'Development' : null
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -199,12 +206,16 @@ export function ProfileScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>SESSION</Text>
           <View style={styles.card}>
-            <MenuRow
-              icon="notifications-outline"
-              label={testingPush ? 'Sending…' : 'Test Push Notification'}
-              onPress={testingPush ? undefined : handleTestNotification}
-            />
-            <View style={styles.divider} />
+            {__DEV__ && supportsRemotePushNotifications() && (
+              <>
+                <MenuRow
+                  icon="notifications-outline"
+                  label={testingPush ? 'Sending…' : 'Test Push Notification'}
+                  onPress={testingPush ? undefined : handleTestNotification}
+                />
+                <View style={styles.divider} />
+              </>
+            )}
             <MenuRow
               icon="log-out-outline"
               label={loggingOut ? 'Logging out…' : 'Log out'}
@@ -214,7 +225,14 @@ export function ProfileScreen() {
           </View>
         </View>
 
-        <Text style={styles.appVersion}>VantageAI · Medical CRM</Text>
+        <Text style={styles.appVersion}>
+          VantageAI · v{appVersion}{buildLabel ? ` · ${buildLabel}` : ''}
+        </Text>
+        {__DEV__ && (
+          <Text style={styles.appMeta} numberOfLines={2}>
+            API: {getApiBaseUrl()}
+          </Text>
+        )}
       </ScrollView>
     </SafeAreaView>
   )
@@ -359,5 +377,12 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     color: colors.textMuted,
     marginTop: spacing.md,
+  },
+  appMeta: {
+    textAlign: 'center',
+    fontSize: fontSize.xxs,
+    color: colors.textDisabled,
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.lg,
   },
 })

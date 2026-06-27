@@ -10,6 +10,7 @@ import { CallItem } from '@/components/calls/CallItem'
 import { EmptyState } from '@/components/common/EmptyState'
 import { useCalls } from '@/hooks/useCalls'
 import { useAuthStore } from '@/store/authStore'
+import { getApiErrorMessage } from '@/services/apiClient'
 import { colors, spacing, fontSize, fontWeight } from '@/constants/theme'
 import type { CallsStackParamList } from '@/navigation/types'
 
@@ -27,15 +28,7 @@ export function CallsScreen() {
   useFocusEffect(useCallback(() => { refetch() }, [refetch]))
   const calls = data?.calls ?? []
   const reviewedIds = new Set(data?.reviewedCallIds ?? [])
-  const debugMsg = (data as any)?.debug ?? null
   const unreviewed = calls.filter((c) => !reviewedIds.has(c.call_id)).length
-
-  // Debug: log when data changes
-  React.useEffect(() => {
-    if (data !== undefined) {
-      console.log('[CallsScreen] data received:', JSON.stringify({ callCount: calls.length, debug: debugMsg, isError }))
-    }
-  }, [data])
 
   const handlePress = useCallback((id: string) => {
     navigation.navigate('CallDetail', { callId: id })
@@ -43,7 +36,6 @@ export function CallsScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      {/* Header */}
       <View style={[styles.header, isTablet && styles.headerTablet]}>
         {practiceName && <Text style={styles.practiceName}>{practiceName}</Text>}
         <View style={styles.titleRow}>
@@ -79,9 +71,7 @@ export function CallsScreen() {
               title={isError ? 'Could not load calls' : 'No calls yet'}
               subtitle={
                 isError
-                  ? String((error as any)?.message ?? 'Unknown error')
-                  : debugMsg
-                  ? debugMsg
+                  ? getApiErrorMessage(error, 'Unable to load calls. Pull to refresh.')
                   : 'AI-agent call recordings will appear here.'
               }
             />

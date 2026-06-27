@@ -1,9 +1,12 @@
 import { create } from 'zustand'
 import type { ConversationStatus, Channel } from '@/types'
 
+type StatusFilter = 'all' | ConversationStatus
+type ChannelFilter = 'all' | Channel
+
 interface InboxFilters {
-  status: ConversationStatus | undefined
-  channel: Channel | undefined
+  status: StatusFilter
+  channel: ChannelFilter
   assignee: 'me' | 'team' | 'all'
   search: string
 }
@@ -18,8 +21,8 @@ interface InboxStore {
 }
 
 const defaultFilters: InboxFilters = {
-  status: undefined,
-  channel: undefined,
+  status: 'all',
+  channel: 'all',
   assignee: 'all',
   search: '',
 }

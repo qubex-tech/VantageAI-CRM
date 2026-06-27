@@ -1,6 +1,14 @@
 import { create } from 'zustand'
 import type { AuthUser } from '@/types'
-import { login as loginService, logout as logoutService, getStoredToken, getStoredUser } from '@/services/auth'
+import {
+  login as loginService,
+  clearStoredCredentials,
+  getStoredToken,
+  getStoredUser,
+  isStoredSessionValid,
+} from '@/services/auth'
+import { getApiErrorMessage } from '@/services/apiClient'
+import { deregisterPushNotifications } from '@/services/notifications'
 
 interface AuthStore {
   user: AuthUser | null
@@ -10,8 +18,14 @@ interface AuthStore {
 
   login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
+  forceLogout: () => Promise<void>
   restoreSession: () => Promise<boolean>
   clearError: () => void
+}
+
+async function clearSessionState(): Promise<void> {
+  await deregisterPushNotifications().catch(() => null)
+  await clearStoredCredentials()
 }
 
 export const useAuthStore = create<AuthStore>((set) => ({
@@ -26,12 +40,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
       const user = await loginService(email, password)
       const token = await getStoredToken()
       set({ user, token, isLoading: false })
-    } catch (err: any) {
-      const raw = err?.response?.data?.error
-      const message =
-        (typeof raw === 'string' ? raw : raw?.message)
-        ?? err?.message
-        ?? 'Login failed. Please try again.'
+    } catch (err: unknown) {
+      const message = getApiErrorMessage(err, 'Login failed. Please try again.')
       set({ error: message, isLoading: false })
       throw err
     }
@@ -40,15 +50,31 @@ export const useAuthStore = create<AuthStore>((set) => ({
   logout: async () => {
     set({ isLoading: true })
     try {
-      await logoutService()
+      await clearSessionState()
     } finally {
-      set({ user: null, token: null, isLoading: false })
+      set({ user: null, token: null, isLoading: false, error: null })
     }
   },
 
+  forceLogout: async () => {
+    await clearSessionState()
+    set({ user: null, token: null, isLoading: false, error: null })
+  },
+
   restoreSession: async () => {
+    const valid = await isStoredSessionValid()
+    if (!valid) {
+      await clearStoredCredentials()
+      set({ user: null, token: null })
+      return false
+    }
+
     const [token, user] = await Promise.all([getStoredToken(), getStoredUser()])
-    if (!token) return false
+    if (!token) {
+      set({ user: null, token: null })
+      return false
+    }
+
     set({ token, user })
     return true
   },

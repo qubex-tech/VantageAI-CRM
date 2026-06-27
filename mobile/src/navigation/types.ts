@@ -1,3 +1,5 @@
+import type { NavigatorScreenParams } from '@react-navigation/native'
+
 export type AuthStackParamList = {
   Login: undefined
   ForgotPassword: undefined
@@ -11,13 +13,6 @@ export type RootStackParamList = {
   Main: undefined
 }
 
-export type RootTabParamList = {
-  Inbox: { screen?: string; params?: object }
-  Calls: undefined
-  Notifications: undefined
-  Profile: undefined
-}
-
 export type InboxStackParamList = {
   InboxList: undefined
   ConversationDetail: { conversationId: string }
@@ -27,4 +22,11 @@ export type InboxStackParamList = {
 export type CallsStackParamList = {
   CallsList: undefined
   CallDetail: { callId: string }
+}
+
+export type RootTabParamList = {
+  Inbox: NavigatorScreenParams<InboxStackParamList>
+  Calls: NavigatorScreenParams<CallsStackParamList>
+  Notifications: undefined
+  Profile: undefined
 }

@@ -1,7 +1,13 @@
-import { useQuery, useInfiniteQuery } from '@tanstack/react-query'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import { fetchNotifications } from '@/services/notifications'
 
-export function useNotifications(unreadOnly = false) {
+export interface UseNotificationsOptions {
+  unreadOnly?: boolean
+}
+
+export function useNotifications(options: UseNotificationsOptions = {}) {
+  const { unreadOnly = false } = options
+
   return useInfiniteQuery({
     queryKey: ['notifications', { unreadOnly }],
     queryFn: ({ pageParam }) =>

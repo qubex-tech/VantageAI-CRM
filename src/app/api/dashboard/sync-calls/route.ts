@@ -32,12 +32,16 @@ export async function POST(req: NextRequest) {
     const timeZone =
       normalizeTimeZone(practice?.brandProfile?.timezone) ?? DEFAULT_PRACTICE_TIMEZONE
     const range30 = resolveDashboardRangeInTimeZone(30, timeZone)
-    const integration = await getRetellIntegrationConfig(user.practiceId)
+    // Validate the integration exists/active before syncing (throws if not configured).
+    await getRetellIntegrationConfig(user.practiceId)
 
+    // Backfill inbound calls from every agent on the account (agentId: null), matching
+    // the dashboard's all-agent handled count so backfill never misses a practice's
+    // primary inbound agent.
     const result = await syncMissingRetellInboundCallsForRange({
       practiceId: user.practiceId,
       userId: user.id,
-      agentId: integration.agentId,
+      agentId: null,
       startMs: range30.startMs,
       endMs: range30.endMs,
     })

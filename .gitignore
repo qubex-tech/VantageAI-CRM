@@ -25,9 +25,17 @@ yarn-error.log*
 # local env files
 .env*.local
 .env
+.env.vercel
+.env.vercel.prod
 
 # vercel
 .vercel
+
+# agent worktrees
+.claire/
+
+# script output (may contain PHI / patient data)
+scripts/output/
 
 # typescript
 *.tsbuildinfo

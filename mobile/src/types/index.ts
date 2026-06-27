@@ -142,6 +142,7 @@ export interface RetellCall {
   call_type: 'phone_call' | 'web_call'
   agent_id: string
   call_status: CallStatus
+  from_number?: string
   start_timestamp?: number
   end_timestamp?: number
   duration_ms?: number

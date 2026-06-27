@@ -12,6 +12,7 @@ import { ConversationItem } from '@/components/inbox/ConversationItem'
 import { FilterBar } from '@/components/inbox/FilterBar'
 import { EmptyState } from '@/components/common/EmptyState'
 import { useConversations, useUnreadCount } from '@/hooks/useConversations'
+import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { useInboxStore } from '@/store/inboxStore'
 import { useAuthStore } from '@/store/authStore'
 import { colors, spacing, radius, fontSize, fontWeight } from '@/constants/theme'
@@ -30,14 +31,15 @@ export function InboxScreen() {
   const { filters, setFilter } = useInboxStore()
   const [search, setSearch] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
+  const debouncedSearch = useDebouncedValue(search.trim(), 300)
 
   const { user } = useAuthStore()
   const practiceName = user?.practiceName ?? null
 
   const queryFilters = {
-    status: filters.status !== 'all' ? filters.status : undefined,
-    channel: filters.channel !== 'all' ? filters.channel : undefined,
-    search: search.trim() || undefined,
+    status: filters.status && filters.status !== 'all' ? filters.status : undefined,
+    channel: filters.channel && filters.channel !== 'all' ? filters.channel : undefined,
+    search: debouncedSearch || undefined,
   }
 
   const { data, isLoading, refetch, isRefetching } = useConversations(queryFilters)
@@ -104,8 +106,8 @@ export function InboxScreen() {
 
       {/* Filters */}
       <FilterBar
-        status={filters.status as StatusFilter}
-        channel={filters.channel as ChannelFilter}
+        status={(filters.status ?? 'all') as StatusFilter}
+        channel={(filters.channel ?? 'all') as ChannelFilter}
         onStatusChange={(s) => setFilter('status', s)}
         onChannelChange={(c) => setFilter('channel', c)}
       />
