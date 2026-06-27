@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/db'
 import { Prisma } from '@prisma/client'
 import { getPracticeTimeZone } from '@/lib/practice-timezone'
-import { getOpenDentalServices } from './factory'
+import { getOpenDentalServices, getOpenDentalConnection } from './factory'
 import { recordSyncResult } from './connectionManager'
 import { logOpenDentalAudit } from './audit'
 import { buildExternalId } from './patientSync'
@@ -69,6 +69,123 @@ function parseOdLocalToInstant(value: unknown, timeZone: string): Date | null {
 function commlogTitle(od: OdCommlog): string {
   const kind = cleanString(od.commType) || cleanString(od.CommType)
   return kind ? `Open Dental commlog — ${kind}` : 'Open Dental commlog'
+}
+
+/**
+ * Insert a single Open Dental commlog as a patient timeline entry, deduped by
+ * CommlogNum. Returns whether a new entry was created.
+ */
+async function importCommlogForPatient(params: {
+  patientId: string
+  od: OdCommlog
+  timeZone: string
+}): Promise<'created' | 'skipped'> {
+  const { patientId, od, timeZone } = params
+  const commlogNum = Number(od.CommlogNum)
+  if (!Number.isInteger(commlogNum)) return 'skipped'
+
+  const existing = await prisma.patientTimelineEntry.findFirst({
+    where: {
+      patientId,
+      type: 'note',
+      metadata: {
+        path: ['commlogNum'],
+        equals: commlogNum,
+      },
+    },
+    select: { id: true },
+  })
+  if (existing) return 'skipped'
+
+  const note = cleanString(od.Note) || '(no note text)'
+  const createdAt = parseOdLocalToInstant(od.CommDateTime, timeZone) ?? new Date()
+
+  await prisma.patientTimelineEntry.create({
+    data: {
+      patientId,
+      type: 'note',
+      title: commlogTitle(od),
+      description: note,
+      createdAt,
+      metadata: {
+        source: 'opendental',
+        commlogNum,
+        patNum: Number(od.PatNum) || null,
+        commType: cleanString(od.commType) || cleanString(od.CommType) || null,
+        mode: cleanString(od.Mode_) || null,
+        sentOrReceived: cleanString(od.SentOrReceived) || null,
+        commDateTime: cleanString(od.CommDateTime) || null,
+      } as Prisma.InputJsonObject,
+    },
+  })
+  return 'created'
+}
+
+/**
+ * Pull commlogs for a single Open Dental patient into the CRM timeline.
+ *
+ * Self-gating: returns a zeroed summary when the practice has no active Open Dental
+ * connection or when the patient is not linked to Open Dental. Designed to run
+ * on-demand (e.g. when a patient profile is opened); failures should be treated as
+ * best-effort by the caller.
+ */
+export async function syncOpenDentalCommlogsForPatient(params: {
+  practiceId: string
+  patientId: string
+  externalEhrId?: string | null
+  patNum?: number
+}): Promise<CommlogSyncSummary> {
+  const { practiceId, patientId } = params
+  const summary: CommlogSyncSummary = {
+    fetched: 0,
+    created: 0,
+    skipped: 0,
+    errors: 0,
+    errorSamples: [],
+  }
+
+  let patNum = params.patNum
+  if (!patNum) {
+    const externalEhrId =
+      params.externalEhrId ??
+      (
+        await prisma.patient.findFirst({
+          where: { id: patientId, practiceId, deletedAt: null },
+          select: { externalEhrId: true },
+        })
+      )?.externalEhrId
+    if (!externalEhrId || !externalEhrId.startsWith('opendental:')) return summary
+    const raw = externalEhrId.slice('opendental:'.length)
+    if (raw.startsWith('apt:')) return summary
+    const parsed = Number(raw)
+    if (!Number.isInteger(parsed) || parsed <= 0) return summary
+    patNum = parsed
+  }
+
+  const connection = await getOpenDentalConnection(practiceId)
+  if (!connection || !connection.isActive) return summary
+
+  const services = await getOpenDentalServices(practiceId)
+  const timeZone = await getPracticeTimeZone(practiceId)
+
+  const commlogs = (await services.commlogs.list({ PatNum: patNum })) as OdCommlog[]
+  if (!Array.isArray(commlogs)) return summary
+
+  for (const od of commlogs) {
+    summary.fetched += 1
+    try {
+      const outcome = await importCommlogForPatient({ patientId, od, timeZone })
+      if (outcome === 'created') summary.created += 1
+      else summary.skipped += 1
+    } catch (error) {
+      summary.errors += 1
+      if (summary.errorSamples.length < 5) {
+        summary.errorSamples.push(error instanceof Error ? error.message : 'unknown error')
+      }
+    }
+  }
+
+  return summary
 }
 
 export type CommlogSyncSummary = {
@@ -159,44 +276,9 @@ export async function syncOpenDentalCommlogs(params: {
             continue
           }
 
-          const existing = await prisma.patientTimelineEntry.findFirst({
-            where: {
-              patientId,
-              type: 'note',
-              metadata: {
-                path: ['commlogNum'],
-                equals: commlogNum,
-              },
-            },
-            select: { id: true },
-          })
-          if (existing) {
-            summary.skipped += 1
-            continue
-          }
-
-          const note = cleanString(od.Note) || '(no note text)'
-          const createdAt = parseOdLocalToInstant(od.CommDateTime, timeZone) ?? new Date()
-
-          await prisma.patientTimelineEntry.create({
-            data: {
-              patientId,
-              type: 'note',
-              title: commlogTitle(od),
-              description: note,
-              createdAt,
-              metadata: {
-                source: 'opendental',
-                commlogNum,
-                patNum,
-                commType: cleanString(od.commType) || cleanString(od.CommType) || null,
-                mode: cleanString(od.Mode_) || null,
-                sentOrReceived: cleanString(od.SentOrReceived) || null,
-                commDateTime: cleanString(od.CommDateTime) || null,
-              } as Prisma.InputJsonObject,
-            },
-          })
-          summary.created += 1
+          const outcome = await importCommlogForPatient({ patientId, od, timeZone })
+          if (outcome === 'created') summary.created += 1
+          else summary.skipped += 1
         } catch (error) {
           summary.errors += 1
           if (summary.errorSamples.length < 5) {

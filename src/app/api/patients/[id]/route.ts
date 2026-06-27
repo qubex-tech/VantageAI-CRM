@@ -7,6 +7,7 @@ import { tenantScope } from '@/lib/db'
 import { logPatientChanges } from '@/lib/patient-activity'
 import { emitEvent } from '@/lib/outbox'
 import { syncPatientUpdateToEhr } from '@/lib/integrations/ehr/patientUpdate'
+import { syncOpenDentalCommlogsForPatient } from '@/lib/integrations/opendental/commlogSync'
 import { normalizeDateOnly, parseDateOnlyString } from '@/lib/date'
 
 export const dynamic = 'force-dynamic'
@@ -53,6 +54,31 @@ export async function GET(
 
     if (!patient) {
       return NextResponse.json({ error: 'Patient not found' }, { status: 404 })
+    }
+
+    // Best-effort: pull the latest Open Dental commlogs for this patient as the profile
+    // is built, so notes written directly in Open Dental show up immediately. Failures
+    // must never block the profile from loading.
+    if (patient.externalEhrId?.startsWith('opendental:')) {
+      try {
+        const commlogSummary = await syncOpenDentalCommlogsForPatient({
+          practiceId,
+          patientId: patient.id,
+          externalEhrId: patient.externalEhrId,
+        })
+        if (commlogSummary.created > 0) {
+          patient.timelineEntries = await prisma.patientTimelineEntry.findMany({
+            where: { patientId: patient.id },
+            orderBy: { createdAt: 'desc' },
+            take: 50,
+          })
+        }
+      } catch (error) {
+        console.warn('[Patient GET] Open Dental commlog pull failed', {
+          patientId: patient.id,
+          error: error instanceof Error ? error.message : 'unknown',
+        })
+      }
     }
 
     return NextResponse.json({ patient })
