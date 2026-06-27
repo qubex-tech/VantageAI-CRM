@@ -4,6 +4,7 @@ import { getOpenDentalServices } from './factory'
 import { logOpenDentalAudit } from './audit'
 import { extractPatNumFromExternalId } from './commlogWriteback'
 import { buildAppointmentExternalId, openDentalNaiveToInstant } from './appointmentSync'
+import { resolveCreatedId } from './apiResponse'
 
 const PATTERN_SLOT_MINUTES = 5
 export const DEFAULT_SLOT_LENGTH_MINUTES = 30
@@ -247,9 +248,9 @@ export async function bookOpenDentalAppointment(params: {
   if (provNum) body.ProvNum = provNum
   if (note) body.Note = note
 
-  const created = (await services.appointments.create(body)) as Record<string, unknown> | null
-  const aptNum = Number(created?.AptNum)
-  if (!Number.isInteger(aptNum) || aptNum <= 0) {
+  const created = await services.appointments.create(body)
+  const aptNum = resolveCreatedId(created, 'AptNum')
+  if (!aptNum || aptNum <= 0) {
     throw new Error('Open Dental did not return an appointment number')
   }
 

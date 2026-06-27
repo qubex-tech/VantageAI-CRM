@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import { getPracticeTimeZone } from '@/lib/practice-timezone'
 import { getOpenDentalServices, getOpenDentalConnection } from './factory'
 import { logOpenDentalAudit } from './audit'
+import { resolveCreatedId, unwrapCreatedRecord } from './apiResponse'
 import { OPEN_DENTAL_EXTERNAL_PREFIX } from './patientSync'
 import { formatPatientNoteForEhr, isPatientNoteType } from '@/lib/patient-note-types'
 import type { ExtractedCallData } from '@/lib/process-call-data'
@@ -107,10 +108,10 @@ export async function writeOpenDentalCommlog(params: {
   // CommType is optional — Open Dental defaults to "Miscellaneous". commType (ItemName) wins if set.
   if (params.commType) body.commType = params.commType
 
-  const created = (await services.commlogs.create(body)) as Record<string, unknown> | null
-  const commlogNum =
-    (created?.CommlogNum as number | string | undefined) ?? undefined
-  return { commlogNum, raw: created }
+  const created = await services.commlogs.create(body)
+  const { record } = unwrapCreatedRecord(created)
+  const commlogNum = resolveCreatedId(created, 'CommlogNum') ?? undefined
+  return { commlogNum, raw: record ?? created }
 }
 
 async function markConversationMetadata(

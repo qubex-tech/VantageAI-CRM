@@ -6,29 +6,29 @@ export declare class AppointmentsService extends BaseDomainService {
     list(params?: Record<string, string | number | boolean | undefined | null>): Promise<unknown>;
     /** GET /{id} */
     get(id: string | number, params?: Record<string, string | number | boolean | undefined>): Promise<unknown>;
-    /** GET /slotswebsched */
+    /** GET /SlotsWebSched */
     getSlotsWebSched(params?: Record<string, string | number | boolean | undefined | null>): Promise<unknown>;
-    /** GET /slots */
+    /** GET /Slots */
     getSlots(params?: Record<string, string | number | boolean | undefined | null>): Promise<unknown>;
-    /** GET /asap */
+    /** GET /ASAP */
     getASAP(params?: Record<string, string | number | boolean | undefined | null>): Promise<unknown>;
-    /** GET /websched */
+    /** GET /WebSched */
     getWebSched(params?: Record<string, string | number | boolean | undefined | null>): Promise<unknown>;
     /** POST /appointments */
     create(body: Record<string, unknown>): Promise<unknown>;
-    /** POST /planned */
+    /** POST /Planned */
     createPlanned(body: Record<string, unknown>): Promise<unknown>;
-    /** POST /scheduleplanned */
+    /** POST /SchedulePlanned */
     createSchedulePlanned(body: Record<string, unknown>): Promise<unknown>;
-    /** POST /websched */
+    /** POST /WebSched */
     createWebSched(body: Record<string, unknown>): Promise<unknown>;
     /** PUT /{id} */
     update(id: string | number, body: Record<string, unknown>): Promise<unknown>;
-    /** PUT /{id}/break */
+    /** PUT /{id}/Break */
     break(id: string | number, body: Record<string, unknown>): Promise<unknown>;
-    /** PUT /{id}/confirm */
+    /** PUT /{id}/Confirm */
     confirm(id: string | number, body: Record<string, unknown>): Promise<unknown>;
-    /** PUT /{id}/note */
+    /** PUT /{id}/Note */
     updateNote(id: string | number, body: Record<string, unknown>): Promise<unknown>;
 }
 //# sourceMappingURL=AppointmentsService.d.ts.map

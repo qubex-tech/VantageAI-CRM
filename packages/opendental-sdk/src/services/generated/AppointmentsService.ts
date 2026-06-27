@@ -14,24 +14,24 @@ export class AppointmentsService extends BaseDomainService {
     return this.getSingle<Record<string, unknown>>(id, params)
   }
 
-  /** GET /slotswebsched */
+  /** GET /SlotsWebSched */
   async getSlotsWebSched(params?: Record<string, string | number | boolean | undefined | null>): Promise<unknown> {
-    return this.getSubResource<Record<string, unknown>>('slotswebsched', params)
+    return this.getSubResource<Record<string, unknown>>('SlotsWebSched', params)
   }
 
-  /** GET /slots */
+  /** GET /Slots */
   async getSlots(params?: Record<string, string | number | boolean | undefined | null>): Promise<unknown> {
-    return this.getSubResource<Record<string, unknown>>('slots', params)
+    return this.getSubResource<Record<string, unknown>>('Slots', params)
   }
 
-  /** GET /asap */
+  /** GET /ASAP */
   async getASAP(params?: Record<string, string | number | boolean | undefined | null>): Promise<unknown> {
-    return this.getSubResource<Record<string, unknown>>('asap', params)
+    return this.getSubResource<Record<string, unknown>>('ASAP', params)
   }
 
-  /** GET /websched */
+  /** GET /WebSched */
   async getWebSched(params?: Record<string, string | number | boolean | undefined | null>): Promise<unknown> {
-    return this.getSubResource<Record<string, unknown>>('websched', params)
+    return this.getSubResource<Record<string, unknown>>('WebSched', params)
   }
 
   /** POST /appointments */
@@ -39,19 +39,19 @@ export class AppointmentsService extends BaseDomainService {
     return this.createRecord<Record<string, unknown>>(body)
   }
 
-  /** POST /planned */
+  /** POST /Planned */
   async createPlanned(body: Record<string, unknown>): Promise<unknown> {
-    return this.postAction<Record<string, unknown>>('planned', body)
+    return this.postAction<Record<string, unknown>>('Planned', body)
   }
 
-  /** POST /scheduleplanned */
+  /** POST /SchedulePlanned */
   async createSchedulePlanned(body: Record<string, unknown>): Promise<unknown> {
-    return this.postAction<Record<string, unknown>>('scheduleplanned', body)
+    return this.postAction<Record<string, unknown>>('SchedulePlanned', body)
   }
 
-  /** POST /websched */
+  /** POST /WebSched */
   async createWebSched(body: Record<string, unknown>): Promise<unknown> {
-    return this.postAction<Record<string, unknown>>('websched', body)
+    return this.postAction<Record<string, unknown>>('WebSched', body)
   }
 
   /** PUT /{id} */
@@ -59,18 +59,18 @@ export class AppointmentsService extends BaseDomainService {
     return this.updateRecord(id, body)
   }
 
-  /** PUT /{id}/break */
+  /** PUT /{id}/Break */
   async break(id: string | number, body: Record<string, unknown>): Promise<unknown> {
-    return this.updateRecord(id, body)
+    return this.updateSubResource(`${id}/Break`, body)
   }
 
-  /** PUT /{id}/confirm */
+  /** PUT /{id}/Confirm */
   async confirm(id: string | number, body: Record<string, unknown>): Promise<unknown> {
-    return this.updateRecord(id, body)
+    return this.updateSubResource(`${id}/Confirm`, body)
   }
 
-  /** PUT /{id}/note */
+  /** PUT /{id}/Note */
   async updateNote(id: string | number, body: Record<string, unknown>): Promise<unknown> {
-    return this.updateRecord(id, body)
+    return this.updateSubResource(`${id}/Note`, body)
   }
 }

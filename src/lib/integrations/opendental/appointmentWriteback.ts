@@ -4,6 +4,7 @@ import { getOpenDentalServices, getOpenDentalConnection } from './factory'
 import { logOpenDentalAudit } from './audit'
 import { extractPatNumFromExternalId, formatOpenDentalLocalDateTime } from './commlogWriteback'
 import { buildAppointmentExternalId } from './appointmentSync'
+import { resolveCreatedId } from './apiResponse'
 
 const APPT_PREFIX = 'opendental:apt:'
 /** Each 'X' in an Open Dental Pattern is a 5-minute slot. */
@@ -159,9 +160,9 @@ export async function writeBackAppointmentToOpenDental(params: {
     if (provNum) body.ProvNum = provNum
     if (note) body.Note = note
 
-    const created = (await services.appointments.create(body)) as Record<string, unknown> | null
-    const aptNum = Number(created?.AptNum)
-    if (Number.isInteger(aptNum) && aptNum > 0) {
+    const created = await services.appointments.create(body)
+    const aptNum = resolveCreatedId(created, 'AptNum')
+    if (aptNum && aptNum > 0) {
       await prisma.appointment.update({
         where: { id: appt.id },
         data: { calBookingId: buildAppointmentExternalId(aptNum) },

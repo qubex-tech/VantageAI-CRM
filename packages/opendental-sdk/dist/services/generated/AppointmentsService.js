@@ -13,53 +13,53 @@ class AppointmentsService extends BaseDomainService_1.BaseDomainService {
     async get(id, params) {
         return this.getSingle(id, params);
     }
-    /** GET /slotswebsched */
+    /** GET /SlotsWebSched */
     async getSlotsWebSched(params) {
-        return this.getSubResource('slotswebsched', params);
+        return this.getSubResource('SlotsWebSched', params);
     }
-    /** GET /slots */
+    /** GET /Slots */
     async getSlots(params) {
-        return this.getSubResource('slots', params);
+        return this.getSubResource('Slots', params);
     }
-    /** GET /asap */
+    /** GET /ASAP */
     async getASAP(params) {
-        return this.getSubResource('asap', params);
+        return this.getSubResource('ASAP', params);
     }
-    /** GET /websched */
+    /** GET /WebSched */
     async getWebSched(params) {
-        return this.getSubResource('websched', params);
+        return this.getSubResource('WebSched', params);
     }
     /** POST /appointments */
     async create(body) {
         return this.createRecord(body);
     }
-    /** POST /planned */
+    /** POST /Planned */
     async createPlanned(body) {
-        return this.postAction('planned', body);
+        return this.postAction('Planned', body);
     }
-    /** POST /scheduleplanned */
+    /** POST /SchedulePlanned */
     async createSchedulePlanned(body) {
-        return this.postAction('scheduleplanned', body);
+        return this.postAction('SchedulePlanned', body);
     }
-    /** POST /websched */
+    /** POST /WebSched */
     async createWebSched(body) {
-        return this.postAction('websched', body);
+        return this.postAction('WebSched', body);
     }
     /** PUT /{id} */
     async update(id, body) {
         return this.updateRecord(id, body);
     }
-    /** PUT /{id}/break */
+    /** PUT /{id}/Break */
     async break(id, body) {
-        return this.updateRecord(id, body);
+        return this.updateSubResource(`${id}/Break`, body);
     }
-    /** PUT /{id}/confirm */
+    /** PUT /{id}/Confirm */
     async confirm(id, body) {
-        return this.updateRecord(id, body);
+        return this.updateSubResource(`${id}/Confirm`, body);
     }
-    /** PUT /{id}/note */
+    /** PUT /{id}/Note */
     async updateNote(id, body) {
-        return this.updateRecord(id, body);
+        return this.updateSubResource(`${id}/Note`, body);
     }
 }
 exports.AppointmentsService = AppointmentsService;
