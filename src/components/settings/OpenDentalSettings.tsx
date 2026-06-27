@@ -49,9 +49,11 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
   const [testing, setTesting] = useState(false)
   const [healthChecking, setHealthChecking] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [testResult, setTestResult] = useState<string | null>(null)
+  const [syncResult, setSyncResult] = useState<string | null>(null)
 
   const hasCustomerKey = Boolean(connection?.hasCustomerKey)
 
@@ -213,6 +215,35 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
     }
   }
 
+  const handleSyncPatients = async () => {
+    setError('')
+    setSuccess('')
+    setSyncResult(null)
+    setSyncing(true)
+
+    try {
+      const response = await fetch('/api/integrations/opendental/sync/patients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ practiceId }),
+      })
+
+      const data = await response.json()
+      if (!response.ok || !data.ok) {
+        throw new Error(data.error || 'Patient sync failed')
+      }
+
+      const s = data.summary
+      setSyncResult(
+        `Synced ${s.fetched} patient(s) — created ${s.created}, updated ${s.updated}, linked ${s.linked}, errors ${s.errors}.`
+      )
+    } catch (err) {
+      setSyncResult(err instanceof Error ? err.message : 'Patient sync failed')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   const handleDisconnect = async () => {
     setError('')
     setSuccess('')
@@ -328,6 +359,11 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
               {testResult}
             </div>
           )}
+          {syncResult && (
+            <div className="rounded-md border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+              {syncResult}
+            </div>
+          )}
 
           <div className="flex flex-wrap gap-2">
             <Button type="submit" disabled={saving}>
@@ -356,6 +392,14 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
               disabled={testing || !connection?.isActive}
             >
               {testing ? 'Testing...' : 'Smoke test'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleSyncPatients}
+              disabled={syncing || !connection?.isActive}
+            >
+              {syncing ? 'Syncing patients...' : 'Sync patients'}
             </Button>
             {connection?.isActive && (
               <Button
