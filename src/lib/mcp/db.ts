@@ -139,6 +139,28 @@ export async function getPrimaryPolicyForPatient(patientId: string) {
   })
 }
 
+export async function getUpcomingAppointmentsByPatientId(patientId: string, limit = 5) {
+  return prisma.appointment.findMany({
+    where: {
+      patientId,
+      startTime: { gte: new Date() },
+      status: { in: ['scheduled', 'confirmed'] },
+    },
+    orderBy: { startTime: 'asc' },
+    take: limit,
+    select: {
+      id: true,
+      status: true,
+      startTime: true,
+      endTime: true,
+      timezone: true,
+      visitType: true,
+      reason: true,
+      providerId: true,
+    },
+  })
+}
+
 export async function searchPatientsByDemographics(params: {
   firstName: string
   lastName: string

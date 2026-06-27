@@ -100,6 +100,25 @@ export const TOOL_DEFINITIONS = [
     inputSchema: schemas.searchPatientByDemographicsInput,
     handler: handlers.handleSearchPatientByDemographics,
   },
+  {
+    name: 'get_upcoming_appointments',
+    description:
+      "Get a patient's upcoming (scheduled/confirmed) appointments, ordered soonest-first. Each appointment includes a ready-to-read summary with the date and time in the patient's local timezone, plus next_appointment for convenience. Resolve the patient with patient_id, or with first_name + last_name + dob during a live call.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        patient_id: { type: 'string', format: 'uuid' },
+        first_name: { type: 'string' },
+        last_name: { type: 'string' },
+        dob: { type: 'string' },
+        zip: { type: 'string' },
+        limit: { type: 'integer', minimum: 1, maximum: 20, default: 5 },
+      },
+      description: 'Provide patient_id OR first_name + last_name + dob',
+    },
+    inputSchema: schemas.getUpcomingAppointmentsInput,
+    handler: handlers.handleGetUpcomingAppointments,
+  },
 ] as const
 
 const toolMap = new Map<string, (typeof TOOL_DEFINITIONS)[number]>(

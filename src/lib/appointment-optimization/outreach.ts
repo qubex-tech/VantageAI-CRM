@@ -16,9 +16,53 @@ import {
   markOpenSlotFilled,
 } from '@/lib/appointment-optimization/slotFilled'
 import { WAVE_BATCH_SIZE } from '@/lib/appointment-optimization/types'
+import { formatAppointmentForVoice, type VoiceAppointment } from '@/lib/appointments/voice-context'
 
 function providerDisplayFromRef(providerId: string | null) {
   return formatProviderDisplayName(providerId, 'your provider')
+}
+
+/**
+ * Resolve the patient's current appointment (the one an earlier slot would
+ * replace) into a voice-agent-friendly summary. Best-effort: never throws.
+ */
+async function resolveCurrentAppointmentContext(params: {
+  appointmentId?: string | null
+  patientId?: string
+}): Promise<VoiceAppointment | null> {
+  try {
+    const where = params.appointmentId
+      ? { id: params.appointmentId }
+      : params.patientId
+        ? {
+            patientId: params.patientId,
+            startTime: { gte: new Date() },
+            status: { in: ['scheduled', 'confirmed'] },
+          }
+        : null
+    if (!where) return null
+
+    const appt = await prisma.appointment.findFirst({
+      where,
+      orderBy: { startTime: 'asc' },
+      select: {
+        id: true,
+        status: true,
+        startTime: true,
+        endTime: true,
+        timezone: true,
+        visitType: true,
+        reason: true,
+        providerId: true,
+      },
+    })
+    return appt ? formatAppointmentForVoice(appt) : null
+  } catch (error) {
+    console.warn('[SlotFill] failed to resolve current appointment context', {
+      error: error instanceof Error ? error.message : error,
+    })
+    return null
+  }
 }
 
 export async function processSlotWave(params: {
@@ -126,6 +170,8 @@ export async function processSlotWave(params: {
           patientName: candidate.patientName,
           slotStart: slot.slotStart,
           openSlotEventId: slot.id,
+          patientId: candidate.patientId,
+          currentAppointmentId: candidate.appointmentId ?? null,
         })
       } else {
         await sendSmsOutreach({
@@ -203,6 +249,8 @@ async function sendVoiceOutreach(params: {
   patientName: string
   slotStart: Date
   openSlotEventId: string
+  patientId?: string
+  currentAppointmentId?: string | null
 }) {
   const config = await getRetellIntegrationConfig(params.practiceId)
   if (!config.apiKey) {
@@ -212,6 +260,14 @@ async function sendVoiceOutreach(params: {
   if (!fromNumber) {
     throw new Error('RETELL_FROM_NUMBER not configured')
   }
+
+  // Give the agent the patient's current appointment (the one this earlier slot
+  // would replace) so it can reference it naturally on the call. Best-effort.
+  const currentAppointment = await resolveCurrentAppointmentContext({
+    appointmentId: params.currentAppointmentId,
+    patientId: params.patientId,
+  })
+
   const client = new RetellApiClient(config.apiKey)
   const response = await client.createPhoneCall({
     fromNumber,
@@ -226,6 +282,9 @@ async function sendVoiceOutreach(params: {
       patient_name: params.patientName,
       offered_slot_datetime: params.slotStart.toISOString(),
       portal_link: (process.env.APP_BASE_URL || '') + '/portal/appointments',
+      has_current_appointment: currentAppointment ? 'true' : 'false',
+      current_appointment_summary: currentAppointment?.summary || '',
+      current_appointment_datetime: currentAppointment?.start_time || '',
     },
   })
   const callId =

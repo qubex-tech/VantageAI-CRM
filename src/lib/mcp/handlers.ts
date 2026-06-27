@@ -2,6 +2,7 @@ import * as db from './db'
 import { computeReadiness } from './readiness'
 import { writeMcpAuditLog, collectFieldPaths } from './audit'
 import { buildVerificationAgentFields, formatPatientDob } from './verification-fields'
+import { formatAppointmentForVoice } from '@/lib/appointments/voice-context'
 import type {
   GetPatientIdentityInput,
   ListInsurancePoliciesInput,
@@ -9,6 +10,7 @@ import type {
   GetVerificationBundleInput,
   SearchPatientByDemographicsInput,
   GetInsuranceVerificationContextInput,
+  GetUpcomingAppointmentsInput,
 } from './schemas'
 
 export interface RequestContext {
@@ -522,6 +524,67 @@ export async function handleGetInsuranceVerificationContext(
   })
 
   return { output, patientId: patient.id, policyId: selectedPolicy?.id ?? null }
+}
+
+export async function handleGetUpcomingAppointments(
+  input: GetUpcomingAppointmentsInput,
+  ctx: RequestContext
+): Promise<{ output: object; patientId: string | null }> {
+  // Resolve the patient by id, or by demographics for live inbound calls.
+  let patientId = input.patient_id ?? null
+  if (!patientId) {
+    const matches = await db.searchPatientsByDemographics({
+      firstName: input.first_name!,
+      lastName: input.last_name!,
+      dob: input.dob!,
+      zip: input.zip,
+    })
+    if (matches.length === 0) {
+      return {
+        output: { error: { code: 'NOT_FOUND', message: 'No patient matched provided demographics' }, matches: [] },
+        patientId: null,
+      }
+    }
+    if (matches.length > 1) {
+      return {
+        output: { error: { code: 'AMBIGUOUS_PATIENT', message: 'Multiple patients matched. Provide patient_id.' }, matches },
+        patientId: null,
+      }
+    }
+    patientId = matches[0].patient_id
+  }
+
+  const patient = await db.getPatientById(patientId)
+  if (!patient) {
+    return {
+      output: { error: { code: 'NOT_FOUND', message: 'Patient not found' } },
+      patientId,
+    }
+  }
+
+  const rows = await db.getUpcomingAppointmentsByPatientId(patientId, input.limit ?? 5)
+  const appointments = rows.map(formatAppointmentForVoice)
+
+  const output: Record<string, unknown> = {
+    patient_id: patient.id,
+    count: appointments.length,
+    has_upcoming: appointments.length > 0,
+    next_appointment: appointments[0] ?? null,
+    appointments,
+  }
+  if (appointments.length === 0) {
+    output.message = 'No upcoming appointments found for this patient'
+  }
+
+  await writeMcpAuditLog({
+    ...ctx,
+    patientId: patient.id,
+    policyId: null,
+    toolName: 'get_upcoming_appointments',
+    fieldsReturned: collectFieldPaths(output),
+  })
+
+  return { output, patientId: patient.id }
 }
 
 export async function handleSearchPatientByDemographics(
