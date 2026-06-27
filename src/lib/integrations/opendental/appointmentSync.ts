@@ -85,6 +85,14 @@ function parseOdDateTime(value: unknown, timeZone: string): Date | null {
   return wallClockToInstant(wall, timeZone)
 }
 
+/**
+ * Convert an Open Dental naive "yyyy-MM-dd HH:mm:ss" wall-clock string (clinic-local)
+ * into the correct UTC instant for the given IANA timezone (DST-aware).
+ */
+export function openDentalNaiveToInstant(value: unknown, timeZone: string): Date | null {
+  return parseOdDateTime(value, timeZone)
+}
+
 function durationFromPattern(pattern: unknown): number {
   const raw = cleanString(pattern)
   if (!raw) return DEFAULT_DURATION_MINUTES

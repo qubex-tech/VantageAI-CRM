@@ -10,6 +10,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import {
   listEhrPractitionersForPractice,
 } from '@/lib/integrations/ehr/scheduleSync'
+import { getSchedulingSettings } from '@/lib/integrations/clinical-system/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -127,9 +128,15 @@ export default async function AppointmentsPage({
     practitioners.map((practitioner) => [practitioner.reference, practitioner.name] as const)
   )
 
+  // Practices on Open Dental scheduling have no Cal.com calendar to merge — their
+  // appointments live in the local DB (synced from / written back to Open Dental).
+  const scheduling = await getSchedulingSettings(practiceId)
+  const useCalBookings = scheduling.mode !== 'open_dental'
+
   // Fetch Cal.com bookings and merge with local appointments
   let calBookings: any[] = []
   try {
+    if (useCalBookings) {
     const calClient = await getCalClient(practiceId)
       
       // Build query params for Cal.com API
@@ -173,6 +180,7 @@ export default async function AppointmentsPage({
       
       const bookingsResponse = await calClient.getBookings(calParams)
       calBookings = bookingsResponse.data || []
+    }
   } catch (error) {
     // If Cal.com is not configured or fails, just use local appointments
     console.error('Error fetching Cal.com bookings:', error)

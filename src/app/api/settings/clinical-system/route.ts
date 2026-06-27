@@ -5,11 +5,23 @@ import {
   resolveClinicalSystemPractice,
   upsertClinicalIntegrationSettings,
 } from '@/lib/integrations/clinical-system/server'
-import { CLINICAL_SYSTEM_TYPES } from '@/lib/integrations/clinical-system/types'
+import { CLINICAL_SYSTEM_TYPES, SCHEDULING_MODES } from '@/lib/integrations/clinical-system/types'
 
-const settingsSchema = z.object({
-  system: z.enum(CLINICAL_SYSTEM_TYPES),
+const schedulingSchema = z.object({
+  mode: z.enum(SCHEDULING_MODES),
+  defaultProvNum: z.number().int().positive().nullish(),
+  defaultOperatoryNum: z.number().int().positive().nullish(),
+  defaultLengthMinutes: z.number().int().positive().max(600).nullish(),
 })
+
+const settingsSchema = z
+  .object({
+    system: z.enum(CLINICAL_SYSTEM_TYPES).optional(),
+    scheduling: schedulingSchema.optional(),
+  })
+  .refine((data) => data.system !== undefined || data.scheduling !== undefined, {
+    message: 'Provide system and/or scheduling settings',
+  })
 
 export async function GET(req: NextRequest) {
   try {

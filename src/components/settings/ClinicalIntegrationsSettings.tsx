@@ -17,6 +17,7 @@ import {
 } from '@/lib/integrations/clinical-system/types'
 import { EhrIntegrationsSettings } from './EhrIntegrationsSettings'
 import { OpenDentalSettings } from './OpenDentalSettings'
+import { SchedulingModeSettings } from './SchedulingModeSettings'
 
 interface ClinicalIntegrationsSettingsProps {
   practiceId?: string
@@ -223,6 +224,14 @@ export function ClinicalIntegrationsSettings({ practiceId }: ClinicalIntegration
           )}
         </CardContent>
       </Card>
+
+      {activePracticeId && !loading && (
+        <SchedulingModeSettings
+          key={activePracticeId}
+          practiceId={activePracticeId}
+          openDentalAvailable={clinicalSystem === 'open_dental'}
+        />
+      )}
 
       {activePracticeId && !loading && clinicalSystem === 'fhir' && (
         <EhrIntegrationsSettings practiceId={activePracticeId} embedded />

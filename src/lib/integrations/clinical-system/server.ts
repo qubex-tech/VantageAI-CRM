@@ -7,8 +7,11 @@ import { getEhrSettings } from '@/lib/integrations/ehr/server'
 import { getOpenDentalConnection } from '@/lib/integrations/opendental/factory'
 import {
   CLINICAL_SYSTEM_TYPES,
+  DEFAULT_SCHEDULING_SETTINGS,
+  SCHEDULING_MODES,
   type ClinicalIntegrationSettings,
   type ClinicalSystemType,
+  type SchedulingSettings,
 } from './types'
 
 export async function resolveClinicalSystemPractice(practiceIdOverride?: string) {
@@ -42,6 +45,23 @@ export async function resolveClinicalSystemPractice(practiceIdOverride?: string)
   return { user, practiceId: user.practiceId }
 }
 
+function parseScheduling(value: unknown): SchedulingSettings | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const raw = value as Record<string, unknown>
+  const mode = raw.mode
+  if (mode !== 'cal' && mode !== 'open_dental') return undefined
+  const toPositiveInt = (v: unknown): number | null => {
+    const n = Number(v)
+    return Number.isInteger(n) && n > 0 ? n : null
+  }
+  return {
+    mode,
+    defaultProvNum: toPositiveInt(raw.defaultProvNum),
+    defaultOperatoryNum: toPositiveInt(raw.defaultOperatoryNum),
+    defaultLengthMinutes: toPositiveInt(raw.defaultLengthMinutes),
+  }
+}
+
 function parseStoredClinicalSettings(value: unknown): ClinicalIntegrationSettings | null {
   if (!value || typeof value !== 'object') {
     return null
@@ -50,7 +70,7 @@ function parseStoredClinicalSettings(value: unknown): ClinicalIntegrationSetting
   if (!CLINICAL_SYSTEM_TYPES.includes(system)) {
     return null
   }
-  return { system }
+  return { system, scheduling: parseScheduling((value as Record<string, unknown>).scheduling) }
 }
 
 export async function inferClinicalSystem(practiceId: string): Promise<ClinicalSystemType> {
@@ -85,11 +105,19 @@ export async function getClinicalIntegrationSettings(
   return { settings: { system }, inferred: true }
 }
 
+/**
+ * Merge-aware update so saving `system` does not wipe `scheduling` (and vice versa).
+ */
 export async function upsertClinicalIntegrationSettings(
   practiceId: string,
-  settings: ClinicalIntegrationSettings
+  patch: Partial<ClinicalIntegrationSettings>
 ) {
-  const settingsJson = settings as Prisma.InputJsonValue
+  const { settings: existing } = await getClinicalIntegrationSettings(practiceId)
+  const merged: ClinicalIntegrationSettings = {
+    system: patch.system ?? existing.system,
+    scheduling: patch.scheduling ?? existing.scheduling,
+  }
+  const settingsJson = merged as unknown as Prisma.InputJsonValue
   return prisma.practiceSettings.upsert({
     where: { practiceId },
     update: { clinicalIntegrations: settingsJson },
@@ -98,4 +126,13 @@ export async function upsertClinicalIntegrationSettings(
       clinicalIntegrations: settingsJson,
     },
   })
+}
+
+/** Resolve the effective scheduling settings for a practice (defaults to Cal.com). */
+export async function getSchedulingSettings(practiceId: string): Promise<SchedulingSettings> {
+  const { settings } = await getClinicalIntegrationSettings(practiceId)
+  if (!settings.scheduling || !SCHEDULING_MODES.includes(settings.scheduling.mode)) {
+    return DEFAULT_SCHEDULING_SETTINGS
+  }
+  return settings.scheduling
 }
