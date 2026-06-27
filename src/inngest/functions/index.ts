@@ -5,6 +5,7 @@ export { refreshEhrBackendTokens } from './refresh-ehr-backend-tokens'
 export { ingestEhrBulkPatients } from './ingest-ehr-bulk-patients'
 export { runEhrBulkNightly } from './ehr-bulk-nightly'
 export { syncEhrAppointmentsDaily } from './sync-ehr-appointments'
+export { syncOpenDentalDaily } from './sync-opendental-daily'
 export { handleOpenSlotCreated, checkOpenSlotStatus } from './appointment-optimization'
 export { enrichPatientFromEhrJob } from './enrich-patient-from-ehr'
 
