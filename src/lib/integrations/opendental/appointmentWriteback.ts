@@ -163,10 +163,22 @@ export async function writeBackAppointmentToOpenDental(params: {
     const created = await services.appointments.create(body)
     const aptNum = resolveCreatedId(created, 'AptNum')
     if (aptNum && aptNum > 0) {
-      await prisma.appointment.update({
-        where: { id: appt.id },
-        data: { calBookingId: buildAppointmentExternalId(aptNum) },
+      const externalKey = buildAppointmentExternalId(aptNum)
+      // The OD appointment may already be mirrored in the CRM (bulk sync / on-demand
+      // pull). If another row already owns this link, drop the row we just created to
+      // avoid a duplicate (and a unique-constraint failure); otherwise stamp the link.
+      const existing = await prisma.appointment.findUnique({
+        where: { calBookingId: externalKey },
+        select: { id: true },
       })
+      if (existing && existing.id !== appt.id) {
+        await prisma.appointment.delete({ where: { id: appt.id } }).catch(() => {})
+      } else if (!existing) {
+        await prisma.appointment.update({
+          where: { id: appt.id },
+          data: { calBookingId: externalKey },
+        })
+      }
       await logOpenDentalAudit({
         tenantId: practiceId,
         actorUserId,

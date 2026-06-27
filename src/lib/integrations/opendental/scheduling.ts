@@ -258,8 +258,12 @@ export async function bookOpenDentalAppointment(params: {
   if (!start) throw new Error('Failed to resolve appointment start instant')
   const end = new Date(start.getTime() + lengthMinutes * 60_000)
 
-  const appointment = await prisma.appointment.create({
-    data: {
+  // Upsert by the Open Dental link so a concurrent sync/pull that already mirrored
+  // this appointment doesn't trigger a unique-constraint failure on calBookingId.
+  const externalKey = buildAppointmentExternalId(aptNum)
+  const appointment = await prisma.appointment.upsert({
+    where: { calBookingId: externalKey },
+    create: {
       practiceId,
       patientId,
       providerId: provNum ? `prov:${provNum}` : null,
@@ -270,8 +274,19 @@ export async function bookOpenDentalAppointment(params: {
       visitType: visitType?.trim() || 'Open Dental Appointment',
       reason: note?.trim() || null,
       notes: note?.trim() || null,
-      calBookingId: buildAppointmentExternalId(aptNum),
+      calBookingId: externalKey,
       calEventId: 'opendental',
+    },
+    update: {
+      patientId,
+      providerId: provNum ? `prov:${provNum}` : null,
+      status: 'scheduled',
+      startTime: start,
+      endTime: end,
+      timezone: timeZone,
+      visitType: visitType?.trim() || 'Open Dental Appointment',
+      reason: note?.trim() || null,
+      notes: note?.trim() || null,
     },
   })
 
