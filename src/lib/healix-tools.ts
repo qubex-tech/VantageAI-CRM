@@ -19,7 +19,8 @@ import { replaceVariables } from './marketing/variables'
 import type { VariableContext } from './marketing/types'
 import { emitEvent } from './outbox'
 import { getCalClient } from './cal'
-import { bookAppointment as bookCalAppointment } from './agentActions'
+import { bookAppointment as bookCalAppointment, getAvailableSlots as getAgentAvailableSlots } from './agentActions'
+import { getSchedulingSettings } from './integrations/clinical-system/server'
 import { initiateInsuranceOutboundCall } from './outbound-insurance-call'
 
 export interface HealixToolResult {
@@ -1503,6 +1504,25 @@ export async function getAppointmentSlots(
       }
     }
 
+    const timezone = params.timezone || 'America/New_York'
+
+    // Open Dental scheduling mode: pull open slots from OD (no Cal event type needed).
+    const scheduling = await getSchedulingSettings(params.clinicId)
+    if (scheduling.mode === 'open_dental') {
+      const slots = await getAgentAvailableSlots(
+        params.clinicId,
+        '',
+        params.dateFrom,
+        params.dateTo,
+        timezone
+      )
+      return {
+        success: true,
+        message: `Found ${slots.length} available slot(s)`,
+        data: { slots, timezone, source: 'open_dental' },
+      }
+    }
+
     const resolvedEvent = await resolveEventTypeId(
       params.clinicId,
       params.eventTypeId,
@@ -1515,7 +1535,6 @@ export async function getAppointmentSlots(
       }
     }
 
-    const timezone = params.timezone || 'America/New_York'
     const calClient = await getCalClient(params.clinicId)
     const slots = await calClient.getAvailableSlots(
       resolvedEvent.eventTypeId,
@@ -1572,23 +1591,30 @@ export async function bookAppointment(
       }
     }
 
-    const resolvedEvent = await resolveEventTypeId(
-      params.clinicId,
-      params.eventTypeId,
-      params.visitTypeName
-    )
-    if (!resolvedEvent.eventTypeId) {
-      return {
-        success: false,
-        message: resolvedEvent.error || 'Event type not found',
+    const timezone = params.timezone || 'America/New_York'
+
+    // Open Dental scheduling mode: no Cal event type needed; book straight into OD.
+    const scheduling = await getSchedulingSettings(params.clinicId)
+    let eventTypeId = ''
+    if (scheduling.mode !== 'open_dental') {
+      const resolvedEvent = await resolveEventTypeId(
+        params.clinicId,
+        params.eventTypeId,
+        params.visitTypeName
+      )
+      if (!resolvedEvent.eventTypeId) {
+        return {
+          success: false,
+          message: resolvedEvent.error || 'Event type not found',
+        }
       }
+      eventTypeId = resolvedEvent.eventTypeId
     }
 
-    const timezone = params.timezone || 'America/New_York'
     const booking = await bookCalAppointment(
       params.clinicId,
       resolvedPatient.patientId,
-      resolvedEvent.eventTypeId,
+      eventTypeId,
       params.startTime,
       timezone,
       params.reason

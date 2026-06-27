@@ -9,6 +9,25 @@ import { prisma } from './db'
 import { getCalClient } from './cal'
 import { createAuditLog, createTimelineEntry } from './audit'
 import { redactPHI } from './phi'
+import { getSchedulingSettings } from '@/lib/integrations/clinical-system/server'
+import type { SchedulingSettings } from '@/lib/integrations/clinical-system/types'
+import { getPracticeTimeZone } from '@/lib/practice-timezone'
+import {
+  getOpenDentalOpenSlots,
+  bookOpenDentalAppointment,
+} from '@/lib/integrations/opendental/scheduling'
+import { formatOpenDentalLocalDateTime } from '@/lib/integrations/opendental/commlogWriteback'
+import { buildAppointmentExternalId } from '@/lib/integrations/opendental/appointmentSync'
+import { writeBackAppointmentToOpenDental } from '@/lib/integrations/opendental/appointmentWriteback'
+
+/** Coerce a date or datetime string to a bare "yyyy-MM-dd" for Open Dental slot queries. */
+function toDateOnly(value: string): string {
+  const m = value.match(/^(\d{4}-\d{2}-\d{2})/)
+  if (m) return m[1]
+  const d = new Date(value)
+  if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10)
+  return value
+}
 
 export interface FindOrCreatePatientResult {
   patientId: string
@@ -154,6 +173,27 @@ export async function getAvailableSlots(
   dateTo: string,
   timezone: string = 'America/New_York'
 ): Promise<AvailableSlot[]> {
+  // When the practice schedules in Open Dental, return OD open slots instead of Cal.com.
+  const scheduling = await getSchedulingSettings(practiceId)
+  if (scheduling.mode === 'open_dental') {
+    try {
+      const slots = await getOpenDentalOpenSlots({
+        practiceId,
+        provNum: scheduling.defaultProvNum ?? null,
+        opNum: scheduling.defaultOperatoryNum ?? null,
+        dateStart: toDateOnly(dateFrom),
+        dateEnd: toDateOnly(dateTo),
+        lengthMinutes: scheduling.defaultLengthMinutes ?? null,
+      })
+      return slots
+        .filter((s) => s.startUtc)
+        .map((s) => ({ time: s.startUtc as string, attendeeCount: 0 }))
+    } catch (error) {
+      console.error('Error fetching Open Dental slots:', error)
+      throw new Error('Failed to fetch available appointment slots')
+    }
+  }
+
   const calClient = await getCalClient(practiceId)
   
   try {
@@ -171,6 +211,53 @@ export async function getAvailableSlots(
 /**
  * Book an appointment via Cal.com
  */
+/**
+ * Book directly into Open Dental for practices in EHR scheduling mode.
+ * Creates the appointment in OD (source of truth) and mirrors it into the CRM.
+ */
+async function bookAppointmentViaOpenDental(params: {
+  practiceId: string
+  patientId: string
+  startTime: string
+  reason?: string
+  scheduling: SchedulingSettings
+}): Promise<BookAppointmentResult> {
+  const { practiceId, patientId, startTime, reason, scheduling } = params
+
+  const opNum = scheduling.defaultOperatoryNum ?? null
+  if (!opNum) {
+    throw new Error(
+      'Open Dental scheduling is enabled but no default operatory is configured. Set a default operatory in Scheduling settings.'
+    )
+  }
+
+  const startInstant = new Date(startTime)
+  if (Number.isNaN(startInstant.getTime())) {
+    throw new Error('Invalid appointment start time')
+  }
+
+  const timeZone = await getPracticeTimeZone(practiceId)
+  const dateTimeStart = formatOpenDentalLocalDateTime(startInstant, timeZone)
+
+  const result = await bookOpenDentalAppointment({
+    practiceId,
+    patientId,
+    provNum: scheduling.defaultProvNum ?? null,
+    opNum,
+    dateTimeStart,
+    lengthMinutes: scheduling.defaultLengthMinutes ?? null,
+    note: reason ?? null,
+  })
+
+  return {
+    appointmentId: result.appointmentId,
+    calBookingId: buildAppointmentExternalId(result.aptNum),
+    startTime: result.startTime.toISOString(),
+    endTime: result.endTime.toISOString(),
+    confirmationMessage: `Your appointment has been scheduled for ${result.startTime.toLocaleString('en-US', { timeZone })}.`,
+  }
+}
+
 export async function bookAppointment(
   practiceId: string,
   patientId: string,
@@ -190,6 +277,18 @@ export async function bookAppointment(
 
   if (!patient) {
     throw new Error('Patient not found')
+  }
+
+  // Route booking to Open Dental when the practice schedules in its EHR.
+  const scheduling = await getSchedulingSettings(practiceId)
+  if (scheduling.mode === 'open_dental') {
+    return bookAppointmentViaOpenDental({
+      practiceId,
+      patientId,
+      startTime,
+      reason,
+      scheduling,
+    })
   }
 
   // Get event type mapping to determine visit type
@@ -284,8 +383,10 @@ export async function cancelAppointment(
     throw new Error('Appointment not found')
   }
 
-  // Cancel in Cal.com if booking ID exists
-  if (appointment.calBookingId) {
+  const isOpenDentalLinked = !!appointment.calBookingId?.startsWith('opendental:')
+
+  // Cancel in Cal.com only for Cal-booked appointments (not Open Dental links).
+  if (appointment.calBookingId && !isOpenDentalLinked) {
     try {
       const calClient = await getCalClient(practiceId)
       await calClient.cancelBooking(appointment.calBookingId)
@@ -300,6 +401,15 @@ export async function cancelAppointment(
     where: { id: appointmentId },
     data: { status: 'cancelled' },
   })
+
+  // For Open Dental-linked appointments, mark the OD appointment Broken (best-effort).
+  if (isOpenDentalLinked) {
+    try {
+      await writeBackAppointmentToOpenDental({ practiceId, appointmentId })
+    } catch (error) {
+      console.error('Error canceling Open Dental appointment:', error)
+    }
+  }
 
   // Create timeline entry using new activity logging system
   const { logAppointmentActivity } = await import('@/lib/patient-activity')
