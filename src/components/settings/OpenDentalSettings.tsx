@@ -51,6 +51,7 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
   const [disconnecting, setDisconnecting] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [syncingAppointments, setSyncingAppointments] = useState(false)
+  const [syncingCommlogs, setSyncingCommlogs] = useState(false)
   const [writingBack, setWritingBack] = useState(false)
   const [writebackPatNum, setWritebackPatNum] = useState('')
   const [error, setError] = useState('')
@@ -58,6 +59,7 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
   const [testResult, setTestResult] = useState<string | null>(null)
   const [syncResult, setSyncResult] = useState<string | null>(null)
   const [appointmentSyncResult, setAppointmentSyncResult] = useState<string | null>(null)
+  const [commlogSyncResult, setCommlogSyncResult] = useState<string | null>(null)
   const [writebackResult, setWritebackResult] = useState<string | null>(null)
 
   const hasCustomerKey = Boolean(connection?.hasCustomerKey)
@@ -278,6 +280,35 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
     }
   }
 
+  const handleSyncCommlogs = async () => {
+    setError('')
+    setSuccess('')
+    setCommlogSyncResult(null)
+    setSyncingCommlogs(true)
+
+    try {
+      const response = await fetch('/api/integrations/opendental/sync/commlogs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ practiceId }),
+      })
+
+      const data = await response.json()
+      if (!response.ok || !data.ok) {
+        throw new Error(data.error || 'Commlog sync failed')
+      }
+
+      const s = data.summary
+      setCommlogSyncResult(
+        `Pulled ${s.fetched} commlog(s) — created ${s.created}, skipped ${s.skipped}, errors ${s.errors}.`
+      )
+    } catch (err) {
+      setCommlogSyncResult(err instanceof Error ? err.message : 'Commlog sync failed')
+    } finally {
+      setSyncingCommlogs(false)
+    }
+  }
+
   const handleTestWriteback = async () => {
     setError('')
     setSuccess('')
@@ -437,6 +468,11 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
               {appointmentSyncResult}
             </div>
           )}
+          {commlogSyncResult && (
+            <div className="rounded-md border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+              {commlogSyncResult}
+            </div>
+          )}
           {writebackResult && (
             <div className="rounded-md border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
               {writebackResult}
@@ -486,6 +522,14 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
               disabled={syncingAppointments || !connection?.isActive}
             >
               {syncingAppointments ? 'Syncing appointments...' : 'Sync appointments'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleSyncCommlogs}
+              disabled={syncingCommlogs || !connection?.isActive}
+            >
+              {syncingCommlogs ? 'Pulling notes...' : 'Pull notes (commlogs)'}
             </Button>
             {connection?.isActive && (
               <Button

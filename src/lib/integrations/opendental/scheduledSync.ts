@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db'
 import { syncOpenDentalPatients, type PatientSyncSummary } from './patientSync'
 import { syncOpenDentalAppointments, type AppointmentSyncSummary } from './appointmentSync'
+import { syncOpenDentalCommlogs, type CommlogSyncSummary } from './commlogSync'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -19,6 +20,7 @@ export type OpenDentalConnectionSyncResult = {
   status: 'success' | 'error'
   patients?: PatientSyncSummary
   appointments?: AppointmentSyncSummary
+  commlogs?: CommlogSyncSummary
   error?: string
 }
 
@@ -60,7 +62,10 @@ export async function syncAllOpenDentalConnections(options?: {
 
       const appointments = await syncOpenDentalAppointments({ practiceId, dateStart, dateEnd })
 
-      results.push({ practiceId, status: 'success', patients, appointments })
+      // Commlogs (notes) pulled incrementally on the same watermark as patients.
+      const commlogs = await syncOpenDentalCommlogs({ practiceId, since })
+
+      results.push({ practiceId, status: 'success', patients, appointments, commlogs })
     } catch (error) {
       results.push({
         practiceId,
