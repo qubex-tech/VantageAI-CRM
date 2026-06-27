@@ -5,6 +5,7 @@ import { appointmentSchema } from '@/lib/validations'
 import { createAuditLog } from '@/lib/audit'
 import { emitEvent } from '@/lib/outbox'
 import { triggerOpenSlotFromCancelledAppointment } from '@/lib/appointment-optimization/trigger'
+import { writeBackAppointmentToOpenDental } from '@/lib/integrations/opendental/appointmentWriteback'
 
 export async function GET(
   req: NextRequest,
@@ -197,6 +198,17 @@ export async function PATCH(
       }
     }
 
+    // Best-effort: mirror the change to Open Dental. Must never block the update.
+    try {
+      await writeBackAppointmentToOpenDental({
+        practiceId,
+        appointmentId: appointment.id,
+        actorUserId: user.id,
+      })
+    } catch (error) {
+      console.error('Failed to write appointment update to Open Dental:', error)
+    }
+
     return NextResponse.json({ appointment })
   } catch (error) {
     if (error instanceof Error && error.name === 'ZodError') {
@@ -295,6 +307,17 @@ export async function DELETE(
       timezone: appointment.timezone,
       status: appointment.status,
     })
+
+    // Best-effort: mark the appointment broken in Open Dental. Must never block cancel.
+    try {
+      await writeBackAppointmentToOpenDental({
+        practiceId,
+        appointmentId: appointment.id,
+        actorUserId: user.id,
+      })
+    } catch (error) {
+      console.error('Failed to write appointment cancellation to Open Dental:', error)
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

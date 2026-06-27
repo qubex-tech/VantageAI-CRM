@@ -6,6 +6,7 @@ import { createAuditLog } from '@/lib/audit'
 import { getCalClient } from '@/lib/cal'
 import { bookAppointment as bookAppointmentAction } from '@/lib/agentActions'
 import { emitEvent } from '@/lib/outbox'
+import { writeBackAppointmentToOpenDental } from '@/lib/integrations/opendental/appointmentWriteback'
 
 export async function GET(req: NextRequest) {
   try {
@@ -211,6 +212,17 @@ export async function POST(req: NextRequest) {
         userId: user.id,
       },
     })
+
+    // Best-effort: push the new appointment to Open Dental. Must never block creation.
+    try {
+      await writeBackAppointmentToOpenDental({
+        practiceId,
+        appointmentId: appointment.id,
+        actorUserId: user.id,
+      })
+    } catch (error) {
+      console.error('Failed to write appointment to Open Dental:', error)
+    }
 
     return NextResponse.json({ appointment }, { status: 201 })
   } catch (error) {
