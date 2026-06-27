@@ -49,7 +49,7 @@ function validateToolsAuth(request: NextRequest) {
     logMcpRequest('/mcp/tools', request, { auth: auth.error.body.error.code, status: auth.error.status })
     return { ok: false as const, response: applyCors(NextResponse.json(auth.error.body, { status: auth.error.status }), request) }
   }
-  return { ok: true as const }
+  return { ok: true as const, ctx: auth.ctx }
 }
 
 export async function GET(request: NextRequest) {
@@ -116,11 +116,12 @@ export async function POST(request: NextRequest) {
 
     const start = Date.now()
     const result = await invokeTool(toolName, input, {
-      requestId: auth.ok ? request.headers.get('x-request-id') || '' : '',
-      actorId: request.headers.get('x-actor-id') || '',
-      actorType: (request.headers.get('x-actor-type') as 'agent' | 'user' | 'system') || 'agent',
-      purpose: request.headers.get('x-purpose') || '',
-      allowUnmasked: request.headers.get('x-allow-unmasked') === 'true',
+      requestId: auth.ctx.requestId,
+      actorId: auth.ctx.actorId,
+      actorType: auth.ctx.actorType,
+      purpose: auth.ctx.purpose,
+      allowUnmasked: auth.ctx.allowUnmasked,
+      practiceId: auth.ctx.practiceId,
       logRoute: '/mcp/tools',
       logSource: 'http',
     })

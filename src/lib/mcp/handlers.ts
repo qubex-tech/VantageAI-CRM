@@ -19,6 +19,8 @@ export interface RequestContext {
   actorType: 'agent' | 'user' | 'system'
   purpose: string
   allowUnmasked: boolean
+  /** When set, all data access is restricted to this practice. */
+  practiceId?: string | null
 }
 
 function getPatientNameParts(patient: {
@@ -71,7 +73,7 @@ export async function handleGetPatientIdentity(
   input: GetPatientIdentityInput,
   ctx: RequestContext
 ): Promise<{ output: object; patientId: string | null }> {
-  const patient = await db.getPatientById(input.patient_id)
+  const patient = await db.getPatientById(input.patient_id, ctx.practiceId)
   if (!patient) {
     return { output: { error: { code: 'NOT_FOUND', message: 'Patient not found' } }, patientId: input.patient_id }
   }
@@ -112,11 +114,11 @@ export async function handleListInsurancePolicies(
   input: ListInsurancePoliciesInput,
   ctx: RequestContext
 ): Promise<{ output: object; patientId: string | null }> {
-  const patient = await db.getPatientById(input.patient_id)
+  const patient = await db.getPatientById(input.patient_id, ctx.practiceId)
   if (!patient) {
     return { output: { error: { code: 'NOT_FOUND', message: 'Patient not found' } }, patientId: input.patient_id }
   }
-  const policies = await db.getInsurancePoliciesByPatientId(input.patient_id)
+  const policies = await db.getInsurancePoliciesByPatientId(input.patient_id, ctx.practiceId)
   const readiness = policies.map((p) => computeReadiness(p, patient))
   const policiesOut = policies.map((p, i) => ({
     policy_id: p.id,
@@ -144,7 +146,7 @@ export async function handleGetInsurancePolicyDetails(
   input: GetInsurancePolicyDetailsInput,
   ctx: RequestContext
 ): Promise<{ output: object; patientId: string | null; policyId: string | null }> {
-  const policy = await db.getInsurancePolicyById(input.policy_id)
+  const policy = await db.getInsurancePolicyById(input.policy_id, ctx.practiceId)
   if (!policy) {
     return {
       output: { error: { code: 'NOT_FOUND', message: 'Policy not found' } },
@@ -202,17 +204,17 @@ export async function handleGetVerificationBundle(
   let patient: { id: string; name: string | null; firstName: string | null; lastName: string | null; dateOfBirth: Date | null; primaryPhone?: string | null; phone?: string; email?: string | null; addressLine1?: string | null; addressLine2?: string | null; city?: string | null; state?: string | null; postalCode?: string | null } | null
 
   if (input.policy_id) {
-    const row = await db.getInsurancePolicyById(input.policy_id)
+    const row = await db.getInsurancePolicyById(input.policy_id, ctx.practiceId)
     policy = row
     patient = row?.patient ?? null
   } else {
-    const row = await db.getPrimaryPolicyForPatient(input.patient_id!)
+    const row = await db.getPrimaryPolicyForPatient(input.patient_id!, ctx.practiceId)
     policy = row
     patient = row?.patient ?? null
   }
 
   if (!patient) {
-    const p = input.patient_id ? await db.getPatientById(input.patient_id) : null
+    const p = input.patient_id ? await db.getPatientById(input.patient_id, ctx.practiceId) : null
     if (!p) {
       return {
         output: { error: { code: 'NOT_FOUND', message: 'Patient not found' } },
@@ -314,7 +316,7 @@ export async function handleGetInsuranceVerificationContext(
   let matchedBy: 'patient_id' | 'policy_id' | 'demographics' = 'patient_id'
 
   if (input.policy_id) {
-    selectedPolicy = await db.getInsurancePolicyById(input.policy_id)
+    selectedPolicy = await db.getInsurancePolicyById(input.policy_id, ctx.practiceId)
     if (!selectedPolicy) {
       return {
         output: { error: { code: 'NOT_FOUND', message: 'Policy not found' } },
@@ -325,7 +327,7 @@ export async function handleGetInsuranceVerificationContext(
     patient = selectedPolicy.patient ?? null
     matchedBy = 'policy_id'
   } else if (input.patient_id) {
-    patient = await db.getPatientById(input.patient_id)
+    patient = await db.getPatientById(input.patient_id, ctx.practiceId)
     if (!patient) {
       return {
         output: { error: { code: 'NOT_FOUND', message: 'Patient not found' } },
@@ -340,7 +342,7 @@ export async function handleGetInsuranceVerificationContext(
       lastName: input.last_name!,
       dob: input.dob!,
       zip: input.zip,
-    })
+    }, ctx.practiceId)
     if (matches.length === 0) {
       return {
         output: {
@@ -361,7 +363,7 @@ export async function handleGetInsuranceVerificationContext(
         policyId: null,
       }
     }
-    patient = await db.getPatientById(matches[0].patient_id)
+    patient = await db.getPatientById(matches[0].patient_id, ctx.practiceId)
     if (!patient) {
       return {
         output: { error: { code: 'NOT_FOUND', message: 'Patient not found after match resolution' } },
@@ -380,7 +382,7 @@ export async function handleGetInsuranceVerificationContext(
     }
   }
 
-  const policies = await db.getInsurancePoliciesByPatientId(patient.id)
+  const policies = await db.getInsurancePoliciesByPatientId(patient.id, ctx.practiceId)
   if (!selectedPolicy) {
     selectedPolicy =
       (policies.find((p) => p.isPrimary) as Awaited<ReturnType<typeof db.getInsurancePolicyById>> | undefined) ??
@@ -538,7 +540,7 @@ export async function handleGetUpcomingAppointments(
       lastName: input.last_name!,
       dob: input.dob!,
       zip: input.zip,
-    })
+    }, ctx.practiceId)
     if (matches.length === 0) {
       return {
         output: { error: { code: 'NOT_FOUND', message: 'No patient matched provided demographics' }, matches: [] },
@@ -554,7 +556,7 @@ export async function handleGetUpcomingAppointments(
     patientId = matches[0].patient_id
   }
 
-  const patient = await db.getPatientById(patientId)
+  const patient = await db.getPatientById(patientId, ctx.practiceId)
   if (!patient) {
     return {
       output: { error: { code: 'NOT_FOUND', message: 'Patient not found' } },
@@ -562,7 +564,7 @@ export async function handleGetUpcomingAppointments(
     }
   }
 
-  const rows = await db.getUpcomingAppointmentsByPatientId(patientId, input.limit ?? 5)
+  const rows = await db.getUpcomingAppointmentsByPatientId(patientId, ctx.practiceId, input.limit ?? 5)
   const appointments = rows.map(formatAppointmentForVoice)
 
   const output: Record<string, unknown> = {
@@ -596,7 +598,7 @@ export async function handleSearchPatientByDemographics(
     lastName: input.last_name,
     dob: input.dob,
     zip: input.zip,
-  })
+  }, ctx.practiceId)
   const output = { matches }
   await writeMcpAuditLog({
     ...ctx,

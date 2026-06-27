@@ -25,6 +25,7 @@ export async function initiateInsuranceOutboundCall(input: InitiateInsuranceOutb
     actorType: 'user' as const,
     purpose: 'insurance verification outbound call',
     allowUnmasked: true,
+    practiceId,
   }
 
   const invokeVerificationContext = async (opts: { includePolicyId: boolean }) =>

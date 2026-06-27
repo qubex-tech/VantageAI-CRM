@@ -64,9 +64,9 @@ function normalizeDobCandidates(rawDob: string): string[] {
   return Array.from(candidates)
 }
 
-export async function getPatientById(patientId: string) {
+export async function getPatientById(patientId: string, practiceId?: string | null) {
   return prisma.patient.findFirst({
-    where: { id: patientId, deletedAt: null },
+    where: { id: patientId, deletedAt: null, ...(practiceId ? { practiceId } : {}) },
     select: {
       id: true,
       practiceId: true,
@@ -86,16 +86,16 @@ export async function getPatientById(patientId: string) {
   })
 }
 
-export async function getInsurancePoliciesByPatientId(patientId: string) {
+export async function getInsurancePoliciesByPatientId(patientId: string, practiceId?: string | null) {
   return prisma.insurancePolicy.findMany({
-    where: { patientId },
+    where: { patientId, ...(practiceId ? { practiceId } : {}) },
     orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }],
   })
 }
 
-export async function getInsurancePolicyById(policyId: string) {
+export async function getInsurancePolicyById(policyId: string, practiceId?: string | null) {
   return prisma.insurancePolicy.findFirst({
-    where: { id: policyId },
+    where: { id: policyId, ...(practiceId ? { practiceId } : {}) },
     include: {
       patient: {
         select: {
@@ -114,9 +114,9 @@ export async function getInsurancePolicyById(policyId: string) {
   })
 }
 
-export async function getPrimaryPolicyForPatient(patientId: string) {
+export async function getPrimaryPolicyForPatient(patientId: string, practiceId?: string | null) {
   return prisma.insurancePolicy.findFirst({
-    where: { patientId, isPrimary: true },
+    where: { patientId, isPrimary: true, ...(practiceId ? { practiceId } : {}) },
     include: {
       patient: {
         select: {
@@ -139,10 +139,15 @@ export async function getPrimaryPolicyForPatient(patientId: string) {
   })
 }
 
-export async function getUpcomingAppointmentsByPatientId(patientId: string, limit = 5) {
+export async function getUpcomingAppointmentsByPatientId(
+  patientId: string,
+  practiceId?: string | null,
+  limit = 5
+) {
   return prisma.appointment.findMany({
     where: {
       patientId,
+      ...(practiceId ? { practiceId } : {}),
       startTime: { gte: new Date() },
       status: { in: ['scheduled', 'confirmed'] },
     },
@@ -166,7 +171,7 @@ export async function searchPatientsByDemographics(params: {
   lastName: string
   dob: string
   zip?: string
-}) {
+}, practiceId?: string | null) {
   const firstName = params.firstName.trim()
   const lastName = params.lastName.trim()
   const dobCandidates = normalizeDobCandidates(params.dob)
@@ -174,6 +179,7 @@ export async function searchPatientsByDemographics(params: {
 
   const where: {
     deletedAt: null
+    practiceId?: string
     OR?: Array<
       | {
           firstName: { equals: string; mode: 'insensitive' }
@@ -188,6 +194,9 @@ export async function searchPatientsByDemographics(params: {
   } = {
     deletedAt: null,
     dateOfBirth: { not: null },
+  }
+  if (practiceId) {
+    where.practiceId = practiceId
   }
   where.OR = [
     {
