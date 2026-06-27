@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
 import { isVantageAdmin } from '@/lib/permissions'
 import { resendIntegrationSchema } from '@/lib/validations'
-import { ResendApiClient } from '@/lib/sendgrid'
+import { ResendApiClient } from '@/lib/resend'
 
 export const dynamic = 'force-dynamic'
 

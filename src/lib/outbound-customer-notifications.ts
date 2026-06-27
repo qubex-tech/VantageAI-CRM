@@ -5,8 +5,8 @@
 
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
-import { getSendgridClient } from '@/lib/sendgrid'
-import { getRetellClient, type RetellCall } from '@/lib/retell-api'
+import { getResendClient } from '@/lib/resend'
+import type { RetellCall } from '@/lib/retell-api'
 import { normalizeTimeZone } from '@/lib/timezone'
 import type { z } from 'zod'
 import { outboundCustomerNotificationsSchema } from '@/lib/validations'
@@ -87,6 +87,43 @@ function readPatientDisplayNameFromCall(call: RetellCall): string | null {
   const combined = `${first || ''} ${last || ''}`.trim()
   if (combined) return combined
   return firstNonEmptyString(norm.caller_name)
+}
+
+/** Formats a phone number for display: US/+1 numbers as (XXX) XXX-XXXX, otherwise the trimmed raw value. */
+export function formatPhoneNumberForDisplay(value: string): string {
+  const trimmed = value.trim()
+  const digits = trimmed.replace(/\D/g, '')
+  const local = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits
+  if (local.length === 10) {
+    return `(${local.slice(0, 3)}) ${local.slice(3, 6)}-${local.slice(6)}`
+  }
+  return trimmed
+}
+
+/**
+ * Best-effort caller phone number ("coming through" on the call).
+ * Inbound calls: the caller is `from_number`; outbound: the patient is `to_number`.
+ * Falls back to a phone captured in Retell `custom_analysis_data`.
+ */
+function readCallerPhoneNumber(call: RetellCall): string | null {
+  const fromCallLeg =
+    call.direction === 'outbound'
+      ? firstNonEmptyString(call.to_number)
+      : firstNonEmptyString(call.from_number)
+  if (fromCallLeg) return fromCallLeg
+
+  const raw = call.call_analysis?.custom_analysis_data
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const norm = normalizeRetellRecord(raw as Record<string, unknown>)
+    return firstNonEmptyString(
+      norm.phone_number,
+      norm.patient_phone,
+      norm.caller_phone,
+      norm.callback_number,
+      norm.phone
+    )
+  }
+  return null
 }
 
 const PRACTICE_EMAIL_TIMEZONE_FALLBACK = 'America/Chicago'
@@ -209,6 +246,27 @@ function metadataObject(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
 }
 
+/**
+ * Re-reads the latest conversation metadata and merges `patch` into it.
+ * Reading immediately before the write keeps concurrent post-call writers from
+ * clobbering each other (the email send is a network call, so state can change).
+ */
+async function mergeVoiceConversationMetadata(
+  conversationId: string,
+  patch: Record<string, unknown>
+): Promise<void> {
+  const latest = await prisma.voiceConversation.findUnique({
+    where: { id: conversationId },
+    select: { metadata: true },
+  })
+  await prisma.voiceConversation.update({
+    where: { id: conversationId },
+    data: {
+      metadata: { ...metadataObject(latest?.metadata), ...patch } as Prisma.InputJsonObject,
+    },
+  })
+}
+
 /** Persist why a missed-transfer email was not sent (does not overwrite a successful send). */
 async function recordUnsuccessfulTransferEmailSkip(
   conversationId: string,
@@ -219,19 +277,12 @@ async function recordUnsuccessfulTransferEmailSkip(
     where: { id: conversationId },
     select: { metadata: true },
   })
-  const meta = metadataObject(latest?.metadata)
-  if (meta.unsuccessfulTransferEmailSentAt) return
+  if (metadataObject(latest?.metadata).unsuccessfulTransferEmailSentAt) return
 
-  await prisma.voiceConversation.update({
-    where: { id: conversationId },
-    data: {
-      metadata: {
-        ...meta,
-        unsuccessfulTransferEmailSkippedAt: new Date().toISOString(),
-        unsuccessfulTransferEmailSkipReason: reason,
-        unsuccessfulTransferEmailSkipDetail: detail ?? null,
-      } as Prisma.InputJsonObject,
-    },
+  await mergeVoiceConversationMetadata(conversationId, {
+    unsuccessfulTransferEmailSkippedAt: new Date().toISOString(),
+    unsuccessfulTransferEmailSkipReason: reason,
+    unsuccessfulTransferEmailSkipDetail: detail ?? null,
   })
 }
 
@@ -285,7 +336,7 @@ export async function resolveOutboundStaffNotificationRecipient(
   return { practiceName: practice?.name ?? 'Practice', recipient, timeZone }
 }
 
-function buildStaffTransferEmail(params: {
+export function buildStaffTransferEmail(params: {
   practiceId: string
   practiceName: string
   timeZone: string
@@ -295,12 +346,15 @@ function buildStaffTransferEmail(params: {
   const callId = call.call_id || 'unknown'
   const { transferOutcome, voicemailMessage } = readRetellTransferNotificationFields(call)
   const patientName = readPatientDisplayNameFromCall(call)
+  const callerPhone = readCallerPhoneNumber(call)
   const callDatetime = formatCallDateTime(call, timeZone)
   const callbackUrl = buildStaffCallLogDeepLink(callId, practiceId)
 
   const e = escapeHtml
   const outcomeDisplay = e(transferOutcome?.trim() || 'Not successful')
   const patientDisplay = e(patientName?.trim() || 'Unknown')
+  const phoneText = callerPhone ? formatPhoneNumberForDisplay(callerPhone) : 'Unknown'
+  const phoneDisplay = e(phoneText)
   const voicemailDisplay = voicemailMessage?.trim()
     ? e(voicemailMessage)
     : e('No voicemail message was captured.')
@@ -314,6 +368,7 @@ function buildStaffTransferEmail(params: {
     `Status / outcome: ${transferOutcome?.trim() || 'Not successful'}`,
     `Date & time: ${callDatetime}`,
     `Patient name: ${patientName?.trim() || 'Unknown'}`,
+    `Phone number: ${phoneText}`,
     '',
     voicemailMessage?.trim()
       ? `Voicemail message:\n${voicemailMessage}`
@@ -428,6 +483,14 @@ function buildStaffTransferEmail(params: {
                     <p style="margin:0; font-size:13px; color:#cccccc; font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;">${patientDisplay}</p>
                   </td>
                 </tr>
+                <tr>
+                  <td style="padding:12px 0; border-top:1px solid #1f1f1f;" width="150" valign="top">
+                    <p style="margin:0; font-size:12px; color:#555555; font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;">Phone Number</p>
+                  </td>
+                  <td style="padding:12px 0; border-top:1px solid #1f1f1f;" valign="top">
+                    <p style="margin:0; font-size:13px; color:#cccccc; font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;">${phoneDisplay}</p>
+                  </td>
+                </tr>
               </table>
             </td>
           </tr>
@@ -510,62 +573,6 @@ function buildStaffTransferEmail(params: {
   }
 }
 
-/**
- * Send the missed-transfer template using live Retell call data, labeled as a sample.
- * Does not require transfer outcome "not successful" and does not touch voice conversation dedupe metadata.
- */
-export async function sendSampleMissedTransferNotification(params: {
-  practiceId: string
-  callId: string
-}): Promise<{ ok: boolean; error?: string; messageId?: string }> {
-  const { practiceId, callId } = params
-
-  const settings = await loadOutboundCustomerNotifications(practiceId)
-  if (!settings.notifyUnsuccessfulTransfer) {
-    return {
-      ok: false,
-      error: 'Unsuccessful transfer notifications are disabled for this practice.',
-    }
-  }
-
-  const resolved = await resolveOutboundStaffNotificationRecipient(practiceId, settings)
-  if (!resolved) {
-    return {
-      ok: false,
-      error:
-        'No recipient email: set Notification inbox under Outbound Customer Notifications, or set the practice profile email.',
-    }
-  }
-
-  try {
-    const call = await (await getRetellClient(practiceId)).getCall(callId)
-    const { subject, textContent, htmlContent } = buildStaffTransferEmail({
-      practiceId,
-      practiceName: resolved.practiceName,
-      timeZone: resolved.timeZone,
-      call,
-    })
-
-    const client = await getSendgridClient(practiceId)
-    const result = await client.sendEmail({
-      to: resolved.recipient,
-      subject: `[Sample] ${subject}`,
-      textContent: `[Manual sample — not sent by live automation rules]\n\n${textContent}`,
-      htmlContent,
-    })
-
-    if (!result.success) {
-      return { ok: false, error: result.error ?? 'Resend send failed' }
-    }
-    return { ok: true, messageId: result.messageId }
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : String(error),
-    }
-  }
-}
-
 export async function maybeNotifyUnsuccessfulTransfer(params: {
   practiceId: string
   call: RetellCall
@@ -612,7 +619,7 @@ export async function maybeNotifyUnsuccessfulTransfer(params: {
       call,
     })
 
-    const client = await getSendgridClient(practiceId)
+    const client = await getResendClient(practiceId)
     const result = await client.sendEmail({
       to: recipient,
       subject,
@@ -626,39 +633,17 @@ export async function maybeNotifyUnsuccessfulTransfer(params: {
         callId: call.call_id,
         error: result.error,
       })
-      const afterFail = await prisma.voiceConversation.findUnique({
-        where: { id: conversationId },
-        select: { metadata: true },
-      })
-      const failMeta = metadataObject(afterFail?.metadata)
-      await prisma.voiceConversation.update({
-        where: { id: conversationId },
-        data: {
-          metadata: {
-            ...failMeta,
-            unsuccessfulTransferEmailFailedAt: new Date().toISOString(),
-            unsuccessfulTransferEmailError: result.error ?? 'Unknown Resend error',
-          } as Prisma.InputJsonObject,
-        },
+      await mergeVoiceConversationMetadata(conversationId, {
+        unsuccessfulTransferEmailFailedAt: new Date().toISOString(),
+        unsuccessfulTransferEmailError: result.error ?? 'Unknown Resend error',
       })
       return
     }
 
-    const afterSend = await prisma.voiceConversation.findUnique({
-      where: { id: conversationId },
-      select: { metadata: true },
-    })
-    const merged = metadataObject(afterSend?.metadata)
-    await prisma.voiceConversation.update({
-      where: { id: conversationId },
-      data: {
-        metadata: {
-          ...merged,
-          unsuccessfulTransferEmailSentAt: new Date().toISOString(),
-          unsuccessfulTransferEmailMessageId: result.messageId ?? null,
-          unsuccessfulTransferEmailError: null,
-        } as Prisma.InputJsonObject,
-      },
+    await mergeVoiceConversationMetadata(conversationId, {
+      unsuccessfulTransferEmailSentAt: new Date().toISOString(),
+      unsuccessfulTransferEmailMessageId: result.messageId ?? null,
+      unsuccessfulTransferEmailError: null,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

@@ -780,10 +780,10 @@ async function sendEmail(
       emailBodyText = replaceVariables(emailBodyText, context)
     }
 
-    const { getSendgridClient } = await import('@/lib/sendgrid')
-    const sendgridClient = await getSendgridClient(practiceId)
+    const { getResendClient } = await import('@/lib/resend')
+    const resendClient = await getResendClient(practiceId)
     
-    const result = await sendgridClient.sendEmail({
+    const result = await resendClient.sendEmail({
       to: toEmail,
       toName: patient.name,
       subject: emailSubject,
@@ -1184,8 +1184,8 @@ async function sendReminder(
 
   if (contactMethod === 'email' && patient.email) {
     try {
-      const { getSendgridClient } = await import('@/lib/sendgrid')
-      const sendgridClient = await getSendgridClient(practiceId)
+      const { getResendClient } = await import('@/lib/resend')
+      const resendClient = await getResendClient(practiceId)
       
       const subject = args.reminderType === 'appointment' 
         ? 'Appointment Reminder'
@@ -1193,7 +1193,7 @@ async function sendReminder(
         ? 'Payment Reminder'
         : 'Follow-up Reminder'
 
-      const result = await sendgridClient.sendEmail({
+      const result = await resendClient.sendEmail({
         to: patient.email,
         toName: patient.name,
         subject,

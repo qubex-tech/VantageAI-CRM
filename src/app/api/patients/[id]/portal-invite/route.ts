@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
 import { getOrCreateVerifiedPatientPortalUrl } from '@/lib/patient-auth'
-import { getSendgridClient } from '@/lib/sendgrid'
+import { getResendClient } from '@/lib/resend'
 import { getSmsClient } from '@/lib/sms'
 import { logEmailActivity, logPatientActivity } from '@/lib/patient-activity'
 
@@ -82,7 +82,7 @@ export async function POST(
         return NextResponse.json({ error: 'Patient email is missing.' }, { status: 400 })
       }
 
-      const sendgridClient = await getSendgridClient(user.practiceId)
+      const resendClient = await getResendClient(user.practiceId)
 
       const subject = 'Your secure link to the Patient Portal'
       const htmlContent = `
@@ -115,7 +115,7 @@ This link expires on ${urlResult.expiresAt.toLocaleDateString()}.
 If you did not expect this message, you can ignore it.
       `.trim()
 
-      const result = await sendgridClient.sendEmail({
+      const result = await resendClient.sendEmail({
         to: email,
         toName: patient.name || undefined,
         subject,

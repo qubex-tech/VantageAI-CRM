@@ -1,7 +1,7 @@
 import { prisma } from './db'
 import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
-import { getSendgridClient } from './sendgrid'
+import { getResendClient } from './resend'
 import { getSmsClient } from './sms'
 import { buildFormRequestPortalUrl, buildVerifiedPatientPortalUrl } from './portal-invite'
 
@@ -38,7 +38,7 @@ export async function sendOTP(
   try {
     if (channel === 'email') {
       // Send via Resend
-      const sendgridClient = await getSendgridClient(practiceId)
+      const resendClient = await getResendClient(practiceId)
       
       // Get practice info for personalized email
       const practice = await prisma.practice.findUnique({
@@ -89,7 +89,7 @@ If you didn't request this code, please ignore this email.
 This is an automated message from ${practiceName}. Please do not reply to this email.
       `.trim()
       
-      const result = await sendgridClient.sendEmail({
+      const result = await resendClient.sendEmail({
         to: recipient,
         subject: `${practiceName} - Your Patient Portal Login Code`,
         htmlContent,

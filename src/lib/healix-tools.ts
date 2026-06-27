@@ -12,7 +12,7 @@ import { logCustomActivity, logEmailActivity, logPatientActivity } from './patie
 import { createAuditLog } from './audit'
 import { formatDateTime } from './timezone'
 import { getOrCreateVerifiedPatientPortalUrl, getVerifiedFormRequestPortalUrl } from './patient-auth'
-import { getSendgridClient } from './sendgrid'
+import { getResendClient } from './resend'
 import { getSmsClient } from './sms'
 import { renderEmailFromJson } from './marketing/render-email'
 import { replaceVariables } from './marketing/variables'
@@ -997,7 +997,7 @@ export async function requestFormCompletion(
             throw new Error('Patient has no email address on file')
           }
 
-          const sendgridClient = await getSendgridClient(params.clinicId)
+          const resendClient = await getResendClient(params.clinicId)
           const sendgridIntegration = await prisma.sendgridIntegration.findFirst({
             where: {
               practiceId: params.clinicId,
@@ -1043,7 +1043,7 @@ export async function requestFormCompletion(
           const htmlWithVars = replaceVariables(html || '', context)
           const textWithVars = replaceVariables(text || '', context)
 
-          const result = await sendgridClient.sendEmail({
+          const result = await resendClient.sendEmail({
             to: patient.email,
             toName: patient.name || undefined,
             subject,
@@ -1244,7 +1244,7 @@ export async function sendPortalInvite(
         return { success: false, message: 'Patient email is missing.' }
       }
 
-      const sendgridClient = await getSendgridClient(params.clinicId)
+      const resendClient = await getResendClient(params.clinicId)
       const subject = 'Your secure link to the Patient Portal'
       const htmlContent = `
         <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111827;">
@@ -1275,7 +1275,7 @@ This link expires on ${urlResult.expiresAt.toLocaleDateString()}.
 If you did not expect this message, you can ignore it.
       `.trim()
 
-      const result = await sendgridClient.sendEmail({
+      const result = await resendClient.sendEmail({
         to: email,
         toName: patient.name || undefined,
         subject,

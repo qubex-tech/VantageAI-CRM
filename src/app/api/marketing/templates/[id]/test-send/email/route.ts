@@ -4,7 +4,7 @@ import { requireAuth } from '@/lib/middleware'
 import { testSendEmailSchema } from '@/lib/validations'
 import { renderEmailFromJson } from '@/lib/marketing/render-email'
 import { replaceVariables } from '@/lib/marketing/variables'
-import { getSendgridClient } from '@/lib/sendgrid'
+import { getResendClient } from '@/lib/resend'
 import { createMarketingAuditLog } from '@/lib/marketing/audit'
 import { quietHoursCheck } from '@/lib/marketing/lint'
 import { VariableContext } from '@/lib/marketing/types'
@@ -134,11 +134,11 @@ export async function POST(
       : 'Test Email'
     
     // Send email via Resend using verified sender email/domain
-    // The client from getSendgridClient() carries the verified default fromEmail for compatibility.
+    // The client from getResendClient() carries the verified default fromEmail for compatibility.
     let result: { success: boolean; messageId?: string; error?: string }
     
     try {
-      const sendgridClient = await getSendgridClient(user.practiceId)
+      const resendClient = await getResendClient(user.practiceId)
       
       // Load integration to access verified sender details.
       const sendgridIntegration = await prisma.sendgridIntegration.findFirst({
@@ -157,7 +157,7 @@ export async function POST(
       const verifiedFromEmail = sendgridIntegration.fromEmail
       const replyTo = brandProfile?.defaultReplyToEmail || verifiedFromEmail
       
-      result = await sendgridClient.sendEmail({
+      result = await resendClient.sendEmail({
         to,
         toName: undefined,
         subject,
@@ -178,11 +178,11 @@ export async function POST(
           { status: 500 }
         )
       }
-    } catch (sendgridError: any) {
+    } catch (resendError: any) {
       // If provider is not configured, return clear error message.
-      if (sendgridError.message?.includes('not configured') || 
-          sendgridError.message?.includes('not found') ||
-          sendgridError.message?.includes('not active')) {
+      if (resendError.message?.includes('not configured') || 
+          resendError.message?.includes('not found') ||
+          resendError.message?.includes('not active')) {
         return NextResponse.json(
           {
             error: 'Resend integration is not configured. Please configure it in Settings -> Resend Integration.',
@@ -194,10 +194,10 @@ export async function POST(
       }
       
       // For other errors, return the error message
-      console.error('Resend error:', sendgridError)
+      console.error('Resend error:', resendError)
       return NextResponse.json(
         {
-          error: sendgridError.message || 'Failed to send email via Resend',
+          error: resendError.message || 'Failed to send email via Resend',
           rendered: { html, text, subject },
         },
         { status: 500 }

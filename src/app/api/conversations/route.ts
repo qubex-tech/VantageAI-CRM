@@ -6,7 +6,7 @@ import { communicationStartSchema } from '@/lib/validations'
 import { getChannelAdapter } from '@/lib/communications/adapters'
 import type { DeliveryStatus } from '@/lib/communications/types'
 import { getSmsClient } from '@/lib/sms'
-import { getSendgridClient } from '@/lib/sendgrid'
+import { getResendClient } from '@/lib/resend'
 import { resolveSmsPracticeId } from '@/lib/resolve-sms-practice-id'
 import { generateConversationSummary } from '@/lib/communications/summaryService'
 
@@ -239,8 +239,8 @@ export async function POST(req: NextRequest) {
       if (!recipient.email) {
         return NextResponse.json({ error: 'Patient email is required for email' }, { status: 400 })
       }
-      const sendgridClient = await getSendgridClient(practiceId)
-      const result = await sendgridClient.sendEmail({
+      const resendClient = await getResendClient(practiceId)
+      const result = await resendClient.sendEmail({
         to: recipient.email,
         subject: validated.subject || 'Message from your care team',
         textContent: validated.body,

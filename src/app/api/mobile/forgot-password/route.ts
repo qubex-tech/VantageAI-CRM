@@ -79,12 +79,12 @@ export async function POST(req: NextRequest) {
 
     // Send OTP email — try practice-scoped Resend integration first, then env fallback
     try {
-      const { getSendgridClient } = await import('@/lib/sendgrid')
+      const { getResendClient } = await import('@/lib/resend')
       let sent = false
 
       if (user.practiceId) {
         try {
-          const client = await getSendgridClient(user.practiceId)
+          const client = await getResendClient(user.practiceId)
           await client.sendEmail({
             to: user.email,
             subject: 'Your VantageAI password reset code',

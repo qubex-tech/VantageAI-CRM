@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/middleware'
-import { getSendgridClient } from '@/lib/sendgrid'
+import { getResendClient } from '@/lib/resend'
 import { prisma } from '@/lib/db'
 import { logEmailActivity } from '@/lib/patient-activity'
 import { logOutboundCommunication } from '@/lib/communications/logging'
@@ -39,9 +39,9 @@ export async function POST(req: NextRequest) {
     }
     const practiceId = user.practiceId
     
-    let sendgridClient
+    let resendClient
     try {
-      sendgridClient = await getSendgridClient(practiceId)
+      resendClient = await getResendClient(practiceId)
     } catch (error) {
       const errorMessage = error instanceof Error 
         ? error.message 
@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Send the email
-    const result = await sendgridClient.sendEmail({
+    const result = await resendClient.sendEmail({
       to,
       toName,
       subject,

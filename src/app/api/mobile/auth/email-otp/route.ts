@@ -57,12 +57,12 @@ export async function POST(req: NextRequest) {
 
     // Send via practice-scoped Resend, then env fallback
     try {
-      const { getSendgridClient } = await import('@/lib/sendgrid')
+      const { getResendClient } = await import('@/lib/resend')
       let sent = false
 
       if (user.practiceId) {
         try {
-          const client = await getSendgridClient(user.practiceId)
+          const client = await getResendClient(user.practiceId)
           await client.sendEmail({
             to: user.email,
             subject: 'Your VantageAI sign-in code',

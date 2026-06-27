@@ -1,8 +1,7 @@
 /**
  * Resend API Client
  *
- * Note: this file name is kept for backward-compatible imports.
- * Runtime delivery now uses Resend.
+ * All outbound email in the app is delivered through Resend.
  */
 
 export interface SendEmailParams {
@@ -167,7 +166,7 @@ export class ResendApiClient {
   }
 }
 
-export async function getSendgridClient(practiceId: string) {
+export async function getResendClient(practiceId: string) {
   const { prisma } = await import('@/lib/db')
 
   const integration = await prisma.sendgridIntegration.findFirst({
@@ -187,7 +186,3 @@ export async function getSendgridClient(practiceId: string) {
     integration.fromName || undefined
   )
 }
-
-// Backward-compatible export name for existing imports.
-export const SendgridApiClient = ResendApiClient
-

@@ -6,7 +6,7 @@ import { getOrCreateVerifiedPatientPortalUrl, getVerifiedFormRequestPortalUrl } 
 import { renderEmailFromJson } from '@/lib/marketing/render-email'
 import { replaceVariables } from '@/lib/marketing/variables'
 import type { VariableContext } from '@/lib/marketing/types'
-import { getSendgridClient } from '@/lib/sendgrid'
+import { getResendClient } from '@/lib/resend'
 import { getSmsClient } from '@/lib/sms'
 
 export async function GET(req: NextRequest) {
@@ -194,7 +194,7 @@ export async function POST(req: NextRequest) {
             throw new Error('Patient has no email address on file')
           }
 
-          const sendgridClient = await getSendgridClient(user.practiceId)
+          const resendClient = await getResendClient(user.practiceId)
           const sendgridIntegration = await prisma.sendgridIntegration.findFirst({
             where: {
               practiceId: user.practiceId,
@@ -240,7 +240,7 @@ export async function POST(req: NextRequest) {
           const htmlWithVars = replaceVariables(html || '', context)
           const textWithVars = replaceVariables(text || '', context)
 
-          const result = await sendgridClient.sendEmail({
+          const result = await resendClient.sendEmail({
             to: patient.email,
             toName: patient.name || undefined,
             subject,

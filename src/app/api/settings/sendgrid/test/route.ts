@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { resendIntegrationSchema } from '@/lib/validations'
-import { ResendApiClient } from '@/lib/sendgrid'
+import { ResendApiClient } from '@/lib/resend'
 
 export const dynamic = 'force-dynamic'
 
