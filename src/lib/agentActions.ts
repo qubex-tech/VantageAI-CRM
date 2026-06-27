@@ -137,6 +137,24 @@ export async function findOrCreatePatientByPhone(
       title: 'Patient created via voice call',
       description: 'Patient was created during a phone conversation',
     })
+
+    // Best-effort: create + link the patient in Open Dental so they can be
+    // booked into the OD schedule later in the same call. No-ops when OD is off.
+    try {
+      const { createOpenDentalPatientFromCrm } = await import(
+        '@/lib/integrations/opendental/patientWriteback'
+      )
+      const odResult = await createOpenDentalPatientFromCrm({
+        practiceId,
+        patientId: patient.id,
+      })
+      if (odResult.status === 'success' && odResult.externalEhrId) {
+        const refreshed = await prisma.patient.findUnique({ where: { id: patient.id } })
+        if (refreshed) patient = refreshed
+      }
+    } catch (error) {
+      console.error('[OpenDental] Voice patient create writeback failed', error)
+    }
   } else if (details) {
     // Update existing patient with provided details
     const updateData: any = {}

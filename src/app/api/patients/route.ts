@@ -6,6 +6,7 @@ import { createAuditLog, createTimelineEntry } from '@/lib/audit'
 import { tenantScope } from '@/lib/db'
 import { emitEvent } from '@/lib/outbox'
 import { syncPatientCreateToEhr } from '@/lib/integrations/ehr/patientUpdate'
+import { createOpenDentalPatientFromCrm } from '@/lib/integrations/opendental/patientWriteback'
 import { normalizeDateOnly, parseDateOnlyString } from '@/lib/date'
 
 export async function GET(req: NextRequest) {
@@ -215,7 +216,23 @@ export async function POST(req: NextRequest) {
       console.error('[EHR] Patient create sync failed', err)
     }
 
-    return NextResponse.json({ patient }, { status: 201 })
+    // Best-effort: create + link the patient in Open Dental so they become
+    // bookable in OD scheduling. No-ops when OD isn't configured.
+    let externalEhrId = patient.externalEhrId
+    try {
+      const odResult = await createOpenDentalPatientFromCrm({
+        practiceId,
+        patientId: patient.id,
+        actorUserId: user.id,
+      })
+      if (odResult.status === 'success' && odResult.externalEhrId) {
+        externalEhrId = odResult.externalEhrId
+      }
+    } catch (err) {
+      console.error('[OpenDental] Patient create writeback failed', err)
+    }
+
+    return NextResponse.json({ patient: { ...patient, externalEhrId } }, { status: 201 })
   } catch (error) {
     if (error instanceof Error && error.name === 'ZodError') {
       return NextResponse.json({ error: 'Validation error', details: error }, { status: 400 })
