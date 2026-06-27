@@ -18,6 +18,34 @@ function splitName(name: string): { first: string; last: string } {
   return { first: parts[0], last: parts.slice(1).join(' ') }
 }
 
+/**
+ * Look up an existing Open Dental patient by name (+ birthdate when available) and
+ * return their PatNum. Used to link rather than fail when OD already has the patient.
+ */
+async function findExistingOpenDentalPatNum(
+  services: Awaited<ReturnType<typeof getOpenDentalServices>>,
+  params: { firstName: string; lastName: string; birthdate?: string }
+): Promise<number | null> {
+  const query: Record<string, string | number> = {
+    LName: params.lastName,
+    FName: params.firstName,
+  }
+  if (params.birthdate) query.Birthdate = params.birthdate
+
+  const matches = (await services.patients.list(query)) as Array<Record<string, unknown>>
+  if (!Array.isArray(matches) || matches.length === 0) return null
+
+  // Prefer an exact birthdate match when we have one; otherwise take the first hit.
+  const candidates = params.birthdate
+    ? matches.filter((m) => String(m.Birthdate ?? '').startsWith(params.birthdate as string))
+    : matches
+  for (const m of candidates.length ? candidates : matches) {
+    const patNum = Number(m.PatNum)
+    if (Number.isFinite(patNum) && patNum > 0) return patNum
+  }
+  return null
+}
+
 function mapGender(gender: string | null): string | undefined {
   if (!gender) return undefined
   const s = gender.toLowerCase()
@@ -111,8 +139,21 @@ export async function createOpenDentalPatientFromCrm(params: {
 
   try {
     const services = await getOpenDentalServices(practiceId)
-    const created = await services.patients.create(body)
-    const patNum = resolveCreatedId(created, 'PatNum')
+    let patNum: number | null = null
+    let linkedExisting = false
+    try {
+      const created = await services.patients.create(body)
+      patNum = resolveCreatedId(created, 'PatNum')
+    } catch (createErr) {
+      const msg = createErr instanceof Error ? createErr.message : String(createErr)
+      // OD rejects duplicates with "A Patient with that information already exists" —
+      // fall back to looking the patient up so we can still link (and book) them.
+      if (!/already exists/i.test(msg)) throw createErr
+    }
+    if (!patNum || patNum <= 0) {
+      patNum = await findExistingOpenDentalPatNum(services, { firstName, lastName, birthdate })
+      if (patNum && patNum > 0) linkedExisting = true
+    }
     if (!patNum || patNum <= 0) {
       return { status: 'error', reason: 'missing_pat_num_in_response' }
     }
@@ -136,7 +177,7 @@ export async function createOpenDentalPatientFromCrm(params: {
       action: 'patient.writeback_created',
       entity: 'Patient',
       entityId: String(patNum),
-      metadata: { patientId, externalEhrId, linked: !conflict },
+      metadata: { patientId, externalEhrId, linked: !conflict, linkedExisting },
     })
 
     return { status: 'success', patNum, externalEhrId }
