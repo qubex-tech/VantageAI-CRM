@@ -4,6 +4,7 @@ import { getPracticeTimeZone } from '@/lib/practice-timezone'
 import { getOpenDentalServices, getOpenDentalConnection } from './factory'
 import { logOpenDentalAudit } from './audit'
 import { OPEN_DENTAL_EXTERNAL_PREFIX } from './patientSync'
+import { formatPatientNoteForEhr, isPatientNoteType } from '@/lib/patient-note-types'
 import type { ExtractedCallData } from '@/lib/process-call-data'
 import type { RetellCall } from '@/lib/retell-api'
 
@@ -230,6 +231,74 @@ export async function writeBackCallToOpenDental(params: {
         openDentalWritebackVersion: WRITEBACK_VERSION,
       })
     }
+    return { status: 'error', reason: message }
+  }
+}
+
+/**
+ * Push a CRM patient-profile note into Open Dental as a patient commlog.
+ *
+ * Self-gating: skips quietly when the practice has no active Open Dental connection
+ * or when the patient is not an Open Dental patient. Called from the patient notes API
+ * alongside the eCW/FHIR note sync.
+ */
+export async function syncPatientNoteToOpenDental(params: {
+  practiceId: string
+  patientId: string
+  noteType: string
+  content: string
+  actorUserId?: string
+}): Promise<CommlogWritebackResult> {
+  const { practiceId, patientId, noteType, content, actorUserId } = params
+
+  const connection = await getOpenDentalConnection(practiceId)
+  if (!connection || !connection.isActive) {
+    return { status: 'skipped', reason: 'opendental_not_configured' }
+  }
+
+  const patient = await prisma.patient.findFirst({
+    where: { id: patientId, practiceId, deletedAt: null },
+    select: { id: true, externalEhrId: true },
+  })
+  const patNum = extractPatNumFromExternalId(patient?.externalEhrId)
+  if (!patNum) {
+    return { status: 'skipped', reason: 'patient_not_linked_to_opendental' }
+  }
+
+  const trimmed = content.trim()
+  if (!trimmed) return { status: 'skipped', reason: 'empty_note' }
+
+  const noteBody = isPatientNoteType(noteType)
+    ? formatPatientNoteForEhr(noteType, trimmed)
+    : trimmed
+  const note = truncate(`Vantage CRM note\n\n${noteBody}`, MAX_NOTE_LENGTH)
+
+  const timeZone = await getPracticeTimeZone(practiceId)
+  const commDateTime = formatOpenDentalLocalDateTime(new Date(), timeZone)
+
+  try {
+    const { commlogNum } = await writeOpenDentalCommlog({
+      practiceId,
+      patNum,
+      note,
+      commDateTime,
+      // Manual profile notes are not phone interactions.
+      mode: 'None',
+      sentOrReceived: 'Neither',
+    })
+
+    await logOpenDentalAudit({
+      tenantId: practiceId,
+      actorUserId,
+      action: 'commlog.note_synced',
+      entity: 'Commlog',
+      entityId: commlogNum != null ? String(commlogNum) : undefined,
+      metadata: { patNum, patientId, noteType, commDateTime, timeZone },
+    })
+
+    return { status: 'success', commlogNum }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Open Dental note writeback failed'
     return { status: 'error', reason: message }
   }
 }

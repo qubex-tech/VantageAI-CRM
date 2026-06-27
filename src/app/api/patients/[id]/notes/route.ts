@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
 import { createAuditLog } from '@/lib/audit'
 import { syncPatientNoteToEhr } from '@/lib/integrations/ehr/patientNoteSync'
+import { syncPatientNoteToOpenDental } from '@/lib/integrations/opendental/commlogWriteback'
 import { isPatientNoteType, PATIENT_NOTE_TYPES } from '@/lib/patient-note-types'
 
 export const dynamic = 'force-dynamic'
@@ -158,7 +159,21 @@ export async function POST(
       ehrSync = { status: 'error', mode: 'none', reason: 'sync_exception' }
     }
 
-    return NextResponse.json({ note, ehrSync }, { status: 201 })
+    let openDentalSync: Awaited<ReturnType<typeof syncPatientNoteToOpenDental>> | undefined
+    try {
+      openDentalSync = await syncPatientNoteToOpenDental({
+        practiceId: user.practiceId,
+        patientId,
+        noteType: type,
+        content: content.trim(),
+        actorUserId: user.id,
+      })
+    } catch (error) {
+      console.error('Failed to sync note to Open Dental:', error)
+      openDentalSync = { status: 'error', reason: 'sync_exception' }
+    }
+
+    return NextResponse.json({ note, ehrSync, openDentalSync }, { status: 201 })
   } catch (error) {
     console.error('Error creating patient note:', error)
     return NextResponse.json(
