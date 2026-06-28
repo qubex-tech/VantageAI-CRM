@@ -11,6 +11,7 @@ import { logOpenDentalAudit } from '@/lib/integrations/opendental/audit'
 const configSchema = z.object({
   displayName: z.string().min(1),
   customerKey: z.string().min(1).optional(),
+  developerKey: z.string().min(1).optional(),
   apiMode: z.enum(['remote', 'service', 'local']).optional(),
   baseUrl: z.string().url().optional(),
   fallbackBaseUrls: z.array(z.string().url()).optional(),
@@ -45,6 +46,7 @@ export async function PUT(req: NextRequest) {
       practiceId,
       displayName: parsed.data.displayName,
       customerKey: parsed.data.customerKey,
+      developerKey: parsed.data.developerKey,
       apiMode: parsed.data.apiMode,
       baseUrl: parsed.data.baseUrl,
       fallbackBaseUrls: parsed.data.fallbackBaseUrls,

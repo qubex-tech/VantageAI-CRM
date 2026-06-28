@@ -537,6 +537,7 @@ model OpenDentalConnection {
   practiceId           String    @unique
   displayName          String
   customerKeyEncrypted String
+  developerKeyEncrypted String?
   apiMode              String    @default("remote")
   baseUrl              String    @default("https://api.opendental.com/api/v1")
   fallbackBaseUrls     Json?

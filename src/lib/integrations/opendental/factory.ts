@@ -9,7 +9,7 @@ import {
   type OpenDentalPracticeConfig,
   type PracticeContext,
 } from '@vantage/opendental-sdk'
-import { getDefaultBaseUrl, getDeveloperKey } from './server'
+import { getDefaultBaseUrl } from './server'
 
 const registry = new PracticeRegistry()
 
@@ -52,25 +52,49 @@ export function connectionToPracticeConfig(
   }
 }
 
-export async function loadPracticeContext(practiceId: string): Promise<PracticeContext> {
+/**
+ * Resolve the developer key for a connection: prefer the per-connection encrypted
+ * key, falling back to the OPEN_DENTAL_DEVELOPER_KEY env var (so existing
+ * connections and the sandbox keep working).
+ */
+function resolveDeveloperKey(connection: { developerKeyEncrypted: string | null }): string {
+  if (connection.developerKeyEncrypted) {
+    const perConnection = decryptString(connection.developerKeyEncrypted).trim()
+    if (perConnection) return perConnection
+  }
+  const envKey = process.env.OPEN_DENTAL_DEVELOPER_KEY?.trim()
+  if (envKey) return envKey
+  throw new Error(
+    'No Open Dental developer key configured (set one on the connection or OPEN_DENTAL_DEVELOPER_KEY)'
+  )
+}
+
+async function loadConnectionContext(
+  practiceId: string
+): Promise<{ context: PracticeContext; developerKey: string }> {
   const connection = await getOpenDentalConnection(practiceId)
   if (!connection || !connection.isActive) {
     throw new Error('Open Dental integration not configured for this practice')
   }
-  const developerKey = getDeveloperKey()
+  const developerKey = resolveDeveloperKey(connection)
   const context = toPracticeContext(connectionToPracticeConfig(connection, developerKey))
   registry.register(context)
+  return { context, developerKey }
+}
+
+export async function loadPracticeContext(practiceId: string): Promise<PracticeContext> {
+  const { context } = await loadConnectionContext(practiceId)
   return context
 }
 
 export async function getOpenDentalClient(practiceId: string): Promise<OpenDentalClient> {
-  const context = await loadPracticeContext(practiceId)
-  return createClientFromContext(context, getDeveloperKey())
+  const { context, developerKey } = await loadConnectionContext(practiceId)
+  return createClientFromContext(context, developerKey)
 }
 
 export async function getOpenDentalServices(practiceId: string) {
-  const context = await loadPracticeContext(practiceId)
-  const client = createClientFromContext(context, getDeveloperKey())
+  const { context, developerKey } = await loadConnectionContext(practiceId)
+  const client = createClientFromContext(context, developerKey)
   return createServiceRegistry(client, context)
 }
 
@@ -82,6 +106,7 @@ export async function upsertOpenDentalConnection(params: {
   practiceId: string
   displayName: string
   customerKey?: string
+  developerKey?: string
   apiMode?: string
   baseUrl?: string
   fallbackBaseUrls?: string[]
@@ -95,12 +120,17 @@ export async function upsertOpenDentalConnection(params: {
     throw new Error('customerKey is required for new Open Dental connections')
   }
 
+  const developerKeyEncrypted = params.developerKey
+    ? encryptString(params.developerKey)
+    : undefined
+
   return prisma.openDentalConnection.upsert({
     where: { practiceId: params.practiceId },
     create: {
       practiceId: params.practiceId,
       displayName: params.displayName,
       customerKeyEncrypted: encrypted,
+      developerKeyEncrypted: developerKeyEncrypted ?? null,
       apiMode: params.apiMode ?? 'remote',
       baseUrl: params.baseUrl ?? getDefaultBaseUrl(),
       fallbackBaseUrls: params.fallbackBaseUrls ?? [],
@@ -109,6 +139,7 @@ export async function upsertOpenDentalConnection(params: {
     update: {
       displayName: params.displayName,
       ...(params.customerKey ? { customerKeyEncrypted: encrypted } : {}),
+      ...(developerKeyEncrypted ? { developerKeyEncrypted } : {}),
       apiMode: params.apiMode ?? existing?.apiMode ?? 'remote',
       baseUrl: params.baseUrl ?? existing?.baseUrl ?? getDefaultBaseUrl(),
       fallbackBaseUrls: params.fallbackBaseUrls ?? existing?.fallbackBaseUrls ?? [],
@@ -162,6 +193,7 @@ export function sanitizeConnectionForResponse(connection: {
   isActive: boolean
   createdAt: Date
   updatedAt: Date
+  developerKeyEncrypted?: string | null
 }) {
   return {
     id: connection.id,
@@ -182,5 +214,6 @@ export function sanitizeConnectionForResponse(connection: {
     createdAt: connection.createdAt,
     updatedAt: connection.updatedAt,
     hasCustomerKey: true,
+    hasDeveloperKey: !!connection.developerKeyEncrypted,
   }
 }

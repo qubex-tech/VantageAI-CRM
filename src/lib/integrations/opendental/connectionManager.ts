@@ -49,6 +49,7 @@ export async function registerAndValidateConnection(params: {
   practiceId: string
   displayName: string
   customerKey: string
+  developerKey?: string
   apiMode?: string
   baseUrl?: string
   fallbackBaseUrls?: string[]

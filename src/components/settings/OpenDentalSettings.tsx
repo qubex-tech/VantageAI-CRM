@@ -26,6 +26,7 @@ type OpenDentalConnection = {
   lastSyncError?: string | null
   odVersion?: string | null
   hasCustomerKey?: boolean
+  hasDeveloperKey?: boolean
 }
 
 interface OpenDentalSettingsProps {
@@ -41,6 +42,7 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
   const [connection, setConnection] = useState<OpenDentalConnection | null>(null)
   const [displayName, setDisplayName] = useState('')
   const [customerKey, setCustomerKey] = useState('')
+  const [developerKey, setDeveloperKey] = useState('')
   const [apiMode, setApiMode] = useState<'remote' | 'service' | 'local'>('remote')
   const [baseUrl, setBaseUrl] = useState('')
   const [loading, setLoading] = useState(true)
@@ -66,6 +68,7 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
   const [writebackResult, setWritebackResult] = useState<string | null>(null)
 
   const hasCustomerKey = Boolean(connection?.hasCustomerKey)
+  const hasDeveloperKey = Boolean(connection?.hasDeveloperKey)
 
   const loadConnection = async () => {
     const response = await fetch(apiUrl('/api/integrations/opendental/config'))
@@ -119,6 +122,7 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
           practiceId,
           displayName: displayName.trim(),
           ...(customerKey.trim() ? { customerKey: customerKey.trim() } : {}),
+          ...(developerKey.trim() ? { developerKey: developerKey.trim() } : {}),
           apiMode,
           ...(baseUrl.trim() ? { baseUrl: baseUrl.trim() } : {}),
         }),
@@ -132,6 +136,7 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
       const data = await response.json()
       setConnection(data.connection)
       setCustomerKey('')
+      setDeveloperKey('')
       setSuccess('Configuration saved.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save configuration')
@@ -157,6 +162,7 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
           practiceId,
           displayName: displayName.trim(),
           customerKey: customerKey.trim(),
+          ...(developerKey.trim() ? { developerKey: developerKey.trim() } : {}),
           apiMode,
           ...(baseUrl.trim() ? { baseUrl: baseUrl.trim() } : {}),
         }),
@@ -170,6 +176,7 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
       const data = await response.json()
       setConnection(data.connection)
       setCustomerKey('')
+      setDeveloperKey('')
       setSuccess('Connected and validated successfully.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to connect')
@@ -459,6 +466,25 @@ export function OpenDentalSettings({ practiceId }: OpenDentalSettingsProps) {
               onChange={(e) => setCustomerKey(e.target.value)}
               placeholder={hasCustomerKey ? '•••••••• (leave blank to keep existing)' : 'From Open Dental API setup'}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="odDeveloperKey">Developer key (optional)</Label>
+            <Input
+              id="odDeveloperKey"
+              type="password"
+              value={developerKey}
+              onChange={(e) => setDeveloperKey(e.target.value)}
+              placeholder={
+                hasDeveloperKey
+                  ? '•••••••• (leave blank to keep existing)'
+                  : 'Leave blank to use the default developer key'
+              }
+            />
+            <p className="text-xs text-muted-foreground">
+              Set this only if this practice uses its own Open Dental developer key. Otherwise the
+              system-wide developer key is used.
+            </p>
           </div>
 
           <div className="space-y-2">
