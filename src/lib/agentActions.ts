@@ -20,6 +20,16 @@ import { formatOpenDentalLocalDateTime } from '@/lib/integrations/opendental/com
 import { buildAppointmentExternalId } from '@/lib/integrations/opendental/appointmentSync'
 import { writeBackAppointmentToOpenDental } from '@/lib/integrations/opendental/appointmentWriteback'
 
+/**
+ * Canonical phone key for matching: digits only, with the US country code dropped
+ * so E.164 inputs (e.g. "+15369875621") match locally-stored 10-digit numbers
+ * (e.g. "(536) 987-5621").
+ */
+function phoneMatchKey(value: string | null | undefined): string {
+  const digits = String(value ?? '').replace(/\D/g, '')
+  return digits.length > 10 ? digits.slice(-10) : digits
+}
+
 /** Coerce a date or datetime string to a bare "yyyy-MM-dd" for Open Dental slot queries. */
 function toDateOnly(value: string): string {
   const m = value.match(/^(\d{4}-\d{2}-\d{2})/)
@@ -64,47 +74,29 @@ export async function findOrCreatePatientByPhone(
     email?: string
   }
 ): Promise<FindOrCreatePatientResult> {
-  // Normalize phone number (remove non-digits) - ensure it's a string
+  // Normalize phone for storage (digits only); match on the last 10 digits so
+  // E.164 (+1...) inputs line up with locally-stored 10-digit numbers.
   const normalizedPhone = String(phone).replace(/\D/g, '')
-  
-  // Try to find existing patient - use exact match on normalized phone
-  // First try exact match on normalized phone (check both phone and primaryPhone)
-  let patient = await prisma.patient.findFirst({
-    where: {
-      practiceId,
-      OR: [
-        { phone: normalizedPhone },
-        { primaryPhone: normalizedPhone },
-      ],
-      deletedAt: null,
-    },
-  })
+  const incomingKey = phoneMatchKey(phone)
 
-  // If no exact match, try matching with normalized versions of stored phones
-  // This handles cases where phone numbers are stored with formatting
-  if (!patient) {
-    const allPatients = await prisma.patient.findMany({
-      where: {
-        practiceId,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        phone: true,
-        primaryPhone: true,
-      },
-    })
+  let patient: Awaited<ReturnType<typeof prisma.patient.findUnique>> | null = null
 
-    const matchedPatient = allPatients.find(p => {
-      const phoneNormalized = p.phone ? String(p.phone).replace(/\D/g, '') : ''
-      const primaryPhoneNormalized = p.primaryPhone ? String(p.primaryPhone).replace(/\D/g, '') : ''
-      return phoneNormalized === normalizedPhone || primaryPhoneNormalized === normalizedPhone
+  if (incomingKey) {
+    const candidates = await prisma.patient.findMany({
+      where: { practiceId, deletedAt: null },
+      select: { id: true, phone: true, primaryPhone: true, externalEhrId: true },
     })
-    if (matchedPatient) {
-      // Reload full patient record
-      patient = await prisma.patient.findUnique({
-        where: { id: matchedPatient.id },
-      })
+    const matches = candidates.filter(
+      (p) =>
+        phoneMatchKey(p.phone) === incomingKey ||
+        phoneMatchKey(p.primaryPhone) === incomingKey
+    )
+    // Prefer an Open Dental-linked record so existing synced patients win over any
+    // unlinked duplicates that happen to share the same phone number.
+    const chosen =
+      matches.find((p) => p.externalEhrId?.startsWith('opendental:')) ?? matches[0]
+    if (chosen) {
+      patient = await prisma.patient.findUnique({ where: { id: chosen.id } })
     }
   }
 
