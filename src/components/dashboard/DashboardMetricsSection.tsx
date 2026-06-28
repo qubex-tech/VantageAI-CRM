@@ -9,7 +9,6 @@ import {
   formatDashboardRangeLabel,
   resolveDashboardRangeInTimeZone,
 } from '@/lib/analytics/dashboardDateRange'
-import { countRetellInboundCallsForRange } from '@/lib/analytics/retellCallSync'
 import { normalizeTimeZone, resolveTimeZone } from '@/lib/timezone'
 import type { DashboardMetricsPayload, DashboardPeriodMetrics } from '@/components/dashboard/types'
 
@@ -57,8 +56,7 @@ function buildPeriodMetrics(
   timeZone: string,
   rangeStart: Date,
   rangeEnd: Date,
-  calls: AnalyticsCallRow[],
-  retellCallsHandled: number | null
+  calls: AnalyticsCallRow[]
 ): DashboardPeriodMetrics {
   const inboundCalls = calls.filter((call) => {
     const startedAt = new Date(call.startedAt)
@@ -72,9 +70,12 @@ function buildPeriodMetrics(
     rangeLabel: formatDashboardRangeLabel(days, rangeStart, rangeEnd, timeZone),
     rangeStart: rangeStart.toISOString(),
     rangeEnd: rangeEnd.toISOString(),
-    // Calls handled must never be lower than the inbound calls we have records for,
-    // otherwise transfers (computed from those same rows) can exceed it (e.g. >100%).
-    callsHandled: Math.max(retellCallsHandled ?? 0, inboundCalls.length),
+    // Source of truth is the practice-scoped voice_conversations table (attributed per
+    // practice by the webhook). We deliberately do NOT count via the Retell list API:
+    // tenants can share one Retell account/API key, so an API-side count would return
+    // every practice's calls. Transfers are derived from these same rows, so the ratios
+    // stay internally consistent.
+    callsHandled: inboundCalls.length,
     transfersAttempted,
     transfersSuccessful,
     transfersUnsuccessful,
@@ -88,32 +89,6 @@ async function loadDashboardMetrics(
   const now = new Date()
   const range7 = resolveDashboardRangeInTimeZone(7, timeZone, now)
   const range30 = resolveDashboardRangeInTimeZone(30, timeZone, now)
-
-  let retellCount7: number | null = null
-  let retellCount30: number | null = null
-
-  try {
-    // Count inbound calls across every agent on the practice's Retell account, not just
-    // the configured agentId. Practices can run multiple inbound agents, and transfer
-    // metrics are derived from all inbound voice_conversations, so scoping the handled
-    // count to a single agent under-reports it and breaks the transfer ratios.
-    ;[retellCount7, retellCount30] = await Promise.all([
-      countRetellInboundCallsForRange({
-        practiceId,
-        agentId: null,
-        startMs: range7.startMs,
-        endMs: range7.endMs,
-      }),
-      countRetellInboundCallsForRange({
-        practiceId,
-        agentId: null,
-        startMs: range30.startMs,
-        endMs: range30.endMs,
-      }),
-    ])
-  } catch (error) {
-    console.warn('[Dashboard] Retell call count failed, falling back to database:', error)
-  }
 
   const callsRaw = await prisma.voiceConversation.findMany({
     where: {
@@ -141,22 +116,8 @@ async function loadDashboardMetrics(
   return {
     timeZone,
     periods: {
-      7: buildPeriodMetrics(
-        7,
-        timeZone,
-        range7.from,
-        range7.to,
-        inboundCalls,
-        retellCount7
-      ),
-      30: buildPeriodMetrics(
-        30,
-        timeZone,
-        range30.from,
-        range30.to,
-        inboundCalls,
-        retellCount30
-      ),
+      7: buildPeriodMetrics(7, timeZone, range7.from, range7.to, inboundCalls),
+      30: buildPeriodMetrics(30, timeZone, range30.from, range30.to, inboundCalls),
     },
   }
 }

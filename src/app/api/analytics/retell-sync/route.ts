@@ -39,16 +39,15 @@ export async function POST(req: NextRequest) {
     const startMs = from.getTime()
     const endMs = to.getTime()
 
-    // Validate the integration exists/active before syncing (throws if not configured).
-    await getRetellIntegrationConfig(user.practiceId)
+    const integration = await getRetellIntegrationConfig(user.practiceId)
 
-    // Sync inbound calls for the whole practice (every agent on the account), not a
-    // single configured agentId — agents get swapped/upgraded over time and analytics
-    // are associated to the practice, not to a specific agent version.
+    // Scope the backfill to this practice's agent. Tenants can share one Retell
+    // account/API key, so syncing without an agent filter would pull every practice's
+    // calls into this practice (cross-tenant contamination).
     const result = await syncRetellInboundCallsForRange({
       practiceId: user.practiceId,
       userId: user.id,
-      agentId: null,
+      agentId: integration.agentId,
       startMs,
       endMs,
     })
@@ -57,7 +56,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       startMs,
       endMs,
-      agentId: null,
+      agentId: integration.agentId,
       ...result,
     })
   } catch (e) {

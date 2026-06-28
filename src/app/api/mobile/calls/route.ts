@@ -16,13 +16,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ calls: [], reviewedCallIds: [] })
     }
 
-    const { getRetellClient } = await import('@/lib/retell-api')
+    const { getRetellClient, getRetellIntegrationConfig } = await import('@/lib/retell-api')
 
-    // List calls for the whole practice (all agents on the account), not a single
-    // configured agentId — agents get upgraded/swapped and the call list is scoped
-    // to the practice, not to a specific agent version.
+    // Scope the listing to this practice's agent. Tenants can share one Retell
+    // account/API key, so listing without an agent filter would surface other
+    // practices' calls in this practice's mobile app.
     let retell: any = null
+    let agentId: string | null = null
     try {
+      const config = await getRetellIntegrationConfig(user.practiceId)
+      agentId = config.agentId ?? null
       retell = await getRetellClient(user.practiceId)
     } catch (e: any) {
       console.log('[mobile/calls] No Retell integration:', e?.message)
@@ -42,7 +45,7 @@ export async function GET(req: NextRequest) {
     try {
       // Fetch more than needed so sorting gives us the true newest records
       const fetchLimit = Math.min(limit * 4, 200)
-      const result = await retell.listCalls({ limit: fetchLimit })
+      const result = await retell.listCalls({ limit: fetchLimit, agentId: agentId ?? undefined })
       const raw: any[] = result?.calls ?? []
 
       // Sort newest-first by start_timestamp (milliseconds epoch).
@@ -59,7 +62,7 @@ export async function GET(req: NextRequest) {
 
       console.log(
         `[mobile/calls] fetched ${raw.length} calls, returning ${calls.length} ` +
-        `(offset=${offset}, limit=${limit}, agentId=all) ` +
+        `(offset=${offset}, limit=${limit}, agentId=${agentId ?? 'all'}) ` +
         `newest=${calls[0]?.start_timestamp ?? 'n/a'}`
       )
     } catch (e: any) {
