@@ -665,6 +665,10 @@ model VoiceConversation {
   practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   patient  Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
 
+  // One conversation row per (practice, Retell call). Guarantees the importer's
+  // dedup marker is unique so concurrent webhook + dashboard backfill runs can't
+  // create duplicate conversations (and therefore duplicate patients) for one call.
+  @@unique([practiceId, retellCallId])
   @@index([practiceId])
   @@index([patientId])
   @@index([callerPhone])

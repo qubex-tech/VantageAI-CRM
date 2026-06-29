@@ -1124,6 +1124,31 @@ export async function processRetellCallData(
     })
   }
 
+  // Idempotency guard: create the voice-conversation dedup marker BEFORE creating a
+  // patient. The importer skips calls that already have a conversation row, so if we
+  // created the patient first and then failed (DB drop, etc.), the next backfill would
+  // re-import the call and create a duplicate patient. Upserting on the
+  // (practiceId, retellCallId) unique key also makes concurrent webhook + backfill runs
+  // for the same call safe (they converge on one row instead of racing to create two).
+  let voiceConversationId: string | null = null
+  if (call.call_id) {
+    const callerPhone =
+      (extractedData.user_phone_number ? String(extractedData.user_phone_number).replace(/\D/g, '') : '') || 'unknown'
+    const marker = await prisma.voiceConversation.upsert({
+      where: { practiceId_retellCallId: { practiceId, retellCallId: call.call_id } },
+      create: {
+        practiceId,
+        retellCallId: call.call_id,
+        callerPhone,
+        startedAt: call.start_timestamp ? new Date(call.start_timestamp) : new Date(),
+        endedAt: call.end_timestamp ? new Date(call.end_timestamp) : undefined,
+      },
+      update: {},
+      select: { id: true },
+    })
+    voiceConversationId = marker.id
+  }
+
   // Create or update patient
   const { patientId, isNew } = await processCallDataForPatient(
     practiceId,
@@ -1134,71 +1159,37 @@ export async function processRetellCallData(
   
   console.log('[processRetellCallData] Patient processing result:', { patientId, isNew })
 
-  // Update or create voice conversation record
+  // Enrich the (already-created) voice conversation with patient link + extracted fields.
   let conversationForEscalation: EscalationConversation | null = null
-  if (call.call_id) {
-    const phoneNumber = extractedData.user_phone_number || 'unknown'
-    
-    // Find existing conversation or create new one
-    const existingConversation = await prisma.voiceConversation.findFirst({
-      where: {
-        practiceId,
-        retellCallId: call.call_id,
+  if (voiceConversationId) {
+    // Re-read latest row so concurrent EHR writeback (or other writers) is not clobbered
+    // when merging extracted fields — avoids losing ehrWritebackEncounterPayload / ehrWritebackVersion.
+    const latestForMerge = await prisma.voiceConversation.findUnique({
+      where: { id: voiceConversationId },
+      select: { metadata: true, patientId: true, transcript: true, extractedIntent: true, outcome: true, endedAt: true },
+    })
+    const existingMetadata = metadataObjectFromRow(latestForMerge?.metadata)
+    const retellRoutingMeta = {
+      ...(call.direction ? { retell_call_direction: call.direction } : {}),
+      ...(call.call_type ? { retell_call_type: call.call_type } : {}),
+    }
+
+    conversationForEscalation = await prisma.voiceConversation.update({
+      where: { id: voiceConversationId },
+      data: {
+        patientId: patientId || latestForMerge?.patientId || undefined,
+        transcript: call.transcript || latestForMerge?.transcript,
+        extractedIntent: extractedData.call_reason || latestForMerge?.extractedIntent,
+        outcome: extractedData.call_successful ? 'appointment_booked' : latestForMerge?.outcome || 'information_only',
+        // Preserve existing webhook metadata (e.g. Curogram delivery logs) while adding extracted fields.
+        metadata: {
+          ...existingMetadata,
+          ...(extractedData as Record<string, unknown>),
+          ...retellRoutingMeta,
+        } as any,
+        endedAt: call.end_timestamp ? new Date(call.end_timestamp) : latestForMerge?.endedAt,
       },
     })
-
-    if (existingConversation) {
-      // Re-read latest metadata so concurrent EHR writeback (or other writers) is not clobbered
-      // when merging extracted fields — avoids losing ehrWritebackEncounterPayload / ehrWritebackVersion.
-      const latestForMerge = await prisma.voiceConversation.findUnique({
-        where: { id: existingConversation.id },
-        select: { metadata: true },
-      })
-      const existingMetadata = metadataObjectFromRow(latestForMerge?.metadata)
-      const retellRoutingMeta = {
-        ...(call.direction ? { retell_call_direction: call.direction } : {}),
-        ...(call.call_type ? { retell_call_type: call.call_type } : {}),
-      }
-
-      conversationForEscalation = await prisma.voiceConversation.update({
-        where: { id: existingConversation.id },
-        data: {
-          patientId: patientId || existingConversation.patientId,
-          transcript: call.transcript || existingConversation.transcript,
-          extractedIntent: extractedData.call_reason || existingConversation.extractedIntent,
-          outcome: extractedData.call_successful ? 'appointment_booked' : existingConversation.outcome || 'information_only',
-          // Preserve existing webhook metadata (e.g. Curogram delivery logs) while adding extracted fields.
-          metadata: {
-            ...existingMetadata,
-            ...(extractedData as Record<string, unknown>),
-            ...retellRoutingMeta,
-          } as any,
-          endedAt: call.end_timestamp ? new Date(call.end_timestamp) : existingConversation.endedAt,
-        },
-      })
-    } else {
-      const retellRoutingMeta = {
-        ...(call.direction ? { retell_call_direction: call.direction } : {}),
-        ...(call.call_type ? { retell_call_type: call.call_type } : {}),
-      }
-      conversationForEscalation = await prisma.voiceConversation.create({
-        data: {
-          practiceId,
-          patientId: patientId || undefined,
-          callerPhone: phoneNumber ? String(phoneNumber).replace(/\D/g, '') : 'unknown',
-          retellCallId: call.call_id,
-          startedAt: call.start_timestamp ? new Date(call.start_timestamp) : new Date(),
-          endedAt: call.end_timestamp ? new Date(call.end_timestamp) : undefined,
-          transcript: call.transcript || undefined,
-          extractedIntent: extractedData.call_reason || undefined,
-          outcome: extractedData.call_successful ? 'appointment_booked' : 'information_only',
-          metadata: {
-            ...(extractedData as Record<string, unknown>),
-            ...retellRoutingMeta,
-          } as any,
-        },
-      })
-    }
   }
 
   if (conversationForEscalation) {
