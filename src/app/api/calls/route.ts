@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/middleware'
 import { z } from 'zod'
 import { prisma } from '@/lib/db'
-import { getRetellClient } from '@/lib/retell-api'
+import { getRetellClient, getRetellIntegrationConfig } from '@/lib/retell-api'
 import { initiateInsuranceOutboundCall } from '@/lib/outbound-insurance-call'
 
 export const dynamic = 'force-dynamic'
@@ -138,7 +138,7 @@ export async function GET(req: NextRequest) {
     
     const searchParams = req.nextUrl.searchParams
     
-    const agentId = searchParams.get('agentId') || undefined
+    const requestedAgentId = searchParams.get('agentId') || undefined
     const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 50
     const offset = searchParams.get('offset') ? parseInt(searchParams.get('offset')!) : 0
     const shouldProcess = searchParams.get('process') === 'true'
@@ -150,6 +150,27 @@ export async function GET(req: NextRequest) {
     const endTimestamp = searchParams.get('endTimestamp')
       ? parseInt(searchParams.get('endTimestamp')!)
       : undefined
+
+    // Cross-tenant guard: tenants can share a single Retell account/API key, so an
+    // unscoped listCalls returns EVERY practice's calls — and with ?process=true that
+    // imports another tenant's calls (and can fire Curogram texts) into this practice.
+    // Always scope to an agent this practice owns; never trust an arbitrary agentId param.
+    const integration = await getRetellIntegrationConfig(practiceId)
+    const ownedAgentIds = [integration.agentId, integration.insuranceVerificationAgentId].filter(
+      (id): id is string => Boolean(id)
+    )
+    const agentId =
+      requestedAgentId && ownedAgentIds.includes(requestedAgentId)
+        ? requestedAgentId
+        : integration.agentId
+    if (!agentId) {
+      // No agent configured for this practice — refuse to list shared-key calls.
+      return NextResponse.json({
+        calls: [],
+        reviewedCallIds: [],
+        error: 'No Retell agent configured for this practice',
+      })
+    }
 
     const retellClient = await getRetellClient(practiceId)
     const result = await retellClient.listCalls({
