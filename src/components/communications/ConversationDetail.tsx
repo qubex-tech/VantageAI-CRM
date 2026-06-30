@@ -52,8 +52,8 @@ export function ConversationDetail({
   }
 
   return (
-    <section className="flex flex-1 flex-col">
-      <header className="border-b border-slate-200 px-8 py-5">
+    <section className="flex flex-1 flex-col w-full">
+      <header className="hidden md:block border-b border-slate-200 px-4 md:px-8 py-4 md:py-5">
         {loading || !conversation ? (
           <div className="space-y-2">
             <div className="h-4 w-40 rounded bg-slate-100 animate-pulse" />
@@ -87,11 +87,31 @@ export function ConversationDetail({
         )}
       </header>
 
-      <div className="flex-1 overflow-y-auto px-8 py-6">
+      {/* Mobile-only conversation info bar */}
+      {conversation && (
+        <div className="md:hidden border-b border-slate-200 px-4 py-2 bg-slate-50">
+          <div className="flex items-center justify-between">
+            <div className="text-xs text-slate-500">
+              {conversation.status} · {conversation.channel.toUpperCase()}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onAssignClick}
+                className="text-xs text-slate-500 hover:text-slate-700"
+              >
+                {conversation.assignee ? conversation.assignee : 'Assign'}
+              </button>
+              <Button size="sm" className="h-7 text-xs">Resolve</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex-1 overflow-y-auto px-4 md:px-8 py-4 md:py-6">
         <MessageTimeline messages={messages} loading={loading} />
       </div>
 
-      <div className="border-t border-slate-200 px-8 py-4">
+      <div className="border-t border-slate-200 px-4 md:px-8 py-3 md:py-4 pb-4 md:pb-4">
         <Composer
           onSend={onSendMessage}
           disabled={sending}

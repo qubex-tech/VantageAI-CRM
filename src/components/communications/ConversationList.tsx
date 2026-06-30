@@ -50,8 +50,8 @@ export function ConversationList({
   }, [loading, onLoadMore, conversations.length])
 
   return (
-    <section className="flex h-full w-[300px] flex-col border-r border-slate-200">
-      <div className="flex items-center justify-between px-6 py-4 text-sm font-medium text-slate-500">
+    <section className="flex h-full w-full md:w-[300px] flex-col border-r border-slate-200">
+      <div className="hidden md:flex items-center justify-between px-6 py-4 text-sm font-medium text-slate-500">
         <span>Conversations</span>
         <button
           onClick={onNewConversation}
@@ -62,7 +62,7 @@ export function ConversationList({
       </div>
       <div className="flex-1 overflow-y-auto">
         {loading ? (
-          <div className="space-y-4 px-6 py-4">
+          <div className="space-y-4 px-4 md:px-6 py-4">
             {Array.from({ length: 6 }).map((_, index) => (
               <div key={index} className="space-y-2">
                 <div className="h-4 w-32 rounded bg-slate-100 animate-pulse" />
@@ -76,7 +76,7 @@ export function ConversationList({
             description="All clear. New messages will appear here."
           />
         ) : (
-          <div className="space-y-1 px-3 pb-6">
+          <div className="space-y-1 px-2 md:px-3 pb-6">
             {conversations.map((conversation) => (
               <ConversationRow
                 key={conversation.id}
@@ -93,6 +93,18 @@ export function ConversationList({
             ) : null}
           </div>
         )}
+      </div>
+      {/* Mobile New Conversation FAB */}
+      <div className="md:hidden absolute bottom-20 right-4">
+        <button
+          onClick={onNewConversation}
+          className="w-14 h-14 rounded-full bg-slate-900 text-white shadow-lg flex items-center justify-center hover:bg-slate-800 active:bg-slate-700 transition-colors"
+          aria-label="New conversation"
+        >
+          <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
       </div>
     </section>
   )
