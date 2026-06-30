@@ -20,7 +20,7 @@ import {
   subDays,
   startOfDay,
 } from 'date-fns'
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, LayoutGrid } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronDown, Calendar as CalendarIcon, LayoutGrid } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 
@@ -330,10 +330,120 @@ export function AppointmentsCalendarView({
 
   const weekDayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
+  const [showMobileMiniCal, setShowMobileMiniCal] = useState(false)
+
   return (
     <div className="flex flex-col lg:flex-row gap-4 font-sans text-gray-900">
-      {/* Sidebar — mini month + legend */}
-      <aside className="w-full lg:w-[272px] flex-shrink-0 space-y-4">
+      {/* Mobile date picker button */}
+      <div className="lg:hidden flex items-center justify-between mb-2">
+        <button
+          onClick={() => setShowMobileMiniCal(!showMobileMiniCal)}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
+        >
+          <CalendarIcon className="h-4 w-4 text-gray-500" />
+          {format(focusDate, 'MMM d, yyyy')}
+          <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showMobileMiniCal ? 'rotate-180' : ''}`} />
+        </button>
+        <div className="flex items-center gap-1">
+          <Button variant="outline" size="sm" onClick={goToToday} className="text-gray-800 h-9 text-xs">
+            Today
+          </Button>
+          <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rounded-none h-9 w-9 px-0"
+              onClick={stepBackward}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rounded-none h-9 w-9 px-0 border-l border-gray-200"
+              onClick={stepForward}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile mini calendar dropdown */}
+      {showMobileMiniCal && (
+        <div className="lg:hidden mb-4">
+          <Card className="border border-gray-200 shadow-sm">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={previousMonthMini}
+                  className="h-8 w-8 p-0"
+                  aria-label="Previous month"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <div className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+                  {format(currentMonth, 'MMMM yyyy')}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={nextMonthMini}
+                  className="h-8 w-8 p-0"
+                  aria-label="Next month"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="grid grid-cols-7 gap-1">
+                {weekDayLabels.map((d) => (
+                  <div
+                    key={d}
+                    className="text-center text-[10px] font-medium uppercase tracking-wide text-gray-500 py-1"
+                  >
+                    {d.charAt(0)}
+                  </div>
+                ))}
+                {miniMonthDays.map((day, dayIdx) => {
+                  const inMonth = isSameMonth(day, currentMonth)
+                  const sel = selectedDate && isSameDay(day, selectedDate)
+                  const viewFocus = isSameDay(day, focusDate) && !sel
+                  const today = isToday(day)
+
+                  return (
+                    <button
+                      key={dayIdx}
+                      type="button"
+                      onClick={() => {
+                        handleMiniDayClick(day)
+                        setShowMobileMiniCal(false)
+                      }}
+                      className={[
+                        'relative flex h-9 items-center justify-center rounded-md text-sm font-medium transition-colors',
+                        !inMonth && 'text-gray-300',
+                        inMonth && 'text-gray-800',
+                        today && !sel && 'ring-2 ring-blue-500 ring-inset',
+                        sel && 'bg-gray-900 text-white',
+                        viewFocus && 'bg-gray-200 text-gray-900',
+                        !sel && !viewFocus && inMonth && 'hover:bg-gray-100',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
+                    >
+                      {format(day, 'd')}
+                    </button>
+                  )
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Sidebar — mini month + legend (desktop only) */}
+      <aside className="hidden lg:block w-[272px] flex-shrink-0 space-y-4">
         <Card className="border border-gray-200 shadow-sm">
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-3">
@@ -424,8 +534,8 @@ export function AppointmentsCalendarView({
 
       {/* Main week grid */}
       <div className="flex-1 min-w-0 border border-gray-200 rounded-xl bg-white shadow-sm overflow-hidden">
-        {/* Toolbar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 border-b border-gray-200 bg-gray-50/80">
+        {/* Toolbar - Desktop only, mobile has separate controls */}
+        <div className="hidden lg:flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 border-b border-gray-200 bg-gray-50/80">
           <div className="text-base font-semibold text-gray-900">
             {layout === 'day' ? (
               <span>{format(focusDate, 'EEEE, MMMM d, yyyy')}</span>
@@ -461,9 +571,23 @@ export function AppointmentsCalendarView({
             </div>
           </div>
         </div>
+        
+        {/* Mobile date range indicator */}
+        <div className="lg:hidden px-4 py-2 border-b border-gray-200 bg-gray-50/80">
+          <div className="text-sm font-medium text-gray-700 text-center">
+            {layout === 'day' ? (
+              <span>{format(focusDate, 'EEEE, MMM d')}</span>
+            ) : (
+              <span>
+                {format(weekStart, 'MMM d')} – {format(weekEnd, 'MMM d')}
+              </span>
+            )}
+          </div>
+        </div>
 
         <div className="overflow-x-auto">
-          <div className={layout === 'day' ? 'min-w-0 w-full' : 'min-w-[720px]'}>
+          {/* On mobile, week view gets horizontal scroll. Day view is full width */}
+          <div className={layout === 'day' ? 'min-w-0 w-full' : 'min-w-[600px] lg:min-w-[720px]'}>
             {/* Day headers + all-day row */}
             <div
               className="grid border-b border-gray-200"
