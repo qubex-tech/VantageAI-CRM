@@ -7,6 +7,7 @@ import { HealixLayoutAdjust } from '@/components/healix/HealixLayoutAdjust'
 import { MainContentWrapper } from '@/components/layout/MainContentWrapper'
 import { NavigationProgress } from '@/components/layout/NavigationProgress'
 import { AppUserProvider } from '@/components/layout/AppUserProvider'
+import { BottomNav } from '@/components/layout/BottomNav'
 import { getAuthenticatedUser } from '@/lib/auth-server'
 import { prisma } from '@/lib/db'
 
@@ -41,6 +42,7 @@ export default async function MainLayout({
             <Sidebar />
             <Header />
             <MainContentWrapper>{children}</MainContentWrapper>
+            <BottomNav />
           </HealixLayoutAdjust>
         </PageHeaderExtrasProvider>
       </SidebarProvider>

@@ -268,6 +268,7 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
   const [notesOpen, setNotesOpen] = useState(false)
   const [patientNotes, setPatientNotes] = useState<PatientNote[]>([])
   const [notesLoading, setNotesLoading] = useState(false)
+  const [showMobileDetails, setShowMobileDetails] = useState(false)
   const healixOpen = useHealixOpen()
   const { setIsPreVisitFocus } = useSidebar()
   
@@ -455,24 +456,23 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
 
   return (
     <div className={cn(
-      "flex h-screen bg-white min-w-0 w-full",
-      // Width is now controlled by CSS custom properties via main-content-healix class
+      "flex flex-col md:flex-row h-[calc(100vh-7.5rem)] md:h-screen bg-white min-w-0 w-full",
     )}>
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0 max-w-full">
         {/* Header Bar */}
-        <div className="border-b border-gray-200 px-6 py-3 flex items-center justify-between bg-white min-w-0">
-          <div className="flex items-center gap-3 min-w-0 flex-shrink">
+        <div className="border-b border-gray-200 px-4 md:px-6 py-3 flex items-center justify-between bg-white min-w-0">
+          <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-shrink">
             <div className="flex items-center gap-2 min-w-0">
               <div className="h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0">
                 <User className="h-4 w-4 text-gray-600" />
               </div>
-              <h1 className="text-lg font-semibold text-gray-900 truncate">{patient.name}</h1>
-              <Star className="h-4 w-4 text-gray-400 flex-shrink-0" />
+              <h1 className="text-base md:text-lg font-semibold text-gray-900 truncate">{patient.name}</h1>
+              <Star className="h-4 w-4 text-gray-400 flex-shrink-0 hidden md:block" />
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0 ml-4">
-            <Button variant="ghost" size="icon">
+          <div className="flex items-center gap-1 md:gap-2 flex-shrink-0 ml-2 md:ml-4">
+            <Button variant="ghost" size="icon" className="hidden md:flex">
               <Clipboard className="h-4 w-4" />
             </Button>
             <Button
@@ -481,6 +481,7 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
               onClick={launchInsuranceAgentFlow}
               aria-label="Start insurance agent call workflow"
               title="Start insurance agent call workflow"
+              className="hidden md:flex"
             >
               <PhoneCall className="h-4 w-4" />
             </Button>
@@ -490,16 +491,28 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
               onClick={() => {
                 setSidebarTab('details')
                 setExpandedSections((prev) => ({ ...prev, formSubmissions: true }))
+                setShowMobileDetails(true)
               }}
               aria-label="Form submissions"
+              className="hidden md:flex"
             >
               <FileText className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" className="hidden md:flex">
               <Share2 className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" className="hidden md:flex">
               <CheckSquare className="h-4 w-4" />
+            </Button>
+            {/* Mobile Details Button */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowMobileDetails(true)}
+              className="md:hidden"
+              aria-label="View patient details"
+            >
+              <User className="h-4 w-4" />
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -536,13 +549,13 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                 </DropdownMenuSub>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" className="hidden md:flex">
               <Bell className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" className="hidden md:flex">
               <HelpCircle className="h-4 w-4" />
             </Button>
-            <div className="h-8 w-8 rounded-full bg-gray-300 ml-2"></div>
+            <div className="h-8 w-8 rounded-full bg-gray-300 ml-2 hidden md:flex"></div>
           </div>
         </div>
 
@@ -560,8 +573,8 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
         )}
 
         {/* Navigation Tabs */}
-        <div className="border-b border-gray-200 px-6 bg-white">
-          <div className="flex gap-6">
+        <div className="border-b border-gray-200 px-4 md:px-6 bg-white overflow-x-auto scrollbar-hide">
+          <div className="flex gap-4 md:gap-6 min-w-max">
             <button
               onClick={() => setActiveTab('overview')}
               className={`px-1 py-3 text-sm font-medium border-b-2 transition-colors ${
@@ -642,7 +655,7 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto px-6 py-6 min-w-0">
+        <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 md:py-6 min-w-0">
           <div className="max-w-4xl w-full min-w-0 mx-auto">
             {activeTab === 'overview' && (
               <>
@@ -655,7 +668,7 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                     </div>
                   </div>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                     {/* Age & Date of Birth */}
                     <div className="border border-gray-200 rounded-lg p-4 bg-white">
                       <div className="flex items-center justify-between">
@@ -1048,13 +1061,125 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
         </div>
       </div>
 
-      {/* Right Sidebar - Adjust width when Healix is open to prevent cutoff */}
+      {/* Mobile Details Overlay */}
+      {showMobileDetails && (
+        <div className="md:hidden fixed inset-0 z-50">
+          <div 
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowMobileDetails(false)}
+          />
+          <div className="absolute right-0 top-0 bottom-0 w-full max-w-sm bg-white shadow-xl animate-in slide-in-from-right duration-300">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">Patient Details</h2>
+              <button
+                onClick={() => setShowMobileDetails(false)}
+                className="p-2 rounded-lg hover:bg-gray-100"
+              >
+                <svg className="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto h-[calc(100%-56px)]">
+              {/* Mobile sidebar tabs */}
+              <div className="border-b border-gray-200 px-4">
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => setSidebarTab('details')}
+                    className={`px-1 py-3 text-sm font-medium border-b-2 transition-colors ${
+                      sidebarTab === 'details'
+                        ? 'border-blue-600 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    Details
+                  </button>
+                  <button
+                    onClick={() => setSidebarTab('comments')}
+                    className={`px-1 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+                      sidebarTab === 'comments'
+                        ? 'border-blue-600 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    <MessageSquare className="h-4 w-4" />
+                    Comments 0
+                  </button>
+                </div>
+              </div>
+              {/* Mobile details content - duplicate of sidebar content */}
+              <div className="px-4 py-6 overflow-y-auto">
+                {sidebarTab === 'details' && (
+                  <div className="space-y-4">
+                    {/* Quick actions for mobile */}
+                    <div className="grid grid-cols-4 gap-2 pb-4 border-b border-gray-200">
+                      <button
+                        onClick={() => { setComposeEmailOpen(true); setShowMobileDetails(false); }}
+                        className="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-gray-50"
+                      >
+                        <Mail className="h-5 w-5 text-gray-600" />
+                        <span className="text-xs text-gray-600">Email</span>
+                      </button>
+                      <button
+                        onClick={() => { setComposeSmsOpen(true); setShowMobileDetails(false); }}
+                        className="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-gray-50"
+                      >
+                        <MessageSquare className="h-5 w-5 text-gray-600" />
+                        <span className="text-xs text-gray-600">SMS</span>
+                      </button>
+                      <button
+                        onClick={() => { launchInsuranceAgentFlow(); setShowMobileDetails(false); }}
+                        className="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-gray-50"
+                      >
+                        <PhoneCall className="h-5 w-5 text-gray-600" />
+                        <span className="text-xs text-gray-600">Call</span>
+                      </button>
+                      <button
+                        onClick={() => { setIsEditing(true); setShowMobileDetails(false); }}
+                        className="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-gray-50"
+                      >
+                        <Pencil className="h-5 w-5 text-gray-600" />
+                        <span className="text-xs text-gray-600">Edit</span>
+                      </button>
+                    </div>
+                    {/* Patient info sections */}
+                    <div className="text-sm text-gray-600 space-y-2">
+                      {patient.email && (
+                        <div className="flex items-center gap-2">
+                          <MailIcon className="h-4 w-4 text-gray-400" />
+                          <span className="truncate">{patient.email}</span>
+                        </div>
+                      )}
+                      {(patient.primaryPhone || patient.phone) && (
+                        <div className="flex items-center gap-2">
+                          <PhoneIcon className="h-4 w-4 text-gray-400" />
+                          <span>{patient.primaryPhone || patient.phone}</span>
+                        </div>
+                      )}
+                      {patient.dateOfBirth && (
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-4 w-4 text-gray-400" />
+                          <span>{formatDateOnly(patient.dateOfBirth, 'MMM d, yyyy')} ({age} yrs)</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {sidebarTab === 'comments' && (
+                  <div className="text-center py-8 text-gray-500 text-sm">
+                    No comments yet
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Right Sidebar - Hidden on mobile, shown on desktop */}
       <div className={cn(
-        "border-l border-gray-200 bg-white flex flex-col overflow-hidden flex-shrink-0 transition-all duration-300",
-        // Default width
+        "hidden md:flex border-l border-gray-200 bg-white flex-col overflow-hidden flex-shrink-0 transition-all duration-300",
         activeTab === 'previsit' ? "w-[26rem]" : "w-80",
-        // When Healix is open on desktop: reduce width significantly to fit
-        // Healix panel takes 384px (md) or 420px (lg), so reduce sidebar proportionally
         healixOpen && activeTab !== 'previsit' && "md:w-56 lg:w-64"
       )}>
         {activeTab !== 'previsit' ? (
@@ -1527,7 +1652,7 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                       </>
                     ) : (
                       <div className="text-sm text-gray-500 italic py-2">
-                        No structured notes. Use "Manage Notes" to add notes.
+                        No structured notes. Use &ldquo;Manage Notes&rdquo; to add notes.
                       </div>
                     )}
                     

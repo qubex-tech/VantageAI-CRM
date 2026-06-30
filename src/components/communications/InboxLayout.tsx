@@ -6,6 +6,8 @@ import { ConversationList } from './ConversationList'
 import { ConversationDetail } from './ConversationDetail'
 import type { Conversation, ConversationView, Message } from './types'
 import { setHealixContextOverride, setHealixPanelOpen } from '@/components/healix/HealixButton'
+import { ArrowLeft, Filter } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 const viewToFilters: Record<ConversationView, { status?: string; assignee?: string }> = {
   Open: { status: 'open' },
@@ -366,31 +368,128 @@ export function InboxLayout({ initialConversationId }: { initialConversationId?:
     // Placeholder for assignee selector; future hook into assignment UI.
   }, [])
 
+  const [mobileView, setMobileView] = useState<'list' | 'detail'>('list')
+  const [showMobileFilters, setShowMobileFilters] = useState(false)
+
+  const handleMobileSelectConversation = (conversationId: string) => {
+    setSelectedId(conversationId)
+    setMobileView('detail')
+  }
+
+  const handleMobileBack = () => {
+    setMobileView('list')
+  }
+
   return (
-    <div className="flex h-[calc(100vh-4.5rem)] w-full overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <Sidebar activeView={view} onChangeView={setView} unreadCount={unreadCount} />
-      <ConversationList
-        conversations={conversations}
-        loading={loadingConversations}
-        selectedId={selectedId}
-        onSelect={handleSelectConversation}
-        onLoadMore={() => setLimit((prev) => prev + 30)}
-        loadingMore={loadingMore}
-        onNewConversation={() => {
-          setSelectedId(null)
-          setSelectedConversation(null)
-          setMessages([])
-        }}
-      />
-      <ConversationDetail
-        conversation={selectedConversation}
-        messages={messages}
-        loading={loadingMessages}
-        onSendMessage={handleSendMessage}
-        onAssignClick={handleAssignClick}
-        onStartConversation={handleStartConversation}
-        sending={sending}
-      />
+    <div className="flex flex-col md:flex-row h-[calc(100vh-7.5rem)] md:h-[calc(100vh-4.5rem)] w-full overflow-hidden md:rounded-xl md:border md:border-slate-200 bg-white">
+      {/* Mobile Header */}
+      <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white">
+        {mobileView === 'detail' && selectedConversation ? (
+          <>
+            <button
+              onClick={handleMobileBack}
+              className="flex items-center gap-2 text-slate-600 hover:text-slate-900"
+            >
+              <ArrowLeft className="h-5 w-5" />
+              <span className="text-sm font-medium">Back</span>
+            </button>
+            <div className="flex-1 text-center">
+              <span className="text-sm font-semibold text-slate-900 truncate">
+                {selectedConversation.patientName}
+              </span>
+            </div>
+            <div className="w-16" />
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-2">
+              <span className="text-lg font-semibold text-slate-900">Inbox</span>
+              {unreadCount > 0 && (
+                <span className="rounded-full bg-slate-900 px-2 py-0.5 text-xs text-white">
+                  {unreadCount}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => setShowMobileFilters(!showMobileFilters)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                showMobileFilters ? "bg-slate-100 text-slate-900" : "text-slate-600 hover:bg-slate-50"
+              )}
+            >
+              <Filter className="h-4 w-4" />
+              {view}
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* Mobile Filters Dropdown */}
+      {showMobileFilters && mobileView === 'list' && (
+        <div className="md:hidden bg-slate-50 border-b border-slate-200 px-4 py-2">
+          <div className="flex flex-wrap gap-2">
+            {(['Open', 'Pending', 'Resolved', 'Mine', 'Team'] as ConversationView[]).map((v) => (
+              <button
+                key={v}
+                onClick={() => {
+                  setView(v)
+                  setShowMobileFilters(false)
+                }}
+                className={cn(
+                  "px-3 py-1.5 rounded-full text-sm font-medium transition-colors",
+                  view === v
+                    ? "bg-slate-900 text-white"
+                    : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                )}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Desktop Sidebar */}
+      <div className="hidden md:block">
+        <Sidebar activeView={view} onChangeView={setView} unreadCount={unreadCount} />
+      </div>
+
+      {/* Conversation List - Hidden on mobile when viewing detail */}
+      <div className={cn(
+        "flex-1 md:flex-none md:w-[300px]",
+        mobileView === 'detail' ? "hidden md:flex" : "flex"
+      )}>
+        <ConversationList
+          conversations={conversations}
+          loading={loadingConversations}
+          selectedId={selectedId}
+          onSelect={handleMobileSelectConversation}
+          onLoadMore={() => setLimit((prev) => prev + 30)}
+          loadingMore={loadingMore}
+          onNewConversation={() => {
+            setSelectedId(null)
+            setSelectedConversation(null)
+            setMessages([])
+            setMobileView('detail')
+          }}
+        />
+      </div>
+
+      {/* Conversation Detail - Shown on mobile only when viewing detail */}
+      <div className={cn(
+        "flex-1",
+        mobileView === 'list' ? "hidden md:flex" : "flex"
+      )}>
+        <ConversationDetail
+          conversation={selectedConversation}
+          messages={messages}
+          loading={loadingMessages}
+          onSendMessage={handleSendMessage}
+          onAssignClick={handleAssignClick}
+          onStartConversation={handleStartConversation}
+          sending={sending}
+        />
+      </div>
     </div>
   )
 }
