@@ -1,15 +1,19 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { PrismaClient } from '@prisma/client'
 
-const prisma = new PrismaClient()
+// Skip database tests if no DATABASE_URL
+const shouldSkip = !process.env.DATABASE_URL
 
-describe('Tenant Scoping', () => {
+const prisma = shouldSkip ? null : new PrismaClient()
+
+describe.skipIf(shouldSkip)('Tenant Scoping', () => {
   let practice1Id: string
   let practice2Id: string
   let patient1Id: string
   let patient2Id: string
 
   beforeAll(async () => {
+    if (!prisma) return
     // Create two practices
     const practice1 = await prisma.practice.create({
       data: {
@@ -52,13 +56,17 @@ describe('Tenant Scoping', () => {
   })
 
   afterAll(async () => {
+    if (!prisma) return
     // Cleanup
-    await prisma.patient.deleteMany({ where: { practiceId: { in: [practice1Id, practice2Id] } } })
-    await prisma.practice.deleteMany({ where: { id: { in: [practice1Id, practice2Id] } } })
+    if (practice1Id && practice2Id) {
+      await prisma.patient.deleteMany({ where: { practiceId: { in: [practice1Id, practice2Id] } } })
+      await prisma.practice.deleteMany({ where: { id: { in: [practice1Id, practice2Id] } } })
+    }
     await prisma.$disconnect()
   })
 
   it('should only return patients for the specified practice', async () => {
+    if (!prisma) return
     const patients = await prisma.patient.findMany({
       where: { practiceId: practice1Id },
     })
@@ -69,6 +77,7 @@ describe('Tenant Scoping', () => {
   })
 
   it('should not allow cross-tenant access', async () => {
+    if (!prisma) return
     // Try to access patient from practice1 using practice2's ID
     const patient = await prisma.patient.findFirst({
       where: {
@@ -81,6 +90,7 @@ describe('Tenant Scoping', () => {
   })
 
   it('should enforce practiceId on all queries', async () => {
+    if (!prisma) return
     const allPatients = await prisma.patient.findMany()
     const practice1Patients = allPatients.filter((p: any) => p.practiceId === practice1Id)
     const practice2Patients = allPatients.filter((p: any) => p.practiceId === practice2Id)
