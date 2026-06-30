@@ -1,14 +1,19 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { PrismaClient } from '@prisma/client'
-import { findOrCreatePatientByPhone, bookAppointment } from '@/lib/agentActions'
 
-const prisma = new PrismaClient()
+// Skip database tests if no DATABASE_URL
+const shouldSkip = !process.env.DATABASE_URL
 
-describe('Agent Actions', () => {
+const prisma = shouldSkip ? null : new PrismaClient()
+
+describe.skipIf(shouldSkip)('Agent Actions', () => {
   let practiceId: string
   let patientId: string
 
   beforeAll(async () => {
+    if (!prisma) return
+    // Dynamically import to avoid module load errors when DATABASE_URL is missing
+    const { findOrCreatePatientByPhone } = await import('@/lib/agentActions')
     const practice = await prisma.practice.create({
       data: {
         name: 'Test Practice',
@@ -19,6 +24,7 @@ describe('Agent Actions', () => {
   })
 
   afterAll(async () => {
+    if (!prisma || !practiceId) return
     await prisma.appointment.deleteMany({ where: { practiceId } })
     await prisma.patient.deleteMany({ where: { practiceId } })
     await prisma.practice.delete({ where: { id: practiceId } })
@@ -26,6 +32,8 @@ describe('Agent Actions', () => {
   })
 
   it('should find or create patient by phone', async () => {
+    if (!prisma) return
+    const { findOrCreatePatientByPhone } = await import('@/lib/agentActions')
     const result = await findOrCreatePatientByPhone(
       practiceId,
       '+1555999999',
@@ -49,6 +57,8 @@ describe('Agent Actions', () => {
   })
 
   it('should require name for new patients', async () => {
+    if (!prisma) return
+    const { findOrCreatePatientByPhone } = await import('@/lib/agentActions')
     await expect(
       findOrCreatePatientByPhone(practiceId, '+1555888888')
     ).rejects.toThrow('Patient name is required')
