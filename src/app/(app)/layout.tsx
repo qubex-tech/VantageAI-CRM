@@ -5,6 +5,7 @@ import { PageHeaderExtrasProvider } from '@/components/layout/PageHeaderExtrasCo
 import { Header } from '@/components/layout/Header'
 import { HealixLayoutAdjust } from '@/components/healix/HealixLayoutAdjust'
 import { MainContentWrapper } from '@/components/layout/MainContentWrapper'
+import { BottomNav } from '@/components/layout/BottomNav'
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
@@ -14,6 +15,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <Sidebar />
           <Header />
           <MainContentWrapper>{children}</MainContentWrapper>
+          <BottomNav />
         </HealixLayoutAdjust>
       </PageHeaderExtrasProvider>
     </SidebarProvider>
