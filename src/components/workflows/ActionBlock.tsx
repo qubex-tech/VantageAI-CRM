@@ -93,7 +93,7 @@ export function ActionBlock({ step, onUpdate, onRemove }: ActionBlockProps) {
                   <SelectValue placeholder="Select recipient type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="patient_email">Patient's Email Address</SelectItem>
+                  <SelectItem value="patient_email">Patient&apos;s Email Address</SelectItem>
                   <SelectItem value="custom">Custom Email</SelectItem>
                 </SelectContent>
               </Select>

@@ -1267,7 +1267,7 @@ function TestSendForm({ templateId, channel }: { templateId: string; channel: 'e
           <div className="font-medium">Test {channel === 'email' ? 'email' : 'SMS'} sent successfully!</div>
           {channel === 'email' && (
             <div className="mt-1 text-xs text-green-600">
-              Check your inbox (and spam folder) for the test email. If you don't receive it, verify your sender email/domain in Resend.
+              Check your inbox (and spam folder) for the test email. If you don&apos;t receive it, verify your sender email/domain in Resend.
             </div>
           )}
         </div>

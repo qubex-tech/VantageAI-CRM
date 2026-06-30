@@ -111,7 +111,7 @@ export function PreferencesForm({ initialPreferences }: PreferencesFormProps) {
           </SelectContent>
         </Select>
         <p className="text-xs text-gray-500 mt-1">
-          Choose how you'd prefer to receive communications from the practice
+          Choose how you&apos;d prefer to receive communications from the practice
         </p>
       </div>
 

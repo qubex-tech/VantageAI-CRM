@@ -9,7 +9,7 @@ export default function CallNotFound() {
         <CardContent className="py-12 text-center">
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Call Not Found</h2>
           <p className="text-sm text-gray-500 mb-6">
-            The call you're looking for doesn't exist or you don't have access to it.
+            The call you&apos;re looking for doesn&apos;t exist or you don&apos;t have access to it.
           </p>
           <Link href="/calls">
             <Button variant="outline">Back to Calls</Button>
