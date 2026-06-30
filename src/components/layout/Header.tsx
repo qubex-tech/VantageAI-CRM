@@ -55,15 +55,17 @@ export function Header() {
   return (
     <header
       className={cn(
-        'fixed top-0 right-0 z-40 flex h-14 items-center border-b border-gray-200 bg-white px-4 transition-all duration-300 ease-in-out max-w-full',
+        'fixed top-0 right-0 z-30 flex h-14 items-center border-b border-gray-200 bg-white px-4 transition-all duration-300 ease-in-out max-w-full',
+        'left-0 pl-16',
+        'md:pl-4',
         effectiveCollapsed ? 'md:left-16' : 'md:left-64'
       )}
     >
       <div className="flex w-full items-center justify-between gap-4 min-w-0">
-        <h1 className="text-lg font-semibold text-gray-900 tracking-tight truncate shrink-0">
+        <h1 className="text-base md:text-lg font-semibold text-gray-900 tracking-tight truncate shrink min-w-0">
           {screenTitle}
         </h1>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1 md:gap-2 shrink-0">
           {extras}
           <HealixButton
             conversationId={conversationIdMatch?.[1]}
