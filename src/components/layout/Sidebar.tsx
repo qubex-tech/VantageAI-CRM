@@ -175,19 +175,23 @@ export function Sidebar() {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed left-0 top-0 h-full bg-white border-r border-gray-200 z-40 transition-all duration-300 ease-in-out",
-          // Mobile: slide in from left
+          "fixed left-0 top-0 bg-white border-r border-gray-200 transition-all duration-300 ease-in-out",
+          // On mobile: slide in/out, sit above overlay (z-45 equivalent via z-[45])
+          // Stop at BottomNav height so logout is always visible
+          "h-[calc(100dvh-4rem)] md:h-full",
+          "z-[45] md:z-40",
           isOpen ? "translate-x-0" : "-translate-x-full",
-          "md:translate-x-0", // Desktop: always visible
-          // Collapsed state (desktop only)
+          "md:translate-x-0",
           effectiveCollapsed ? "md:w-16" : "md:w-64",
-          "w-64" // Mobile width
+          "w-72" // slightly wider on mobile for comfort
         )}
       >
         <div className="flex flex-col h-full">
-          {/* Logo/Header - padding aligned with nav for a clean, consistent inset */}
+          {/* Logo/Header */}
           <div className={cn(
-            "flex items-center justify-between gap-3 border-b border-gray-200 px-4",
+            "flex items-center justify-between gap-3 border-b border-gray-200",
+            // On mobile: indent enough to clear the fixed hamburger/X button (left-4 + p-2 + icon = ~52px)
+            "pl-14 pr-4 md:px-4",
             !effectiveCollapsed && practiceName ? "h-auto min-h-14 py-3" : "h-14"
           )}>
             {!effectiveCollapsed && (
@@ -229,7 +233,7 @@ export function Sidebar() {
             </button>
           </div>
 
-          {/* Navigation - same horizontal padding as header for aligned, clean look */}
+          {/* Navigation */}
           <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
             {navItems.map((item) => {
               const Icon = item.icon
@@ -241,7 +245,7 @@ export function Sidebar() {
                   href={item.href}
                   onClick={() => setIsOpen(false)}
                   className={cn(
-                    "relative flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                    "relative flex items-center gap-3 px-3 py-2.5 md:py-2 rounded-md text-sm font-medium transition-colors",
                     "hover:bg-gray-100",
                     isActive
                       ? "bg-gray-100 text-gray-900"
@@ -270,7 +274,7 @@ export function Sidebar() {
             })}
           </nav>
 
-          {/* Logout button */}
+          {/* Logout button — always visible above BottomNav */}
           <div className="px-4 py-4 border-t border-gray-200">
             <div className={cn(
               "flex items-center",
