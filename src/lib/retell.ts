@@ -388,6 +388,7 @@ export async function handleToolCall(
           name: parameters.name,
           dateOfBirth: parameters.dateOfBirth,
           email: parameters.email,
+          forceCreate: parameters.forceCreate === true,
         }
       )
 

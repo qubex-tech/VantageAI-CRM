@@ -68,6 +68,23 @@ export const getUpcomingAppointmentsInput = z.object({
   }
 )
 
+export const resolvePatientForSchedulingInput = z.object({
+  phone: z.string().min(1).optional(),
+  first_name: z.string().min(1).optional(),
+  last_name: z.string().min(1).optional(),
+  dob: z.string().min(1).optional(),
+  name: z.string().min(1).optional(),
+  email: z.string().email().optional().or(z.literal('')),
+  /** When true, create a new CRM (+ OD) patient even if the phone matches someone else. */
+  force_create: z.boolean().optional().default(false),
+}).refine(
+  (v) => !!v.phone || (!!v.first_name && !!v.last_name && !!v.dob) || !!v.name,
+  {
+    message: 'Provide phone, or name + dob, or full name with phone',
+    path: ['phone'],
+  }
+)
+
 export type GetPatientIdentityInput = z.infer<typeof getPatientIdentityInput>
 export type ListInsurancePoliciesInput = z.infer<typeof listInsurancePoliciesInput>
 export type GetInsurancePolicyDetailsInput = z.infer<typeof getInsurancePolicyDetailsInput>
@@ -75,3 +92,4 @@ export type GetVerificationBundleInput = z.infer<typeof getVerificationBundleInp
 export type SearchPatientByDemographicsInput = z.infer<typeof searchPatientByDemographicsInput>
 export type GetInsuranceVerificationContextInput = z.infer<typeof getInsuranceVerificationContextInput>
 export type GetUpcomingAppointmentsInput = z.infer<typeof getUpcomingAppointmentsInput>
+export type ResolvePatientForSchedulingInput = z.infer<typeof resolvePatientForSchedulingInput>

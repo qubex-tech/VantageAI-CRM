@@ -5,6 +5,26 @@ import { buildToolLogFromInvocation, logMcpToolCall } from './request-log'
 
 export const TOOL_DEFINITIONS = [
   {
+    name: 'resolve_patient_for_scheduling',
+    description:
+      'Resolve or create a patient for scheduling. Always returns ground-truth facts: caller demographics, CRM chart, linked Open Dental chart (PatNum, name, DOB), phone collisions, identity_match, and recommendation (use_existing | create_new | disambiguate | verify_before_booking). Phone numbers are NOT unique — family members may share one. Use force_create=true to register a separate patient on the same phone when name+DOB differ.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        phone: { type: 'string' },
+        first_name: { type: 'string' },
+        last_name: { type: 'string' },
+        dob: { type: 'string', description: 'YYYY-MM-DD or MM/DD/YYYY — year is required' },
+        name: { type: 'string' },
+        email: { type: 'string' },
+        force_create: { type: 'boolean', default: false },
+      },
+      description: 'Provide phone and caller demographics. Call before find_or_create_patient or book_appointment.',
+    },
+    inputSchema: schemas.resolvePatientForSchedulingInput,
+    handler: handlers.handleResolvePatientForScheduling,
+  },
+  {
     name: 'get_insurance_verification_context',
     description:
       'Single-call tool: resolve patient and return verification fields for the voice agent: patient_first_name, patient_last_name, patient_dob (YYYY-MM-DD), member_id, group_number.',

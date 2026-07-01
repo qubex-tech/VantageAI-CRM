@@ -18,6 +18,13 @@ import {
 import { looksLikePhoneNumber } from './retell-patient-identity'
 import { maybeNotifyUnsuccessfulTransfer } from './outbound-customer-notifications'
 import { persistInsuranceVerificationNote } from './insurance-verification-note'
+import {
+  buildSafePatientUpdate,
+  demographicsMatch,
+  fetchOpenDentalChartFacts,
+  phoneMatchKey,
+  resolveDemographics,
+} from './patient-identity'
 
 function metadataObjectFromRow(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -855,75 +862,57 @@ export async function processCallDataForPatient(
 
   // Normalize phone number - ensure it's a string before calling replace
   const normalizedPhone = phoneNumber ? String(phoneNumber).replace(/\D/g, '') : null
+  const incomingKey = normalizedPhone ? phoneMatchKey(normalizedPhone) : ''
+  const callerDemo = resolveDemographics({
+    name: patientName ?? undefined,
+    dateOfBirth: callData.patient_dob,
+  })
 
-  // Try to find existing patient by phone number
-  let patient = null
-  if (normalizedPhone) {
-    patient = await prisma.patient.findFirst({
-      where: {
-        practiceId,
-        phone: normalizedPhone,
-        deletedAt: null,
-      },
-    })
+  const allPatients = await prisma.patient.findMany({
+    where: { practiceId, deletedAt: null },
+    select: {
+      id: true,
+      name: true,
+      firstName: true,
+      lastName: true,
+      dateOfBirth: true,
+      phone: true,
+      primaryPhone: true,
+      externalEhrId: true,
+      notes: true,
+    },
+  })
 
-    // If no exact match, try matching with normalized versions
-    if (!patient) {
-      const allPatients = await prisma.patient.findMany({
-        where: {
-          practiceId,
-          deletedAt: null,
-        },
-        select: {
-          id: true,
-          phone: true,
-        },
-      })
+  let patient: (typeof allPatients)[number] | null = null
 
-      const matchedPatient = allPatients.find(p => p.phone ? String(p.phone).replace(/\D/g, '') === normalizedPhone : false)
-      if (matchedPatient) {
-        patient = await prisma.patient.findUnique({
-          where: { id: matchedPatient.id },
+  // Prefer exact demographics (name + full DOB) over phone-only matching.
+  if (callerDemo.firstName && callerDemo.lastName && callerDemo.dateOfBirth) {
+    patient =
+      allPatients.find((p) =>
+        demographicsMatch(p, {
+          firstName: callerDemo.firstName!,
+          lastName: callerDemo.lastName!,
+          dateOfBirth: callerDemo.dateOfBirth!,
         })
-      }
-    }
+      ) ?? null
   }
 
-  // Also try to find by name if phone match failed
-  if (!patient && patientName) {
-    patient = await prisma.patient.findFirst({
-      where: {
-        practiceId,
-        name: {
-          contains: patientName,
-          mode: 'insensitive',
-        },
-        deletedAt: null,
-      },
-    })
+  if (!patient && incomingKey) {
+    const phoneMatches = allPatients.filter(
+      (p) =>
+        phoneMatchKey(p.phone) === incomingKey || phoneMatchKey(p.primaryPhone) === incomingKey
+    )
+    if (phoneMatches.length === 1 && demographicsMatch(phoneMatches[0], { name: patientName ?? undefined, dateOfBirth: callData.patient_dob })) {
+      patient = phoneMatches[0]
+    }
+    // Phone collision with different identity → do not attach; a new patient will be created below.
   }
 
   let isNew = false
-  const updateData: any = {}
-
-  // Prepare update/create data
-  if (patientName && patientName !== patient?.name) {
-    updateData.name = patientName
-  }
+  const updateData: Record<string, unknown> = {}
 
   if (normalizedPhone && normalizedPhone !== patient?.phone) {
     updateData.phone = normalizedPhone
-  }
-
-  // Parse age if provided (convert to date of birth estimate)
-  if (callData.user_age) {
-    const age = typeof callData.user_age === 'string' ? parseInt(callData.user_age) : callData.user_age
-    if (!isNaN(age) && age > 0 && age < 150) {
-      // Estimate date of birth from age (use Jan 1 of estimated year)
-      const currentYear = new Date().getFullYear()
-      const estimatedBirthYear = currentYear - age
-      updateData.dateOfBirth = new Date(estimatedBirthYear, 0, 1)
-    }
   }
 
   if (callData.patient_dob && !updateData.dateOfBirth) {
@@ -947,10 +936,19 @@ export async function processCallDataForPatient(
   }
 
   if (patient) {
-    // Update existing patient
+    const odChart = await fetchOpenDentalChartFacts(practiceId, patient.externalEhrId)
+    const safeIdentity = buildSafePatientUpdate(
+      patient,
+      { name: patientName ?? undefined, dateOfBirth: callData.patient_dob },
+      odChart
+    )
+    const mergedUpdate = { ...safeIdentity, ...updateData }
+    // Notes-only fields from updateData should still apply
+    if (updateData.notes) mergedUpdate.notes = updateData.notes
+
     patient = await prisma.patient.update({
       where: { id: patient.id },
-      data: updateData,
+      data: mergedUpdate,
     })
 
     // Create audit log (skip when userId is null - system-initiated actions)
@@ -965,7 +963,7 @@ export async function processCallDataForPatient(
           after: {
             source: 'retell_call',
             callId,
-            updatedFields: Object.keys(updateData),
+            updatedFields: Object.keys(mergedUpdate),
           },
         },
       })
@@ -982,14 +980,23 @@ export async function processCallDataForPatient(
     // Phone is required, use a placeholder if not available
     const phoneForCreation = normalizedPhone || '000-000-0000'
 
+    const dobForCreate =
+      updateData.dateOfBirth instanceof Date
+        ? updateData.dateOfBirth
+        : callerDemo.dateOfBirth
+          ? new Date(`${callerDemo.dateOfBirth}T00:00:00.000Z`)
+          : new Date('1900-01-01')
+    const notesForCreate =
+      typeof updateData.notes === 'string' ? updateData.notes : undefined
+
     const newPatient = await prisma.patient.create({
       data: {
         practiceId,
         name: patientName,
         phone: phoneForCreation,
-        dateOfBirth: updateData.dateOfBirth || new Date('1900-01-01'),
+        dateOfBirth: dobForCreate,
         preferredContactMethod: 'phone',
-        notes: updateData.notes || undefined,
+        notes: notesForCreate,
       },
     })
 

@@ -19,16 +19,17 @@ import {
 import { formatOpenDentalLocalDateTime } from '@/lib/integrations/opendental/commlogWriteback'
 import { buildAppointmentExternalId } from '@/lib/integrations/opendental/appointmentSync'
 import { writeBackAppointmentToOpenDental } from '@/lib/integrations/opendental/appointmentWriteback'
-
-/**
- * Canonical phone key for matching: digits only, with the US country code dropped
- * so E.164 inputs (e.g. "+15369875621") match locally-stored 10-digit numbers
- * (e.g. "(536) 987-5621").
- */
-function phoneMatchKey(value: string | null | undefined): string {
-  const digits = String(value ?? '').replace(/\D/g, '')
-  return digits.length > 10 ? digits.slice(-10) : digits
-}
+import {
+  buildPatientIdentityFacts,
+  buildSafePatientUpdate,
+  demographicsMatch,
+  enrichPhoneCollisionsWithOdCharts,
+  fetchOpenDentalChartFacts,
+  openDentalChartMatchesCaller,
+  phoneMatchKey,
+  resolveDemographics,
+  type PatientIdentityFacts,
+} from '@/lib/patient-identity'
 
 /** Coerce a date or datetime string to a bare "yyyy-MM-dd" for Open Dental slot queries. */
 function toDateOnly(value: string): string {
@@ -40,13 +41,18 @@ function toDateOnly(value: string): string {
 }
 
 export interface FindOrCreatePatientResult {
-  patientId: string
+  /** Null when requires_agent_decision — existing phone match found but caller identity differs. */
+  patientId: string | null
   isNew: boolean
+  /** True when caller must confirm same person vs new family member before proceeding. */
+  requires_agent_decision: boolean
   patient: {
     id: string
     name: string
     phone: string
-  }
+  } | null
+  /** Ground-truth identity facts for the Retell agent (also returned by MCP resolve_patient_for_scheduling). */
+  facts: PatientIdentityFacts
 }
 
 export interface AvailableSlot {
@@ -72,56 +78,115 @@ export async function findOrCreatePatientByPhone(
     name?: string
     dateOfBirth?: string
     email?: string
+    /** When true, always create a new CRM patient even if the phone matches someone else (same phone is allowed). */
+    forceCreate?: boolean
   }
 ): Promise<FindOrCreatePatientResult> {
-  // Normalize phone for storage (digits only); match on the last 10 digits so
-  // E.164 (+1...) inputs line up with locally-stored 10-digit numbers.
   const normalizedPhone = String(phone).replace(/\D/g, '')
   const incomingKey = phoneMatchKey(phone)
+  const caller = resolveDemographics(details ?? {})
 
-  let patient: Awaited<ReturnType<typeof prisma.patient.findUnique>> | null = null
+  const allPatients = await prisma.patient.findMany({
+    where: { practiceId, deletedAt: null },
+    select: {
+      id: true,
+      name: true,
+      firstName: true,
+      lastName: true,
+      dateOfBirth: true,
+      phone: true,
+      primaryPhone: true,
+      externalEhrId: true,
+      email: true,
+    },
+  })
 
-  if (incomingKey) {
-    const candidates = await prisma.patient.findMany({
-      where: { practiceId, deletedAt: null },
-      select: { id: true, phone: true, primaryPhone: true, externalEhrId: true },
-    })
-    const matches = candidates.filter(
-      (p) =>
-        phoneMatchKey(p.phone) === incomingKey ||
-        phoneMatchKey(p.primaryPhone) === incomingKey
-    )
-    // Prefer an Open Dental-linked record so existing synced patients win over any
-    // unlinked duplicates that happen to share the same phone number.
-    const chosen =
-      matches.find((p) => p.externalEhrId?.startsWith('opendental:')) ?? matches[0]
-    if (chosen) {
-      patient = await prisma.patient.findUnique({ where: { id: chosen.id } })
+  const phoneCollisions = incomingKey
+    ? allPatients.filter(
+        (p) =>
+          phoneMatchKey(p.phone) === incomingKey || phoneMatchKey(p.primaryPhone) === incomingKey
+      )
+    : []
+
+  let patient: (typeof allPatients)[number] | null = null
+  let isNew = false
+  const callerHasFullIdentity = Boolean(
+    caller.firstName && caller.lastName && caller.dateOfBirth
+  )
+
+  if (!details?.forceCreate) {
+    // Prefer an exact demographics match (name + full DOB) anywhere in the practice.
+    if (caller.firstName && caller.lastName && caller.dateOfBirth) {
+      patient =
+        allPatients.find((p) =>
+          demographicsMatch(p, {
+            firstName: caller.firstName!,
+            lastName: caller.lastName!,
+            dateOfBirth: caller.dateOfBirth!,
+          })
+        ) ?? null
+    }
+
+    // Phone alone is not sufficient — only reuse when demographics also match.
+    if (!patient && phoneCollisions.length === 1) {
+      const only = phoneCollisions[0]
+      if (demographicsMatch(only, details ?? {})) {
+        patient = only
+      }
     }
   }
 
-  let isNew = false
+  // Single phone match and caller did not provide conflicting identity — reuse existing chart.
+  if (!patient && !details?.forceCreate && phoneCollisions.length === 1 && !callerHasFullIdentity) {
+    patient = phoneCollisions[0]
+  }
+
+  // Phone match but caller-provided name+DOB conflicts with every collision → return facts; let agent decide.
+  if (!patient && !details?.forceCreate && phoneCollisions.length > 0 && callerHasFullIdentity) {
+    const enriched = await enrichPhoneCollisionsWithOdCharts(practiceId, phoneCollisions)
+    const primaryOd = enriched[0]?.open_dental_chart ?? null
+    const facts = buildPatientIdentityFacts({
+      caller: details ?? {},
+      selectedPatient: null,
+      phoneCollisions,
+      enrichedPhoneCollisions: enriched,
+      openDentalChart: primaryOd,
+      isNew: false,
+      requiresAgentDecision: true,
+    })
+    return {
+      patientId: null,
+      isNew: false,
+      requires_agent_decision: true,
+      patient: null,
+      facts,
+    }
+  }
 
   if (!patient) {
-    // Create new patient
-    if (!details?.name) {
+    if (!details?.name && !caller.fullName) {
       throw new Error('Patient name is required for new patients')
     }
 
+    const dobIso = caller.dateOfBirth
     patient = await prisma.patient.create({
       data: {
         practiceId,
-        name: details.name,
+        name: details?.name || caller.fullName!,
+        firstName: caller.firstName ?? undefined,
+        lastName: caller.lastName ?? undefined,
         phone: normalizedPhone,
-        dateOfBirth: details.dateOfBirth ? new Date(details.dateOfBirth) : new Date('1900-01-01'),
-        email: details.email || undefined,
+        primaryPhone: normalizedPhone,
+        dateOfBirth: dobIso
+          ? new Date(`${dobIso}T00:00:00.000Z`)
+          : new Date('1900-01-01'),
+        email: details?.email || undefined,
         preferredContactMethod: 'phone',
       },
     })
 
     isNew = true
 
-    // Create timeline entry using new activity logging system
     const { logCustomActivity } = await import('@/lib/patient-activity')
     await logCustomActivity({
       patientId: patient.id,
@@ -130,8 +195,6 @@ export async function findOrCreatePatientByPhone(
       description: 'Patient was created during a phone conversation',
     })
 
-    // Best-effort: create + link the patient in Open Dental so they can be
-    // booked into the OD schedule later in the same call. No-ops when OD is off.
     try {
       const { createOpenDentalPatientFromCrm } = await import(
         '@/lib/integrations/opendental/patientWriteback'
@@ -148,12 +211,8 @@ export async function findOrCreatePatientByPhone(
       console.error('[OpenDental] Voice patient create writeback failed', error)
     }
   } else if (details) {
-    // Update existing patient with provided details
-    const updateData: any = {}
-    if (details.name) updateData.name = details.name
-    if (details.email) updateData.email = details.email
-    if (details.dateOfBirth) updateData.dateOfBirth = new Date(details.dateOfBirth)
-
+    const odChart = await fetchOpenDentalChartFacts(practiceId, patient.externalEhrId)
+    const updateData = buildSafePatientUpdate(patient, details, odChart)
     if (Object.keys(updateData).length > 0) {
       patient = await prisma.patient.update({
         where: { id: patient.id },
@@ -162,15 +221,104 @@ export async function findOrCreatePatientByPhone(
     }
   }
 
+  const odChart = await fetchOpenDentalChartFacts(practiceId, patient.externalEhrId)
+  const enriched = await enrichPhoneCollisionsWithOdCharts(practiceId, phoneCollisions)
+  const facts = buildPatientIdentityFacts({
+    caller: details ?? {},
+    selectedPatient: patient,
+    phoneCollisions,
+    enrichedPhoneCollisions: enriched,
+    openDentalChart: odChart,
+    isNew,
+  })
+
   return {
     patientId: patient.id,
     isNew,
+    requires_agent_decision: facts.requires_agent_decision,
     patient: {
       id: patient.id,
       name: patient.name,
       phone: patient.phone,
     },
+    facts,
   }
+}
+
+/**
+ * Read-only patient resolution for MCP — returns ground-truth identity facts without creating.
+ */
+export async function lookupPatientForScheduling(
+  practiceId: string,
+  input: {
+    phone?: string
+    name?: string
+    firstName?: string
+    lastName?: string
+    dateOfBirth?: string
+  }
+): Promise<{ patientId: string | null; facts: PatientIdentityFacts }> {
+  const incomingKey = input.phone ? phoneMatchKey(input.phone) : ''
+  const caller = resolveDemographics(input)
+
+  const allPatients = await prisma.patient.findMany({
+    where: { practiceId, deletedAt: null },
+    select: {
+      id: true,
+      name: true,
+      firstName: true,
+      lastName: true,
+      dateOfBirth: true,
+      phone: true,
+      primaryPhone: true,
+      externalEhrId: true,
+    },
+  })
+
+  const phoneCollisions = incomingKey
+    ? allPatients.filter(
+        (p) =>
+          phoneMatchKey(p.phone) === incomingKey || phoneMatchKey(p.primaryPhone) === incomingKey
+      )
+    : []
+
+  let selected: (typeof allPatients)[number] | null = null
+
+  if (caller.firstName && caller.lastName && caller.dateOfBirth) {
+    selected =
+      allPatients.find((p) =>
+        demographicsMatch(p, {
+          firstName: caller.firstName!,
+          lastName: caller.lastName!,
+          dateOfBirth: caller.dateOfBirth!,
+        })
+      ) ?? null
+  }
+
+  if (!selected && phoneCollisions.length === 1 && demographicsMatch(phoneCollisions[0], input)) {
+    selected = phoneCollisions[0]
+  }
+
+  const callerHasFullIdentity = Boolean(
+    caller.firstName && caller.lastName && caller.dateOfBirth
+  )
+
+  const enriched = await enrichPhoneCollisionsWithOdCharts(practiceId, phoneCollisions)
+  const odChart = selected
+    ? await fetchOpenDentalChartFacts(practiceId, selected.externalEhrId)
+    : enriched[0]?.open_dental_chart ?? null
+
+  const facts = buildPatientIdentityFacts({
+    caller: input,
+    selectedPatient: selected,
+    phoneCollisions,
+    enrichedPhoneCollisions: enriched,
+    openDentalChart: odChart,
+    isNew: false,
+    requiresAgentDecision: !selected && phoneCollisions.length > 0 && callerHasFullIdentity,
+  })
+
+  return { patientId: selected?.id ?? null, facts }
 }
 
 /**
@@ -292,6 +440,19 @@ export async function bookAppointment(
   // Route booking to Open Dental when the practice schedules in its EHR.
   const scheduling = await getSchedulingSettings(practiceId)
   if (scheduling.mode === 'open_dental') {
+    const odChart = await fetchOpenDentalChartFacts(practiceId, patient.externalEhrId)
+    if (odChart && !openDentalChartMatchesCaller(odChart, patient)) {
+      throw new Error(
+        `Cannot book: CRM patient "${patient.name}" (DOB ${patient.dateOfBirth?.toISOString().slice(0, 10) ?? 'unknown'}) ` +
+          `is linked to Open Dental PatNum ${odChart.pat_num} (${odChart.first_name} ${odChart.last_name}, DOB ${odChart.birthdate ?? 'unknown'}). ` +
+          `Resolve identity with resolve_patient_for_scheduling (MCP) or find_or_create_patient with forceCreate before booking.`
+      )
+    }
+    if (!patient.externalEhrId?.startsWith('opendental:')) {
+      throw new Error(
+        'Patient is not linked to Open Dental. Call find_or_create_patient first and confirm facts.identity_match is true before booking.'
+      )
+    }
     return bookAppointmentViaOpenDental({
       practiceId,
       patientId,

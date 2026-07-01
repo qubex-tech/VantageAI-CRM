@@ -145,17 +145,23 @@ export async function upsertPatientFromOpenDental(params: {
   }
 
   // Try to merge into an existing unlinked CRM patient before creating a new record.
+  // Phone alone is NOT sufficient — family members often share a number.
   const mergeOrConditions: Array<Record<string, unknown>> = []
   if (mapped.email) {
     mergeOrConditions.push({ email: { equals: mapped.email, mode: 'insensitive' } })
   }
-  if (mapped.primaryPhone) {
-    mergeOrConditions.push({ primaryPhone: mapped.primaryPhone })
-    mergeOrConditions.push({ phone: mapped.primaryPhone })
-  }
   if (mapped.name && mapped.dateOfBirth) {
     mergeOrConditions.push({
       AND: [
+        { name: { equals: mapped.name, mode: 'insensitive' } },
+        { dateOfBirth: mapped.dateOfBirth },
+      ],
+    })
+  }
+  if (mapped.primaryPhone && mapped.name && mapped.dateOfBirth) {
+    mergeOrConditions.push({
+      AND: [
+        { OR: [{ primaryPhone: mapped.primaryPhone }, { phone: mapped.primaryPhone }] },
         { name: { equals: mapped.name, mode: 'insensitive' } },
         { dateOfBirth: mapped.dateOfBirth },
       ],
@@ -178,11 +184,11 @@ export async function upsertPatientFromOpenDental(params: {
         where: { id: mergeCandidate.id },
         data: {
           externalEhrId: mapped.externalEhrId,
-          firstName: mergeCandidate.firstName || mapped.firstName,
-          lastName: mergeCandidate.lastName || mapped.lastName,
-          name: mergeCandidate.name || mapped.name,
-          preferredName: mergeCandidate.preferredName || mapped.preferredName,
-          dateOfBirth: mergeCandidate.dateOfBirth || mapped.dateOfBirth,
+          firstName: mapped.firstName || mergeCandidate.firstName,
+          lastName: mapped.lastName || mergeCandidate.lastName,
+          name: mapped.name || mergeCandidate.name,
+          preferredName: mapped.preferredName || mergeCandidate.preferredName,
+          dateOfBirth: mapped.dateOfBirth || mergeCandidate.dateOfBirth,
           gender: mergeCandidate.gender || mapped.gender,
           primaryPhone: mergeCandidate.primaryPhone || mapped.primaryPhone,
           secondaryPhone: mergeCandidate.secondaryPhone || mapped.secondaryPhone,

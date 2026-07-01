@@ -3,6 +3,11 @@ import { computeReadiness } from './readiness'
 import { writeMcpAuditLog, collectFieldPaths } from './audit'
 import { buildVerificationAgentFields, formatPatientDob } from './verification-fields'
 import { formatAppointmentForVoice } from '@/lib/appointments/voice-context'
+import {
+  fetchOpenDentalChartFacts,
+  normalizeDobToIso,
+} from '@/lib/patient-identity'
+import { findOrCreatePatientByPhone, lookupPatientForScheduling } from '@/lib/agentActions'
 import type {
   GetPatientIdentityInput,
   ListInsurancePoliciesInput,
@@ -11,6 +16,7 @@ import type {
   SearchPatientByDemographicsInput,
   GetInsuranceVerificationContextInput,
   GetUpcomingAppointmentsInput,
+  ResolvePatientForSchedulingInput,
 } from './schemas'
 
 export interface RequestContext {
@@ -78,6 +84,7 @@ export async function handleGetPatientIdentity(
     return { output: { error: { code: 'NOT_FOUND', message: 'Patient not found' } }, patientId: input.patient_id }
   }
   const nameParts = getPatientNameParts(patient)
+  const odChart = await fetchOpenDentalChartFacts(ctx.practiceId ?? patient.practiceId, patient.externalEhrId)
   const output: Record<string, unknown> = {
     patient_id: patient.id,
     first_name: nameParts.firstName || undefined,
@@ -90,6 +97,17 @@ export async function handleGetPatientIdentity(
     }),
     phone: patient.primaryPhone || patient.phone || undefined,
     email: patient.email || undefined,
+    external_ehr_id: patient.externalEhrId ?? undefined,
+    open_dental_chart: odChart,
+    facts: {
+      crm_chart: {
+        patient_id: patient.id,
+        full_name: patient.name,
+        date_of_birth: normalizeDobToIso(patient.dateOfBirth),
+        external_ehr_id: patient.externalEhrId ?? null,
+      },
+      open_dental_chart: odChart,
+    },
   }
   if (input.include_address) {
     output.address = {
@@ -608,4 +626,84 @@ export async function handleSearchPatientByDemographics(
     fieldsReturned: collectFieldPaths(output),
   })
   return { output, patientId: null }
+}
+
+export async function handleResolvePatientForScheduling(
+  input: ResolvePatientForSchedulingInput,
+  ctx: RequestContext
+): Promise<{ output: object; patientId: string | null }> {
+  const practiceId = ctx.practiceId
+  if (!practiceId) {
+    return {
+      output: { error: { code: 'PRACTICE_REQUIRED', message: 'Practice scope is required' } },
+      patientId: null,
+    }
+  }
+
+  const callerInput = {
+    phone: input.phone,
+    name: input.name,
+    firstName: input.first_name,
+    lastName: input.last_name,
+    dateOfBirth: input.dob,
+    email: input.email || undefined,
+  }
+
+  if (input.force_create) {
+    if (!input.phone) {
+      return {
+        output: {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'phone is required when force_create is true',
+          },
+        },
+        patientId: null,
+      }
+    }
+    const created = await findOrCreatePatientByPhone(practiceId, input.phone, {
+      ...callerInput,
+      forceCreate: true,
+    })
+    const output = {
+      patient_id: created.patientId,
+      is_new: created.isNew,
+      requires_agent_decision: created.requires_agent_decision,
+      facts: created.facts,
+    }
+    await writeMcpAuditLog({
+      ...ctx,
+      patientId: created.patientId,
+      policyId: null,
+      toolName: 'resolve_patient_for_scheduling',
+      fieldsReturned: collectFieldPaths(output),
+    })
+    return { output, patientId: created.patientId }
+  }
+
+  const lookup = await lookupPatientForScheduling(practiceId, callerInput)
+  const output: Record<string, unknown> = {
+    patient_id: lookup.patientId,
+    is_new: false,
+    requires_agent_decision: lookup.facts.requires_agent_decision,
+    facts: lookup.facts,
+  }
+
+  if (lookup.facts.requires_agent_decision) {
+    output.message =
+      'Existing patient(s) found on this phone with different identity. Read facts.phone_collisions and facts.open_dental_chart, confirm with the caller, then either use the existing patient_id (same person) or call again with force_create=true (different person, same phone).'
+  } else if (!lookup.patientId) {
+    output.message =
+      'No matching patient found. Use force_create=true to register a separate patient on this phone number (same phone is allowed for family members).'
+  }
+
+  await writeMcpAuditLog({
+    ...ctx,
+    patientId: lookup.patientId,
+    policyId: null,
+    toolName: 'resolve_patient_for_scheduling',
+    fieldsReturned: collectFieldPaths(output),
+  })
+
+  return { output, patientId: lookup.patientId }
 }

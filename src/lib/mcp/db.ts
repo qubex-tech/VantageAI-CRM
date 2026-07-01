@@ -82,6 +82,7 @@ export async function getPatientById(patientId: string, practiceId?: string | nu
       city: true,
       state: true,
       postalCode: true,
+      externalEhrId: true,
     },
   })
 }
