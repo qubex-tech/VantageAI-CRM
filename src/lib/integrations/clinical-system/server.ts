@@ -56,8 +56,10 @@ function parseScheduling(value: unknown): SchedulingSettings | undefined {
   }
   return {
     mode,
-    defaultProvNum: toPositiveInt(raw.defaultProvNum),
+    defaultReadProvNum: toPositiveInt(raw.defaultReadProvNum),
     defaultReadOperatoryNum: toPositiveInt(raw.defaultReadOperatoryNum),
+    defaultReadLengthMinutes: toPositiveInt(raw.defaultReadLengthMinutes),
+    defaultProvNum: toPositiveInt(raw.defaultProvNum),
     defaultOperatoryNum: toPositiveInt(raw.defaultOperatoryNum),
     defaultLengthMinutes: toPositiveInt(raw.defaultLengthMinutes),
   }

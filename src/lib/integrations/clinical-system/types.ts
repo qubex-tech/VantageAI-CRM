@@ -13,19 +13,33 @@ export type SchedulingMode = (typeof SCHEDULING_MODES)[number]
 
 export type SchedulingSettings = {
   mode: SchedulingMode
-  /** Open Dental provider used by default when fetching slots / booking (EHR mode). */
-  defaultProvNum?: number | null
+  /** Open Dental provider used when reading available slots (EHR mode). Falls back to defaultProvNum. */
+  defaultReadProvNum?: number | null
   /** Open Dental operatory used when reading available slots (EHR mode). Falls back to defaultOperatoryNum. */
   defaultReadOperatoryNum?: number | null
+  /** Default visit length in minutes when reading available slots. Falls back to defaultLengthMinutes. */
+  defaultReadLengthMinutes?: number | null
+  /** Open Dental provider used when booking appointments (EHR mode). */
+  defaultProvNum?: number | null
   /** Open Dental operatory used when booking appointments (EHR mode). */
   defaultOperatoryNum?: number | null
   /** Default visit length in minutes for EHR-native booking. */
   defaultLengthMinutes?: number | null
 }
 
+/** Provider for slot availability queries — read default, then booking default. */
+export function resolveReadProvNum(settings: SchedulingSettings): number | null {
+  return settings.defaultReadProvNum ?? settings.defaultProvNum ?? null
+}
+
 /** Operatory for slot availability queries — read default, then booking default. */
 export function resolveReadOperatoryNum(settings: SchedulingSettings): number | null {
   return settings.defaultReadOperatoryNum ?? settings.defaultOperatoryNum ?? null
+}
+
+/** Visit length for slot availability queries — read default, then booking default. */
+export function resolveReadLengthMinutes(settings: SchedulingSettings): number | null {
+  return settings.defaultReadLengthMinutes ?? settings.defaultLengthMinutes ?? null
 }
 
 export const DEFAULT_SCHEDULING_SETTINGS: SchedulingSettings = { mode: 'cal' }

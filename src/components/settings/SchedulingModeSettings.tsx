@@ -34,8 +34,10 @@ const NONE = 'none'
 
 export function SchedulingModeSettings({ practiceId, openDentalAvailable }: SchedulingModeSettingsProps) {
   const [mode, setMode] = useState<SchedulingMode>('cal')
-  const [defaultProvNum, setDefaultProvNum] = useState<string>(NONE)
+  const [defaultReadProvNum, setDefaultReadProvNum] = useState<string>(NONE)
   const [defaultReadOperatoryNum, setDefaultReadOperatoryNum] = useState<string>(NONE)
+  const [defaultReadLengthMinutes, setDefaultReadLengthMinutes] = useState<string>(NONE)
+  const [defaultProvNum, setDefaultProvNum] = useState<string>(NONE)
   const [defaultOperatoryNum, setDefaultOperatoryNum] = useState<string>(NONE)
   const [defaultLengthMinutes, setDefaultLengthMinutes] = useState<number>(30)
   const [providers, setProviders] = useState<ProviderOption[]>([])
@@ -60,10 +62,14 @@ export function SchedulingModeSettings({ practiceId, openDentalAvailable }: Sche
         const sched = data.settings?.scheduling
         if (sched) {
           setMode(sched.mode ?? 'cal')
-          setDefaultProvNum(sched.defaultProvNum ? String(sched.defaultProvNum) : NONE)
+          setDefaultReadProvNum(sched.defaultReadProvNum ? String(sched.defaultReadProvNum) : NONE)
           setDefaultReadOperatoryNum(
             sched.defaultReadOperatoryNum ? String(sched.defaultReadOperatoryNum) : NONE
           )
+          setDefaultReadLengthMinutes(
+            sched.defaultReadLengthMinutes ? String(sched.defaultReadLengthMinutes) : NONE
+          )
+          setDefaultProvNum(sched.defaultProvNum ? String(sched.defaultProvNum) : NONE)
           setDefaultOperatoryNum(sched.defaultOperatoryNum ? String(sched.defaultOperatoryNum) : NONE)
           setDefaultLengthMinutes(sched.defaultLengthMinutes ?? 30)
         }
@@ -111,9 +117,12 @@ export function SchedulingModeSettings({ practiceId, openDentalAvailable }: Sche
         mode === 'open_dental'
           ? {
               mode,
-              defaultProvNum: defaultProvNum !== NONE ? Number(defaultProvNum) : null,
+              defaultReadProvNum: defaultReadProvNum !== NONE ? Number(defaultReadProvNum) : null,
               defaultReadOperatoryNum:
                 defaultReadOperatoryNum !== NONE ? Number(defaultReadOperatoryNum) : null,
+              defaultReadLengthMinutes:
+                defaultReadLengthMinutes !== NONE ? Number(defaultReadLengthMinutes) : null,
+              defaultProvNum: defaultProvNum !== NONE ? Number(defaultProvNum) : null,
               defaultOperatoryNum: defaultOperatoryNum !== NONE ? Number(defaultOperatoryNum) : null,
               defaultLengthMinutes,
             }
@@ -181,16 +190,33 @@ export function SchedulingModeSettings({ practiceId, openDentalAvailable }: Sche
                   <div>
                     <p className="text-sm font-medium text-gray-700">Open Dental reading defaults</p>
                     <p className="text-xs text-gray-500 mt-1">
-                      Operatory used when checking available appointment slots (voice agent, CRM booking UI).
+                      Provider, operatory, and length used when checking available appointment slots
+                      (voice agent, CRM booking UI).
                     </p>
                   </div>
                   {loadingLists ? (
                     <div className="flex items-center gap-2 text-sm text-gray-500">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading operatories...
+                      Loading providers and operatories...
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-md">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">Default provider</label>
+                        <Select value={defaultReadProvNum} onValueChange={setDefaultReadProvNum}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Same as booking default" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={NONE}>Same as booking default</SelectItem>
+                            {providers.map((p) => (
+                              <SelectItem key={p.provNum} value={String(p.provNum)}>
+                                {p.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                       <div className="space-y-2">
                         <label className="text-sm font-medium text-gray-700">Default operatory</label>
                         <Select value={defaultReadOperatoryNum} onValueChange={setDefaultReadOperatoryNum}>
@@ -202,6 +228,22 @@ export function SchedulingModeSettings({ practiceId, openDentalAvailable }: Sche
                             {operatories.map((o) => (
                               <SelectItem key={o.operatoryNum} value={String(o.operatoryNum)}>
                                 {o.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">Default length</label>
+                        <Select value={defaultReadLengthMinutes} onValueChange={setDefaultReadLengthMinutes}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Same as booking default" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={NONE}>Same as booking default</SelectItem>
+                            {LENGTH_OPTIONS.map((m) => (
+                              <SelectItem key={m} value={String(m)}>
+                                {m} minutes
                               </SelectItem>
                             ))}
                           </SelectContent>

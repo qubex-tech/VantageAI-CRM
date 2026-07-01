@@ -10,7 +10,11 @@ import { getCalClient } from './cal'
 import { createAuditLog, createTimelineEntry } from './audit'
 import { redactPHI } from './phi'
 import { getSchedulingSettings } from '@/lib/integrations/clinical-system/server'
-import { resolveReadOperatoryNum } from '@/lib/integrations/clinical-system/types'
+import {
+  resolveReadLengthMinutes,
+  resolveReadOperatoryNum,
+  resolveReadProvNum,
+} from '@/lib/integrations/clinical-system/types'
 import type { SchedulingSettings } from '@/lib/integrations/clinical-system/types'
 import { getPracticeTimeZone } from '@/lib/practice-timezone'
 import {
@@ -338,11 +342,11 @@ export async function getAvailableSlots(
     try {
       const slots = await getOpenDentalOpenSlots({
         practiceId,
-        provNum: scheduling.defaultProvNum ?? null,
+        provNum: resolveReadProvNum(scheduling),
         opNum: resolveReadOperatoryNum(scheduling),
         dateStart: toDateOnly(dateFrom),
         dateEnd: toDateOnly(dateTo),
-        lengthMinutes: scheduling.defaultLengthMinutes ?? null,
+        lengthMinutes: resolveReadLengthMinutes(scheduling),
       })
       return slots
         .filter((s) => s.startUtc)
