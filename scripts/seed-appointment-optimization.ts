@@ -24,6 +24,12 @@ async function main() {
         appointmentOptimizationEnabled: true,
         outreachChannel: 'sms',
         smsTemplateName: 'Earlier Appointment Available',
+        triggerScenarios: {
+          cancellation: true,
+          noShow: false,
+          reschedule: false,
+          availability: false,
+        },
       },
     },
     update: {
@@ -33,6 +39,12 @@ async function main() {
         appointmentOptimizationEnabled: true,
         outreachChannel: 'sms',
         smsTemplateName: 'Earlier Appointment Available',
+        triggerScenarios: {
+          cancellation: true,
+          noShow: false,
+          reschedule: false,
+          availability: false,
+        },
       },
     },
   })

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requirePatientSession } from '@/lib/portal-session'
 import { appointmentCancelSchema } from '@/lib/validations'
+import { handleAppointmentChangeForSlotFill } from '@/lib/appointment-optimization/appointmentChangeHandler'
 
 /**
  * POST /api/portal/appointments/[id]/cancel
@@ -42,6 +43,8 @@ export async function POST(
         notes: parsed.reason ? `${appointment.notes || ''}\nCancelled: ${parsed.reason}`.trim() : appointment.notes,
       },
     })
+
+    await handleAppointmentChangeForSlotFill({ before: appointment, after: updated })
 
     // Create audit log
     await prisma.portalAuditLog.create({

@@ -4,7 +4,7 @@ import { requireAuth } from '@/lib/middleware'
 import { appointmentSchema } from '@/lib/validations'
 import { createAuditLog } from '@/lib/audit'
 import { emitEvent } from '@/lib/outbox'
-import { triggerOpenSlotFromCancelledAppointment } from '@/lib/appointment-optimization/trigger'
+import { handleAppointmentChangeForSlotFill } from '@/lib/appointment-optimization/appointmentChangeHandler'
 import { writeBackAppointmentToOpenDental } from '@/lib/integrations/opendental/appointmentWriteback'
 
 export async function GET(
@@ -168,16 +168,7 @@ export async function PATCH(
           },
         })
       } else if (validated.status === 'cancelled') {
-        await triggerOpenSlotFromCancelledAppointment({
-          id: appointment.id,
-          practiceId: appointment.practiceId,
-          providerId: appointment.providerId,
-          visitType: appointment.visitType,
-          startTime: appointment.startTime,
-          endTime: appointment.endTime,
-          timezone: appointment.timezone,
-          status: appointment.status,
-        })
+        // Slot fill handled below via handleAppointmentChangeForSlotFill
       } else if (validated.status === 'no_show') {
         await emitEvent({
           practiceId,
@@ -197,6 +188,8 @@ export async function PATCH(
         })
       }
     }
+
+    await handleAppointmentChangeForSlotFill({ before: existing, after: appointment })
 
     // Best-effort: mirror the change to Open Dental. Must never block the update.
     try {
@@ -297,16 +290,7 @@ export async function DELETE(
       },
     })
 
-    await triggerOpenSlotFromCancelledAppointment({
-      id: appointment.id,
-      practiceId: appointment.practiceId,
-      providerId: appointment.providerId,
-      visitType: appointment.visitType,
-      startTime: appointment.startTime,
-      endTime: appointment.endTime,
-      timezone: appointment.timezone,
-      status: appointment.status,
-    })
+    await handleAppointmentChangeForSlotFill({ before: existing, after: appointment })
 
     // Best-effort: mark the appointment broken in Open Dental. Must never block cancel.
     try {

@@ -11,6 +11,7 @@ import { FhirClient } from '@/lib/integrations/fhir/fhirClient'
 import { refreshBackendConnectionIfNeeded } from '@/lib/integrations/ehr/backendTokens'
 import { getEcwDefaultLocationOrganizationForIssuer } from '@/lib/integrations/ehr/writeback'
 import { enrichPatientsAfterScheduleSync } from '@/lib/integrations/ehr/enrichScheduleSyncPatients'
+import { handleAppointmentChangeForSlotFill } from '@/lib/appointment-optimization/appointmentChangeHandler'
 
 const WRITEBACK_PROVIDER_ID = 'ecw_write'
 const STALE_SYNC_WINDOW_MS = 12 * 60 * 60 * 1000
@@ -857,10 +858,19 @@ async function upsertAppointmentFromEncounter(params: {
 
   const existing = await prisma.appointment.findUnique({
     where: { calBookingId: appointmentKey },
-    select: { id: true },
+    select: {
+      id: true,
+      practiceId: true,
+      providerId: true,
+      status: true,
+      startTime: true,
+      endTime: true,
+      timezone: true,
+      visitType: true,
+    },
   })
 
-  await prisma.appointment.upsert({
+  const saved = await prisma.appointment.upsert({
     where: { calBookingId: appointmentKey },
     create: {
       practiceId,
@@ -887,7 +897,19 @@ async function upsertAppointmentFromEncounter(params: {
       reason: getEncounterReason(encounter),
       notes: `Synced from ECW Encounter/${encounter.id}`,
     },
+    select: {
+      id: true,
+      practiceId: true,
+      providerId: true,
+      status: true,
+      startTime: true,
+      endTime: true,
+      timezone: true,
+      visitType: true,
+    },
   })
+
+  await handleAppointmentChangeForSlotFill({ before: existing, after: saved })
 
   return existing ? 'updated' : 'created'
 }

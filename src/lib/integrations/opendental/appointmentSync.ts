@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
 import type { Appointment as OdAppointment } from '@vantage/opendental-sdk'
+import { handleAppointmentChangeForSlotFill } from '@/lib/appointment-optimization/appointmentChangeHandler'
 import { getPracticeTimeZone } from '@/lib/practice-timezone'
 import { getOpenDentalServices, getOpenDentalConnection } from './factory'
 import { recordSyncResult } from './connectionManager'
@@ -147,7 +148,16 @@ async function upsertAppointmentFromOpenDental(params: {
 
   const existing = await prisma.appointment.findUnique({
     where: { calBookingId: externalKey },
-    select: { id: true },
+    select: {
+      id: true,
+      practiceId: true,
+      providerId: true,
+      status: true,
+      startTime: true,
+      endTime: true,
+      timezone: true,
+      visitType: true,
+    },
   })
 
   const data = {
@@ -163,7 +173,7 @@ async function upsertAppointmentFromOpenDental(params: {
     notes,
   }
 
-  await prisma.appointment.upsert({
+  const saved = await prisma.appointment.upsert({
     where: { calBookingId: externalKey },
     create: {
       ...data,
@@ -171,7 +181,19 @@ async function upsertAppointmentFromOpenDental(params: {
       calEventId: 'opendental',
     },
     update: data,
+    select: {
+      id: true,
+      practiceId: true,
+      providerId: true,
+      status: true,
+      startTime: true,
+      endTime: true,
+      timezone: true,
+      visitType: true,
+    },
   })
+
+  await handleAppointmentChangeForSlotFill({ before: existing, after: saved })
 
   return existing ? 'updated' : 'created'
 }

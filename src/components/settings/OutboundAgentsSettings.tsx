@@ -8,7 +8,12 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import type { OutboundAgentsSettings } from '@/lib/appointment-optimization/types'
-import { DEFAULT_OUTBOUND_AGENTS } from '@/lib/appointment-optimization/types'
+import {
+  DEFAULT_OUTBOUND_AGENTS,
+  DEFAULT_TRIGGER_SCENARIOS,
+  OPEN_SLOT_TRIGGER_SCENARIO_OPTIONS,
+  type OpenSlotTriggerScenario,
+} from '@/lib/appointment-optimization/types'
 
 interface OutboundAgentsSettingsProps {
   practiceId?: string
@@ -36,7 +41,14 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
       const res = await fetch(apiUrl)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to load')
-      setSettings({ ...DEFAULT_OUTBOUND_AGENTS, ...data.settings })
+      setSettings({
+        ...DEFAULT_OUTBOUND_AGENTS,
+        ...data.settings,
+        triggerScenarios: {
+          ...DEFAULT_TRIGGER_SCENARIOS,
+          ...data.settings?.triggerScenarios,
+        },
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load')
     } finally {
@@ -60,7 +72,14 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to save')
-      setSettings({ ...DEFAULT_OUTBOUND_AGENTS, ...data.settings })
+      setSettings({
+        ...DEFAULT_OUTBOUND_AGENTS,
+        ...data.settings,
+        triggerScenarios: {
+          ...DEFAULT_TRIGGER_SCENARIOS,
+          ...data.settings?.triggerScenarios,
+        },
+      })
       setSuccess('Outbound agent settings saved.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save')
@@ -70,6 +89,17 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
   }
 
   const masterOff = !settings.masterEnabled
+  const triggerScenarios = settings.triggerScenarios ?? DEFAULT_TRIGGER_SCENARIOS
+
+  const setTriggerScenario = (key: OpenSlotTriggerScenario, enabled: boolean) => {
+    setSettings((s) => ({
+      ...s,
+      triggerScenarios: {
+        ...(s.triggerScenarios ?? DEFAULT_TRIGGER_SCENARIOS),
+        [key]: enabled,
+      },
+    }))
+  }
 
   return (
     <Card className="border border-gray-200">
@@ -77,7 +107,9 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
         <CardTitle>Outbound AI Agents</CardTitle>
         <CardDescription>
           Enable automated outbound agents for this practice. Appointment Optimization contacts
-          patients with later visits when an earlier slot opens (portal self-reschedule only).
+          patients with later visits when an earlier slot opens — regardless of whether the change
+          comes from the CRM, patient portal, Cal.com, eClinicalWorks, Open Dental, or another
+          connected system.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -133,7 +165,46 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
         </div>
 
         {settings.appointmentOptimizationEnabled && !masterOff && (
-          <div className="space-y-4 border-t pt-4">
+          <div className="space-y-6 border-t pt-4">
+            <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-4 space-y-4">
+              <div>
+                <Label className="text-base font-medium">Trigger scenarios</Label>
+                <p className="text-sm text-gray-500 mt-1">
+                  Choose which events create an open slot and start outreach. These apply to
+                  appointment changes from any source — CRM, portal, Cal.com, eClinicalWorks, Open
+                  Dental, and other connected EHR/EMR systems.
+                </p>
+              </div>
+              <div className="space-y-3">
+                {OPEN_SLOT_TRIGGER_SCENARIO_OPTIONS.map((scenario) => (
+                  <div
+                    key={scenario.key}
+                    className="flex items-start justify-between gap-4 rounded-lg border border-gray-200 bg-white p-4"
+                  >
+                    <div className="min-w-0">
+                      <Label className="font-medium">{scenario.label}</Label>
+                      <p className="text-sm text-gray-500 mt-1">{scenario.description}</p>
+                    </div>
+                    <Switch
+                      checked={triggerScenarios[scenario.key]}
+                      onCheckedChange={(checked) => setTriggerScenario(scenario.key, checked)}
+                      disabled={loading}
+                      className="shrink-0 mt-1"
+                    />
+                  </div>
+                ))}
+              </div>
+              {!triggerScenarios.cancellation &&
+                !triggerScenarios.noShow &&
+                !triggerScenarios.reschedule &&
+                !triggerScenarios.availability && (
+                  <p className="text-sm text-amber-700">
+                    No trigger scenarios are enabled. The agent will not start outreach until at
+                    least one scenario is turned on.
+                  </p>
+                )}
+            </div>
+
             <div>
               <Label>Outreach channel</Label>
               <Select

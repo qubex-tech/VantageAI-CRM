@@ -7,6 +7,58 @@ export const OPEN_SLOT_STATUS = {
 export const WAVE_BATCH_SIZE = 5
 export const WAVE_WAIT_MS = 10 * 60 * 1000
 
+/** Scenarios that can create an open slot and start outreach. */
+export type OpenSlotTriggerScenario = 'cancellation' | 'noShow' | 'reschedule' | 'availability'
+
+export type OpenSlotTriggerScenarios = Record<OpenSlotTriggerScenario, boolean>
+
+export const DEFAULT_TRIGGER_SCENARIOS: OpenSlotTriggerScenarios = {
+  cancellation: true,
+  noShow: false,
+  reschedule: false,
+  availability: false,
+}
+
+export const OPEN_SLOT_TRIGGER_SCENARIO_OPTIONS: Array<{
+  key: OpenSlotTriggerScenario
+  label: string
+  description: string
+}> = [
+  {
+    key: 'cancellation',
+    label: 'Appointment cancellation',
+    description:
+      'When an appointment is cancelled in the CRM, patient portal, Cal.com, eClinicalWorks, Open Dental, or any connected system.',
+  },
+  {
+    key: 'noShow',
+    label: 'Patient no-show',
+    description:
+      'When an appointment is marked no-show in the CRM or synced from a connected EHR/EMR.',
+  },
+  {
+    key: 'reschedule',
+    label: 'Reschedule frees a slot',
+    description:
+      'When a visit is moved to a new time in any connected system, contact patients about the earlier time that was freed.',
+  },
+  {
+    key: 'availability',
+    label: 'Open schedule time',
+    description:
+      'When a blank opening is detected on the provider schedule from any connected EHR/EMR or availability feed.',
+  },
+]
+
+export type OpenSlotSource = 'cancellation' | 'no_show' | 'reschedule' | 'availability'
+
+export const SCENARIO_TO_SOURCE: Record<OpenSlotTriggerScenario, OpenSlotSource> = {
+  cancellation: 'cancellation',
+  noShow: 'no_show',
+  reschedule: 'reschedule',
+  availability: 'availability',
+}
+
 export type OutboundAgentsSettings = {
   masterEnabled: boolean
   insuranceVerificationEnabled: boolean
@@ -15,6 +67,8 @@ export type OutboundAgentsSettings = {
   outreachChannel?: string
   /** Marketing template name for SMS body */
   smsTemplateName?: string
+  /** Which events create open slots and start the optimization agent */
+  triggerScenarios?: OpenSlotTriggerScenarios
 }
 
 export const DEFAULT_OUTBOUND_AGENTS: OutboundAgentsSettings = {
@@ -23,6 +77,7 @@ export const DEFAULT_OUTBOUND_AGENTS: OutboundAgentsSettings = {
   appointmentOptimizationEnabled: false,
   outreachChannel: 'sms',
   smsTemplateName: 'Earlier Appointment Available',
+  triggerScenarios: { ...DEFAULT_TRIGGER_SCENARIOS },
 }
 
 export type OpenSlotCreatedPayload = {

@@ -6,6 +6,8 @@ import {
 } from '@/lib/appointment-optimization/settings'
 import type { OpenSlotCreatedPayload } from '@/lib/appointment-optimization/types'
 
+import type { OpenSlotSource } from '@/lib/appointment-optimization/types'
+
 export type CreateOpenSlotInput = {
   practiceId: string
   providerId: string | null
@@ -13,7 +15,7 @@ export type CreateOpenSlotInput = {
   slotStart: Date
   slotEnd: Date
   locationId?: string | null
-  source: 'cancellation' | 'reschedule' | 'availability'
+  source: OpenSlotSource
   sourceAppointmentId?: string | null
 }
 
@@ -84,24 +86,4 @@ export async function createOpenSlotEvent(input: CreateOpenSlotInput) {
   })
 
   return { created: true as const, openSlotEventId: event.id, event }
-}
-
-export async function createOpenSlotFromCancelledAppointment(appointment: {
-  id: string
-  practiceId: string
-  providerId: string | null
-  visitType: string
-  startTime: Date
-  endTime: Date
-  timezone: string
-}) {
-  return createOpenSlotEvent({
-    practiceId: appointment.practiceId,
-    providerId: appointment.providerId,
-    appointmentType: appointment.visitType,
-    slotStart: appointment.startTime,
-    slotEnd: appointment.endTime,
-    source: 'cancellation',
-    sourceAppointmentId: appointment.id,
-  })
 }

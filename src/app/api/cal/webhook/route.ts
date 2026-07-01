@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { verifyCalSignature, rateLimit } from '@/lib/middleware'
 import { createAuditLog, createTimelineEntry } from '@/lib/audit'
 import { syncBookingToPatient } from '@/lib/sync-booking-to-patient'
+import { handleAppointmentChangeForSlotFill } from '@/lib/appointment-optimization/appointmentChangeHandler'
 
 /**
  * Cal.com webhook endpoint
@@ -331,19 +332,7 @@ export async function POST(req: NextRequest) {
             data: { status: 'cancelled' },
           })
 
-          const { triggerOpenSlotFromCancelledAppointment } = await import(
-            '@/lib/appointment-optimization/trigger'
-          )
-          await triggerOpenSlotFromCancelledAppointment({
-            id: cancelled.id,
-            practiceId: cancelled.practiceId,
-            providerId: cancelled.providerId,
-            visitType: cancelled.visitType,
-            startTime: cancelled.startTime,
-            endTime: cancelled.endTime,
-            timezone: cancelled.timezone,
-            status: cancelled.status,
-          })
+          await handleAppointmentChangeForSlotFill({ before: appointment, after: cancelled })
 
           if (appointment.patientId) {
             await createTimelineEntry({
@@ -364,14 +353,19 @@ export async function POST(req: NextRequest) {
       case 'BOOKING_RESCHEDULED':
       case 'booking.rescheduled':
         if (appointment && startTime && endTime) {
-          await prisma.appointment.update({
+          const newStartTime = new Date(startTime)
+          const newEndTime = new Date(endTime)
+
+          const rescheduled = await prisma.appointment.update({
             where: { id: appointment.id },
             data: {
-              startTime: new Date(startTime),
-              endTime: new Date(endTime),
+              startTime: newStartTime,
+              endTime: newEndTime,
               status: 'confirmed',
             },
           })
+
+          await handleAppointmentChangeForSlotFill({ before: appointment, after: rescheduled })
 
           if (appointment.patientId) {
             await createTimelineEntry({

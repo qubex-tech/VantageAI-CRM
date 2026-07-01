@@ -489,10 +489,18 @@ export const outboundCustomerNotificationsSchema = z.object({
 })
 
 /** Outbound AI agents (practice + Vantage admin settings) */
+export const openSlotTriggerScenariosSchema = z.object({
+  cancellation: z.boolean().default(true),
+  noShow: z.boolean().default(false),
+  reschedule: z.boolean().default(false),
+  availability: z.boolean().default(false),
+})
+
 export const outboundAgentsSettingsSchema = z.object({
   masterEnabled: z.boolean().default(false),
   insuranceVerificationEnabled: z.boolean().default(false),
   appointmentOptimizationEnabled: z.boolean().default(false),
   outreachChannel: z.enum(['sms', 'voice', 'prefer_sms', 'prefer_voice']).optional(),
   smsTemplateName: z.string().optional(),
+  triggerScenarios: openSlotTriggerScenariosSchema.optional(),
 })
