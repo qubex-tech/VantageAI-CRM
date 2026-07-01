@@ -103,7 +103,56 @@ export function mapOpenDentalPatient(od: OdPatient): MappedPatient {
   }
 }
 
-type UpsertOutcome = 'created' | 'updated' | 'linked'
+type UpsertOutcome = 'created' | 'updated' | 'linked' | 'restored'
+
+/** Open Dental chart statuses that should not appear as active CRM patients. */
+export function isOpenDentalPatientActive(od: Pick<OdPatient, 'PatStatus'>): boolean {
+  const status = cleanString(od.PatStatus)?.toLowerCase()
+  if (!status) return true
+  return status !== 'deleted' && status !== 'archived' && status !== 'deceased'
+}
+
+function patientUpdateFromMapped(
+  existing: {
+    firstName: string | null
+    lastName: string | null
+    name: string
+    preferredName: string | null
+    dateOfBirth: Date | null
+    gender: string | null
+    primaryPhone: string | null
+    secondaryPhone: string | null
+    phone: string
+    email: string | null
+    addressLine1: string | null
+    addressLine2: string | null
+    address: string | null
+    city: string | null
+    state: string | null
+    postalCode: string | null
+  },
+  mapped: MappedPatient
+) {
+  return {
+    deletedAt: null,
+    firstName: mapped.firstName ?? existing.firstName,
+    lastName: mapped.lastName ?? existing.lastName,
+    name: mapped.name || existing.name,
+    preferredName: mapped.preferredName ?? existing.preferredName,
+    dateOfBirth: mapped.dateOfBirth ?? existing.dateOfBirth,
+    gender: mapped.gender ?? existing.gender,
+    primaryPhone: mapped.primaryPhone ?? existing.primaryPhone,
+    secondaryPhone: mapped.secondaryPhone ?? existing.secondaryPhone,
+    phone: mapped.primaryPhone || existing.phone || 'unknown',
+    email: mapped.email ?? existing.email,
+    addressLine1: mapped.addressLine1 ?? existing.addressLine1,
+    addressLine2: mapped.addressLine2 ?? existing.addressLine2,
+    address: mapped.address ?? existing.address,
+    city: mapped.city ?? existing.city,
+    state: mapped.state ?? existing.state,
+    postalCode: mapped.postalCode ?? existing.postalCode,
+  }
+}
 
 export async function upsertPatientFromOpenDental(params: {
   practiceId: string
@@ -111,37 +160,21 @@ export async function upsertPatientFromOpenDental(params: {
 }): Promise<{ id: string; outcome: UpsertOutcome }> {
   const { practiceId, mapped } = params
 
-  const existing = await prisma.patient.findFirst({
+  const linked = await prisma.patient.findFirst({
     where: {
       practiceId,
-      deletedAt: null,
       externalEhrId: mapped.externalEhrId,
     },
+    orderBy: { deletedAt: 'asc' },
   })
 
-  if (existing) {
+  if (linked) {
+    const wasDeleted = linked.deletedAt != null
     await prisma.patient.update({
-      where: { id: existing.id },
-      data: {
-        firstName: mapped.firstName ?? existing.firstName,
-        lastName: mapped.lastName ?? existing.lastName,
-        name: mapped.name || existing.name,
-        preferredName: mapped.preferredName ?? existing.preferredName,
-        dateOfBirth: mapped.dateOfBirth ?? existing.dateOfBirth,
-        gender: mapped.gender ?? existing.gender,
-        primaryPhone: mapped.primaryPhone ?? existing.primaryPhone,
-        secondaryPhone: mapped.secondaryPhone ?? existing.secondaryPhone,
-        phone: mapped.primaryPhone || existing.phone || 'unknown',
-        email: mapped.email ?? existing.email,
-        addressLine1: mapped.addressLine1 ?? existing.addressLine1,
-        addressLine2: mapped.addressLine2 ?? existing.addressLine2,
-        address: mapped.address ?? existing.address,
-        city: mapped.city ?? existing.city,
-        state: mapped.state ?? existing.state,
-        postalCode: mapped.postalCode ?? existing.postalCode,
-      },
+      where: { id: linked.id },
+      data: patientUpdateFromMapped(linked, mapped),
     })
-    return { id: existing.id, outcome: 'updated' }
+    return { id: linked.id, outcome: wasDeleted ? 'restored' : 'updated' }
   }
 
   // Try to merge into an existing unlinked CRM patient before creating a new record.
@@ -251,17 +284,18 @@ export async function ensureCrmPatientIdForPatNum(params: {
 
   const externalId = buildExternalId(patNum)
   const existing = await prisma.patient.findFirst({
-    where: { practiceId, deletedAt: null, externalEhrId: externalId },
-    select: { id: true },
+    where: { practiceId, externalEhrId: externalId },
+    select: { id: true, deletedAt: true },
+    orderBy: { deletedAt: 'asc' },
   })
-  if (existing) {
+  if (existing && existing.deletedAt == null) {
     cache.set(patNum, existing.id)
     return existing.id
   }
 
   try {
     const od = (await services.patients.get(patNum)) as OdPatient | null
-    if (!od || !od.PatNum) return null
+    if (!od || !od.PatNum || !isOpenDentalPatientActive(od)) return null
     const mapped = mapOpenDentalPatient(od)
     const { id } = await upsertPatientFromOpenDental({ practiceId, mapped })
     cache.set(patNum, id)
@@ -276,6 +310,7 @@ export type PatientSyncSummary = {
   created: number
   updated: number
   linked: number
+  restored: number
   errors: number
   errorSamples: string[]
 }
@@ -304,6 +339,7 @@ export async function syncOpenDentalPatients(params: {
     created: 0,
     updated: 0,
     linked: 0,
+    restored: 0,
     errors: 0,
     errorSamples: [],
   }
@@ -329,11 +365,13 @@ export async function syncOpenDentalPatients(params: {
 
       for (const od of batch) {
         summary.fetched += 1
+        if (!isOpenDentalPatientActive(od)) continue
         try {
           const mapped = mapOpenDentalPatient(od)
           const { outcome } = await upsertPatientFromOpenDental({ practiceId, mapped })
           if (outcome === 'created') summary.created += 1
           else if (outcome === 'updated') summary.updated += 1
+          else if (outcome === 'restored') summary.restored += 1
           else summary.linked += 1
         } catch (error) {
           summary.errors += 1
@@ -348,7 +386,11 @@ export async function syncOpenDentalPatients(params: {
     }
 
     await recordSyncResult(practiceId, {
-      status: summary.errors > 0 && summary.created + summary.updated + summary.linked === 0 ? 'error' : 'success',
+      status:
+        summary.errors > 0 &&
+        summary.created + summary.updated + summary.linked + summary.restored === 0
+          ? 'error'
+          : 'success',
       error: summary.errorSamples[0],
     })
 
@@ -362,6 +404,7 @@ export async function syncOpenDentalPatients(params: {
         created: summary.created,
         updated: summary.updated,
         linked: summary.linked,
+        restored: summary.restored,
         errors: summary.errors,
       },
     })
