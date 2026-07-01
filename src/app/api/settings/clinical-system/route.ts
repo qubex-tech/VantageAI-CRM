@@ -10,6 +10,7 @@ import { CLINICAL_SYSTEM_TYPES, SCHEDULING_MODES } from '@/lib/integrations/clin
 const schedulingSchema = z.object({
   mode: z.enum(SCHEDULING_MODES),
   defaultProvNum: z.number().int().positive().nullish(),
+  defaultReadOperatoryNum: z.number().int().positive().nullish(),
   defaultOperatoryNum: z.number().int().positive().nullish(),
   defaultLengthMinutes: z.number().int().positive().max(600).nullish(),
 })

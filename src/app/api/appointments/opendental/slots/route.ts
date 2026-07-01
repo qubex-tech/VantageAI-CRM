@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/middleware'
 import { getSchedulingSettings } from '@/lib/integrations/clinical-system/server'
+import { resolveReadOperatoryNum } from '@/lib/integrations/clinical-system/types'
 import {
   getOpenDentalOpenSlots,
   DEFAULT_SLOT_LENGTH_MINUTES,
@@ -26,7 +27,8 @@ export async function GET(req: NextRequest) {
     const dateEnd = sp.get('dateEnd') || undefined
 
     const provNum = Number(sp.get('provNum')) || scheduling.defaultProvNum || undefined
-    const opNum = Number(sp.get('opNum')) || scheduling.defaultOperatoryNum || undefined
+    const readOp = resolveReadOperatoryNum(scheduling)
+    const opNum = Number(sp.get('opNum')) || readOp || undefined
     const lengthMinutes =
       Number(sp.get('lengthMinutes')) || scheduling.defaultLengthMinutes || DEFAULT_SLOT_LENGTH_MINUTES
 

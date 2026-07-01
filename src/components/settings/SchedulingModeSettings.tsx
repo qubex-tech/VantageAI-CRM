@@ -35,6 +35,7 @@ const NONE = 'none'
 export function SchedulingModeSettings({ practiceId, openDentalAvailable }: SchedulingModeSettingsProps) {
   const [mode, setMode] = useState<SchedulingMode>('cal')
   const [defaultProvNum, setDefaultProvNum] = useState<string>(NONE)
+  const [defaultReadOperatoryNum, setDefaultReadOperatoryNum] = useState<string>(NONE)
   const [defaultOperatoryNum, setDefaultOperatoryNum] = useState<string>(NONE)
   const [defaultLengthMinutes, setDefaultLengthMinutes] = useState<number>(30)
   const [providers, setProviders] = useState<ProviderOption[]>([])
@@ -60,6 +61,9 @@ export function SchedulingModeSettings({ practiceId, openDentalAvailable }: Sche
         if (sched) {
           setMode(sched.mode ?? 'cal')
           setDefaultProvNum(sched.defaultProvNum ? String(sched.defaultProvNum) : NONE)
+          setDefaultReadOperatoryNum(
+            sched.defaultReadOperatoryNum ? String(sched.defaultReadOperatoryNum) : NONE
+          )
           setDefaultOperatoryNum(sched.defaultOperatoryNum ? String(sched.defaultOperatoryNum) : NONE)
           setDefaultLengthMinutes(sched.defaultLengthMinutes ?? 30)
         }
@@ -108,6 +112,8 @@ export function SchedulingModeSettings({ practiceId, openDentalAvailable }: Sche
           ? {
               mode,
               defaultProvNum: defaultProvNum !== NONE ? Number(defaultProvNum) : null,
+              defaultReadOperatoryNum:
+                defaultReadOperatoryNum !== NONE ? Number(defaultReadOperatoryNum) : null,
               defaultOperatoryNum: defaultOperatoryNum !== NONE ? Number(defaultOperatoryNum) : null,
               defaultLengthMinutes,
             }
@@ -170,8 +176,48 @@ export function SchedulingModeSettings({ practiceId, openDentalAvailable }: Sche
             </div>
 
             {mode === 'open_dental' && (
-              <div className="space-y-4 rounded-md border border-gray-100 bg-gray-50 p-4">
-                <p className="text-sm font-medium text-gray-700">Open Dental booking defaults</p>
+              <div className="space-y-4">
+                <div className="space-y-4 rounded-md border border-gray-100 bg-gray-50 p-4">
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">Open Dental reading defaults</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Operatory used when checking available appointment slots (voice agent, CRM booking UI).
+                    </p>
+                  </div>
+                  {loadingLists ? (
+                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading operatories...
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-md">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">Default operatory</label>
+                        <Select value={defaultReadOperatoryNum} onValueChange={setDefaultReadOperatoryNum}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Same as booking default" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={NONE}>Same as booking default</SelectItem>
+                            {operatories.map((o) => (
+                              <SelectItem key={o.operatoryNum} value={String(o.operatoryNum)}>
+                                {o.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-4 rounded-md border border-gray-100 bg-gray-50 p-4">
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">Open Dental booking defaults</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Provider, operatory, and length used when writing a new appointment into Open Dental.
+                    </p>
+                  </div>
                 {loadingLists ? (
                   <div className="flex items-center gap-2 text-sm text-gray-500">
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -231,6 +277,7 @@ export function SchedulingModeSettings({ practiceId, openDentalAvailable }: Sche
                     </div>
                   </div>
                 )}
+                </div>
               </div>
             )}
 
