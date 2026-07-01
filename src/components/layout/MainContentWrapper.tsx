@@ -11,7 +11,7 @@ export function MainContentWrapper({ children }: { children: ReactNode }) {
   return (
     <main 
       className={cn(
-        "flex-1 pt-14 pb-20 md:pb-0 bg-white transition-all duration-300 ease-in-out overflow-x-hidden main-content-healix",
+        "flex-1 pt-14 bg-white transition-all duration-300 ease-in-out overflow-x-hidden main-content-healix",
         effectiveCollapsed ? "md:ml-16" : "md:ml-64"
       )}
       style={{

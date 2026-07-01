@@ -11,11 +11,20 @@
 
 /* Main content area should adjust width when Healix is open */
 @layer components {
+  /* Mobile: full width — sidebar is hidden, no subtraction needed */
   .main-content-healix {
     width: 100%;
-    max-width: calc(100vw - var(--sidebar-width) - var(--healix-panel-width));
+    max-width: 100%;
   }
 
+  /* Desktop (md+): subtract sidebar width */
+  @media (min-width: 768px) {
+    .main-content-healix {
+      max-width: calc(100vw - var(--sidebar-width) - var(--healix-panel-width));
+    }
+  }
+
+  /* Large desktop: also subtract Healix panel */
   @media (min-width: 1024px) {
     .main-content-healix {
       max-width: calc(100vw - var(--sidebar-width) - var(--healix-panel-width-lg));

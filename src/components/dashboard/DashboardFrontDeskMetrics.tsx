@@ -65,7 +65,7 @@ export function DashboardFrontDeskMetrics({
   ]
 
   return (
-    <div className="grid gap-5 md:grid-cols-3">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-5">
       {metrics.map((metric) => {
         const Icon = metric.icon
         return (
@@ -73,26 +73,26 @@ export function DashboardFrontDeskMetrics({
             key={metric.title}
             className="border border-gray-100 bg-white shadow-lg shadow-gray-200/50 transition-shadow hover:shadow-xl hover:shadow-gray-200/60"
           >
-            <CardHeader className="pb-2">
+            <CardHeader className="pb-2 p-4 sm:p-6">
               <div className="flex items-start justify-between gap-3">
-                <div className="space-y-1">
+                <div className="space-y-0.5 sm:space-y-1">
                   <CardTitle className="text-sm font-medium text-gray-600">
                     {metric.title}
                   </CardTitle>
-                  <CardDescription className="text-xs leading-relaxed">
+                  <CardDescription className="text-xs leading-relaxed hidden sm:block">
                     {metric.description}
                   </CardDescription>
                 </div>
-                <div className={`rounded-lg p-2 ${metric.iconBg}`}>
+                <div className={`rounded-lg p-2 flex-shrink-0 ${metric.iconBg}`}>
                   <Icon className={`h-4 w-4 ${metric.iconColor}`} />
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
-              <div className={`text-4xl font-bold tracking-tight ${metric.accent}`}>
+            <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+              <div className={`text-3xl sm:text-4xl font-bold tracking-tight ${metric.accent}`}>
                 {metric.value.toLocaleString()}
               </div>
-              <p className="mt-2 text-xs text-gray-500">{metric.detail}</p>
+              <p className="mt-1 sm:mt-2 text-xs text-gray-500">{metric.detail}</p>
             </CardContent>
           </Card>
         )

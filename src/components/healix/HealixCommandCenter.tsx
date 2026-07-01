@@ -66,8 +66,8 @@ export function HealixCommandCenter({ context, frontDeskStats }: HealixCommandCe
   return (
     <Card className="border border-gray-100 bg-white shadow-lg shadow-gray-200/50 overflow-hidden">
       <div className="p-4">
-        <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row sm:items-center gap-3">
-          <div className="flex-1 flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50/50 focus-within:border-gray-300 focus-within:bg-white transition-colors px-3">
+        <form onSubmit={handleSubmit} className="flex items-center gap-2">
+          <div className="flex-1 flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50/50 focus-within:border-gray-300 focus-within:bg-white transition-colors px-3">
             <Sparkles className="h-4 w-4 text-lime-600 flex-shrink-0" />
             <Input
               value={prompt}
@@ -78,24 +78,44 @@ export function HealixCommandCenter({ context, frontDeskStats }: HealixCommandCe
                   handleSubmit()
                 }
               }}
-              placeholder="Ask Healix about your AI front desk performance…"
-              className="border-0 bg-transparent shadow-none focus-visible:ring-0 py-5 text-sm placeholder:text-gray-400"
+              placeholder="Ask Healix…"
+              className="border-0 bg-transparent shadow-none focus-visible:ring-0 py-5 text-sm placeholder:text-gray-400 min-w-0"
               aria-label="Message Healix"
             />
-            <Button
-              type="submit"
-              size="sm"
-              className="rounded-md bg-gray-900 hover:bg-gray-800 text-white flex-shrink-0 gap-1.5"
-            >
-              Ask
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Button>
           </div>
+          <Button
+            type="submit"
+            size="sm"
+            className="rounded-md bg-gray-900 hover:bg-gray-800 text-white flex-shrink-0 gap-1.5"
+          >
+            Ask
+            <ArrowRight className="h-3.5 w-3.5 hidden sm:inline" />
+          </Button>
         </form>
+
+        {frontDeskStats && (
+          <div className="mt-3 grid grid-cols-3 gap-2 sm:hidden">
+            <div className="flex flex-col items-center gap-0.5 rounded-lg bg-gray-50 py-2">
+              <Phone className="h-3.5 w-3.5 text-lime-600" />
+              <span className="text-sm font-semibold text-lime-600">{frontDeskStats.callsHandled}</span>
+              <span className="text-[10px] text-gray-500 text-center leading-tight">Calls ({frontDeskStats.days}d)</span>
+            </div>
+            <div className="flex flex-col items-center gap-0.5 rounded-lg bg-gray-50 py-2">
+              <PhoneForwarded className="h-3.5 w-3.5 text-orange-400" />
+              <span className="text-sm font-semibold text-orange-400">{frontDeskStats.transfersSuccessful}</span>
+              <span className="text-[10px] text-gray-500 text-center leading-tight">Transferred</span>
+            </div>
+            <div className="flex flex-col items-center gap-0.5 rounded-lg bg-gray-50 py-2">
+              <PhoneOff className="h-3.5 w-3.5 text-red-600" />
+              <span className="text-sm font-semibold text-red-600">{frontDeskStats.transfersUnsuccessful}</span>
+              <span className="text-[10px] text-gray-500 text-center leading-tight">Failed</span>
+            </div>
+          </div>
+        )}
 
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
           {frontDeskStats && (
-            <span className="text-xs text-gray-500 flex flex-wrap items-center gap-3">
+            <span className="text-xs text-gray-500 hidden sm:flex flex-wrap items-center gap-3">
               <span className="flex items-center gap-1">
                 <Phone className="h-3.5 w-3.5 text-lime-600" />
                 <span>
@@ -103,7 +123,7 @@ export function HealixCommandCenter({ context, frontDeskStats }: HealixCommandCe
                   inbound calls ({frontDeskStats.days}d)
                 </span>
               </span>
-              <span className="text-gray-300 hidden sm:inline">·</span>
+              <span className="text-gray-300">·</span>
               <span className="flex items-center gap-1">
                 <PhoneForwarded className="h-3.5 w-3.5 text-orange-400" />
                 <span>
@@ -111,7 +131,7 @@ export function HealixCommandCenter({ context, frontDeskStats }: HealixCommandCe
                   transferred
                 </span>
               </span>
-              <span className="text-gray-300 hidden sm:inline">·</span>
+              <span className="text-gray-300">·</span>
               <span className="flex items-center gap-1">
                 <PhoneOff className="h-3.5 w-3.5 text-red-600" />
                 <span>
