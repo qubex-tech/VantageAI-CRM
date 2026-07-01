@@ -10,9 +10,11 @@ import { createAuditLog } from './audit'
 import type { Prisma } from '@prisma/client'
 import {
   buildCurogramIntentTopicWithPatientContext,
+  CurogramPatientItemPayload,
   isCurogramEscalationEnabled,
   normalizePhoneToE164,
   sendCurogramEscalation,
+  sendCurogramPatientsUpsert,
   trimCurogramIntentTopicForApi,
 } from './curogram'
 import { looksLikePhoneNumber } from './retell-patient-identity'
@@ -77,11 +79,37 @@ type EscalationConversation = {
   retellCallId: string | null
 }
 
+function splitPatientName(fullName: string | null | undefined): { firstName?: string; lastName?: string } {
+  const normalized = fullName?.trim()
+  if (!normalized) return {}
+  const parts = normalized.split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return {}
+  if (parts.length === 1) return { firstName: parts[0] }
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(' '),
+  }
+}
+
+function normalizeCurogramGender(value: unknown): string | undefined {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (!normalized) return undefined
+  if (['male', 'm'].includes(normalized)) return 'Male'
+  if (['female', 'f'].includes(normalized)) return 'Female'
+  if (['other', 'non-binary', 'nonbinary'].includes(normalized)) return 'Other'
+  if (['unknown', 'prefer not to say'].includes(normalized)) return 'Unknown'
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1)
+}
+
+function formatDobForCurogram(value: unknown): string | undefined {
+  const parsed = parsePatientDob(value)
+  if (!parsed) return undefined
+  return parsed.toISOString()
+}
+
 function shouldTriggerCurogramEscalation(params: {
   extractedData: ExtractedCallData
-  isNewPatient: boolean
 }): boolean {
-  if (!params.isNewPatient) return false
   const customData = (params.extractedData.retell_custom_data || {}) as Record<string, unknown>
   const newPatientAdd = parseBooleanLike(
     customData['New Patient Add'] ??
@@ -138,82 +166,218 @@ async function triggerCurogramAfterRetellProcessing(
       ? (conversation.metadata as Record<string, unknown>)
       : {}
 
-  // Enforce one escalation attempt per call after full Retell processing.
-  if (metadata.curogramEscalationAttemptedAt || metadata.curogramEscalationSentAt) return
+  const hasPatientSyncSuccess = Boolean(metadata.curogramPatientSyncSentAt)
+  const shouldSyncPatient = !hasPatientSyncSuccess
+  const shouldEscalate =
+    !metadata.curogramEscalationAttemptedAt && !metadata.curogramEscalationSentAt
+  if (!shouldSyncPatient && !shouldEscalate) return
 
-  const requestId = `retell-curogram-post-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-  const callerNumber = normalizePhoneToE164(
-    extractedData.patient_phone_number || extractedData.user_phone_number
-  )
+  const nowIso = new Date().toISOString()
+  const metadataUpdate: Record<string, unknown> = { ...metadata }
+  let patientSyncSucceeded = hasPatientSyncSuccess
 
-  if (!callerNumber) {
-    await prisma.voiceConversation.update({
-      where: { id: conversation.id },
-      data: {
-        metadata: {
-          ...metadata,
-          curogramEscalationAttemptedAt: new Date().toISOString(),
-          curogramEscalationError: 'Missing valid callerNumber for Curogram payload',
-          curogramEscalationRequestId: requestId,
-          curogramEscalationEventType: 'post_call_processing',
-        } as Prisma.InputJsonObject,
+  let patientRecord: {
+    id: string
+    name: string
+    firstName: string | null
+    lastName: string | null
+    dateOfBirth: Date | null
+    gender: string | null
+    primaryLanguage: string | null
+    phone: string
+    primaryPhone: string | null
+    email: string | null
+    externalEhrId: string | null
+  } | null = null
+
+  if (conversation.patientId) {
+    patientRecord = await prisma.patient.findUnique({
+      where: { id: conversation.patientId },
+      select: {
+        id: true,
+        name: true,
+        firstName: true,
+        lastName: true,
+        dateOfBirth: true,
+        gender: true,
+        primaryLanguage: true,
+        phone: true,
+        primaryPhone: true,
+        email: true,
+        externalEhrId: true,
       },
     })
-    return
   }
 
-  const intentTopic = trimCurogramIntentTopicForApi(
-    buildCurogramIntentTopicWithPatientContext({
-      extracted: extractedData,
-      defaultIntent: process.env.CUROGRAM_AI_ESCALATION_DEFAULT_INTENT || 'AI call escalation',
-    })
-  )
+  if (shouldSyncPatient) {
+    const patientRequestId = `retell-curogram-patient-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const extractedNames = splitPatientName(extractedData.patient_name)
+    const dbNames = splitPatientName(patientRecord?.name)
+    const firstName = patientRecord?.firstName?.trim() || extractedNames.firstName || dbNames.firstName
+    const lastName = patientRecord?.lastName?.trim() || extractedNames.lastName || dbNames.lastName
+    const dob = formatDobForCurogram(patientRecord?.dateOfBirth || extractedData.patient_dob)
+    const gender = normalizeCurogramGender(
+      patientRecord?.gender || extractedData.retell_custom_data?.gender
+    )
+    const language =
+      patientRecord?.primaryLanguage?.trim() ||
+      firstNonEmptyString(extractedData.retell_custom_data?.language) ||
+      'English'
+    const phoneCandidates = [
+      patientRecord?.primaryPhone,
+      patientRecord?.phone,
+      extractedData.patient_phone_number,
+      extractedData.user_phone_number,
+    ]
+    const phones = phoneCandidates
+      .map((value) => normalizePhoneToE164(value))
+      .filter((value): value is string => Boolean(value))
+    const emailCandidates = [patientRecord?.email, extractedData.patient_email]
+    const emails = emailCandidates
+      .map((value) => firstNonEmptyString(value))
+      .filter((value): value is string => Boolean(value))
 
-  console.log('[Curogram Escalation] Sending after Retell processing', {
-    requestId,
-    practiceId,
-    callId: call.call_id,
-    callerNumber,
-    hasIntentTopic: Boolean(intentTopic),
-    intentTopicLength: intentTopic?.length ?? 0,
-  })
+    if (!firstName) {
+      metadataUpdate.curogramPatientSyncAttemptedAt = nowIso
+      metadataUpdate.curogramPatientSyncSentAt = null
+      metadataUpdate.curogramPatientSyncStatus = 0
+      metadataUpdate.curogramPatientSyncError = 'Missing patient firstName for Curogram patient payload'
+      metadataUpdate.curogramPatientSyncRequestId = patientRequestId
+      patientSyncSucceeded = false
+    } else {
+      const patientItem: CurogramPatientItemPayload = {
+        firstName,
+        ...(lastName ? { lastName } : {}),
+        ...(dob ? { dob } : {}),
+        ...(gender ? { gender } : {}),
+        // Stable ID avoids duplicate Curogram patient records across retries/calls.
+        mappingId: patientRecord?.externalEhrId || conversation.patientId || patientRecord?.id || '',
+        ...(language ? { language } : {}),
+        ...(phones.length > 0 ? { phones: Array.from(new Set(phones)) } : {}),
+        ...(emails.length > 0 ? { emails: Array.from(new Set(emails)) } : {}),
+      }
 
-  const escalationResult = await sendCurogramEscalation(
-    {
-      callerNumber,
-      intentTopic,
-      patientData: extractedData as Record<string, unknown>,
-    },
-    {
-      endpointUrl: retellIntegration?.curogramEscalationUrl,
-      requestId,
-      callId: call.call_id,
+      console.log('[Curogram Patient Sync] Sending after Retell processing', {
+        requestId: patientRequestId,
+        practiceId,
+        callId: call.call_id,
+        patientId: patientRecord?.id || conversation.patientId || null,
+        hasPhone: Boolean(patientItem.phones?.length),
+        hasEmail: Boolean(patientItem.emails?.length),
+        hasMappingId: Boolean(patientItem.mappingId),
+      })
+
+      const patientResult = await sendCurogramPatientsUpsert(
+        {
+          type: 'integration-engine',
+          items: [patientItem],
+        },
+        {
+          requestId: patientRequestId,
+          callId: call.call_id,
+        }
+      )
+
+      console.log('[Curogram Patient Sync] Post-call result', {
+        requestId: patientRequestId,
+        practiceId,
+        callId: call.call_id,
+        ok: patientResult.ok,
+        status: patientResult.status,
+        responsePreview: patientResult.body.slice(0, 200),
+      })
+
+      metadataUpdate.curogramPatientSyncAttemptedAt = nowIso
+      metadataUpdate.curogramPatientSyncSentAt = patientResult.ok ? new Date().toISOString() : null
+      metadataUpdate.curogramPatientSyncStatus = patientResult.status
+      metadataUpdate.curogramPatientSyncResponse = patientResult.body.slice(0, 500)
+      metadataUpdate.curogramPatientSyncRequestId = patientRequestId
+      metadataUpdate.curogramPatientSyncPayloadPreview = {
+        ...patientItem,
+        emails: patientItem.emails ? ['[redacted]'] : undefined,
+      }
+      patientSyncSucceeded = patientResult.ok
+      if (!patientResult.ok) {
+        metadataUpdate.curogramPatientSyncError = patientResult.body.slice(0, 500)
+      }
     }
-  )
+  }
 
-  console.log('[Curogram Escalation] Post-call result', {
-    requestId,
-    practiceId,
-    callId: call.call_id,
-    ok: escalationResult.ok,
-    status: escalationResult.status,
-    responsePreview: escalationResult.body.slice(0, 200),
-  })
+  if (shouldEscalate) {
+    if (!patientSyncSucceeded) {
+      metadataUpdate.curogramEscalationDeferredAt = nowIso
+      metadataUpdate.curogramEscalationDeferredReason = 'patient_sync_not_successful'
+    } else {
+    const requestId = `retell-curogram-post-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const callerNumber = normalizePhoneToE164(
+      extractedData.patient_phone_number || extractedData.user_phone_number
+    )
+
+    if (!callerNumber) {
+      metadataUpdate.curogramEscalationAttemptedAt = nowIso
+      metadataUpdate.curogramEscalationSentAt = null
+      metadataUpdate.curogramEscalationStatus = 0
+      metadataUpdate.curogramEscalationError = 'Missing valid callerNumber for Curogram payload'
+      metadataUpdate.curogramEscalationRequestId = requestId
+      metadataUpdate.curogramEscalationEventType = 'post_call_processing'
+    } else {
+      const intentTopic = trimCurogramIntentTopicForApi(
+        buildCurogramIntentTopicWithPatientContext({
+          extracted: extractedData,
+          defaultIntent: process.env.CUROGRAM_AI_ESCALATION_DEFAULT_INTENT || 'AI call escalation',
+        })
+      )
+
+      console.log('[Curogram Escalation] Sending after Retell processing', {
+        requestId,
+        practiceId,
+        callId: call.call_id,
+        callerNumber,
+        hasIntentTopic: Boolean(intentTopic),
+        intentTopicLength: intentTopic?.length ?? 0,
+      })
+
+      const escalationResult = await sendCurogramEscalation(
+        {
+          callerNumber,
+          intentTopic,
+          patientData: extractedData as Record<string, unknown>,
+        },
+        {
+          endpointUrl: retellIntegration?.curogramEscalationUrl,
+          requestId,
+          callId: call.call_id,
+        }
+      )
+
+      console.log('[Curogram Escalation] Post-call result', {
+        requestId,
+        practiceId,
+        callId: call.call_id,
+        ok: escalationResult.ok,
+        status: escalationResult.status,
+        responsePreview: escalationResult.body.slice(0, 200),
+      })
+
+      metadataUpdate.curogramEscalationAttemptedAt = nowIso
+      metadataUpdate.curogramEscalationSentAt = escalationResult.ok ? new Date().toISOString() : null
+      metadataUpdate.curogramEscalationStatus = escalationResult.status
+      metadataUpdate.curogramEscalationResponse = escalationResult.body.slice(0, 500)
+      metadataUpdate.curogramEscalationCallerNumber = callerNumber
+      metadataUpdate.curogramEscalationIntentTopic = intentTopic || null
+      metadataUpdate.curogramEscalationRequestId = requestId
+      metadataUpdate.curogramEscalationEventType = 'post_call_processing'
+      if (!escalationResult.ok) {
+        metadataUpdate.curogramEscalationError = escalationResult.body.slice(0, 500)
+      }
+    }
+    }
+  }
 
   await prisma.voiceConversation.update({
     where: { id: conversation.id },
     data: {
-      metadata: {
-        ...metadata,
-        curogramEscalationAttemptedAt: new Date().toISOString(),
-        curogramEscalationSentAt: escalationResult.ok ? new Date().toISOString() : null,
-        curogramEscalationStatus: escalationResult.status,
-        curogramEscalationResponse: escalationResult.body.slice(0, 500),
-        curogramEscalationCallerNumber: callerNumber,
-        curogramEscalationIntentTopic: intentTopic || null,
-        curogramEscalationRequestId: requestId,
-        curogramEscalationEventType: 'post_call_processing',
-      } as Prisma.InputJsonObject,
+      metadata: metadataUpdate as Prisma.InputJsonObject,
     },
   })
 }
@@ -1226,7 +1390,6 @@ export async function processRetellCallData(
 
     const shouldEscalate = shouldTriggerCurogramEscalation({
       extractedData,
-      isNewPatient: isNew,
     })
 
     if (shouldEscalate) {

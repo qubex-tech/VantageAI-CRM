@@ -48,8 +48,24 @@ export async function GET(req: NextRequest) {
         const eventType = metadata.curogramEscalationEventType as string | undefined
         const error = metadata.curogramEscalationError as string | undefined
         const callerNumber = metadata.curogramEscalationCallerNumber as string | undefined
+        const patientSyncAttemptedAt = metadata.curogramPatientSyncAttemptedAt as string | undefined
+        const patientSyncSentAt = metadata.curogramPatientSyncSentAt as string | undefined
+        const patientSyncStatus = metadata.curogramPatientSyncStatus as number | undefined
+        const patientSyncRequestId = metadata.curogramPatientSyncRequestId as string | undefined
+        const patientSyncError = metadata.curogramPatientSyncError as string | undefined
+        const patientSyncResponse = metadata.curogramPatientSyncResponse as string | undefined
+        const patientSyncPayloadPreview =
+          metadata.curogramPatientSyncPayloadPreview as Record<string, unknown> | undefined
 
-        if (!attemptedAt && !sentAt && status === undefined && !error) {
+        const hasEscalation = Boolean(attemptedAt || sentAt || status !== undefined || error)
+        const hasPatientSync = Boolean(
+          patientSyncAttemptedAt ||
+            patientSyncSentAt ||
+            patientSyncStatus !== undefined ||
+            patientSyncError
+        )
+
+        if (!hasEscalation && !hasPatientSync) {
           return null
         }
 
@@ -68,6 +84,16 @@ export async function GET(req: NextRequest) {
           intentTopic: intentTopic ?? null,
           error: error || null,
           responsePreview: response ? response.slice(0, 300) : null,
+          patientSync: {
+            requestId: patientSyncRequestId || null,
+            attemptedAt: patientSyncAttemptedAt || null,
+            sentAt: patientSyncSentAt || null,
+            delivered: Boolean(patientSyncSentAt),
+            status: patientSyncStatus ?? null,
+            error: patientSyncError || null,
+            responsePreview: patientSyncResponse ? patientSyncResponse.slice(0, 300) : null,
+            payloadPreview: patientSyncPayloadPreview || null,
+          },
         }
       })
       .filter((item): item is NonNullable<typeof item> => Boolean(item))

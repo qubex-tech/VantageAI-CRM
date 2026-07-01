@@ -4,6 +4,23 @@ export interface CurogramEscalationPayload {
   patientData?: Record<string, unknown>
 }
 
+export interface CurogramPatientItemPayload {
+  firstName: string
+  middleName?: string
+  lastName?: string
+  dob?: string
+  gender?: string
+  mappingId?: string
+  language?: string
+  phones?: string[]
+  emails?: string[]
+}
+
+export interface CurogramPatientsUpsertPayload {
+  type: 'integration-engine'
+  items: CurogramPatientItemPayload[]
+}
+
 interface CurogramEscalationOptions {
   requestId?: string
   callId?: string
@@ -11,6 +28,14 @@ interface CurogramEscalationOptions {
   timeoutMs?: number
   authHeaderName?: string | null
   authHeaderValue?: string | null
+}
+
+interface CurogramPatientsOptions {
+  requestId?: string
+  callId?: string
+  endpointUrl?: string | null
+  token?: string | null
+  timeoutMs?: number
 }
 
 function parseTimeoutMs(raw: string | undefined): number {
@@ -43,6 +68,10 @@ export function normalizePhoneToE164(phone: unknown): string | null {
 
   const digits = trimmed.replace(/\D/g, '')
   if (!digits) return null
+  // Assume NANP when caller provides 10-digit US local format.
+  if (digits.length === 10) return `+1${digits}`
+  // Preserve NANP leading country code when provided without plus.
+  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`
   return `+${digits}`
 }
 
@@ -87,6 +116,46 @@ export async function sendCurogramEscalation(
     return { ok: response.ok, status: response.status, body: bodyText }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown Curogram error'
+    return { ok: false, status: 0, body: message }
+  } finally {
+    clearTimeout(timeoutId)
+    if (options.requestId || options.callId) {
+      // Keep options referenced for future request-level tracing.
+    }
+  }
+}
+
+export async function sendCurogramPatientsUpsert(
+  payload: CurogramPatientsUpsertPayload,
+  options: CurogramPatientsOptions = {}
+): Promise<{ ok: boolean; status: number; body: string }> {
+  const url = options.endpointUrl?.trim() || process.env.CUROGRAM_PATIENTS_API_URL?.trim() || 'https://integrations.curogram.com/patients'
+  const token = options.token?.trim() || process.env.CUROGRAM_PATIENTS_API_TOKEN?.trim()
+  if (!url) {
+    return { ok: false, status: 0, body: 'Curogram patients API URL not configured' }
+  }
+  if (!token) {
+    return { ok: false, status: 0, body: 'Curogram patients API token not configured' }
+  }
+
+  const timeoutMs = options.timeoutMs || parseTimeoutMs(process.env.CUROGRAM_PATIENTS_API_TIMEOUT_MS)
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    })
+    const bodyText = await response.text()
+    return { ok: response.ok, status: response.status, body: bodyText }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown Curogram patients API error'
     return { ok: false, status: 0, body: message }
   } finally {
     clearTimeout(timeoutId)
