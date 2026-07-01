@@ -122,7 +122,15 @@ function shouldTriggerCurogramEscalation(params: {
       params.extractedData.existing_patient_update
   )
   if (existingPatientUpdate === true) return false
-  return newPatientAdd === true
+  if (newPatientAdd === true) return true
+
+  // Fallback when custom booleans are missing but classification says "new patient".
+  const patientType = String(params.extractedData.patient_type || '')
+    .trim()
+    .toLowerCase()
+  if (patientType.includes('new')) return true
+
+  return false
 }
 
 async function triggerCurogramAfterRetellProcessing(
