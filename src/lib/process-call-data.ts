@@ -107,7 +107,7 @@ function formatDobForCurogram(value: unknown): string | undefined {
   return parsed.toISOString()
 }
 
-function shouldTriggerCurogramEscalation(params: {
+export function shouldTriggerCurogramEscalation(params: {
   extractedData: ExtractedCallData
 }): boolean {
   const customData = (params.extractedData.retell_custom_data || {}) as Record<string, unknown>
