@@ -35,6 +35,7 @@ interface AppointmentsViewProps {
     reference: string
     name: string
   }>
+  openDentalActions?: boolean
 }
 
 type ViewMode = 'list' | 'week' | 'day'
@@ -57,7 +58,11 @@ function toLocalDateInputValue(date: Date): string {
   return `${year}-${month}-${day}`
 }
 
-export function AppointmentsView({ initialAppointments, practitioners }: AppointmentsViewProps) {
+export function AppointmentsView({
+  initialAppointments,
+  practitioners,
+  openDentalActions = false,
+}: AppointmentsViewProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [viewMode, setViewMode] = useState<ViewMode>(() =>
@@ -71,6 +76,7 @@ export function AppointmentsView({ initialAppointments, practitioners }: Appoint
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
   const [syncStatusLine, setSyncStatusLine] = useState<string | null>(null)
   const [selectedPractitionerRefs, setSelectedPractitionerRefs] = useState<string[]>([])
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -407,8 +413,20 @@ export function AppointmentsView({ initialAppointments, practitioners }: Appoint
       )}
 
       {/* View Content */}
+      {viewMode === 'list' && appointments.length > 0 && (
+        <p className="text-sm text-gray-500">
+          Select an appointment to pull from Open Dental or cancel it. Click the card to open full details.
+        </p>
+      )}
       {viewMode === 'list' ? (
-        <AppointmentsListView appointments={appointments} />
+        <AppointmentsListView
+          appointments={appointments}
+          openDentalActions={openDentalActions}
+          selectedId={selectedAppointmentId}
+          onSelect={(id) =>
+            setSelectedAppointmentId((current) => (current === id ? null : id))
+          }
+        />
       ) : (
         <AppointmentsCalendarView
           layout={viewMode === 'day' ? 'day' : 'week'}

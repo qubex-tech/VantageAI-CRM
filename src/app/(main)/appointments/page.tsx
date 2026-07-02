@@ -11,6 +11,7 @@ import {
   listEhrPractitionersForPractice,
 } from '@/lib/integrations/ehr/scheduleSync'
 import { getSchedulingSettings } from '@/lib/integrations/clinical-system/server'
+import { getOpenDentalConnection } from '@/lib/integrations/opendental/factory'
 
 export const dynamic = 'force-dynamic'
 
@@ -132,6 +133,8 @@ export default async function AppointmentsPage({
   // appointments live in the local DB (synced from / written back to Open Dental).
   const scheduling = await getSchedulingSettings(practiceId)
   const useCalBookings = scheduling.mode !== 'open_dental'
+  const openDentalConnection = await getOpenDentalConnection(practiceId)
+  const openDentalActions = !!openDentalConnection?.isActive
 
   // Fetch Cal.com bookings and merge with local appointments
   let calBookings: any[] = []
@@ -304,7 +307,11 @@ export default async function AppointmentsPage({
         description={date ? format(date, 'MMMM d, yyyy') : 'Manage and view all appointments'}
       />
 
-      <AppointmentsView initialAppointments={transformedAppointments} practitioners={practitioners} />
+      <AppointmentsView
+        initialAppointments={transformedAppointments}
+        practitioners={practitioners}
+        openDentalActions={openDentalActions}
+      />
     </div>
   )
 }

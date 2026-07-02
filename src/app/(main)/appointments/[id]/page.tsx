@@ -6,6 +6,8 @@ import { format } from 'date-fns'
 import Link from 'next/link'
 import { getCalClient } from '@/lib/cal'
 import { syncBookingToPatient } from '@/lib/sync-booking-to-patient'
+import { getOpenDentalConnection } from '@/lib/integrations/opendental/factory'
+import { AppointmentActionsBar } from '@/components/appointments/AppointmentActionsBar'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,6 +24,8 @@ export default async function AppointmentDetailPage({
     notFound()
   }
   const practiceId = user.practiceId
+  const openDentalConnection = await getOpenDentalConnection(practiceId)
+  const openDentalActions = !!openDentalConnection?.isActive
 
   // Check if this is a Cal.com booking (ID starts with "cal-")
   const isCalBooking = id.startsWith('cal-')
@@ -156,6 +160,15 @@ export default async function AppointmentDetailPage({
         <p className="text-sm text-gray-500">
           {appointment ? `Appointment ID: ${appointment.id.slice(0, 8)}...` : `Booking ID: ${calBooking?.uid || calBooking?.id}`}
         </p>
+        {appointment && (
+          <div className="mt-4">
+            <AppointmentActionsBar
+              appointmentId={appointment.id}
+              status={appointment.status}
+              openDentalActions={openDentalActions}
+            />
+          </div>
+        )}
       </div>
 
       {appointment ? (
@@ -220,6 +233,12 @@ export default async function AppointmentDetailPage({
                   {appointment.status}
                 </span>
               </div>
+              {appointment.calBookingId && (
+                <div>
+                  <p className="text-sm font-medium text-gray-500">External link</p>
+                  <p className="text-sm text-gray-900 mt-1 font-mono">{appointment.calBookingId}</p>
+                </div>
+              )}
               {appointment.reason && (
                 <div>
                   <p className="text-sm font-medium text-gray-500">Reason</p>

@@ -15,6 +15,17 @@ export function buildAppointmentExternalId(aptNum: number | string): string {
   return `opendental:apt:${aptNum}`
 }
 
+const APPT_BOOKING_PREFIX = 'opendental:apt:'
+
+/** Parse Open Dental AptNum from CRM `calBookingId` (`opendental:apt:{AptNum}`). */
+export function parseOpenDentalAptNumFromBookingId(
+  calBookingId: string | null | undefined
+): number | null {
+  if (!calBookingId || !calBookingId.startsWith(APPT_BOOKING_PREFIX)) return null
+  const n = Number(calBookingId.slice(APPT_BOOKING_PREFIX.length))
+  return Number.isInteger(n) && n > 0 ? n : null
+}
+
 function cleanString(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
@@ -278,6 +289,90 @@ export async function syncOpenDentalAppointmentsForPatient(params: {
   }
 
   return summary
+}
+
+export type SingleAppointmentPullResult = {
+  outcome: 'created' | 'updated' | 'skipped'
+  reason?: string
+  aptNum?: number
+}
+
+/**
+ * Pull a single CRM appointment from Open Dental by AptNum (when linked) or refresh
+ * the patient's OD appointments and match by start time when only the patient is linked.
+ */
+export async function syncOpenDentalAppointmentByCrmId(params: {
+  practiceId: string
+  appointmentId: string
+  actorUserId?: string
+}): Promise<SingleAppointmentPullResult> {
+  const { practiceId, appointmentId, actorUserId } = params
+
+  const appointment = await prisma.appointment.findFirst({
+    where: { id: appointmentId, practiceId },
+    include: {
+      patient: { select: { id: true, externalEhrId: true } },
+    },
+  })
+  if (!appointment) throw new Error('Appointment not found')
+
+  const connection = await getOpenDentalConnection(practiceId)
+  if (!connection?.isActive) {
+    return { outcome: 'skipped', reason: 'opendental_not_configured' }
+  }
+
+  const services = await getOpenDentalServices(practiceId)
+  const timeZone = await getPracticeTimeZone(practiceId)
+  const aptNum = parseOpenDentalAptNumFromBookingId(appointment.calBookingId)
+
+  if (aptNum) {
+    const od = (await services.appointments.get(aptNum)) as OdAppointment | null
+    if (!od?.AptNum) {
+      return { outcome: 'skipped', reason: 'not_found_in_opendental', aptNum }
+    }
+    if (!isSchedulableStatus(od.AptStatus) || !parseOdWallClock(od.AptDateTime)) {
+      return { outcome: 'skipped', reason: 'non_schedulable_in_opendental', aptNum }
+    }
+    const outcome = await upsertAppointmentFromOpenDental({
+      practiceId,
+      patientId: appointment.patientId,
+      od,
+      timeZone,
+    })
+    await logOpenDentalAudit({
+      tenantId: practiceId,
+      actorUserId,
+      action: 'appointment.pulled',
+      entity: 'Appointment',
+      entityId: String(aptNum),
+      metadata: { appointmentId, outcome },
+    })
+    return { outcome, aptNum }
+  }
+
+  const patientOdId = appointment.patient.externalEhrId
+  if (!patientOdId?.startsWith('opendental:') || patientOdId.includes(':apt:')) {
+    return { outcome: 'skipped', reason: 'not_linked_to_opendental' }
+  }
+
+  const summary = await syncOpenDentalAppointmentsForPatient({
+    practiceId,
+    patientId: appointment.patientId,
+    externalEhrId: patientOdId,
+  })
+
+  const refreshed = await prisma.appointment.findFirst({
+    where: { id: appointmentId, practiceId },
+    select: { calBookingId: true, updatedAt: true },
+  })
+  const linked = parseOpenDentalAptNumFromBookingId(refreshed?.calBookingId)
+  if (linked) {
+    return { outcome: 'updated', aptNum: linked }
+  }
+  if (summary.updated + summary.created > 0) {
+    return { outcome: 'updated', reason: 'patient_appointments_refreshed' }
+  }
+  return { outcome: 'skipped', reason: 'no_matching_opendental_appointment' }
 }
 
 /**
