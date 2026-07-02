@@ -9,12 +9,14 @@ import { getSchedulingSettings } from '../src/lib/integrations/clinical-system/s
 import {
   resolveReadLengthMinutes,
   resolveReadOperatoryNum,
+  resolveReadOperatoryNums,
   resolveReadProvNum,
+  resolveBookOperatoryNum,
 } from '../src/lib/integrations/clinical-system/types'
 import { createOpenDentalPatientFromCrm } from '../src/lib/integrations/opendental/patientWriteback'
 import {
   bookOpenDentalAppointment,
-  getOpenDentalOpenSlots,
+  getOpenDentalOpenSlotsForOperatories,
 } from '../src/lib/integrations/opendental/scheduling'
 import { getOpenDentalServices } from '../src/lib/integrations/opendental/factory'
 
@@ -41,22 +43,23 @@ async function main() {
   }
 
   const readProv = resolveReadProvNum(scheduling)
+  const readOps = resolveReadOperatoryNums(scheduling)
   const readOp = resolveReadOperatoryNum(scheduling)
   const readLen = resolveReadLengthMinutes(scheduling)
   const bookProv = scheduling.defaultProvNum ?? null
-  const bookOp = scheduling.defaultOperatoryNum ?? null
+  const bookOp = resolveBookOperatoryNum(scheduling)
   const bookLen = scheduling.defaultLengthMinutes ?? null
 
   console.log('\n[config] Reading defaults (resolved):')
-  console.log(`  provider:  ${readProv ?? '(none)'}`)
-  console.log(`  operatory: ${readOp ?? '(none)'}`)
-  console.log(`  length:    ${readLen ?? '(none)'} min`)
+  console.log(`  provider:   ${readProv ?? '(none)'}`)
+  console.log(`  operatories: ${readOps.length ? readOps.join(', ') : '(none)'}`)
+  console.log(`  length:     ${readLen ?? '(none)'} min`)
   console.log('[config] Booking defaults:')
   console.log(`  provider:  ${bookProv ?? '(none)'}`)
   console.log(`  operatory: ${bookOp ?? '(none)'}`)
   console.log(`  length:    ${bookLen ?? '(none)'} min`)
 
-  if (!readOp) throw new Error('No read operatory resolved — configure reading or booking operatory in settings.')
+  if (!readOps.length) throw new Error('No read operatories resolved — configure reading or booking operatories in settings.')
   if (!bookOp) throw new Error('No booking operatory configured in settings.')
 
   const services = await getOpenDentalServices(PRACTICE_ID)
@@ -66,7 +69,7 @@ async function main() {
     .map((o) => ({ operatoryNum: Number(o.OperatoryNum), name: String(o.OpName ?? o.OperatoryNum) }))
 
   console.log('\n[config] Operatory names:')
-  console.log(`  read  -> ${opName(operatories, readOp)} (${readOp})`)
+  console.log(`  read  -> ${readOps.map((n) => `${opName(operatories, n)} (${n})`).join(', ')}`)
   console.log(`  book  -> ${opName(operatories, bookOp)} (${bookOp})`)
 
   if (readOp === bookOp) {
@@ -104,10 +107,10 @@ async function main() {
   end.setDate(end.getDate() + 14)
 
   console.log('\n[3] Fetching slots using READ defaults...')
-  const slots = await getOpenDentalOpenSlots({
+  const slots = await getOpenDentalOpenSlotsForOperatories({
     practiceId: PRACTICE_ID,
     provNum: readProv,
-    opNum: readOp,
+    opNums: readOps,
     dateStart: ymd(start),
     dateEnd: ymd(end),
     lengthMinutes: readLen,
@@ -122,9 +125,9 @@ async function main() {
   sample.forEach((s) => console.log(`      • ${s.start} op=${s.opNum} prov=${s.provNum}`.trim() + ` len=${s.lengthMinutes}m`))
 
   const readOpOk =
-    slotOpNums.size === 1 && slotOpNums.has(readOp)
+    readOps.every((op) => slotOpNums.has(op)) && slotOpNums.size <= readOps.length
       ? 'PASS'
-      : slotOpNums.has(readOp)
+      : slotOpNums.has(readOp ?? -1)
         ? 'PARTIAL (mixed operatories in response)'
         : 'FAIL'
   console.log(`\n    Slot operatory check: ${readOpOk}`)

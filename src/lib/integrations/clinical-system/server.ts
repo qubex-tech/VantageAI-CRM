@@ -54,13 +54,28 @@ function parseScheduling(value: unknown): SchedulingSettings | undefined {
     const n = Number(v)
     return Number.isInteger(n) && n > 0 ? n : null
   }
+  const toPositiveIntArray = (v: unknown): number[] => {
+    if (!Array.isArray(v)) return []
+    const seen = new Set<number>()
+    const out: number[] = []
+    for (const item of v) {
+      const n = toPositiveInt(item)
+      if (n && !seen.has(n)) {
+        seen.add(n)
+        out.push(n)
+      }
+    }
+    return out
+  }
   return {
     mode,
     defaultReadProvNum: toPositiveInt(raw.defaultReadProvNum),
     defaultReadOperatoryNum: toPositiveInt(raw.defaultReadOperatoryNum),
+    defaultReadOperatoryNums: toPositiveIntArray(raw.defaultReadOperatoryNums),
     defaultReadLengthMinutes: toPositiveInt(raw.defaultReadLengthMinutes),
     defaultProvNum: toPositiveInt(raw.defaultProvNum),
     defaultOperatoryNum: toPositiveInt(raw.defaultOperatoryNum),
+    defaultOperatoryNums: toPositiveIntArray(raw.defaultOperatoryNums),
     defaultLengthMinutes: toPositiveInt(raw.defaultLengthMinutes),
   }
 }

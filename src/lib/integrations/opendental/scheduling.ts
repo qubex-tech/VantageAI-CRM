@@ -190,6 +190,40 @@ export async function getOpenDentalOpenSlots(params: {
   return slots
 }
 
+/**
+ * Fetch open slots across multiple operatories and merge them (deduped by start + operatory).
+ */
+export async function getOpenDentalOpenSlotsForOperatories(params: {
+  practiceId: string
+  provNum?: number | null
+  opNums: number[]
+  dateStart: string
+  dateEnd?: string
+  lengthMinutes?: number | null
+}): Promise<OpenDentalOpenSlot[]> {
+  const { opNums, ...rest } = params
+  const uniqueOps = [...new Set(opNums.filter((n) => Number.isInteger(n) && n > 0))]
+
+  if (uniqueOps.length === 0) {
+    return getOpenDentalOpenSlots({ ...rest, opNum: null })
+  }
+
+  const merged: OpenDentalOpenSlot[] = []
+  const seen = new Set<string>()
+  for (const opNum of uniqueOps) {
+    const slots = await getOpenDentalOpenSlots({ ...rest, opNum })
+    for (const slot of slots) {
+      const key = `${slot.start}|${slot.opNum}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      merged.push(slot)
+    }
+  }
+
+  merged.sort((a, b) => a.start.localeCompare(b.start))
+  return merged
+}
+
 function lengthToPattern(lengthMinutes: number): string {
   const slots = Math.max(1, Math.round(lengthMinutes / PATTERN_SLOT_MINUTES))
   return 'X'.repeat(slots)

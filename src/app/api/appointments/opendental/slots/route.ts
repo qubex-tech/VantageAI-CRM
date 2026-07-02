@@ -3,11 +3,12 @@ import { requireAuth } from '@/lib/middleware'
 import { getSchedulingSettings } from '@/lib/integrations/clinical-system/server'
 import {
   resolveReadLengthMinutes,
-  resolveReadOperatoryNum,
+  resolveReadOperatoryNums,
   resolveReadProvNum,
 } from '@/lib/integrations/clinical-system/types'
 import {
   getOpenDentalOpenSlots,
+  getOpenDentalOpenSlotsForOperatories,
   DEFAULT_SLOT_LENGTH_MINUTES,
 } from '@/lib/integrations/opendental/scheduling'
 
@@ -31,20 +32,29 @@ export async function GET(req: NextRequest) {
     const dateEnd = sp.get('dateEnd') || undefined
 
     const provNum = Number(sp.get('provNum')) || resolveReadProvNum(scheduling) || undefined
-    const opNum = Number(sp.get('opNum')) || resolveReadOperatoryNum(scheduling) || undefined
+    const opNumOverride = Number(sp.get('opNum')) || undefined
     const lengthMinutes =
       Number(sp.get('lengthMinutes')) ||
       resolveReadLengthMinutes(scheduling) ||
       DEFAULT_SLOT_LENGTH_MINUTES
 
-    const slots = await getOpenDentalOpenSlots({
-      practiceId,
-      provNum,
-      opNum,
-      dateStart,
-      dateEnd,
-      lengthMinutes,
-    })
+    const slots = opNumOverride
+      ? await getOpenDentalOpenSlots({
+          practiceId,
+          provNum,
+          opNum: opNumOverride,
+          dateStart,
+          dateEnd,
+          lengthMinutes,
+        })
+      : await getOpenDentalOpenSlotsForOperatories({
+          practiceId,
+          provNum,
+          opNums: resolveReadOperatoryNums(scheduling),
+          dateStart,
+          dateEnd,
+          lengthMinutes,
+        })
 
     return NextResponse.json({ slots })
   } catch (error) {

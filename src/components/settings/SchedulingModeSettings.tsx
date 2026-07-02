@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -11,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Loader2, CalendarClock } from 'lucide-react'
+import { Loader2, CalendarClock, X } from 'lucide-react'
 import type { SchedulingMode } from '@/lib/integrations/clinical-system/types'
 
 interface SchedulingModeSettingsProps {
@@ -31,14 +30,101 @@ interface OperatoryOption {
 
 const LENGTH_OPTIONS = [15, 20, 30, 40, 45, 60, 90]
 const NONE = 'none'
+const ADD_OPERATORY = 'add-operatory'
+
+function operatoryLabel(operatories: OperatoryOption[], operatoryNum: number): string {
+  return operatories.find((o) => o.operatoryNum === operatoryNum)?.name ?? `OP-${operatoryNum}`
+}
+
+function AdditionalOperatoriesEditor({
+  label,
+  description,
+  primaryOperatoryNum,
+  additionalOperatoryNums,
+  operatories,
+  onChangeAdditional,
+}: {
+  label: string
+  description: string
+  primaryOperatoryNum: string
+  additionalOperatoryNums: number[]
+  operatories: OperatoryOption[]
+  onChangeAdditional: (nums: number[]) => void
+}) {
+  const primaryNum = primaryOperatoryNum !== NONE ? Number(primaryOperatoryNum) : null
+  const reserved = new Set<number>([
+    ...(primaryNum && Number.isFinite(primaryNum) ? [primaryNum] : []),
+    ...additionalOperatoryNums,
+  ])
+  const available = operatories.filter((o) => !reserved.has(o.operatoryNum))
+
+  const handleAdd = (value: string) => {
+    if (value === ADD_OPERATORY) return
+    const num = Number(value)
+    if (!Number.isInteger(num) || num <= 0 || reserved.has(num)) return
+    onChangeAdditional([...additionalOperatoryNums, num])
+  }
+
+  return (
+    <div className="space-y-2 sm:col-span-3">
+      <div>
+        <p className="text-sm font-medium text-gray-700">{label}</p>
+        <p className="text-xs text-gray-500 mt-0.5">{description}</p>
+      </div>
+      {additionalOperatoryNums.length > 0 ? (
+        <ul className="flex flex-wrap gap-2">
+          {additionalOperatoryNums.map((num) => (
+            <li
+              key={num}
+              className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-sm text-gray-800"
+            >
+              {operatoryLabel(operatories, num)}
+              <button
+                type="button"
+                onClick={() =>
+                  onChangeAdditional(additionalOperatoryNums.filter((n) => n !== num))
+                }
+                className="rounded p-0.5 text-gray-400 hover:text-gray-700"
+                aria-label={`Remove ${operatoryLabel(operatories, num)}`}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-gray-500">No additional operatories configured.</p>
+      )}
+      {available.length > 0 && (
+        <Select value={ADD_OPERATORY} onValueChange={handleAdd}>
+          <SelectTrigger className="max-w-xs">
+            <SelectValue placeholder="Add operatory" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ADD_OPERATORY} disabled>
+              Add operatory…
+            </SelectItem>
+            {available.map((o) => (
+              <SelectItem key={o.operatoryNum} value={String(o.operatoryNum)}>
+                {o.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+    </div>
+  )
+}
 
 export function SchedulingModeSettings({ practiceId, openDentalAvailable }: SchedulingModeSettingsProps) {
   const [mode, setMode] = useState<SchedulingMode>('cal')
   const [defaultReadProvNum, setDefaultReadProvNum] = useState<string>(NONE)
   const [defaultReadOperatoryNum, setDefaultReadOperatoryNum] = useState<string>(NONE)
+  const [additionalReadOperatoryNums, setAdditionalReadOperatoryNums] = useState<number[]>([])
   const [defaultReadLengthMinutes, setDefaultReadLengthMinutes] = useState<string>(NONE)
   const [defaultProvNum, setDefaultProvNum] = useState<string>(NONE)
   const [defaultOperatoryNum, setDefaultOperatoryNum] = useState<string>(NONE)
+  const [additionalBookOperatoryNums, setAdditionalBookOperatoryNums] = useState<number[]>([])
   const [defaultLengthMinutes, setDefaultLengthMinutes] = useState<number>(30)
   const [providers, setProviders] = useState<ProviderOption[]>([])
   const [operatories, setOperatories] = useState<OperatoryOption[]>([])
@@ -66,11 +152,17 @@ export function SchedulingModeSettings({ practiceId, openDentalAvailable }: Sche
           setDefaultReadOperatoryNum(
             sched.defaultReadOperatoryNum ? String(sched.defaultReadOperatoryNum) : NONE
           )
+          setAdditionalReadOperatoryNums(
+            Array.isArray(sched.defaultReadOperatoryNums) ? sched.defaultReadOperatoryNums : []
+          )
           setDefaultReadLengthMinutes(
             sched.defaultReadLengthMinutes ? String(sched.defaultReadLengthMinutes) : NONE
           )
           setDefaultProvNum(sched.defaultProvNum ? String(sched.defaultProvNum) : NONE)
           setDefaultOperatoryNum(sched.defaultOperatoryNum ? String(sched.defaultOperatoryNum) : NONE)
+          setAdditionalBookOperatoryNums(
+            Array.isArray(sched.defaultOperatoryNums) ? sched.defaultOperatoryNums : []
+          )
           setDefaultLengthMinutes(sched.defaultLengthMinutes ?? 30)
         }
       } catch (err) {
@@ -92,8 +184,8 @@ export function SchedulingModeSettings({ practiceId, openDentalAvailable }: Sche
       ])
       const pData = await pRes.json()
       const oData = await oRes.json()
-      if (pRes.ok) setProviders((pData.providers || []).filter((p: any) => !p.isHidden))
-      if (oRes.ok) setOperatories((oData.operatories || []).filter((o: any) => !o.isHidden))
+      if (pRes.ok) setProviders((pData.providers || []).filter((p: ProviderOption & { isHidden?: boolean }) => !p.isHidden))
+      if (oRes.ok) setOperatories((oData.operatories || []).filter((o: OperatoryOption & { isHidden?: boolean }) => !o.isHidden))
     } catch {
       // Non-fatal — admin can still pick a mode without defaults.
     } finally {
@@ -120,10 +212,12 @@ export function SchedulingModeSettings({ practiceId, openDentalAvailable }: Sche
               defaultReadProvNum: defaultReadProvNum !== NONE ? Number(defaultReadProvNum) : null,
               defaultReadOperatoryNum:
                 defaultReadOperatoryNum !== NONE ? Number(defaultReadOperatoryNum) : null,
+              defaultReadOperatoryNums: additionalReadOperatoryNums,
               defaultReadLengthMinutes:
                 defaultReadLengthMinutes !== NONE ? Number(defaultReadLengthMinutes) : null,
               defaultProvNum: defaultProvNum !== NONE ? Number(defaultProvNum) : null,
               defaultOperatoryNum: defaultOperatoryNum !== NONE ? Number(defaultOperatoryNum) : null,
+              defaultOperatoryNums: additionalBookOperatoryNums,
               defaultLengthMinutes,
             }
           : { mode }
@@ -191,7 +285,7 @@ export function SchedulingModeSettings({ practiceId, openDentalAvailable }: Sche
                     <p className="text-sm font-medium text-gray-700">Open Dental reading defaults</p>
                     <p className="text-xs text-gray-500 mt-1">
                       Provider, operatory, and length used when checking available appointment slots
-                      (voice agent, CRM booking UI).
+                      (voice agent, CRM booking UI). Slots are read from every operatory listed below.
                     </p>
                   </div>
                   {loadingLists ? (
@@ -249,6 +343,14 @@ export function SchedulingModeSettings({ practiceId, openDentalAvailable }: Sche
                           </SelectContent>
                         </Select>
                       </div>
+                      <AdditionalOperatoriesEditor
+                        label="Additional reading operatories"
+                        description="Open slots are also pulled from these operatories and merged into availability."
+                        primaryOperatoryNum={defaultReadOperatoryNum}
+                        additionalOperatoryNums={additionalReadOperatoryNums}
+                        operatories={operatories}
+                        onChangeAdditional={setAdditionalReadOperatoryNums}
+                      />
                     </div>
                   )}
                 </div>
@@ -258,6 +360,7 @@ export function SchedulingModeSettings({ practiceId, openDentalAvailable }: Sche
                     <p className="text-sm font-medium text-gray-700">Open Dental booking defaults</p>
                     <p className="text-xs text-gray-500 mt-1">
                       Provider, operatory, and length used when writing a new appointment into Open Dental.
+                      New appointments book into the default operatory unless a specific operatory is passed.
                     </p>
                   </div>
                 {loadingLists ? (
@@ -317,6 +420,14 @@ export function SchedulingModeSettings({ practiceId, openDentalAvailable }: Sche
                         </SelectContent>
                       </Select>
                     </div>
+                    <AdditionalOperatoriesEditor
+                      label="Additional booking operatories"
+                      description="These operatories are eligible for writes; the default operatory is used unless another is specified."
+                      primaryOperatoryNum={defaultOperatoryNum}
+                      additionalOperatoryNums={additionalBookOperatoryNums}
+                      operatories={operatories}
+                      onChangeAdditional={setAdditionalBookOperatoryNums}
+                    />
                   </div>
                 )}
                 </div>

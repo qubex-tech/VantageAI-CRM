@@ -12,13 +12,14 @@ import { redactPHI } from './phi'
 import { getSchedulingSettings } from '@/lib/integrations/clinical-system/server'
 import {
   resolveReadLengthMinutes,
-  resolveReadOperatoryNum,
+  resolveReadOperatoryNums,
   resolveReadProvNum,
+  resolveBookOperatoryNum,
 } from '@/lib/integrations/clinical-system/types'
 import type { SchedulingSettings } from '@/lib/integrations/clinical-system/types'
 import { getPracticeTimeZone } from '@/lib/practice-timezone'
 import {
-  getOpenDentalOpenSlots,
+  getOpenDentalOpenSlotsForOperatories,
   bookOpenDentalAppointment,
 } from '@/lib/integrations/opendental/scheduling'
 import { formatOpenDentalLocalDateTime } from '@/lib/integrations/opendental/commlogWriteback'
@@ -397,10 +398,10 @@ export async function getAvailableSlots(
   const scheduling = await getSchedulingSettings(practiceId)
   if (scheduling.mode === 'open_dental') {
     try {
-      const slots = await getOpenDentalOpenSlots({
+      const slots = await getOpenDentalOpenSlotsForOperatories({
         practiceId,
         provNum: resolveReadProvNum(scheduling),
-        opNum: resolveReadOperatoryNum(scheduling),
+        opNums: resolveReadOperatoryNums(scheduling),
         dateStart: toDateOnly(dateFrom),
         dateEnd: toDateOnly(dateTo),
         lengthMinutes: resolveReadLengthMinutes(scheduling),
@@ -444,7 +445,7 @@ async function bookAppointmentViaOpenDental(params: {
 }): Promise<BookAppointmentResult> {
   const { practiceId, patientId, startTime, reason, scheduling } = params
 
-  const opNum = scheduling.defaultOperatoryNum ?? null
+  const opNum = resolveBookOperatoryNum(scheduling)
   if (!opNum) {
     throw new Error(
       'Open Dental scheduling is enabled but no default operatory is configured. Set a default operatory in Scheduling settings.'

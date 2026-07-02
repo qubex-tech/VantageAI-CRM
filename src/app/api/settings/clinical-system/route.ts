@@ -11,9 +11,11 @@ const schedulingSchema = z.object({
   mode: z.enum(SCHEDULING_MODES),
   defaultReadProvNum: z.number().int().positive().nullish(),
   defaultReadOperatoryNum: z.number().int().positive().nullish(),
+  defaultReadOperatoryNums: z.array(z.number().int().positive()).nullish(),
   defaultReadLengthMinutes: z.number().int().positive().max(600).nullish(),
   defaultProvNum: z.number().int().positive().nullish(),
   defaultOperatoryNum: z.number().int().positive().nullish(),
+  defaultOperatoryNums: z.array(z.number().int().positive()).nullish(),
   defaultLengthMinutes: z.number().int().positive().max(600).nullish(),
 })
 

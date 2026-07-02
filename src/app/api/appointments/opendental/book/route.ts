@@ -5,6 +5,7 @@ import { requireAuth } from '@/lib/middleware'
 import { createAuditLog } from '@/lib/audit'
 import { emitEvent } from '@/lib/outbox'
 import { getSchedulingSettings } from '@/lib/integrations/clinical-system/server'
+import { resolveBookOperatoryNum, resolveBookOperatoryNums } from '@/lib/integrations/clinical-system/types'
 import {
   bookOpenDentalAppointment,
   DEFAULT_SLOT_LENGTH_MINUTES,
@@ -37,7 +38,12 @@ export async function POST(req: NextRequest) {
     const input = parsed.data
 
     const scheduling = await getSchedulingSettings(practiceId)
-    const opNum = input.opNum || scheduling.defaultOperatoryNum || undefined
+    const bookOperatoryNums = resolveBookOperatoryNums(scheduling)
+    const requestedOpNum = input.opNum ?? undefined
+    const opNum =
+      requestedOpNum && bookOperatoryNums.includes(requestedOpNum)
+        ? requestedOpNum
+        : resolveBookOperatoryNum(scheduling) ?? undefined
     const provNum = input.provNum || scheduling.defaultProvNum || undefined
     const lengthMinutes =
       input.lengthMinutes || scheduling.defaultLengthMinutes || DEFAULT_SLOT_LENGTH_MINUTES
