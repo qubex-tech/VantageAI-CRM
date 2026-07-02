@@ -45,6 +45,73 @@ function toDateOnly(value: string): string {
   return value
 }
 
+const patientSchedulingSelect = {
+  id: true,
+  name: true,
+  firstName: true,
+  lastName: true,
+  dateOfBirth: true,
+  phone: true,
+  primaryPhone: true,
+  externalEhrId: true,
+  email: true,
+} as const
+
+type PatientSchedulingRow = {
+  id: string
+  name: string
+  firstName: string | null
+  lastName: string | null
+  dateOfBirth: Date | null
+  phone: string
+  primaryPhone: string | null
+  externalEhrId: string | null
+  email: string | null
+}
+
+/**
+ * When the practice books in Open Dental, ensure the CRM patient has an
+ * `opendental:{PatNum}` link — creating or matching in OD when missing.
+ */
+async function ensureOpenDentalPatientLinkedForScheduling(
+  practiceId: string,
+  patient: PatientSchedulingRow
+): Promise<PatientSchedulingRow> {
+  const scheduling = await getSchedulingSettings(practiceId)
+  if (scheduling.mode !== 'open_dental') return patient
+  if (patient.externalEhrId?.startsWith('opendental:')) return patient
+
+  const { createOpenDentalPatientFromCrm } = await import(
+    '@/lib/integrations/opendental/patientWriteback'
+  )
+  const odResult = await createOpenDentalPatientFromCrm({
+    practiceId,
+    patientId: patient.id,
+  })
+
+  const refreshed = await prisma.patient.findUnique({
+    where: { id: patient.id },
+    select: patientSchedulingSelect,
+  })
+  if (refreshed?.externalEhrId?.startsWith('opendental:')) {
+    return refreshed
+  }
+
+  if (odResult.status === 'success' && odResult.externalEhrId) {
+    return refreshed ?? { ...patient, externalEhrId: odResult.externalEhrId }
+  }
+
+  const reason = odResult.reason ?? 'unknown error'
+  if (reason === 'linked_to_other_system') {
+    throw new Error(
+      'Patient is linked to another system and cannot be booked in Open Dental.'
+    )
+  }
+  throw new Error(
+    `Could not link patient to Open Dental for scheduling (${reason}).`
+  )
+}
+
 export interface FindOrCreatePatientResult {
   /** Null when requires_agent_decision — existing phone match found but caller identity differs. */
   patientId: string | null
@@ -199,22 +266,6 @@ export async function findOrCreatePatientByPhone(
       title: 'Patient created via voice call',
       description: 'Patient was created during a phone conversation',
     })
-
-    try {
-      const { createOpenDentalPatientFromCrm } = await import(
-        '@/lib/integrations/opendental/patientWriteback'
-      )
-      const odResult = await createOpenDentalPatientFromCrm({
-        practiceId,
-        patientId: patient.id,
-      })
-      if (odResult.status === 'success' && odResult.externalEhrId) {
-        const refreshed = await prisma.patient.findUnique({ where: { id: patient.id } })
-        if (refreshed) patient = refreshed
-      }
-    } catch (error) {
-      console.error('[OpenDental] Voice patient create writeback failed', error)
-    }
   } else if (details) {
     const odChart = await fetchOpenDentalChartFacts(practiceId, patient.externalEhrId)
     const updateData = buildSafePatientUpdate(patient, details, odChart)
@@ -224,6 +275,12 @@ export async function findOrCreatePatientByPhone(
         data: updateData,
       })
     }
+  }
+
+  try {
+    patient = await ensureOpenDentalPatientLinkedForScheduling(practiceId, patient)
+  } catch (error) {
+    console.error('[OpenDental] Could not link patient for scheduling during find_or_create_patient', error)
   }
 
   const odChart = await fetchOpenDentalChartFacts(practiceId, patient.externalEhrId)
@@ -445,22 +502,23 @@ export async function bookAppointment(
   // Route booking to Open Dental when the practice schedules in its EHR.
   const scheduling = await getSchedulingSettings(practiceId)
   if (scheduling.mode === 'open_dental') {
-    const odChart = await fetchOpenDentalChartFacts(practiceId, patient.externalEhrId)
-    if (odChart && !openDentalChartMatchesCaller(odChart, patient)) {
+    const linkedPatient = await ensureOpenDentalPatientLinkedForScheduling(practiceId, patient)
+    const odChart = await fetchOpenDentalChartFacts(practiceId, linkedPatient.externalEhrId)
+    if (odChart && !openDentalChartMatchesCaller(odChart, linkedPatient)) {
       throw new Error(
-        `Cannot book: CRM patient "${patient.name}" (DOB ${patient.dateOfBirth?.toISOString().slice(0, 10) ?? 'unknown'}) ` +
+        `Cannot book: CRM patient "${linkedPatient.name}" (DOB ${linkedPatient.dateOfBirth?.toISOString().slice(0, 10) ?? 'unknown'}) ` +
           `is linked to Open Dental PatNum ${odChart.pat_num} (${odChart.first_name} ${odChart.last_name}, DOB ${odChart.birthdate ?? 'unknown'}). ` +
           `Resolve identity with resolve_patient_for_scheduling (MCP) or find_or_create_patient with forceCreate before booking.`
       )
     }
-    if (!patient.externalEhrId?.startsWith('opendental:')) {
+    if (!linkedPatient.externalEhrId?.startsWith('opendental:')) {
       throw new Error(
-        'Patient is not linked to Open Dental. Call find_or_create_patient first and confirm facts.identity_match is true before booking.'
+        'Patient is not linked to Open Dental. Could not create or match an Open Dental chart for booking.'
       )
     }
     return bookAppointmentViaOpenDental({
       practiceId,
-      patientId,
+      patientId: linkedPatient.id,
       startTime,
       reason,
       scheduling,
