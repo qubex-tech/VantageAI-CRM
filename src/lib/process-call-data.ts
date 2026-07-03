@@ -184,6 +184,9 @@ async function triggerCurogramAfterRetellProcessing(
   const metadataUpdate: Record<string, unknown> = { ...metadata }
   let patientSyncSucceeded = hasPatientSyncSuccess
   let curogramPrimaryPhoneForEscalation: string | null = null
+  let curogramMappingIdForEscalation: string | null = null
+  let curogramFirstNameForEscalation: string | null = null
+  let curogramLastNameForEscalation: string | null = null
 
   let patientRecord: {
     id: string
@@ -267,6 +270,9 @@ async function triggerCurogramAfterRetellProcessing(
         ...(emails.length > 0 ? { emails: Array.from(new Set(emails)) } : {}),
       }
       curogramPrimaryPhoneForEscalation = patientItem.phones?.[0] || null
+      curogramMappingIdForEscalation = patientItem.mappingId || null
+      curogramFirstNameForEscalation = patientItem.firstName || null
+      curogramLastNameForEscalation = patientItem.lastName || null
 
       console.log('[Curogram Patient Sync] Sending after Retell processing', {
         requestId: patientRequestId,
@@ -308,6 +314,7 @@ async function triggerCurogramAfterRetellProcessing(
         emails: patientItem.emails ? ['[redacted]'] : undefined,
       }
       metadataUpdate.curogramPatientSyncPrimaryPhone = curogramPrimaryPhoneForEscalation
+      metadataUpdate.curogramPatientSyncMappingId = curogramMappingIdForEscalation
       patientSyncSucceeded = patientResult.ok
       if (!patientResult.ok) {
         metadataUpdate.curogramPatientSyncError = patientResult.body.slice(0, 500)
@@ -330,11 +337,26 @@ async function triggerCurogramAfterRetellProcessing(
       : []
     const priorPrimaryPhone =
       priorSyncPhones.length > 0 ? normalizePhoneToE164(priorSyncPhones[0]) : null
+    const priorMappingId =
+      typeof priorSyncPreview?.mappingId === 'string' && priorSyncPreview.mappingId.trim()
+        ? priorSyncPreview.mappingId.trim()
+        : null
+    const priorFirstName =
+      typeof priorSyncPreview?.firstName === 'string' && priorSyncPreview.firstName.trim()
+        ? priorSyncPreview.firstName.trim()
+        : null
+    const priorLastName =
+      typeof priorSyncPreview?.lastName === 'string' && priorSyncPreview.lastName.trim()
+        ? priorSyncPreview.lastName.trim()
+        : null
     const requestId = `retell-curogram-post-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     const callerNumber =
       curogramPrimaryPhoneForEscalation ||
       priorPrimaryPhone ||
       normalizePhoneToE164(extractedData.patient_phone_number || extractedData.user_phone_number)
+    const mappingIdForEscalation = curogramMappingIdForEscalation || priorMappingId
+    const firstNameForEscalation = curogramFirstNameForEscalation || priorFirstName
+    const lastNameForEscalation = curogramLastNameForEscalation || priorLastName
 
     if (!callerNumber) {
       metadataUpdate.curogramEscalationAttemptedAt = nowIso
@@ -364,7 +386,20 @@ async function triggerCurogramAfterRetellProcessing(
         {
           callerNumber,
           intentTopic,
-          patientData: extractedData as Record<string, unknown>,
+          patientData: {
+            ...(extractedData as Record<string, unknown>),
+            // Explicit shared identity keys for Curogram-side merge correlation.
+            curogram_patient_mapping_id: mappingIdForEscalation || null,
+            curogram_patient_phone_e164: callerNumber,
+            curogram_patient_first_name: firstNameForEscalation || null,
+            curogram_patient_last_name: lastNameForEscalation || null,
+            curogram_identity: {
+              mappingId: mappingIdForEscalation || null,
+              primaryPhone: callerNumber,
+              firstName: firstNameForEscalation || null,
+              lastName: lastNameForEscalation || null,
+            },
+          },
         },
         {
           endpointUrl: retellIntegration?.curogramEscalationUrl,
@@ -390,6 +425,7 @@ async function triggerCurogramAfterRetellProcessing(
       metadataUpdate.curogramEscalationIntentTopic = intentTopic || null
       metadataUpdate.curogramEscalationRequestId = requestId
       metadataUpdate.curogramEscalationEventType = 'post_call_processing'
+      metadataUpdate.curogramEscalationMappingId = mappingIdForEscalation || null
       if (!escalationResult.ok) {
         metadataUpdate.curogramEscalationError = escalationResult.body.slice(0, 500)
       }
