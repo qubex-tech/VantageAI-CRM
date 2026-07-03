@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizePhoneToE164 } from '@/lib/curogram'
+import { buildCurogramIntentTopicWithPatientContext, normalizePhoneToE164 } from '@/lib/curogram'
 import { shouldTriggerCurogramEscalation } from '@/lib/process-call-data'
 
 describe('curogram integration safeguards', () => {
@@ -84,6 +84,20 @@ describe('curogram integration safeguards', () => {
 
     it('preserves international numbers and plus-prefixed formatting', () => {
       expect(normalizePhoneToE164('+44 7911 123456')).toBe('+447911123456')
+    })
+  })
+
+  describe('buildCurogramIntentTopicWithPatientContext', () => {
+    it('normalizes phone number line to +1 format for US numbers', () => {
+      const topic = buildCurogramIntentTopicWithPatientContext({
+        extracted: {
+          call_summary: 'New patient appointment request',
+          patient_name: 'Della Pest',
+          patient_phone_number: '8569125689',
+        },
+      })
+
+      expect(topic).toContain('Phone number: +18569125689')
     })
   })
 })

@@ -213,8 +213,9 @@ export function buildCurogramIntentTopicWithPatientContext(params: {
 
   const name = params.extracted.patient_name?.trim()
   const email = params.extracted.patient_email?.trim()
-  const phone =
+  const rawPhone =
     params.extracted.patient_phone_number?.trim() || params.extracted.user_phone_number?.trim()
+  const phone = normalizePhoneToE164(rawPhone) || rawPhone
   const dob =
     params.extracted.patient_dob?.trim() ||
     params.extracted.insurance_verification?.patient_dob?.trim()
