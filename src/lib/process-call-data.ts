@@ -183,6 +183,7 @@ async function triggerCurogramAfterRetellProcessing(
   const nowIso = new Date().toISOString()
   const metadataUpdate: Record<string, unknown> = { ...metadata }
   let patientSyncSucceeded = hasPatientSyncSuccess
+  let curogramPrimaryPhoneForEscalation: string | null = null
 
   let patientRecord: {
     id: string
@@ -240,6 +241,7 @@ async function triggerCurogramAfterRetellProcessing(
     const phones = phoneCandidates
       .map((value) => normalizePhoneToE164(value))
       .filter((value): value is string => Boolean(value))
+    const uniquePhones = Array.from(new Set(phones))
     const emailCandidates = [patientRecord?.email, extractedData.patient_email]
     const emails = emailCandidates
       .map((value) => firstNonEmptyString(value))
@@ -261,9 +263,10 @@ async function triggerCurogramAfterRetellProcessing(
         // Stable ID avoids duplicate Curogram patient records across retries/calls.
         mappingId: patientRecord?.externalEhrId || conversation.patientId || patientRecord?.id || '',
         ...(language ? { language } : {}),
-        ...(phones.length > 0 ? { phones: Array.from(new Set(phones)) } : {}),
+        ...(uniquePhones.length > 0 ? { phones: uniquePhones } : {}),
         ...(emails.length > 0 ? { emails: Array.from(new Set(emails)) } : {}),
       }
+      curogramPrimaryPhoneForEscalation = patientItem.phones?.[0] || null
 
       console.log('[Curogram Patient Sync] Sending after Retell processing', {
         requestId: patientRequestId,
@@ -304,6 +307,7 @@ async function triggerCurogramAfterRetellProcessing(
         ...patientItem,
         emails: patientItem.emails ? ['[redacted]'] : undefined,
       }
+      metadataUpdate.curogramPatientSyncPrimaryPhone = curogramPrimaryPhoneForEscalation
       patientSyncSucceeded = patientResult.ok
       if (!patientResult.ok) {
         metadataUpdate.curogramPatientSyncError = patientResult.body.slice(0, 500)
@@ -316,10 +320,21 @@ async function triggerCurogramAfterRetellProcessing(
       metadataUpdate.curogramEscalationDeferredAt = nowIso
       metadataUpdate.curogramEscalationDeferredReason = 'patient_sync_not_successful'
     } else {
+    const priorSyncPreview =
+      metadata.curogramPatientSyncPayloadPreview &&
+      typeof metadata.curogramPatientSyncPayloadPreview === 'object'
+        ? (metadata.curogramPatientSyncPayloadPreview as Record<string, unknown>)
+        : null
+    const priorSyncPhones = Array.isArray(priorSyncPreview?.phones)
+      ? priorSyncPreview?.phones
+      : []
+    const priorPrimaryPhone =
+      priorSyncPhones.length > 0 ? normalizePhoneToE164(priorSyncPhones[0]) : null
     const requestId = `retell-curogram-post-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    const callerNumber = normalizePhoneToE164(
-      extractedData.patient_phone_number || extractedData.user_phone_number
-    )
+    const callerNumber =
+      curogramPrimaryPhoneForEscalation ||
+      priorPrimaryPhone ||
+      normalizePhoneToE164(extractedData.patient_phone_number || extractedData.user_phone_number)
 
     if (!callerNumber) {
       metadataUpdate.curogramEscalationAttemptedAt = nowIso
