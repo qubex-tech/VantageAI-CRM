@@ -107,6 +107,13 @@ function formatDobForCurogram(value: unknown): string | undefined {
   return parsed.toISOString()
 }
 
+function parseCurogramEscalationDelayMs(): number {
+  const raw = process.env.CUROGRAM_SYNC_TO_ESCALATION_DELAY_MS?.trim()
+  const parsed = raw ? Number.parseInt(raw, 10) : 2000
+  if (!Number.isFinite(parsed) || parsed < 0) return 2000
+  return Math.min(parsed, 10000)
+}
+
 export function shouldTriggerCurogramEscalation(params: {
   extractedData: ExtractedCallData
 }): boolean {
@@ -327,6 +334,12 @@ async function triggerCurogramAfterRetellProcessing(
       metadataUpdate.curogramEscalationDeferredAt = nowIso
       metadataUpdate.curogramEscalationDeferredReason = 'patient_sync_not_successful'
     } else {
+    const delayMs = parseCurogramEscalationDelayMs()
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+      metadataUpdate.curogramEscalationDelayMs = delayMs
+      metadataUpdate.curogramEscalationDelayedAt = new Date().toISOString()
+    }
     const priorSyncPreview =
       metadata.curogramPatientSyncPayloadPreview &&
       typeof metadata.curogramPatientSyncPayloadPreview === 'object'
