@@ -21,10 +21,8 @@ import {
 const WRITEBACK_PROVIDER_ID = 'ecw_write'
 const STALE_SYNC_WINDOW_MS = 12 * 60 * 60 * 1000
 const SYNC_TIMEZONE = 'America/Chicago'
-/** Default forward horizon when practice config does not override. */
-const DEFAULT_SYNC_BUSINESS_DAYS = 14
-/** Manual backfill default when no query params are passed. */
-const MANUAL_SYNC_DEFAULT_BUSINESS_DAYS = 21
+/** Default forward horizon (calendar days, includes weekends) when practice config does not override. */
+const DEFAULT_SYNC_CALENDAR_DAYS = 14
 
 const DEFAULT_SCHEDULE_PRACTITIONER_FFBJCD =
   'Practitioner/Lt2IFR5Ah76n4d8TFP5gBPiX1g1-Q2P9s8IYoGZvbFM'
@@ -56,7 +54,7 @@ type FhirPatient = {
 
 export type SyncOptions = {
   force?: boolean
-  /** Number of upcoming weekdays (Chicago) to sync when startDate/endDate are omitted. */
+  /** Number of upcoming calendar days (Chicago, includes weekends) when startDate/endDate are omitted. */
   businessDays?: number
   /** Inclusive calendar start (YYYY-MM-DD, Chicago). */
   startDate?: string
@@ -257,10 +255,6 @@ export async function resolveEcwSchedulePractitionerRefs(
   return parsePractitionerRefsFromConfig(writeConfig, ehrContext.connection.issuer)
 }
 
-function getTzWeekday(date: Date, timeZone: string) {
-  return new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short' }).format(date)
-}
-
 function formatTzDate(date: Date, timeZone: string) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone,
@@ -272,30 +266,26 @@ function formatTzDate(date: Date, timeZone: string) {
   return `${get('year')}-${get('month')}-${get('day')}`
 }
 
-function getUpcomingBusinessDays(count: number, timeZone = SYNC_TIMEZONE) {
+function getUpcomingCalendarDays(count: number, timeZone = SYNC_TIMEZONE) {
   const days: string[] = []
   const cursor = new Date()
 
   while (days.length < count) {
-    const weekday = getTzWeekday(cursor, timeZone)
-    const isWeekend = weekday === 'Sat' || weekday === 'Sun'
-    if (!isWeekend) {
-      days.push(formatTzDate(cursor, timeZone))
-    }
+    days.push(formatTzDate(cursor, timeZone))
     cursor.setUTCDate(cursor.getUTCDate() + 1)
   }
 
   return days
 }
 
-function parseBusinessDaysFromConfig(config: Record<string, unknown>) {
-  const raw = config.ecwScheduleSyncBusinessDays
+function parseSyncHorizonDaysFromConfig(config: Record<string, unknown>) {
+  const raw = config.ecwScheduleSyncBusinessDays ?? config.ecwScheduleSyncDays
   if (typeof raw === 'number' && raw > 0 && raw <= 90) return Math.floor(raw)
   if (typeof raw === 'string') {
     const parsed = Number.parseInt(raw, 10)
     if (parsed > 0 && parsed <= 90) return parsed
   }
-  return DEFAULT_SYNC_BUSINESS_DAYS
+  return DEFAULT_SYNC_CALENDAR_DAYS
 }
 
 function isValidDateString(value: string) {
@@ -321,14 +311,14 @@ function getCalendarDaysInRange(startDate: string, endDate: string, timeZone = S
   return days
 }
 
-function resolveSyncDays(options: SyncOptions, configBusinessDays: number) {
+function resolveSyncDays(options: SyncOptions, configSyncDays: number) {
   if (options.startDate && options.endDate) {
     const rangeDays = getCalendarDaysInRange(options.startDate, options.endDate)
     if (rangeDays.length > 0) return rangeDays
   }
 
-  const businessDays = options.businessDays ?? configBusinessDays
-  return getUpcomingBusinessDays(businessDays, SYNC_TIMEZONE)
+  const syncDays = options.businessDays ?? configSyncDays
+  return getUpcomingCalendarDays(syncDays, SYNC_TIMEZONE)
 }
 
 function buildEncounterScheduleQuery(practitionerRef: string, day: string) {
@@ -999,8 +989,8 @@ export async function syncEhrAppointmentsForPractice(practiceId: string, options
     return { status: 'skipped' as const, reason: 'missing_practitioner_refs' }
   }
 
-  const configBusinessDays = parseBusinessDaysFromConfig(writeConfig)
-  const days = resolveSyncDays(options, configBusinessDays)
+  const configSyncDays = parseSyncHorizonDaysFromConfig(writeConfig)
+  const days = resolveSyncDays(options, configSyncDays)
   if (days.length === 0) {
     return { status: 'skipped' as const, reason: 'invalid_date_range' }
   }
@@ -1073,7 +1063,8 @@ export async function syncEhrAppointmentsForPractice(practiceId: string, options
   })
 
   const syncMetadata = {
-    businessDays: options.businessDays ?? configBusinessDays,
+    syncDays: options.businessDays ?? configSyncDays,
+    businessDays: options.businessDays ?? configSyncDays,
     startDate: options.startDate ?? null,
     endDate: options.endDate ?? null,
     daysQueried: days.length,
