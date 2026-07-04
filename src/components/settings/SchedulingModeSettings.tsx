@@ -39,6 +39,83 @@ interface OperatoryOption {
 const LENGTH_OPTIONS = [15, 20, 30, 40, 45, 60, 90]
 const NONE = 'none'
 const ADD_OPERATORY = 'add-operatory'
+const ADD_PRACTITIONER = 'add-practitioner'
+
+function practitionerLabel(practitioners: EcwPractitionerOption[], reference: string): string {
+  return practitioners.find((p) => p.reference === reference)?.name ?? reference
+}
+
+function EcwPractitionerFilterEditor({
+  practitioners,
+  selectedRefs,
+  onChangeSelected,
+}: {
+  practitioners: EcwPractitionerOption[]
+  selectedRefs: string[]
+  onChangeSelected: (refs: string[]) => void
+}) {
+  const reserved = new Set(selectedRefs)
+  const available = practitioners.filter((p) => !reserved.has(p.reference))
+
+  const handleAdd = (value: string) => {
+    if (value === ADD_PRACTITIONER) return
+    if (!value || reserved.has(value)) return
+    onChangeSelected([...selectedRefs, value])
+  }
+
+  return (
+    <div className="space-y-2 sm:col-span-2">
+      <div>
+        <p className="text-sm font-medium text-gray-700">Practitioners to include</p>
+        <p className="text-xs text-gray-500 mt-0.5">
+          Leave empty to pull appointments and open slots for every eCW practitioner. Add
+          practitioners here to limit availability to specific providers.
+        </p>
+      </div>
+      {selectedRefs.length > 0 ? (
+        <ul className="flex flex-wrap gap-2">
+          {selectedRefs.map((reference) => (
+            <li
+              key={reference}
+              className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-sm text-gray-800"
+            >
+              {practitionerLabel(practitioners, reference)}
+              <button
+                type="button"
+                onClick={() => onChangeSelected(selectedRefs.filter((ref) => ref !== reference))}
+                className="rounded p-0.5 text-gray-400 hover:text-gray-700"
+                aria-label={`Remove ${practitionerLabel(practitioners, reference)}`}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-gray-600 rounded-md border border-dashed border-gray-200 bg-white px-3 py-2">
+          All practitioners ({practitioners.length}) — full eCW schedule will be synced and read.
+        </p>
+      )}
+      {available.length > 0 && (
+        <Select value={ADD_PRACTITIONER} onValueChange={handleAdd}>
+          <SelectTrigger className="max-w-xs">
+            <SelectValue placeholder="Limit to practitioner…" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ADD_PRACTITIONER} disabled>
+              Limit to practitioner…
+            </SelectItem>
+            {available.map((p) => (
+              <SelectItem key={p.reference} value={p.reference}>
+                {p.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+    </div>
+  )
+}
 
 function operatoryLabel(operatories: OperatoryOption[], operatoryNum: number): string {
   return operatories.find((o) => o.operatoryNum === operatoryNum)?.name ?? `OP-${operatoryNum}`
@@ -135,7 +212,7 @@ export function SchedulingModeSettings({
   const [defaultReadOperatoryNum, setDefaultReadOperatoryNum] = useState<string>(NONE)
   const [additionalReadOperatoryNums, setAdditionalReadOperatoryNums] = useState<number[]>([])
   const [defaultReadLengthMinutes, setDefaultReadLengthMinutes] = useState<string>(NONE)
-  const [defaultReadPractitionerRef, setDefaultReadPractitionerRef] = useState<string>(NONE)
+  const [defaultReadPractitionerRefs, setDefaultReadPractitionerRefs] = useState<string[]>([])
   const [defaultWritePractitionerRef, setDefaultWritePractitionerRef] = useState<string>(NONE)
   const [defaultProvNum, setDefaultProvNum] = useState<string>(NONE)
   const [defaultOperatoryNum, setDefaultOperatoryNum] = useState<string>(NONE)
@@ -185,7 +262,13 @@ export function SchedulingModeSettings({
             Array.isArray(sched.defaultOperatoryNums) ? sched.defaultOperatoryNums : []
           )
           setDefaultLengthMinutes(sched.defaultLengthMinutes ?? 30)
-          setDefaultReadPractitionerRef(sched.defaultReadPractitionerRef || NONE)
+          setDefaultReadPractitionerRefs(
+            Array.isArray(sched.defaultReadPractitionerRefs)
+              ? sched.defaultReadPractitionerRefs
+              : sched.defaultReadPractitionerRef
+                ? [sched.defaultReadPractitionerRef]
+                : []
+          )
           setDefaultWritePractitionerRef(sched.defaultWritePractitionerRef || NONE)
         }
       } catch (err) {
@@ -267,8 +350,8 @@ export function SchedulingModeSettings({
           : {}),
         ...(readSource === 'ecw' || writeSource === 'ecw'
           ? {
-              defaultReadPractitionerRef:
-                defaultReadPractitionerRef !== NONE ? defaultReadPractitionerRef : null,
+              defaultReadPractitionerRef: null,
+              defaultReadPractitionerRefs,
               defaultWritePractitionerRef:
                 defaultWritePractitionerRef !== NONE ? defaultWritePractitionerRef : null,
               defaultReadLengthMinutes:
@@ -389,8 +472,9 @@ export function SchedulingModeSettings({
                 <div>
                   <p className="text-sm font-medium text-gray-700">eClinicalWorks defaults</p>
                   <p className="text-xs text-gray-500 mt-1">
-                    Practitioner and visit length used when pulling Encounters (appointments) and
-                    computing open slots from the eCW schedule.
+                    Practitioners and visit length used when pulling Encounters (appointments) and
+                    computing open slots from the eCW schedule. By default all practitioners are
+                    included.
                   </p>
                 </div>
                 {loadingEcwPractitioners ? (
@@ -402,27 +486,11 @@ export function SchedulingModeSettings({
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     {readSource === 'ecw' && (
                       <>
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium text-gray-700">
-                            Reading practitioner
-                          </label>
-                          <Select
-                            value={defaultReadPractitionerRef}
-                            onValueChange={setDefaultReadPractitionerRef}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select practitioner" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value={NONE}>Not set</SelectItem>
-                              {ecwPractitioners.map((p) => (
-                                <SelectItem key={p.reference} value={p.reference}>
-                                  {p.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
+                        <EcwPractitionerFilterEditor
+                          practitioners={ecwPractitioners}
+                          selectedRefs={defaultReadPractitionerRefs}
+                          onChangeSelected={setDefaultReadPractitionerRefs}
+                        />
                         <div className="space-y-2">
                           <label className="text-sm font-medium text-gray-700">Default length</label>
                           <Select

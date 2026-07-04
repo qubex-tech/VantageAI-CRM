@@ -110,6 +110,11 @@ function parseScheduling(value: unknown): SchedulingSettings | undefined {
       typeof raw.defaultReadPractitionerRef === 'string' && raw.defaultReadPractitionerRef.trim()
         ? raw.defaultReadPractitionerRef.trim()
         : null,
+    defaultReadPractitionerRefs: Array.isArray(raw.defaultReadPractitionerRefs)
+      ? raw.defaultReadPractitionerRefs
+          .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+          .map((value) => value.trim())
+      : [],
     defaultWritePractitionerRef:
       typeof raw.defaultWritePractitionerRef === 'string' && raw.defaultWritePractitionerRef.trim()
         ? raw.defaultWritePractitionerRef.trim()

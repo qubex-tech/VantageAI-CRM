@@ -45,6 +45,8 @@ export type SchedulingSettings = {
   defaultLengthMinutes?: number | null
   /** eClinicalWorks practitioner reference for reading schedule (Practitioner/{id}). */
   defaultReadPractitionerRef?: string | null
+  /** Additional eCW practitioners to include when reading schedule (empty = all practitioners). */
+  defaultReadPractitionerRefs?: string[] | null
   /** eClinicalWorks practitioner reference for booking writeback. */
   defaultWritePractitionerRef?: string | null
 }
@@ -143,8 +145,37 @@ export function usesEcwForWrite(settings: SchedulingSettings): boolean {
   return resolveWriteSource(settings) === 'ecw'
 }
 
+function dedupePractitionerRefs(refs: string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const ref of refs) {
+    const trimmed = ref.trim()
+    if (!trimmed || seen.has(trimmed)) continue
+    seen.add(trimmed)
+    out.push(trimmed)
+  }
+  return out
+}
+
+/** Explicit eCW practitioner filter from scheduling settings (empty = use all practitioners). */
+export function resolveReadPractitionerRefs(settings: SchedulingSettings): string[] {
+  const refs: string[] = []
+  if (Array.isArray(settings.defaultReadPractitionerRefs)) {
+    refs.push(...settings.defaultReadPractitionerRefs)
+  }
+  if (settings.defaultReadPractitionerRef) {
+    refs.push(settings.defaultReadPractitionerRef)
+  }
+  const deduped = dedupePractitionerRefs(refs)
+  if (deduped.length > 0) return deduped
+  if (settings.defaultWritePractitionerRef) {
+    return [settings.defaultWritePractitionerRef]
+  }
+  return []
+}
+
 export function resolveReadPractitionerRef(settings: SchedulingSettings): string | null {
-  return settings.defaultReadPractitionerRef ?? settings.defaultWritePractitionerRef ?? null
+  return resolveReadPractitionerRefs(settings)[0] ?? null
 }
 
 export function resolveWritePractitionerRef(settings: SchedulingSettings): string | null {

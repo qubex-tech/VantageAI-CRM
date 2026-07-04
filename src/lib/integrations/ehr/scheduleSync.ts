@@ -12,6 +12,11 @@ import { refreshBackendConnectionIfNeeded } from '@/lib/integrations/ehr/backend
 import { getEcwDefaultLocationOrganizationForIssuer } from '@/lib/integrations/ehr/writeback'
 import { enrichPatientsAfterScheduleSync } from '@/lib/integrations/ehr/enrichScheduleSyncPatients'
 import { handleAppointmentChangeForSlotFill } from '@/lib/appointment-optimization/appointmentChangeHandler'
+import { getSchedulingSettings } from '@/lib/integrations/clinical-system/server'
+import {
+  resolveReadPractitionerRefs,
+  type SchedulingSettings,
+} from '@/lib/integrations/clinical-system/types'
 
 const WRITEBACK_PROVIDER_ID = 'ecw_write'
 const STALE_SYNC_WINDOW_MS = 12 * 60 * 60 * 1000
@@ -187,7 +192,7 @@ function inferDefaultPractitionerRef(issuer: string) {
   return DEFAULT_SCHEDULE_PRACTITIONER_FFBJCD
 }
 
-function parsePractitionerRefsFromConfig(config: Record<string, unknown>, issuer: string) {
+function parseExplicitPractitionerRefsFromConfig(config: Record<string, unknown>) {
   const explicitRefs = typeof config.ecwSchedulePractitionerRefs === 'string'
     ? config.ecwSchedulePractitionerRefs
         .split(',')
@@ -205,7 +210,51 @@ function parsePractitionerRefsFromConfig(config: Record<string, unknown>, issuer
     return [participantRef]
   }
 
+  return []
+}
+
+function parsePractitionerRefsFromConfig(config: Record<string, unknown>, issuer: string) {
+  const explicit = parseExplicitPractitionerRefsFromConfig(config)
+  if (explicit.length > 0) {
+    return explicit
+  }
   return [inferDefaultPractitionerRef(issuer)]
+}
+
+/** Resolve which eCW practitioners to pull schedule data for (settings → config → all → issuer default). */
+export async function resolveEcwSchedulePractitionerRefs(
+  practiceId: string,
+  options?: {
+    scheduling?: SchedulingSettings
+    explicitRefs?: string[]
+  }
+): Promise<string[]> {
+  const explicit = (options?.explicitRefs ?? [])
+    .map((value) => normalizePractitionerReference(value.trim()))
+    .filter((value): value is string => Boolean(value))
+  if (explicit.length > 0) {
+    return Array.from(new Set(explicit))
+  }
+
+  const scheduling = options?.scheduling ?? (await getSchedulingSettings(practiceId))
+  const fromScheduling = resolveReadPractitionerRefs(scheduling)
+  if (fromScheduling.length > 0) {
+    return fromScheduling
+  }
+
+  const allPractitioners = await listEhrPractitionersForPractice(practiceId)
+  if (allPractitioners.length > 0) {
+    return allPractitioners.map((practitioner) => practitioner.reference)
+  }
+
+  const ehrContext = await createEhrClientForPractice(practiceId)
+  if (!ehrContext) {
+    return []
+  }
+  const settings = await getEhrSettings(practiceId)
+  const writeConfig =
+    (settings?.providerConfigs?.[WRITEBACK_PROVIDER_ID] as Record<string, unknown> | undefined) || {}
+  return parsePractitionerRefsFromConfig(writeConfig, ehrContext.connection.issuer)
 }
 
 function getTzWeekday(date: Date, timeZone: string) {
@@ -943,7 +992,9 @@ export async function syncEhrAppointmentsForPractice(practiceId: string, options
   }
   const writeConfig =
     (settings?.providerConfigs?.[WRITEBACK_PROVIDER_ID] as Record<string, unknown> | undefined) || {}
-  const practitionerRefs = parsePractitionerRefsFromConfig(writeConfig, connection.issuer)
+  const practitionerRefs = await resolveEcwSchedulePractitionerRefs(practiceId, {
+    scheduling: await getSchedulingSettings(practiceId),
+  })
   if (practitionerRefs.length === 0) {
     return { status: 'skipped' as const, reason: 'missing_practitioner_refs' }
   }
@@ -1109,16 +1160,34 @@ export async function listEhrPractitionersForPractice(practiceId: string): Promi
   return Array.from(deduped.values()).sort((a, b) => a.name.localeCompare(b.name))
 }
 
-/** Pull Encounter rows from eCW for a practitioner across an inclusive calendar date range. */
+export type EcwScheduledEncounter = FhirEncounter & {
+  schedulePractitionerRef: string
+}
+
+/** Pull Encounter rows from eCW for one or more practitioners across an inclusive calendar date range. */
 export async function fetchEcwEncountersForSchedule(params: {
   practiceId: string
-  practitionerRef: string
+  /** @deprecated Prefer practitionerRefs */
+  practitionerRef?: string
+  practitionerRefs?: string[]
   dateStart: string
   dateEnd: string
 }) {
-  const normalizedRef = normalizePractitionerReference(params.practitionerRef.trim())
-  if (!normalizedRef) {
-    throw new Error('A valid Practitioner reference is required')
+  let practitionerRefs = (params.practitionerRefs ?? [])
+    .map((value) => normalizePractitionerReference(value.trim()))
+    .filter((value): value is string => Boolean(value))
+
+  if (practitionerRefs.length === 0 && params.practitionerRef) {
+    const single = normalizePractitionerReference(params.practitionerRef.trim())
+    if (single) practitionerRefs = [single]
+  }
+
+  if (practitionerRefs.length === 0) {
+    practitionerRefs = await resolveEcwSchedulePractitionerRefs(params.practiceId)
+  }
+
+  if (practitionerRefs.length === 0) {
+    throw new Error('No eClinicalWorks practitioners available for schedule lookup')
   }
 
   const ehrContext = await createEhrClientForPractice(params.practiceId)
@@ -1133,15 +1202,17 @@ export async function fetchEcwEncountersForSchedule(params: {
 
   const { client } = ehrContext
   const encounteredIds = new Set<string>()
-  const encounters: FhirEncounter[] = []
+  const encounters: EcwScheduledEncounter[] = []
 
-  for (const day of days) {
-    const query = buildEncounterScheduleQuery(normalizedRef, day)
-    const batch = await fetchEncounterPages(client, query)
-    for (const encounter of batch) {
-      if (!encounter.id || encounteredIds.has(encounter.id)) continue
-      encounteredIds.add(encounter.id)
-      encounters.push(encounter)
+  for (const practitionerRef of practitionerRefs) {
+    for (const day of days) {
+      const query = buildEncounterScheduleQuery(practitionerRef, day)
+      const batch = await fetchEncounterPages(client, query)
+      for (const encounter of batch) {
+        if (!encounter.id || encounteredIds.has(encounter.id)) continue
+        encounteredIds.add(encounter.id)
+        encounters.push({ ...encounter, schedulePractitionerRef: practitionerRef })
+      }
     }
   }
 

@@ -20,6 +20,7 @@ const schedulingSchema = z.object({
   defaultOperatoryNums: z.array(z.number().int().positive()).nullish(),
   defaultLengthMinutes: z.number().int().positive().max(600).nullish(),
   defaultReadPractitionerRef: z.string().min(1).nullish(),
+  defaultReadPractitionerRefs: z.array(z.string().min(1)).nullish(),
   defaultWritePractitionerRef: z.string().min(1).nullish(),
 })
 

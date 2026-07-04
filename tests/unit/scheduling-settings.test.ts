@@ -5,6 +5,8 @@ import {
   resolveReadLengthMinutes,
   resolveReadOperatoryNum,
   resolveReadOperatoryNums,
+  resolveReadPractitionerRef,
+  resolveReadPractitionerRefs,
   resolveReadProvNum,
   resolveReadSource,
   resolveWriteSource,
@@ -145,6 +147,33 @@ describe('scheduling settings resolvers', () => {
   describe('resolveReadOperatoryNum', () => {
     it('returns first resolved read operatory', () => {
       expect(resolveReadOperatoryNum(base)).toBe(1)
+    })
+  })
+
+  describe('resolveReadPractitionerRefs', () => {
+    it('returns empty when no practitioner filter is configured', () => {
+      expect(resolveReadPractitionerRefs({ readSource: 'ecw', writeSource: 'none' })).toEqual([])
+    })
+
+    it('merges array and legacy single ref without duplicates', () => {
+      expect(
+        resolveReadPractitionerRefs({
+          readSource: 'ecw',
+          writeSource: 'none',
+          defaultReadPractitionerRefs: ['Practitioner/a', 'Practitioner/b'],
+          defaultReadPractitionerRef: 'Practitioner/a',
+        })
+      ).toEqual(['Practitioner/a', 'Practitioner/b'])
+    })
+
+    it('falls back to write practitioner when read filter is empty', () => {
+      expect(
+        resolveReadPractitionerRef({
+          readSource: 'ecw',
+          writeSource: 'ecw',
+          defaultWritePractitionerRef: 'Practitioner/z',
+        })
+      ).toBe('Practitioner/z')
     })
   })
 })

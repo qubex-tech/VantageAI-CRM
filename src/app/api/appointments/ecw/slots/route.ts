@@ -35,6 +35,10 @@ export async function GET(req: NextRequest) {
     }
 
     const practitionerRef = sp.get('practitionerRef') || undefined
+    const practitionerRefsParam = sp.get('practitionerRefs') || ''
+    const practitionerRefs = practitionerRefsParam
+      ? practitionerRefsParam.split(',').map((value) => value.trim()).filter(Boolean)
+      : undefined
     const lengthMinutes =
       Number(sp.get('lengthMinutes')) ||
       resolveReadLengthMinutes(scheduling) ||
@@ -46,6 +50,7 @@ export async function GET(req: NextRequest) {
       dateStart,
       dateEnd,
       practitionerRef,
+      practitionerRefs,
       lengthMinutes,
       timeZone: sp.get('timezone') || undefined,
     })
@@ -53,6 +58,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       slots: result.slots,
       appointments: result.appointments,
+      practitionerRefs: result.practitionerRefs,
       source: 'ecw',
     })
   } catch (error) {
