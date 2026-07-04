@@ -9,10 +9,15 @@ import { RetellCall } from './retell-api'
 import { createAuditLog } from './audit'
 import type { Prisma } from '@prisma/client'
 import {
+  CurogramAiCallSummaryTranscriptPayload,
+  CurogramAiCallsToActionPayload,
   buildCurogramIntentTopicWithPatientContext,
   CurogramPatientItemPayload,
   isCurogramEscalationEnabled,
+  normalizeCurogramAiV2Gender,
   normalizePhoneToE164,
+  sendCurogramAiCallsToAction,
+  sendCurogramAiCallSummaryTranscript,
   sendCurogramEscalation,
   sendCurogramPatientsUpsert,
   trimCurogramIntentTopicForApi,
@@ -114,6 +119,20 @@ function parseCurogramEscalationDelayMs(): number {
   return Math.min(parsed, 10000)
 }
 
+function resolveCallDurationSeconds(call: RetellCall): number | undefined {
+  if (typeof call.duration_ms === 'number' && Number.isFinite(call.duration_ms) && call.duration_ms > 0) {
+    return Math.max(1, Math.round(call.duration_ms / 1000))
+  }
+  if (
+    typeof call.start_timestamp === 'number' &&
+    typeof call.end_timestamp === 'number' &&
+    call.end_timestamp > call.start_timestamp
+  ) {
+    return Math.max(1, Math.round((call.end_timestamp - call.start_timestamp) / 1000))
+  }
+  return undefined
+}
+
 export function shouldTriggerCurogramEscalation(params: {
   extractedData: ExtractedCallData
 }): boolean {
@@ -185,7 +204,24 @@ async function triggerCurogramAfterRetellProcessing(
   const shouldSyncPatient = !hasPatientSyncSuccess
   const shouldEscalate =
     !metadata.curogramEscalationAttemptedAt && !metadata.curogramEscalationSentAt
-  if (!shouldSyncPatient && !shouldEscalate) return
+  const aiCallsToActionEnabled = Boolean(
+    process.env.CUROGRAM_AI_CALLS_TO_ACTION_URL?.trim() &&
+      process.env.CUROGRAM_AI_CALLS_TO_ACTION_TOKEN?.trim()
+  )
+  const aiCallSummaryEnabled = Boolean(
+    process.env.CUROGRAM_AI_CALL_SUMMARY_URL?.trim() && process.env.CUROGRAM_AI_CALL_SUMMARY_TOKEN?.trim()
+  )
+  const shouldSendAiCallsToAction =
+    aiCallsToActionEnabled &&
+    !metadata.curogramAiCallsToActionAttemptedAt &&
+    !metadata.curogramAiCallsToActionSentAt
+  const shouldSendAiCallSummary =
+    aiCallSummaryEnabled &&
+    !metadata.curogramAiCallSummaryAttemptedAt &&
+    !metadata.curogramAiCallSummarySentAt
+  if (!shouldSyncPatient && !shouldEscalate && !shouldSendAiCallsToAction && !shouldSendAiCallSummary) {
+    return
+  }
 
   const nowIso = new Date().toISOString()
   const metadataUpdate: Record<string, unknown> = { ...metadata }
@@ -194,6 +230,11 @@ async function triggerCurogramAfterRetellProcessing(
   let curogramMappingIdForEscalation: string | null = null
   let curogramFirstNameForEscalation: string | null = null
   let curogramLastNameForEscalation: string | null = null
+  let curogramDobForV2: string | null = null
+  let curogramGenderForV2:
+    | CurogramAiCallsToActionPayload['gender']
+    | CurogramAiCallSummaryTranscriptPayload['gender']
+    | null = null
 
   let patientRecord: {
     id: string
@@ -280,6 +321,8 @@ async function triggerCurogramAfterRetellProcessing(
       curogramMappingIdForEscalation = patientItem.mappingId || null
       curogramFirstNameForEscalation = patientItem.firstName || null
       curogramLastNameForEscalation = patientItem.lastName || null
+      curogramDobForV2 = patientItem.dob || null
+      curogramGenderForV2 = normalizeCurogramAiV2Gender(patientItem.gender) || null
 
       console.log('[Curogram Patient Sync] Sending after Retell processing', {
         requestId: patientRequestId,
@@ -329,120 +372,223 @@ async function triggerCurogramAfterRetellProcessing(
     }
   }
 
+  const priorSyncPreview =
+    metadata.curogramPatientSyncPayloadPreview &&
+    typeof metadata.curogramPatientSyncPayloadPreview === 'object'
+      ? (metadata.curogramPatientSyncPayloadPreview as Record<string, unknown>)
+      : null
+  const priorSyncPhones = Array.isArray(priorSyncPreview?.phones) ? priorSyncPreview.phones : []
+  const priorPrimaryPhone = priorSyncPhones.length > 0 ? normalizePhoneToE164(priorSyncPhones[0]) : null
+  const priorMappingId =
+    typeof priorSyncPreview?.mappingId === 'string' && priorSyncPreview.mappingId.trim()
+      ? priorSyncPreview.mappingId.trim()
+      : null
+  const priorFirstName =
+    typeof priorSyncPreview?.firstName === 'string' && priorSyncPreview.firstName.trim()
+      ? priorSyncPreview.firstName.trim()
+      : null
+  const priorLastName =
+    typeof priorSyncPreview?.lastName === 'string' && priorSyncPreview.lastName.trim()
+      ? priorSyncPreview.lastName.trim()
+      : null
+  const priorDob =
+    typeof priorSyncPreview?.dob === 'string' && priorSyncPreview.dob.trim()
+      ? priorSyncPreview.dob.trim()
+      : null
+  const priorGender =
+    typeof priorSyncPreview?.gender === 'string' ? normalizeCurogramAiV2Gender(priorSyncPreview.gender) : null
+  const callerNumber =
+    curogramPrimaryPhoneForEscalation ||
+    priorPrimaryPhone ||
+    normalizePhoneToE164(extractedData.patient_phone_number || extractedData.user_phone_number)
+  const mappingIdForEscalation = curogramMappingIdForEscalation || priorMappingId
+  const firstNameForEscalation = curogramFirstNameForEscalation || priorFirstName
+  const lastNameForEscalation = curogramLastNameForEscalation || priorLastName
+  const dobForAiV2 =
+    curogramDobForV2 || priorDob || formatDobForCurogram(patientRecord?.dateOfBirth || extractedData.patient_dob) || null
+  const genderForAiV2 =
+    curogramGenderForV2 ||
+    priorGender ||
+    normalizeCurogramAiV2Gender(patientRecord?.gender || extractedData.retell_custom_data?.gender) ||
+    null
+
   if (shouldEscalate) {
     if (!patientSyncSucceeded) {
       metadataUpdate.curogramEscalationDeferredAt = nowIso
       metadataUpdate.curogramEscalationDeferredReason = 'patient_sync_not_successful'
     } else {
-    const delayMs = parseCurogramEscalationDelayMs()
-    if (delayMs > 0) {
-      await new Promise((resolve) => setTimeout(resolve, delayMs))
-      metadataUpdate.curogramEscalationDelayMs = delayMs
-      metadataUpdate.curogramEscalationDelayedAt = new Date().toISOString()
-    }
-    const priorSyncPreview =
-      metadata.curogramPatientSyncPayloadPreview &&
-      typeof metadata.curogramPatientSyncPayloadPreview === 'object'
-        ? (metadata.curogramPatientSyncPayloadPreview as Record<string, unknown>)
-        : null
-    const priorSyncPhones = Array.isArray(priorSyncPreview?.phones)
-      ? priorSyncPreview?.phones
-      : []
-    const priorPrimaryPhone =
-      priorSyncPhones.length > 0 ? normalizePhoneToE164(priorSyncPhones[0]) : null
-    const priorMappingId =
-      typeof priorSyncPreview?.mappingId === 'string' && priorSyncPreview.mappingId.trim()
-        ? priorSyncPreview.mappingId.trim()
-        : null
-    const priorFirstName =
-      typeof priorSyncPreview?.firstName === 'string' && priorSyncPreview.firstName.trim()
-        ? priorSyncPreview.firstName.trim()
-        : null
-    const priorLastName =
-      typeof priorSyncPreview?.lastName === 'string' && priorSyncPreview.lastName.trim()
-        ? priorSyncPreview.lastName.trim()
-        : null
-    const requestId = `retell-curogram-post-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    const callerNumber =
-      curogramPrimaryPhoneForEscalation ||
-      priorPrimaryPhone ||
-      normalizePhoneToE164(extractedData.patient_phone_number || extractedData.user_phone_number)
-    const mappingIdForEscalation = curogramMappingIdForEscalation || priorMappingId
-    const firstNameForEscalation = curogramFirstNameForEscalation || priorFirstName
-    const lastNameForEscalation = curogramLastNameForEscalation || priorLastName
+      const delayMs = parseCurogramEscalationDelayMs()
+      if (delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs))
+        metadataUpdate.curogramEscalationDelayMs = delayMs
+        metadataUpdate.curogramEscalationDelayedAt = new Date().toISOString()
+      }
+      const requestId = `retell-curogram-post-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
-    if (!callerNumber) {
-      metadataUpdate.curogramEscalationAttemptedAt = nowIso
-      metadataUpdate.curogramEscalationSentAt = null
-      metadataUpdate.curogramEscalationStatus = 0
-      metadataUpdate.curogramEscalationError = 'Missing valid callerNumber for Curogram payload'
-      metadataUpdate.curogramEscalationRequestId = requestId
-      metadataUpdate.curogramEscalationEventType = 'post_call_processing'
-    } else {
-      const intentTopic = trimCurogramIntentTopicForApi(
-        buildCurogramIntentTopicWithPatientContext({
-          extracted: extractedData,
-          defaultIntent: process.env.CUROGRAM_AI_ESCALATION_DEFAULT_INTENT || 'AI call escalation',
-        })
-      )
+      if (!callerNumber) {
+        metadataUpdate.curogramEscalationAttemptedAt = nowIso
+        metadataUpdate.curogramEscalationSentAt = null
+        metadataUpdate.curogramEscalationStatus = 0
+        metadataUpdate.curogramEscalationError = 'Missing valid callerNumber for Curogram payload'
+        metadataUpdate.curogramEscalationRequestId = requestId
+        metadataUpdate.curogramEscalationEventType = 'post_call_processing'
+      } else {
+        const intentTopic = trimCurogramIntentTopicForApi(
+          buildCurogramIntentTopicWithPatientContext({
+            extracted: extractedData,
+            defaultIntent: process.env.CUROGRAM_AI_ESCALATION_DEFAULT_INTENT || 'AI call escalation',
+          })
+        )
 
-      console.log('[Curogram Escalation] Sending after Retell processing', {
-        requestId,
-        practiceId,
-        callId: call.call_id,
-        callerNumber,
-        hasIntentTopic: Boolean(intentTopic),
-        intentTopicLength: intentTopic?.length ?? 0,
-      })
-
-      const escalationResult = await sendCurogramEscalation(
-        {
+        console.log('[Curogram Escalation] Sending after Retell processing', {
+          requestId,
+          practiceId,
+          callId: call.call_id,
           callerNumber,
-          intentTopic,
-          patientData: {
-            ...(extractedData as Record<string, unknown>),
-            // Explicit shared identity keys for Curogram-side merge correlation.
-            curogram_patient_mapping_id: mappingIdForEscalation || null,
-            curogram_patient_phone_e164: callerNumber,
-            curogram_patient_first_name: firstNameForEscalation || null,
-            curogram_patient_last_name: lastNameForEscalation || null,
-            curogram_identity: {
-              mappingId: mappingIdForEscalation || null,
-              primaryPhone: callerNumber,
-              firstName: firstNameForEscalation || null,
-              lastName: lastNameForEscalation || null,
+          hasIntentTopic: Boolean(intentTopic),
+          intentTopicLength: intentTopic?.length ?? 0,
+        })
+
+        const escalationResult = await sendCurogramEscalation(
+          {
+            callerNumber,
+            intentTopic,
+            patientData: {
+              ...(extractedData as Record<string, unknown>),
+              // Explicit shared identity keys for Curogram-side merge correlation.
+              curogram_patient_mapping_id: mappingIdForEscalation || null,
+              curogram_patient_phone_e164: callerNumber,
+              curogram_patient_first_name: firstNameForEscalation || null,
+              curogram_patient_last_name: lastNameForEscalation || null,
+              curogram_identity: {
+                mappingId: mappingIdForEscalation || null,
+                primaryPhone: callerNumber,
+                firstName: firstNameForEscalation || null,
+                lastName: lastNameForEscalation || null,
+              },
             },
           },
-        },
-        {
-          endpointUrl: retellIntegration?.curogramEscalationUrl,
+          {
+            endpointUrl: retellIntegration?.curogramEscalationUrl,
+            requestId,
+            callId: call.call_id,
+          }
+        )
+
+        console.log('[Curogram Escalation] Post-call result', {
           requestId,
+          practiceId,
           callId: call.call_id,
+          ok: escalationResult.ok,
+          status: escalationResult.status,
+          responsePreview: escalationResult.body.slice(0, 200),
+        })
+
+        metadataUpdate.curogramEscalationAttemptedAt = nowIso
+        metadataUpdate.curogramEscalationSentAt = escalationResult.ok ? new Date().toISOString() : null
+        metadataUpdate.curogramEscalationStatus = escalationResult.status
+        metadataUpdate.curogramEscalationResponse = escalationResult.body.slice(0, 500)
+        metadataUpdate.curogramEscalationCallerNumber = callerNumber
+        metadataUpdate.curogramEscalationIntentTopic = intentTopic || null
+        metadataUpdate.curogramEscalationRequestId = requestId
+        metadataUpdate.curogramEscalationEventType = 'post_call_processing'
+        metadataUpdate.curogramEscalationMappingId = mappingIdForEscalation || null
+        if (!escalationResult.ok) {
+          metadataUpdate.curogramEscalationError = escalationResult.body.slice(0, 500)
         }
-      )
-
-      console.log('[Curogram Escalation] Post-call result', {
-        requestId,
-        practiceId,
-        callId: call.call_id,
-        ok: escalationResult.ok,
-        status: escalationResult.status,
-        responsePreview: escalationResult.body.slice(0, 200),
-      })
-
-      metadataUpdate.curogramEscalationAttemptedAt = nowIso
-      metadataUpdate.curogramEscalationSentAt = escalationResult.ok ? new Date().toISOString() : null
-      metadataUpdate.curogramEscalationStatus = escalationResult.status
-      metadataUpdate.curogramEscalationResponse = escalationResult.body.slice(0, 500)
-      metadataUpdate.curogramEscalationCallerNumber = callerNumber
-      metadataUpdate.curogramEscalationIntentTopic = intentTopic || null
-      metadataUpdate.curogramEscalationRequestId = requestId
-      metadataUpdate.curogramEscalationEventType = 'post_call_processing'
-      metadataUpdate.curogramEscalationMappingId = mappingIdForEscalation || null
-      if (!escalationResult.ok) {
-        metadataUpdate.curogramEscalationError = escalationResult.body.slice(0, 500)
       }
     }
+  }
+
+  if (patientSyncSucceeded && shouldSendAiCallsToAction) {
+    const actionRequestId = `retell-curogram-action-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const customData = (extractedData.retell_custom_data || {}) as Record<string, unknown>
+    const actionId =
+      firstNonEmptyString(customData['Curogram Action ID']) ||
+      firstNonEmptyString(customData['Curogram Action Id']) ||
+      firstNonEmptyString(customData['Action ID']) ||
+      firstNonEmptyString(process.env.CUROGRAM_AI_CALLS_TO_ACTION_DEFAULT_ACTION_ID)
+
+    if (!actionId || !callerNumber || !firstNameForEscalation || !lastNameForEscalation || !dobForAiV2) {
+      metadataUpdate.curogramAiCallsToActionAttemptedAt = nowIso
+      metadataUpdate.curogramAiCallsToActionSentAt = null
+      metadataUpdate.curogramAiCallsToActionStatus = 0
+      metadataUpdate.curogramAiCallsToActionRequestId = actionRequestId
+      metadataUpdate.curogramAiCallsToActionError =
+        'Missing one or more required fields: actionId, phoneNumber, firstName, lastName, dob'
+    } else {
+      const actionPayload: CurogramAiCallsToActionPayload = {
+        firstName: firstNameForEscalation,
+        lastName: lastNameForEscalation,
+        phoneNumber: callerNumber,
+        dob: dobForAiV2,
+        actionId,
+        ...(genderForAiV2 ? { gender: genderForAiV2 } : {}),
+      }
+      const actionResult = await sendCurogramAiCallsToAction(actionPayload, {
+        requestId: actionRequestId,
+        callId: call.call_id,
+      })
+      metadataUpdate.curogramAiCallsToActionAttemptedAt = nowIso
+      metadataUpdate.curogramAiCallsToActionSentAt = actionResult.ok ? new Date().toISOString() : null
+      metadataUpdate.curogramAiCallsToActionStatus = actionResult.status
+      metadataUpdate.curogramAiCallsToActionResponse = actionResult.body.slice(0, 500)
+      metadataUpdate.curogramAiCallsToActionRequestId = actionRequestId
+      metadataUpdate.curogramAiCallsToActionPayloadPreview = actionPayload
+      if (!actionResult.ok) {
+        metadataUpdate.curogramAiCallsToActionError = actionResult.body.slice(0, 500)
+      }
+    }
+  }
+
+  if (patientSyncSucceeded && shouldSendAiCallSummary) {
+    const summaryRequestId = `retell-curogram-summary-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const duration = resolveCallDurationSeconds(call)
+    const summary = firstNonEmptyString(extractedData.call_summary) || firstNonEmptyString(extractedData.call_reason)
+    const transcript = firstNonEmptyString(call.transcript)
+
+    if (
+      !callerNumber ||
+      !firstNameForEscalation ||
+      !lastNameForEscalation ||
+      !dobForAiV2 ||
+      !duration ||
+      !summary ||
+      !transcript
+    ) {
+      metadataUpdate.curogramAiCallSummaryAttemptedAt = nowIso
+      metadataUpdate.curogramAiCallSummarySentAt = null
+      metadataUpdate.curogramAiCallSummaryStatus = 0
+      metadataUpdate.curogramAiCallSummaryRequestId = summaryRequestId
+      metadataUpdate.curogramAiCallSummaryError =
+        'Missing one or more required fields: phoneNumber, firstName, lastName, dob, duration, summary, transcript'
+    } else {
+      const summaryPayload: CurogramAiCallSummaryTranscriptPayload = {
+        phoneNumber: callerNumber,
+        firstName: firstNameForEscalation,
+        lastName: lastNameForEscalation,
+        dob: dobForAiV2,
+        duration,
+        summary,
+        transcript,
+        ...(genderForAiV2 ? { gender: genderForAiV2 } : {}),
+      }
+      const summaryResult = await sendCurogramAiCallSummaryTranscript(summaryPayload, {
+        requestId: summaryRequestId,
+        callId: call.call_id,
+      })
+      metadataUpdate.curogramAiCallSummaryAttemptedAt = nowIso
+      metadataUpdate.curogramAiCallSummarySentAt = summaryResult.ok ? new Date().toISOString() : null
+      metadataUpdate.curogramAiCallSummaryStatus = summaryResult.status
+      metadataUpdate.curogramAiCallSummaryResponse = summaryResult.body.slice(0, 500)
+      metadataUpdate.curogramAiCallSummaryRequestId = summaryRequestId
+      metadataUpdate.curogramAiCallSummaryPayloadPreview = {
+        ...summaryPayload,
+        transcript: `[${summaryPayload.transcript.length} chars]`,
+      }
+      if (!summaryResult.ok) {
+        metadataUpdate.curogramAiCallSummaryError = summaryResult.body.slice(0, 500)
+      }
     }
   }
 

@@ -74,7 +74,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Practice not found' }, { status: 404 })
     }
 
+    const existingSettings = await prisma.practiceSettings.findUnique({
+      where: { practiceId },
+      select: { outboundCustomerNotifications: true },
+    })
+    const existingPayload =
+      existingSettings?.outboundCustomerNotifications &&
+      typeof existingSettings.outboundCustomerNotifications === 'object' &&
+      !Array.isArray(existingSettings.outboundCustomerNotifications)
+        ? (existingSettings.outboundCustomerNotifications as Record<string, unknown>)
+        : {}
     const outboundCustomerNotifications = {
+      ...existingPayload,
       recipientEmail: validated.recipientEmail ?? null,
       notifyUnsuccessfulTransfer: validated.notifyUnsuccessfulTransfer ?? false,
     }
@@ -90,7 +101,13 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    return NextResponse.json({ settings: outboundCustomerNotifications })
+    return NextResponse.json({
+      settings: {
+        recipientEmail: outboundCustomerNotifications.recipientEmail ?? null,
+        notifyUnsuccessfulTransfer:
+          Boolean(outboundCustomerNotifications.notifyUnsuccessfulTransfer),
+      },
+    })
   } catch (error) {
     if (error instanceof ZodError) {
       const message = error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')

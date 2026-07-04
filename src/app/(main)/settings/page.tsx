@@ -8,6 +8,7 @@ import { RetellSettings } from '@/components/settings/RetellSettings'
 import { ResendSettings } from '@/components/settings/SendgridSettings'
 import { TwilioSettings } from '@/components/settings/TwilioSettings'
 import { TelnyxSettings } from '@/components/settings/TelnyxSettings'
+import { CommunicationsSettings } from '@/components/settings/CommunicationsSettings'
 import { SmsFromNumberSettings } from '@/components/settings/SmsFromNumberSettings'
 import { PracticeManagement } from '@/components/settings/PracticeManagement'
 import { PracticeAPIConfiguration } from '@/components/settings/PracticeAPIConfiguration'
@@ -172,9 +173,11 @@ export default async function SettingsPage() {
 
                 <ResendSettings initialIntegration={resendIntegration} />
 
-                <TwilioSettings initialIntegration={twilioIntegration} />
+                <CommunicationsSettings initialRetellIntegration={retellIntegration} />
 
                 <TelnyxSettings initialIntegration={telnyxIntegration} />
+
+                <TwilioSettings initialIntegration={twilioIntegration} />
               </div>
             </TabsContent>
           )}

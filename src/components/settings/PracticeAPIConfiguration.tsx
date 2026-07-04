@@ -15,6 +15,7 @@ import { RetellSettings } from './RetellSettings'
 import { ResendSettings } from './SendgridSettings'
 import { TwilioSettings } from './TwilioSettings'
 import { TelnyxSettings } from './TelnyxSettings'
+import { CommunicationsSettings } from './CommunicationsSettings'
 import { SmsFromNumberSettings } from './SmsFromNumberSettings'
 import { ClinicalIntegrationsSettings } from './ClinicalIntegrationsSettings'
 import { OutboundCustomerNotificationsSettings } from './OutboundCustomerNotificationsSettings'
@@ -243,14 +244,33 @@ export function PracticeAPIConfiguration() {
                     resendIntegration?.isActive !== false
                 )}
               />
-              <TwilioSettingsWithPracticeId
-                practiceId={selectedPracticeId}
-                initialIntegration={twilioIntegration}
-              />
-              <TelnyxSettingsWithPracticeId
-                practiceId={selectedPracticeId}
-                initialIntegration={telnyxIntegration}
-              />
+              <div className="space-y-4">
+                <Card className="border border-gray-200">
+                  <CardHeader>
+                    <CardTitle className="text-base font-semibold text-gray-900">
+                      Communications
+                    </CardTitle>
+                    <CardDescription className="text-sm text-gray-500">
+                      This section controls outbound communication vendors and provider-specific configurations.
+                    </CardDescription>
+                  </CardHeader>
+                </Card>
+                <div className="text-sm font-medium text-gray-700">1. Communication Integration Platform</div>
+                <CommunicationsSettings
+                  practiceId={selectedPracticeId}
+                  initialRetellIntegration={retellIntegration}
+                />
+                <div className="text-sm font-medium text-gray-700">2. Telnyx Configuration</div>
+                <TelnyxSettingsWithPracticeId
+                  practiceId={selectedPracticeId}
+                  initialIntegration={telnyxIntegration}
+                />
+                <div className="text-sm font-medium text-gray-700">3. Twilio Configuration</div>
+                <TwilioSettingsWithPracticeId
+                  practiceId={selectedPracticeId}
+                  initialIntegration={twilioIntegration}
+                />
+              </div>
             </>
           )}
         </div>

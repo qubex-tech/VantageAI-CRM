@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildCurogramIntentTopicWithPatientContext, normalizePhoneToE164 } from '@/lib/curogram'
+import {
+  buildCurogramIntentTopicWithPatientContext,
+  normalizeCurogramAiV2Gender,
+  normalizePhoneToE164,
+} from '@/lib/curogram'
 import { shouldTriggerCurogramEscalation } from '@/lib/process-call-data'
 
 describe('curogram integration safeguards', () => {
@@ -98,6 +102,19 @@ describe('curogram integration safeguards', () => {
       })
 
       expect(topic).toContain('Phone number: +18569125689')
+    })
+  })
+
+  describe('normalizeCurogramAiV2Gender', () => {
+    it('maps common values to API-allowed case-sensitive values', () => {
+      expect(normalizeCurogramAiV2Gender('male')).toBe('Male')
+      expect(normalizeCurogramAiV2Gender('Female')).toBe('Female')
+      expect(normalizeCurogramAiV2Gender('non-binary')).toBe('Other')
+      expect(normalizeCurogramAiV2Gender('unknown')).toBe('Prefer not to say')
+    })
+
+    it('omits unsupported values instead of sending invalid gender', () => {
+      expect(normalizeCurogramAiV2Gender('Prefer no answer')).toBeUndefined()
     })
   })
 })

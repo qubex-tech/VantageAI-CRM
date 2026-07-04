@@ -504,3 +504,14 @@ export const outboundAgentsSettingsSchema = z.object({
   smsTemplateName: z.string().optional(),
   triggerScenarios: openSlotTriggerScenariosSchema.optional(),
 })
+
+export const communicationIntegrationPlatformSchema = z.enum([
+  'none',
+  'curogram',
+  'weave',
+  'us_telekom',
+])
+
+export const communicationsSettingsSchema = z.object({
+  platform: communicationIntegrationPlatformSchema.default('none'),
+})

@@ -21,6 +21,26 @@ export interface CurogramPatientsUpsertPayload {
   items: CurogramPatientItemPayload[]
 }
 
+export interface CurogramAiCallsToActionPayload {
+  firstName: string
+  lastName: string
+  phoneNumber: string
+  dob: string
+  actionId: string
+  gender?: 'Male' | 'Female' | 'Prefer not to say' | 'Other' | '' | ' '
+}
+
+export interface CurogramAiCallSummaryTranscriptPayload {
+  phoneNumber: string
+  firstName: string
+  lastName: string
+  dob: string
+  duration: number
+  summary: string
+  transcript: string
+  gender?: 'Male' | 'Female' | 'Prefer not to say' | 'Other' | '' | ' '
+}
+
 interface CurogramEscalationOptions {
   requestId?: string
   callId?: string
@@ -31,6 +51,14 @@ interface CurogramEscalationOptions {
 }
 
 interface CurogramPatientsOptions {
+  requestId?: string
+  callId?: string
+  endpointUrl?: string | null
+  token?: string | null
+  timeoutMs?: number
+}
+
+interface CurogramAiV2Options {
   requestId?: string
   callId?: string
   endpointUrl?: string | null
@@ -156,6 +184,105 @@ export async function sendCurogramPatientsUpsert(
     return { ok: response.ok, status: response.status, body: bodyText }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown Curogram patients API error'
+    return { ok: false, status: 0, body: message }
+  } finally {
+    clearTimeout(timeoutId)
+    if (options.requestId || options.callId) {
+      // Keep options referenced for future request-level tracing.
+    }
+  }
+}
+
+export function normalizeCurogramAiV2Gender(
+  value: unknown
+): 'Male' | 'Female' | 'Prefer not to say' | 'Other' | '' | ' ' | undefined {
+  const raw = String(value ?? '').trim()
+  if (!raw) return undefined
+  if (raw === 'Male' || raw === 'Female' || raw === 'Prefer not to say' || raw === 'Other') {
+    return raw
+  }
+
+  const normalized = raw.toLowerCase()
+  if (['male', 'm'].includes(normalized)) return 'Male'
+  if (['female', 'f'].includes(normalized)) return 'Female'
+  if (['other', 'non-binary', 'nonbinary'].includes(normalized)) return 'Other'
+  if (['prefer not to say', 'prefer_not_to_say', 'unknown', 'undisclosed'].includes(normalized)) {
+    return 'Prefer not to say'
+  }
+  return undefined
+}
+
+export async function sendCurogramAiCallsToAction(
+  payload: CurogramAiCallsToActionPayload,
+  options: CurogramAiV2Options = {}
+): Promise<{ ok: boolean; status: number; body: string }> {
+  const url = options.endpointUrl?.trim() || process.env.CUROGRAM_AI_CALLS_TO_ACTION_URL?.trim()
+  const token = options.token?.trim() || process.env.CUROGRAM_AI_CALLS_TO_ACTION_TOKEN?.trim()
+  if (!url) {
+    return { ok: false, status: 0, body: 'Curogram AI calls-to-action URL not configured' }
+  }
+  if (!token) {
+    return { ok: false, status: 0, body: 'Curogram AI calls-to-action token not configured' }
+  }
+
+  const timeoutMs = options.timeoutMs || parseTimeoutMs(process.env.CUROGRAM_AI_CALLS_TO_ACTION_TIMEOUT_MS)
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    })
+    const bodyText = await response.text()
+    return { ok: response.ok, status: response.status, body: bodyText }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown Curogram AI calls-to-action error'
+    return { ok: false, status: 0, body: message }
+  } finally {
+    clearTimeout(timeoutId)
+    if (options.requestId || options.callId) {
+      // Keep options referenced for future request-level tracing.
+    }
+  }
+}
+
+export async function sendCurogramAiCallSummaryTranscript(
+  payload: CurogramAiCallSummaryTranscriptPayload,
+  options: CurogramAiV2Options = {}
+): Promise<{ ok: boolean; status: number; body: string }> {
+  const url = options.endpointUrl?.trim() || process.env.CUROGRAM_AI_CALL_SUMMARY_URL?.trim()
+  const token = options.token?.trim() || process.env.CUROGRAM_AI_CALL_SUMMARY_TOKEN?.trim()
+  if (!url) {
+    return { ok: false, status: 0, body: 'Curogram AI call-summary URL not configured' }
+  }
+  if (!token) {
+    return { ok: false, status: 0, body: 'Curogram AI call-summary token not configured' }
+  }
+
+  const timeoutMs = options.timeoutMs || parseTimeoutMs(process.env.CUROGRAM_AI_CALL_SUMMARY_TIMEOUT_MS)
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    })
+    const bodyText = await response.text()
+    return { ok: response.ok, status: response.status, body: bodyText }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown Curogram AI call-summary error'
     return { ok: false, status: 0, body: message }
   } finally {
     clearTimeout(timeoutId)

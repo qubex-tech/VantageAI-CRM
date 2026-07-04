@@ -147,7 +147,13 @@ export async function POST(req: NextRequest) {
     const portalChatAgentId = validated.portalChatAgentId?.trim() || null
     const existingIntegration = await prisma.retellIntegration.findUnique({
       where: { practiceId: practiceId },
-      select: { apiKey: true, portalChatPublicKey: true, portalChatRecaptchaSiteKey: true },
+      select: {
+        apiKey: true,
+        portalChatPublicKey: true,
+        portalChatRecaptchaSiteKey: true,
+        curogramEscalationEnabled: true,
+        curogramEscalationUrl: true,
+      },
     })
     const portalChatPublicKey =
       validated.portalChatPublicKey === undefined
@@ -158,8 +164,12 @@ export async function POST(req: NextRequest) {
         ? existingIntegration?.portalChatRecaptchaSiteKey ?? null
         : validated.portalChatRecaptchaSiteKey.trim() || null
     const resolvedApiKey = validated.apiKey?.trim() || existingIntegration?.apiKey
-    const curogramEscalationEnabled = Boolean(validated.curogramEscalationEnabled)
-    const curogramEscalationUrl = validated.curogramEscalationUrl?.trim() || null
+    const curogramEscalationEnabled =
+      validated.curogramEscalationEnabled ?? existingIntegration?.curogramEscalationEnabled ?? false
+    const curogramEscalationUrl =
+      validated.curogramEscalationUrl === undefined
+        ? existingIntegration?.curogramEscalationUrl ?? null
+        : validated.curogramEscalationUrl?.trim() || null
 
     if (!resolvedApiKey) {
       return NextResponse.json(
