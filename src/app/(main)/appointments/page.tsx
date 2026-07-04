@@ -11,6 +11,7 @@ import {
   listEhrPractitionersForPractice,
 } from '@/lib/integrations/ehr/scheduleSync'
 import { getSchedulingSettings } from '@/lib/integrations/clinical-system/server'
+import { usesCalForWrite } from '@/lib/integrations/clinical-system/types'
 import { getOpenDentalConnection } from '@/lib/integrations/opendental/factory'
 
 export const dynamic = 'force-dynamic'
@@ -132,7 +133,7 @@ export default async function AppointmentsPage({
   // Practices on Open Dental scheduling have no Cal.com calendar to merge — their
   // appointments live in the local DB (synced from / written back to Open Dental).
   const scheduling = await getSchedulingSettings(practiceId)
-  const useCalBookings = scheduling.mode !== 'open_dental'
+  const useCalBookings = usesCalForWrite(scheduling)
   const openDentalConnection = await getOpenDentalConnection(practiceId)
   const openDentalActions = !!openDentalConnection?.isActive
 

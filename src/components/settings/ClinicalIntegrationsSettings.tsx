@@ -230,6 +230,7 @@ export function ClinicalIntegrationsSettings({ practiceId }: ClinicalIntegration
           key={activePracticeId}
           practiceId={activePracticeId}
           openDentalAvailable={clinicalSystem === 'open_dental'}
+          ecwAvailable={clinicalSystem === 'fhir'}
         />
       )}
 

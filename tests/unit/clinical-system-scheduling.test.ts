@@ -42,6 +42,8 @@ describe('getSchedulingSettings', () => {
     const settings = await getSchedulingSettings('practice-1')
 
     expect(settings.mode).toBe('open_dental')
+    expect(settings.readSource).toBe('open_dental')
+    expect(settings.writeSource).toBe('open_dental')
     expect(settings.defaultReadOperatoryNum).toBe(1)
     expect(settings.defaultReadOperatoryNums).toEqual([3, 4])
     expect(settings.defaultOperatoryNum).toBe(2)
@@ -55,6 +57,10 @@ describe('getSchedulingSettings', () => {
     } as never)
 
     const settings = await getSchedulingSettings('practice-1')
-    expect(settings).toEqual({ mode: 'cal' })
+    expect(settings).toEqual({
+      mode: 'cal',
+      readSource: 'cal',
+      writeSource: 'cal',
+    })
   })
 })

@@ -5,10 +5,12 @@ import {
   resolveClinicalSystemPractice,
   upsertClinicalIntegrationSettings,
 } from '@/lib/integrations/clinical-system/server'
-import { CLINICAL_SYSTEM_TYPES, SCHEDULING_MODES } from '@/lib/integrations/clinical-system/types'
+import { CLINICAL_SYSTEM_TYPES, SCHEDULING_SOURCES } from '@/lib/integrations/clinical-system/types'
 
 const schedulingSchema = z.object({
-  mode: z.enum(SCHEDULING_MODES),
+  mode: z.enum(['cal', 'open_dental']).optional(),
+  readSource: z.enum(SCHEDULING_SOURCES).optional(),
+  writeSource: z.enum(SCHEDULING_SOURCES).optional(),
   defaultReadProvNum: z.number().int().positive().nullish(),
   defaultReadOperatoryNum: z.number().int().positive().nullish(),
   defaultReadOperatoryNums: z.array(z.number().int().positive()).nullish(),
@@ -17,6 +19,8 @@ const schedulingSchema = z.object({
   defaultOperatoryNum: z.number().int().positive().nullish(),
   defaultOperatoryNums: z.array(z.number().int().positive()).nullish(),
   defaultLengthMinutes: z.number().int().positive().max(600).nullish(),
+  defaultReadPractitionerRef: z.string().min(1).nullish(),
+  defaultWritePractitionerRef: z.string().min(1).nullish(),
 })
 
 const settingsSchema = z

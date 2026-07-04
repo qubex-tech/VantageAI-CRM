@@ -4,6 +4,11 @@ import { prisma } from '@/lib/db'
 import { ScheduleAppointmentForm } from '@/components/appointments/ScheduleAppointmentForm'
 import { OpenDentalScheduleForm } from '@/components/appointments/OpenDentalScheduleForm'
 import { getSchedulingSettings } from '@/lib/integrations/clinical-system/server'
+import {
+  canBookAppointments,
+  resolveReadSource,
+  usesOpenDentalForWrite,
+} from '@/lib/integrations/clinical-system/types'
 import { getPracticeTimeZone } from '@/lib/practice-timezone'
 import { listOpenDentalProviders } from '@/lib/integrations/opendental/scheduling'
 
@@ -44,8 +49,24 @@ export default async function NewAppointmentPage({
 
   const scheduling = await getSchedulingSettings(practiceId)
 
-  // Open Dental native scheduling: pull open slots from OD and book directly.
-  if (scheduling.mode === 'open_dental') {
+  if (!canBookAppointments(scheduling)) {
+    return (
+      <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8 md:pt-8">
+        <div className="mb-8">
+          <h1 className="text-2xl font-semibold text-gray-900 mb-1">Schedule Appointment</h1>
+          <p className="text-sm text-gray-500">Booking is disabled for this practice</p>
+        </div>
+        <div className="max-w-2xl rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+          Appointment booking is turned off in Settings → Scheduling. Availability may still be
+          checked from{' '}
+          {resolveReadSource(scheduling) === 'open_dental' ? 'Open Dental' : 'Cal.com'}
+          , but new visits cannot be written until a booking destination is configured.
+        </div>
+      </div>
+    )
+  }
+
+  if (usesOpenDentalForWrite(scheduling)) {
     let providers: Array<{ provNum: number; name: string }> = []
     try {
       providers = (await listOpenDentalProviders(practiceId))

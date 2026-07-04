@@ -17,11 +17,19 @@ import {
   resolveBookOperatoryNum,
 } from '@/lib/integrations/clinical-system/types'
 import type { SchedulingSettings } from '@/lib/integrations/clinical-system/types'
+import {
+  canBookAppointments,
+  usesOpenDentalForRead,
+  usesOpenDentalForWrite,
+  usesEcwForRead,
+  usesEcwForWrite,
+} from '@/lib/integrations/clinical-system/types'
 import { getPracticeTimeZone } from '@/lib/practice-timezone'
 import {
   getOpenDentalOpenSlotsForOperatories,
   bookOpenDentalAppointment,
 } from '@/lib/integrations/opendental/scheduling'
+import { getEcwScheduleFromSettings } from '@/lib/integrations/ehr/scheduling'
 import { formatOpenDentalLocalDateTime } from '@/lib/integrations/opendental/commlogWriteback'
 import { buildAppointmentExternalId } from '@/lib/integrations/opendental/appointmentSync'
 import { writeBackAppointmentToOpenDental } from '@/lib/integrations/opendental/appointmentWriteback'
@@ -79,7 +87,7 @@ async function ensureOpenDentalPatientLinkedForScheduling(
   patient: PatientSchedulingRow
 ): Promise<PatientSchedulingRow> {
   const scheduling = await getSchedulingSettings(practiceId)
-  if (scheduling.mode !== 'open_dental') return patient
+  if (!usesOpenDentalForWrite(scheduling)) return patient
   if (patient.externalEhrId?.startsWith('opendental:')) return patient
 
   const { createOpenDentalPatientFromCrm } = await import(
@@ -394,9 +402,9 @@ export async function getAvailableSlots(
   dateTo: string,
   timezone: string = 'America/New_York'
 ): Promise<AvailableSlot[]> {
-  // When the practice schedules in Open Dental, return OD open slots instead of Cal.com.
+  // When availability is read from Open Dental, return OD open slots instead of Cal.com.
   const scheduling = await getSchedulingSettings(practiceId)
-  if (scheduling.mode === 'open_dental') {
+  if (usesOpenDentalForRead(scheduling)) {
     try {
       const slots = await getOpenDentalOpenSlotsForOperatories({
         practiceId,
@@ -412,6 +420,25 @@ export async function getAvailableSlots(
     } catch (error) {
       console.error('Error fetching Open Dental slots:', error)
       throw new Error('Failed to fetch available appointment slots')
+    }
+  }
+
+  if (usesEcwForRead(scheduling)) {
+    try {
+      const { slots } = await getEcwScheduleFromSettings({
+        practiceId,
+        scheduling,
+        dateStart: toDateOnly(dateFrom),
+        dateEnd: toDateOnly(dateTo),
+        timeZone: timezone,
+      })
+      return slots.map((slot) => ({
+        time: slot.startUtc,
+        attendeeCount: 0,
+      }))
+    } catch (error) {
+      console.error('Error fetching eCW slots:', error)
+      throw new Error('Failed to fetch available appointment slots from eClinicalWorks')
     }
   }
 
@@ -500,9 +527,19 @@ export async function bookAppointment(
     throw new Error('Patient not found')
   }
 
-  // Route booking to Open Dental when the practice schedules in its EHR.
+  // Route booking based on configured write destination.
   const scheduling = await getSchedulingSettings(practiceId)
-  if (scheduling.mode === 'open_dental') {
+  if (!canBookAppointments(scheduling)) {
+    throw new Error(
+      'Booking is disabled for this practice. Set a booking destination in Settings → Scheduling.'
+    )
+  }
+  if (usesEcwForWrite(scheduling)) {
+    throw new Error(
+      'Booking into eClinicalWorks is not enabled yet. Use Cal.com or Open Dental as the booking destination, or set booking to None.'
+    )
+  }
+  if (usesOpenDentalForWrite(scheduling)) {
     const linkedPatient = await ensureOpenDentalPatientLinkedForScheduling(practiceId, patient)
     const odChart = await fetchOpenDentalChartFacts(practiceId, linkedPatient.externalEhrId)
     if (odChart && !openDentalChartMatchesCaller(odChart, linkedPatient)) {

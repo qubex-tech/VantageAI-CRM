@@ -11,12 +11,20 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Loader2, CalendarClock, X } from 'lucide-react'
-import type { SchedulingMode } from '@/lib/integrations/clinical-system/types'
+import type { SchedulingSource } from '@/lib/integrations/clinical-system/types'
 
 interface SchedulingModeSettingsProps {
   practiceId: string
   /** Whether Open Dental is the selected clinical system (enables EHR-native scheduling). */
   openDentalAvailable: boolean
+  /** Whether FHIR / eClinicalWorks is configured for this practice. */
+  ecwAvailable: boolean
+}
+
+interface EcwPractitionerOption {
+  id: string
+  reference: string
+  name: string
 }
 
 interface ProviderOption {
@@ -116,23 +124,35 @@ function AdditionalOperatoriesEditor({
   )
 }
 
-export function SchedulingModeSettings({ practiceId, openDentalAvailable }: SchedulingModeSettingsProps) {
-  const [mode, setMode] = useState<SchedulingMode>('cal')
+export function SchedulingModeSettings({
+  practiceId,
+  openDentalAvailable,
+  ecwAvailable,
+}: SchedulingModeSettingsProps) {
+  const [readSource, setReadSource] = useState<SchedulingSource>('cal')
+  const [writeSource, setWriteSource] = useState<SchedulingSource>('cal')
   const [defaultReadProvNum, setDefaultReadProvNum] = useState<string>(NONE)
   const [defaultReadOperatoryNum, setDefaultReadOperatoryNum] = useState<string>(NONE)
   const [additionalReadOperatoryNums, setAdditionalReadOperatoryNums] = useState<number[]>([])
   const [defaultReadLengthMinutes, setDefaultReadLengthMinutes] = useState<string>(NONE)
+  const [defaultReadPractitionerRef, setDefaultReadPractitionerRef] = useState<string>(NONE)
+  const [defaultWritePractitionerRef, setDefaultWritePractitionerRef] = useState<string>(NONE)
   const [defaultProvNum, setDefaultProvNum] = useState<string>(NONE)
   const [defaultOperatoryNum, setDefaultOperatoryNum] = useState<string>(NONE)
   const [additionalBookOperatoryNums, setAdditionalBookOperatoryNums] = useState<number[]>([])
   const [defaultLengthMinutes, setDefaultLengthMinutes] = useState<number>(30)
   const [providers, setProviders] = useState<ProviderOption[]>([])
   const [operatories, setOperatories] = useState<OperatoryOption[]>([])
+  const [ecwPractitioners, setEcwPractitioners] = useState<EcwPractitionerOption[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingLists, setLoadingLists] = useState(false)
+  const [loadingEcwPractitioners, setLoadingEcwPractitioners] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+
+  const needsOpenDentalLists = readSource === 'open_dental' || writeSource === 'open_dental'
+  const needsEcwPractitioners = readSource === 'ecw' || writeSource === 'ecw'
 
   const withPractice = (path: string) =>
     `${path}${path.includes('?') ? '&' : '?'}practiceId=${encodeURIComponent(practiceId)}`
@@ -147,7 +167,8 @@ export function SchedulingModeSettings({ practiceId, openDentalAvailable }: Sche
         if (!res.ok) throw new Error(data.error || 'Failed to load scheduling settings')
         const sched = data.settings?.scheduling
         if (sched) {
-          setMode(sched.mode ?? 'cal')
+          setReadSource(sched.readSource ?? (sched.mode === 'open_dental' ? 'open_dental' : 'cal'))
+          setWriteSource(sched.writeSource ?? (sched.mode === 'open_dental' ? 'open_dental' : 'cal'))
           setDefaultReadProvNum(sched.defaultReadProvNum ? String(sched.defaultReadProvNum) : NONE)
           setDefaultReadOperatoryNum(
             sched.defaultReadOperatoryNum ? String(sched.defaultReadOperatoryNum) : NONE
@@ -164,6 +185,8 @@ export function SchedulingModeSettings({ practiceId, openDentalAvailable }: Sche
             Array.isArray(sched.defaultOperatoryNums) ? sched.defaultOperatoryNums : []
           )
           setDefaultLengthMinutes(sched.defaultLengthMinutes ?? 30)
+          setDefaultReadPractitionerRef(sched.defaultReadPractitionerRef || NONE)
+          setDefaultWritePractitionerRef(sched.defaultWritePractitionerRef || NONE)
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load scheduling settings')
@@ -173,6 +196,19 @@ export function SchedulingModeSettings({ practiceId, openDentalAvailable }: Sche
     }
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [practiceId])
+
+  const loadEcwPractitioners = useCallback(async () => {
+    setLoadingEcwPractitioners(true)
+    try {
+      const res = await fetch(withPractice('/api/integrations/ehr/practitioners'))
+      const data = await res.json()
+      if (res.ok) setEcwPractitioners(data.practitioners || [])
+    } catch {
+      // Non-fatal
+    } finally {
+      setLoadingEcwPractitioners(false)
+    }
   }, [practiceId])
 
   const loadLists = useCallback(async () => {
@@ -187,28 +223,36 @@ export function SchedulingModeSettings({ practiceId, openDentalAvailable }: Sche
       if (pRes.ok) setProviders((pData.providers || []).filter((p: ProviderOption & { isHidden?: boolean }) => !p.isHidden))
       if (oRes.ok) setOperatories((oData.operatories || []).filter((o: OperatoryOption & { isHidden?: boolean }) => !o.isHidden))
     } catch {
-      // Non-fatal — admin can still pick a mode without defaults.
+      // Non-fatal — admin can still pick sources without defaults.
     } finally {
       setLoadingLists(false)
     }
   }, [practiceId])
 
   useEffect(() => {
-    if (mode === 'open_dental' && openDentalAvailable && providers.length === 0 && operatories.length === 0) {
+    if (needsOpenDentalLists && openDentalAvailable && providers.length === 0 && operatories.length === 0) {
       loadLists()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, openDentalAvailable])
+  }, [needsOpenDentalLists, openDentalAvailable])
+
+  useEffect(() => {
+    if (needsEcwPractitioners && ecwAvailable && ecwPractitioners.length === 0) {
+      loadEcwPractitioners()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsEcwPractitioners, ecwAvailable])
 
   const handleSave = async () => {
     setSaving(true)
     setError('')
     setSuccess('')
     try {
-      const scheduling =
-        mode === 'open_dental'
+      const scheduling = {
+        readSource,
+        writeSource,
+        ...(readSource === 'open_dental' || writeSource === 'open_dental'
           ? {
-              mode,
               defaultReadProvNum: defaultReadProvNum !== NONE ? Number(defaultReadProvNum) : null,
               defaultReadOperatoryNum:
                 defaultReadOperatoryNum !== NONE ? Number(defaultReadOperatoryNum) : null,
@@ -220,7 +264,19 @@ export function SchedulingModeSettings({ practiceId, openDentalAvailable }: Sche
               defaultOperatoryNums: additionalBookOperatoryNums,
               defaultLengthMinutes,
             }
-          : { mode }
+          : {}),
+        ...(readSource === 'ecw' || writeSource === 'ecw'
+          ? {
+              defaultReadPractitionerRef:
+                defaultReadPractitionerRef !== NONE ? defaultReadPractitionerRef : null,
+              defaultWritePractitionerRef:
+                defaultWritePractitionerRef !== NONE ? defaultWritePractitionerRef : null,
+              defaultReadLengthMinutes:
+                defaultReadLengthMinutes !== NONE ? Number(defaultReadLengthMinutes) : null,
+              defaultLengthMinutes,
+            }
+          : {}),
+      }
       const res = await fetch('/api/settings/clinical-system', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -244,8 +300,9 @@ export function SchedulingModeSettings({ practiceId, openDentalAvailable }: Sche
           Scheduling
         </CardTitle>
         <CardDescription className="text-sm text-gray-500">
-          Choose how this practice books appointments. Cal.com uses event types and availability;
-          Open Dental pulls open slots from the practice schedule and books directly into Open Dental.
+          Configure availability checking and booking separately. A practice can read open slots
+          from one system (e.g. Open Dental) while booking into another (e.g. Cal.com), or disable
+          booking when write access is not available.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -256,113 +313,252 @@ export function SchedulingModeSettings({ practiceId, openDentalAvailable }: Sche
           </div>
         ) : (
           <>
-            <div className="space-y-2">
-              <label htmlFor="scheduling-mode" className="text-sm font-medium text-gray-700">
-                Scheduling source
-              </label>
-              <Select value={mode} onValueChange={(v) => setMode(v as SchedulingMode)}>
-                <SelectTrigger id="scheduling-mode">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cal">Cal.com scheduling</SelectItem>
-                  <SelectItem value="open_dental" disabled={!openDentalAvailable}>
-                    Open Dental scheduling{!openDentalAvailable ? ' (requires Open Dental)' : ''}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              {!openDentalAvailable && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label htmlFor="read-source" className="text-sm font-medium text-gray-700">
+                  Availability source
+                </label>
                 <p className="text-xs text-gray-500">
-                  Set the clinical system to Open Dental above to enable EHR-native scheduling.
+                  Where open appointment slots are checked (voice agent, CRM booking UI, Healix).
                 </p>
-              )}
+                <Select value={readSource} onValueChange={(v) => setReadSource(v as SchedulingSource)}>
+                  <SelectTrigger id="read-source">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cal">Cal.com availability</SelectItem>
+                    <SelectItem value="open_dental" disabled={!openDentalAvailable}>
+                      Open Dental schedule{!openDentalAvailable ? ' (requires Open Dental)' : ''}
+                    </SelectItem>
+                    <SelectItem value="ecw" disabled={!ecwAvailable}>
+                      eClinicalWorks (eCW){!ecwAvailable ? ' (requires FHIR / eCW connection)' : ''}
+                    </SelectItem>
+                    <SelectItem value="none">None (disable slot lookup)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="write-source" className="text-sm font-medium text-gray-700">
+                  Booking destination
+                </label>
+                <p className="text-xs text-gray-500">
+                  Where new appointments are written when staff or agents book a visit.
+                </p>
+                <Select value={writeSource} onValueChange={(v) => setWriteSource(v as SchedulingSource)}>
+                  <SelectTrigger id="write-source">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cal">Cal.com scheduling</SelectItem>
+                    <SelectItem value="open_dental" disabled={!openDentalAvailable}>
+                      Open Dental schedule{!openDentalAvailable ? ' (requires Open Dental)' : ''}
+                    </SelectItem>
+                    <SelectItem value="ecw" disabled={!ecwAvailable}>
+                      eClinicalWorks (eCW){!ecwAvailable ? ' (read-only until writeback enabled)' : ''}
+                    </SelectItem>
+                    <SelectItem value="none">None (read-only — no booking)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            {mode === 'open_dental' && (
-              <div className="space-y-4">
-                <div className="space-y-4 rounded-md border border-gray-100 bg-gray-50 p-4">
-                  <div>
-                    <p className="text-sm font-medium text-gray-700">Open Dental reading defaults</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Provider, operatory, and length used when checking available appointment slots
-                      (voice agent, CRM booking UI). Slots are read from every operatory listed below.
-                    </p>
+            {!openDentalAvailable && (readSource === 'open_dental' || writeSource === 'open_dental') && (
+              <p className="text-xs text-amber-700">
+                Set the clinical system to Open Dental above to use Open Dental for availability or
+                booking.
+              </p>
+            )}
+
+            {!ecwAvailable && (readSource === 'ecw' || writeSource === 'ecw') && (
+              <p className="text-xs text-amber-700">
+                Set the clinical system to FHIR / SMART on FHIR and connect eClinicalWorks backend
+                services to use eCW for availability or appointment sync.
+              </p>
+            )}
+
+            {writeSource === 'ecw' && (
+              <p className="text-xs text-amber-700">
+                Writing appointments directly into eClinicalWorks is not enabled yet. Use eCW as an
+                availability source and book via Cal.com or Open Dental, or set booking to None.
+              </p>
+            )}
+
+            {(readSource === 'ecw' || writeSource === 'ecw') && (
+              <div className="space-y-4 rounded-md border border-gray-100 bg-gray-50 p-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-700">eClinicalWorks defaults</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Practitioner and visit length used when pulling Encounters (appointments) and
+                    computing open slots from the eCW schedule.
+                  </p>
+                </div>
+                {loadingEcwPractitioners ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading eCW practitioners...
                   </div>
-                  {loadingLists ? (
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading providers and operatories...
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {readSource === 'ecw' && (
+                      <>
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-gray-700">
+                            Reading practitioner
+                          </label>
+                          <Select
+                            value={defaultReadPractitionerRef}
+                            onValueChange={setDefaultReadPractitionerRef}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select practitioner" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={NONE}>Not set</SelectItem>
+                              {ecwPractitioners.map((p) => (
+                                <SelectItem key={p.reference} value={p.reference}>
+                                  {p.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-gray-700">Default length</label>
+                          <Select
+                            value={defaultReadLengthMinutes}
+                            onValueChange={setDefaultReadLengthMinutes}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="30 minutes" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={NONE}>Same as booking default</SelectItem>
+                              {LENGTH_OPTIONS.map((m) => (
+                                <SelectItem key={m} value={String(m)}>
+                                  {m} minutes
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </>
+                    )}
+                    {writeSource === 'ecw' && (
                       <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-700">Default provider</label>
-                        <Select value={defaultReadProvNum} onValueChange={setDefaultReadProvNum}>
+                        <label className="text-sm font-medium text-gray-700">
+                          Booking practitioner
+                        </label>
+                        <Select
+                          value={defaultWritePractitionerRef}
+                          onValueChange={setDefaultWritePractitionerRef}
+                        >
                           <SelectTrigger>
-                            <SelectValue placeholder="Same as booking default" />
+                            <SelectValue placeholder="Select practitioner" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value={NONE}>Same as booking default</SelectItem>
-                            {providers.map((p) => (
-                              <SelectItem key={p.provNum} value={String(p.provNum)}>
+                            <SelectItem value={NONE}>Same as reading default</SelectItem>
+                            {ecwPractitioners.map((p) => (
+                              <SelectItem key={p.reference} value={p.reference}>
                                 {p.name}
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-700">Default operatory</label>
-                        <Select value={defaultReadOperatoryNum} onValueChange={setDefaultReadOperatoryNum}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Same as booking default" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={NONE}>Same as booking default</SelectItem>
-                            {operatories.map((o) => (
-                              <SelectItem key={o.operatoryNum} value={String(o.operatoryNum)}>
-                                {o.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-700">Default length</label>
-                        <Select value={defaultReadLengthMinutes} onValueChange={setDefaultReadLengthMinutes}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Same as booking default" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={NONE}>Same as booking default</SelectItem>
-                            {LENGTH_OPTIONS.map((m) => (
-                              <SelectItem key={m} value={String(m)}>
-                                {m} minutes
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <AdditionalOperatoriesEditor
-                        label="Additional reading operatories"
-                        description="Open slots are also pulled from these operatories and merged into availability."
-                        primaryOperatoryNum={defaultReadOperatoryNum}
-                        additionalOperatoryNums={additionalReadOperatoryNums}
-                        operatories={operatories}
-                        onChangeAdditional={setAdditionalReadOperatoryNums}
-                      />
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-4 rounded-md border border-gray-100 bg-gray-50 p-4">
-                  <div>
-                    <p className="text-sm font-medium text-gray-700">Open Dental booking defaults</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Provider, operatory, and length used when writing a new appointment into Open Dental.
-                      New appointments book into the default operatory unless a specific operatory is passed.
-                    </p>
+                    )}
                   </div>
+                )}
+              </div>
+            )}
+
+            {readSource === 'open_dental' && (
+              <div className="space-y-4 rounded-md border border-gray-100 bg-gray-50 p-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Open Dental reading defaults</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Provider, operatory, and length used when checking available appointment slots.
+                    Slots are read from every operatory listed below.
+                  </p>
+                </div>
+                {loadingLists ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading providers and operatories...
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Default provider</label>
+                      <Select value={defaultReadProvNum} onValueChange={setDefaultReadProvNum}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Same as booking default" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NONE}>Same as booking default</SelectItem>
+                          {providers.map((p) => (
+                            <SelectItem key={p.provNum} value={String(p.provNum)}>
+                              {p.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Default operatory</label>
+                      <Select value={defaultReadOperatoryNum} onValueChange={setDefaultReadOperatoryNum}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Same as booking default" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NONE}>Same as booking default</SelectItem>
+                          {operatories.map((o) => (
+                            <SelectItem key={o.operatoryNum} value={String(o.operatoryNum)}>
+                              {o.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Default length</label>
+                      <Select value={defaultReadLengthMinutes} onValueChange={setDefaultReadLengthMinutes}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Same as booking default" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NONE}>Same as booking default</SelectItem>
+                          {LENGTH_OPTIONS.map((m) => (
+                            <SelectItem key={m} value={String(m)}>
+                              {m} minutes
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <AdditionalOperatoriesEditor
+                      label="Additional reading operatories"
+                      description="Open slots are also pulled from these operatories and merged into availability."
+                      primaryOperatoryNum={defaultReadOperatoryNum}
+                      additionalOperatoryNums={additionalReadOperatoryNums}
+                      operatories={operatories}
+                      onChangeAdditional={setAdditionalReadOperatoryNums}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {writeSource === 'open_dental' && (
+              <div className="space-y-4 rounded-md border border-gray-100 bg-gray-50 p-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Open Dental booking defaults</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Provider, operatory, and length used when writing a new appointment into Open
+                    Dental. New appointments book into the default operatory unless another is
+                    specified.
+                  </p>
+                </div>
                 {loadingLists ? (
                   <div className="flex items-center gap-2 text-sm text-gray-500">
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -430,8 +626,15 @@ export function SchedulingModeSettings({ practiceId, openDentalAvailable }: Sche
                     />
                   </div>
                 )}
-                </div>
               </div>
+            )}
+
+            {writeSource === 'none' && readSource !== 'none' && (
+              <p className="text-sm text-gray-600 rounded-md border border-blue-100 bg-blue-50 p-3">
+                Availability can be checked from{' '}
+                {readSource === 'open_dental' ? 'Open Dental' : 'Cal.com'}, but booking is disabled
+                for this practice. Agents and staff can share open slots without writing appointments.
+              </p>
             )}
 
             {error && <div className="text-sm text-red-600">{error}</div>}

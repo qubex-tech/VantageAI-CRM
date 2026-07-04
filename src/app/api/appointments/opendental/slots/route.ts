@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/middleware'
 import { getSchedulingSettings } from '@/lib/integrations/clinical-system/server'
+import { usesOpenDentalForRead, usesOpenDentalForWrite } from '@/lib/integrations/clinical-system/types'
 import {
   resolveReadLengthMinutes,
   resolveReadOperatoryNums,
@@ -24,6 +25,12 @@ export async function GET(req: NextRequest) {
     const sp = req.nextUrl.searchParams
 
     const scheduling = await getSchedulingSettings(practiceId)
+    if (!usesOpenDentalForRead(scheduling)) {
+      return NextResponse.json(
+        { error: 'Open Dental is not configured as the availability source for this practice.' },
+        { status: 400 }
+      )
+    }
 
     const dateStart = sp.get('dateStart') || sp.get('date') || ''
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStart)) {

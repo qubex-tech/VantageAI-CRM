@@ -20,7 +20,15 @@ import type { VariableContext } from './marketing/types'
 import { emitEvent } from './outbox'
 import { getCalClient } from './cal'
 import { bookAppointment as bookCalAppointment, getAvailableSlots as getAgentAvailableSlots } from './agentActions'
-import { getSchedulingSettings } from './integrations/clinical-system/server'
+import { getSchedulingSettings } from '@/lib/integrations/clinical-system/server'
+import {
+  canBookAppointments,
+  usesCalForWrite,
+  usesEcwForRead,
+  usesOpenDentalForRead,
+  usesOpenDentalForWrite,
+  resolveReadSource,
+} from '@/lib/integrations/clinical-system/types'
 import { initiateInsuranceOutboundCall } from './outbound-insurance-call'
 
 export interface HealixToolResult {
@@ -1506,9 +1514,9 @@ export async function getAppointmentSlots(
 
     const timezone = params.timezone || 'America/New_York'
 
-    // Open Dental scheduling mode: pull open slots from OD (no Cal event type needed).
+    // Open Dental availability: pull open slots from OD (no Cal event type needed).
     const scheduling = await getSchedulingSettings(params.clinicId)
-    if (scheduling.mode === 'open_dental') {
+    if (usesOpenDentalForRead(scheduling)) {
       const slots = await getAgentAvailableSlots(
         params.clinicId,
         '',
@@ -1520,6 +1528,28 @@ export async function getAppointmentSlots(
         success: true,
         message: `Found ${slots.length} available slot(s)`,
         data: { slots, timezone, source: 'open_dental' },
+      }
+    }
+
+    if (usesEcwForRead(scheduling)) {
+      const slots = await getAgentAvailableSlots(
+        params.clinicId,
+        '',
+        params.dateFrom,
+        params.dateTo,
+        timezone
+      )
+      return {
+        success: true,
+        message: `Found ${slots.length} available slot(s) from eClinicalWorks`,
+        data: { slots, timezone, source: 'ecw' },
+      }
+    }
+
+    if (resolveReadSource(scheduling) === 'none') {
+      return {
+        success: false,
+        message: 'Availability lookup is disabled for this practice.',
       }
     }
 
@@ -1593,10 +1623,16 @@ export async function bookAppointment(
 
     const timezone = params.timezone || 'America/New_York'
 
-    // Open Dental scheduling mode: no Cal event type needed; book straight into OD.
     const scheduling = await getSchedulingSettings(params.clinicId)
+    if (!canBookAppointments(scheduling)) {
+      return {
+        success: false,
+        message: 'Booking is disabled for this practice.',
+      }
+    }
+
     let eventTypeId = ''
-    if (scheduling.mode !== 'open_dental') {
+    if (usesCalForWrite(scheduling)) {
       const resolvedEvent = await resolveEventTypeId(
         params.clinicId,
         params.eventTypeId,

@@ -1108,3 +1108,42 @@ export async function listEhrPractitionersForPractice(practiceId: string): Promi
 
   return Array.from(deduped.values()).sort((a, b) => a.name.localeCompare(b.name))
 }
+
+/** Pull Encounter rows from eCW for a practitioner across an inclusive calendar date range. */
+export async function fetchEcwEncountersForSchedule(params: {
+  practiceId: string
+  practitionerRef: string
+  dateStart: string
+  dateEnd: string
+}) {
+  const normalizedRef = normalizePractitionerReference(params.practitionerRef.trim())
+  if (!normalizedRef) {
+    throw new Error('A valid Practitioner reference is required')
+  }
+
+  const ehrContext = await createEhrClientForPractice(params.practiceId)
+  if (!ehrContext) {
+    throw new Error('eClinicalWorks backend connection is not configured for this practice')
+  }
+
+  const days = getCalendarDaysInRange(params.dateStart, params.dateEnd, SYNC_TIMEZONE)
+  if (days.length === 0) {
+    throw new Error('Invalid date range')
+  }
+
+  const { client } = ehrContext
+  const encounteredIds = new Set<string>()
+  const encounters: FhirEncounter[] = []
+
+  for (const day of days) {
+    const query = buildEncounterScheduleQuery(normalizedRef, day)
+    const batch = await fetchEncounterPages(client, query)
+    for (const encounter of batch) {
+      if (!encounter.id || encounteredIds.has(encounter.id)) continue
+      encounteredIds.add(encounter.id)
+      encounters.push(encounter)
+    }
+  }
+
+  return encounters
+}

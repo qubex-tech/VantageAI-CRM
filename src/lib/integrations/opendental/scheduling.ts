@@ -191,7 +191,9 @@ export async function getOpenDentalOpenSlots(params: {
 }
 
 /**
- * Fetch open slots across multiple operatories and merge them (deduped by start + operatory).
+ * Fetch open slots across multiple operatories.
+ * When more than one operatory is configured, only times open on **every** operatory
+ * are returned (intersection). Single-operatory reads return that operatory's slots.
  */
 export async function getOpenDentalOpenSlotsForOperatories(params: {
   practiceId: string
@@ -208,16 +210,36 @@ export async function getOpenDentalOpenSlotsForOperatories(params: {
     return getOpenDentalOpenSlots({ ...rest, opNum: null })
   }
 
-  const merged: OpenDentalOpenSlot[] = []
-  const seen = new Set<string>()
+  if (uniqueOps.length === 1) {
+    return getOpenDentalOpenSlots({ ...rest, opNum: uniqueOps[0] })
+  }
+
+  const slotsByOp: OpenDentalOpenSlot[][] = []
   for (const opNum of uniqueOps) {
-    const slots = await getOpenDentalOpenSlots({ ...rest, opNum })
+    slotsByOp.push(await getOpenDentalOpenSlots({ ...rest, opNum }))
+  }
+
+  const startsPerOp = slotsByOp.map((slots) => new Set(slots.map((s) => s.start)))
+  const sharedStarts = [...startsPerOp[0]].filter((start) =>
+    startsPerOp.every((set) => set.has(start))
+  )
+
+  const slotByStartAndOp = new Map<string, OpenDentalOpenSlot>()
+  for (const slots of slotsByOp) {
     for (const slot of slots) {
-      const key = `${slot.start}|${slot.opNum}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      merged.push(slot)
+      slotByStartAndOp.set(`${slot.start}|${slot.opNum}`, slot)
     }
+  }
+
+  const merged: OpenDentalOpenSlot[] = []
+  for (const start of sharedStarts) {
+    // Prefer later operatories in config (typically the booking operatory).
+    let picked: OpenDentalOpenSlot | undefined
+    for (let i = uniqueOps.length - 1; i >= 0; i--) {
+      picked = slotByStartAndOp.get(`${start}|${uniqueOps[i]}`)
+      if (picked) break
+    }
+    if (picked) merged.push(picked)
   }
 
   merged.sort((a, b) => a.start.localeCompare(b.start))

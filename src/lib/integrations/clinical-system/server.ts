@@ -8,11 +8,36 @@ import { getOpenDentalConnection } from '@/lib/integrations/opendental/factory'
 import {
   CLINICAL_SYSTEM_TYPES,
   DEFAULT_SCHEDULING_SETTINGS,
-  SCHEDULING_MODES,
+  SCHEDULING_SOURCES,
   type ClinicalIntegrationSettings,
   type ClinicalSystemType,
   type SchedulingSettings,
+  type SchedulingSource,
+  resolveReadSource,
+  resolveWriteSource,
 } from './types'
+
+function parseSchedulingSource(value: unknown): SchedulingSource | undefined {
+  if (typeof value === 'string' && (SCHEDULING_SOURCES as readonly string[]).includes(value)) {
+    return value as SchedulingSource
+  }
+  return undefined
+}
+
+function normalizeSchedulingSettings(raw: SchedulingSettings): SchedulingSettings {
+  const readSource = resolveReadSource(raw)
+  const writeSource = resolveWriteSource(raw)
+  const mode: SchedulingSettings['mode'] =
+    readSource === writeSource && readSource !== 'none'
+      ? (readSource as SchedulingSettings['mode'])
+      : raw.mode
+  return {
+    ...raw,
+    readSource,
+    writeSource,
+    mode,
+  }
+}
 
 export async function resolveClinicalSystemPractice(practiceIdOverride?: string) {
   const session = await getSupabaseSession()
@@ -48,8 +73,10 @@ export async function resolveClinicalSystemPractice(practiceIdOverride?: string)
 function parseScheduling(value: unknown): SchedulingSettings | undefined {
   if (!value || typeof value !== 'object') return undefined
   const raw = value as Record<string, unknown>
-  const mode = raw.mode
-  if (mode !== 'cal' && mode !== 'open_dental') return undefined
+  const legacyMode = raw.mode
+  const legacyModeValid = legacyMode === 'cal' || legacyMode === 'open_dental' ? legacyMode : undefined
+  const readSource = parseSchedulingSource(raw.readSource) ?? legacyModeValid ?? 'cal'
+  const writeSource = parseSchedulingSource(raw.writeSource) ?? legacyModeValid ?? 'cal'
   const toPositiveInt = (v: unknown): number | null => {
     const n = Number(v)
     return Number.isInteger(n) && n > 0 ? n : null
@@ -67,8 +94,10 @@ function parseScheduling(value: unknown): SchedulingSettings | undefined {
     }
     return out
   }
-  return {
-    mode,
+  return normalizeSchedulingSettings({
+    mode: legacyModeValid,
+    readSource,
+    writeSource,
     defaultReadProvNum: toPositiveInt(raw.defaultReadProvNum),
     defaultReadOperatoryNum: toPositiveInt(raw.defaultReadOperatoryNum),
     defaultReadOperatoryNums: toPositiveIntArray(raw.defaultReadOperatoryNums),
@@ -77,7 +106,15 @@ function parseScheduling(value: unknown): SchedulingSettings | undefined {
     defaultOperatoryNum: toPositiveInt(raw.defaultOperatoryNum),
     defaultOperatoryNums: toPositiveIntArray(raw.defaultOperatoryNums),
     defaultLengthMinutes: toPositiveInt(raw.defaultLengthMinutes),
-  }
+    defaultReadPractitionerRef:
+      typeof raw.defaultReadPractitionerRef === 'string' && raw.defaultReadPractitionerRef.trim()
+        ? raw.defaultReadPractitionerRef.trim()
+        : null,
+    defaultWritePractitionerRef:
+      typeof raw.defaultWritePractitionerRef === 'string' && raw.defaultWritePractitionerRef.trim()
+        ? raw.defaultWritePractitionerRef.trim()
+        : null,
+  })
 }
 
 function parseStoredClinicalSettings(value: unknown): ClinicalIntegrationSettings | null {
@@ -149,8 +186,16 @@ export async function upsertClinicalIntegrationSettings(
 /** Resolve the effective scheduling settings for a practice (defaults to Cal.com). */
 export async function getSchedulingSettings(practiceId: string): Promise<SchedulingSettings> {
   const { settings } = await getClinicalIntegrationSettings(practiceId)
-  if (!settings.scheduling || !SCHEDULING_MODES.includes(settings.scheduling.mode)) {
+  if (!settings.scheduling) {
     return DEFAULT_SCHEDULING_SETTINGS
   }
-  return settings.scheduling
+  const readSource = resolveReadSource(settings.scheduling)
+  const writeSource = resolveWriteSource(settings.scheduling)
+  if (
+    !(SCHEDULING_SOURCES as readonly string[]).includes(readSource) ||
+    !(SCHEDULING_SOURCES as readonly string[]).includes(writeSource)
+  ) {
+    return DEFAULT_SCHEDULING_SETTINGS
+  }
+  return normalizeSchedulingSettings(settings.scheduling)
 }

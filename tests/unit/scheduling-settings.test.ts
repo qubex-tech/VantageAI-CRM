@@ -6,11 +6,19 @@ import {
   resolveReadOperatoryNum,
   resolveReadOperatoryNums,
   resolveReadProvNum,
+  resolveReadSource,
+  resolveWriteSource,
+  usesOpenDentalForRead,
+  usesOpenDentalForWrite,
+  usesEcwForRead,
+  usesEcwForWrite,
   type SchedulingSettings,
 } from '@/lib/integrations/clinical-system/types'
 
 const base: SchedulingSettings = {
   mode: 'open_dental',
+  readSource: 'open_dental',
+  writeSource: 'open_dental',
   defaultReadProvNum: null,
   defaultReadOperatoryNum: 1,
   defaultReadOperatoryNums: [3, 4],
@@ -20,6 +28,34 @@ const base: SchedulingSettings = {
   defaultOperatoryNums: [5],
   defaultLengthMinutes: 30,
 }
+
+describe('scheduling source resolvers', () => {
+  it('derives read/write from legacy mode when sources omitted', () => {
+    expect(resolveReadSource({ mode: 'open_dental' })).toBe('open_dental')
+    expect(resolveWriteSource({ mode: 'cal' })).toBe('cal')
+  })
+
+  it('prefers explicit readSource/writeSource over mode', () => {
+    expect(
+      resolveReadSource({ mode: 'cal', readSource: 'open_dental', writeSource: 'none' })
+    ).toBe('open_dental')
+    expect(
+      resolveWriteSource({ mode: 'cal', readSource: 'open_dental', writeSource: 'none' })
+    ).toBe('none')
+  })
+
+  it('detects open dental read vs write independently', () => {
+    const readOnlyOd = { readSource: 'open_dental' as const, writeSource: 'none' as const }
+    expect(usesOpenDentalForRead(readOnlyOd)).toBe(true)
+    expect(usesOpenDentalForWrite(readOnlyOd)).toBe(false)
+  })
+
+  it('detects ecw read vs write independently', () => {
+    const readOnlyEcw = { readSource: 'ecw' as const, writeSource: 'none' as const }
+    expect(usesEcwForRead(readOnlyEcw)).toBe(true)
+    expect(usesEcwForWrite(readOnlyEcw)).toBe(false)
+  })
+})
 
 describe('scheduling settings resolvers', () => {
   describe('resolveReadProvNum', () => {

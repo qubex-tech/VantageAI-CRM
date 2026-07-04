@@ -5,6 +5,7 @@ import { requireAuth } from '@/lib/middleware'
 import { createAuditLog } from '@/lib/audit'
 import { emitEvent } from '@/lib/outbox'
 import { getSchedulingSettings } from '@/lib/integrations/clinical-system/server'
+import { usesOpenDentalForWrite } from '@/lib/integrations/clinical-system/types'
 import { resolveBookOperatoryNum, resolveBookOperatoryNums } from '@/lib/integrations/clinical-system/types'
 import {
   bookOpenDentalAppointment,
@@ -38,6 +39,13 @@ export async function POST(req: NextRequest) {
     const input = parsed.data
 
     const scheduling = await getSchedulingSettings(practiceId)
+    if (!usesOpenDentalForWrite(scheduling)) {
+      return NextResponse.json(
+        { error: 'Open Dental is not configured as the booking destination for this practice.' },
+        { status: 400 }
+      )
+    }
+
     const bookOperatoryNums = resolveBookOperatoryNums(scheduling)
     const requestedOpNum = input.opNum ?? undefined
     const opNum =
