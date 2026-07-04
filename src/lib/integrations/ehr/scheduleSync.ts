@@ -21,6 +21,8 @@ import {
 const WRITEBACK_PROVIDER_ID = 'ecw_write'
 const STALE_SYNC_WINDOW_MS = 12 * 60 * 60 * 1000
 const SYNC_TIMEZONE = 'America/Chicago'
+/** eCW schedule sync can fan out across practitioners × days; allow longer FHIR reads. */
+const ECW_SYNC_TIMEOUT_MS = 60_000
 /** Default forward horizon (calendar days, includes weekends) when practice config does not override. */
 const DEFAULT_SYNC_CALENDAR_DAYS = 14
 
@@ -329,6 +331,30 @@ function buildEncounterScheduleQuery(practitionerRef: string, day: string) {
   )}&date=ge${day}&date=lt${nextDay}`
 }
 
+/** eCW tenants often reject `_count`; strip it from paths and pagination next links. */
+export function sanitizeEcwFhirRequestPath(pathOrUrl: string) {
+  try {
+    const isAbsolute = pathOrUrl.startsWith('http')
+    const url = new URL(
+      isAbsolute
+        ? pathOrUrl
+        : `https://ecw.local${pathOrUrl.startsWith('/') ? '' : '/'}${pathOrUrl}`
+    )
+    url.searchParams.delete('_count')
+    const search = url.searchParams.toString()
+    if (isAbsolute) {
+      url.search = search
+      return url.toString()
+    }
+    return `${url.pathname}${search ? `?${search}` : ''}`
+  } catch {
+    return pathOrUrl
+      .replace(/([?&])_count=[^&]*(?=&|$)/g, '$1')
+      .replace(/\?&/, '?')
+      .replace(/[?&]$/, '')
+  }
+}
+
 function addUtcDay(dateString: string) {
   const date = new Date(`${dateString}T00:00:00.000Z`)
   date.setUTCDate(date.getUTCDate() + 1)
@@ -407,7 +433,7 @@ function getEncounterReason(encounter: FhirEncounter) {
 
 async function fetchEncounterPages(client: FhirClient, initialPath: string) {
   const encounters: FhirEncounter[] = []
-  let nextPath: string | undefined = initialPath
+  let nextPath: string | undefined = sanitizeEcwFhirRequestPath(initialPath)
 
   while (nextPath) {
     const responseBundle: FhirBundle<FhirEncounter> = await client.request(nextPath)
@@ -417,7 +443,7 @@ async function fetchEncounterPages(client: FhirClient, initialPath: string) {
       }
     }
     const nextLink = responseBundle.link?.find((link) => link.relation === 'next')?.url
-    nextPath = nextLink || undefined
+    nextPath = nextLink ? sanitizeEcwFhirRequestPath(nextLink) : undefined
   }
 
   return encounters
@@ -439,16 +465,16 @@ function formatPractitionerName(practitioner: FhirPractitioner) {
  * - PractitionerRole (read): https://fhir.eclinicalworks.com/ecwopendev/documentation/v3-read-resources?name=PractitionerRole
  *
  * Interactions used here:
- * - Type search (list): GET `{base}/Practitioner?_count=…` — follow `Bundle.link.relation === "next"`.
+ * - Type search (list): GET `{base}/Practitioner` — follow `Bundle.link.relation === "next"`.
  * - Read by id (spec): GET `{base}/Practitioner/{id}` — often fails on eCW when `{id}` contains `.`;
- *   use type search GET `{base}/Practitioner?_id={encodedId}&_count=1` instead.
- * - Roles for a practitioner: GET `{base}/PractitionerRole?practitioner=Practitioner/{id}&_count=…`.
+ *   use type search GET `{base}/Practitioner?_id={encodedId}` instead (no `_count` on eCW).
+ * - Roles for a practitioner: GET `{base}/PractitionerRole?practitioner=Practitioner/{id}`.
  *
  * Supported search parameters vary by tenant; use GET `{base}/metadata` to confirm.
  */
 async function fetchPractitionerPages(client: FhirClient, initialPath: string) {
   const practitioners: FhirPractitioner[] = []
-  let nextPath: string | undefined = initialPath
+  let nextPath: string | undefined = sanitizeEcwFhirRequestPath(initialPath)
 
   while (nextPath) {
     const responseBundle: FhirBundle<FhirPractitioner> = await client.request(nextPath)
@@ -458,7 +484,7 @@ async function fetchPractitionerPages(client: FhirClient, initialPath: string) {
       }
     }
     const nextLink = responseBundle.link?.find((link) => link.relation === 'next')?.url
-    nextPath = nextLink || undefined
+    nextPath = nextLink ? sanitizeEcwFhirRequestPath(nextLink) : undefined
   }
 
   return practitioners
@@ -469,7 +495,9 @@ async function fetchPractitionerPages(client: FhirClient, initialPath: string) {
  * OperationOutcome ("String index out of range: -1").
  */
 async function fetchPractitionerByIdSearch(client: FhirClient, practitionerId: string) {
-  const path = `/Practitioner?_id=${encodeURIComponent(practitionerId)}&_count=1`
+  const path = sanitizeEcwFhirRequestPath(
+    `/Practitioner?_id=${encodeURIComponent(practitionerId)}`
+  )
   const responseBundle: FhirBundle<FhirPractitioner> = await client.request(path)
   const resource = responseBundle.entry?.[0]?.resource
   return resource?.id ? resource : null
@@ -477,8 +505,10 @@ async function fetchPractitionerByIdSearch(client: FhirClient, practitionerId: s
 
 async function fetchPractitionerRolesForRef(client: FhirClient, practitionerRef: string) {
   const roles: FhirPractitionerRole[] = []
-  const params = new URLSearchParams({ practitioner: practitionerRef, _count: '50' })
-  let nextPath: string | undefined = `/PractitionerRole?${params.toString()}`
+  const params = new URLSearchParams({ practitioner: practitionerRef })
+  let nextPath: string | undefined = sanitizeEcwFhirRequestPath(
+    `/PractitionerRole?${params.toString()}`
+  )
 
   while (nextPath) {
     const responseBundle: FhirBundle<FhirPractitionerRole> = await client.request(nextPath)
@@ -488,7 +518,7 @@ async function fetchPractitionerRolesForRef(client: FhirClient, practitionerRef:
       }
     }
     const nextLink = responseBundle.link?.find((link) => link.relation === 'next')?.url
-    nextPath = nextLink || undefined
+    nextPath = nextLink ? sanitizeEcwFhirRequestPath(nextLink) : undefined
   }
 
   return roles
@@ -513,15 +543,19 @@ export async function fetchEhrPractitionerDetailForPractice(
   }
 
   const { client, connection } = ehrContext
-  const practitionerRequestPath = `/Practitioner?_id=${encodeURIComponent(practitionerId)}&_count=1`
+  const practitionerRequestPath = sanitizeEcwFhirRequestPath(
+    `/Practitioner?_id=${encodeURIComponent(practitionerId)}`
+  )
   const practitioner = await fetchPractitionerByIdSearch(client, practitionerId)
   if (!practitioner?.id) {
     return null
   }
 
   const canonicalRef = `Practitioner/${practitioner.id}`
-  const roleParams = new URLSearchParams({ practitioner: canonicalRef, _count: '50' })
-  const practitionerRoleRequestPath = `/PractitionerRole?${roleParams.toString()}`
+  const roleParams = new URLSearchParams({ practitioner: canonicalRef })
+  const practitionerRoleRequestPath = sanitizeEcwFhirRequestPath(
+    `/PractitionerRole?${roleParams.toString()}`
+  )
 
   let roles: FhirPractitionerRole[] = []
   try {
@@ -623,7 +657,7 @@ export async function fetchFacgcdPractitionerDirectoryForPractice(
 
   return {
     issuer: ehrContext.connection.issuer,
-    practitionerInitialPath: '/Practitioner?_count=200',
+    practitionerInitialPath: '/Practitioner',
     practitionerPagesScanned: 1,
     practitionerRolePagesScanned: rolePageBuckets,
     practitionerCount: list.length,
@@ -970,7 +1004,7 @@ export async function syncEhrAppointmentsForPractice(practiceId: string, options
     }
   }
 
-  const ehrContext = await createEhrClientForPractice(practiceId)
+  const ehrContext = await createEhrClientForPractice(practiceId, { timeoutMs: ECW_SYNC_TIMEOUT_MS })
   if (!ehrContext) {
     return { status: 'skipped' as const, reason: 'missing_connection' }
   }
@@ -1123,13 +1157,13 @@ export async function syncEhrAppointmentsAcrossPractices() {
 }
 
 export async function listEhrPractitionersForPractice(practiceId: string): Promise<EhrPractitionerOption[]> {
-  const ehrContext = await createEhrClientForPractice(practiceId)
+  const ehrContext = await createEhrClientForPractice(practiceId, { timeoutMs: ECW_SYNC_TIMEOUT_MS })
   if (!ehrContext) {
     return []
   }
 
   const { client } = ehrContext
-  const practitioners = await fetchPractitionerPages(client, '/Practitioner?_count=200')
+  const practitioners = await fetchPractitionerPages(client, '/Practitioner')
   const options = practitioners
     .filter((practitioner) => Boolean(practitioner.id))
     .map((practitioner) => {
