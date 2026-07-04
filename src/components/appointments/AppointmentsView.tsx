@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AppointmentsListView } from './AppointmentsListView'
 import { AppointmentsCalendarView } from './AppointmentsCalendarView'
+import { formatEhrSyncStatusLine } from '@/lib/integrations/ehr/syncStatusDisplay'
 
 interface Appointment {
   id: string
@@ -84,20 +85,7 @@ export function AppointmentsView({
       .then((res) => (res.ok ? res.json() : null))
       .then((payload) => {
         if (cancelled || !payload?.status) return
-        const last = payload.status.lastCompleteAt
-          ? new Date(payload.status.lastCompleteAt).toLocaleString()
-          : 'never'
-        const synced = payload.status.lastCompleteMetadata?.synced
-        const line =
-          typeof synced === 'number'
-            ? `Last EHR sync: ${last} (${synced} appointment(s))`
-            : `Last EHR sync: ${last}`
-        setSyncStatusLine(line)
-        if (payload.status.lastErrorAt && payload.status.lastErrorMessage) {
-          setSyncStatusLine(
-            `${line}. Latest error: ${payload.status.lastErrorMessage.slice(0, 160)}`
-          )
-        }
+        setSyncStatusLine(formatEhrSyncStatusLine(payload.status))
       })
       .catch(() => {})
     return () => {
@@ -228,9 +216,8 @@ export function AppointmentsView({
         setSyncMessage(message)
       }
 
-      if (payload?.status?.lastCompleteAt) {
-        const last = new Date(payload.status.lastCompleteAt).toLocaleString()
-        setSyncStatusLine(`Last EHR sync: ${last}`)
+      if (payload?.status) {
+        setSyncStatusLine(formatEhrSyncStatusLine(payload.status))
       }
 
       router.refresh()

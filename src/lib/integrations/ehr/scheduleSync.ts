@@ -1030,13 +1030,21 @@ export async function getEhrAppointmentSyncStatusForPractice(
     }),
   ])
 
+  const lastCompleteAt = lastComplete?.createdAt ?? null
+  const lastErrorAt = lastError?.createdAt ?? null
   const lastErrorMeta = lastError?.metadata as { error?: string } | null
+  const lastErrorMessage =
+    typeof lastErrorMeta?.error === 'string' ? lastErrorMeta.error.slice(0, 500) : null
+  const errorIsActive =
+    lastErrorAt != null &&
+    lastErrorMessage != null &&
+    (lastCompleteAt == null || lastErrorAt.getTime() > lastCompleteAt.getTime())
+
   return {
-    lastCompleteAt: lastComplete?.createdAt?.toISOString() ?? null,
+    lastCompleteAt: lastCompleteAt?.toISOString() ?? null,
     lastCompleteMetadata: (lastComplete?.metadata as Record<string, unknown> | null) ?? null,
-    lastErrorAt: lastError?.createdAt?.toISOString() ?? null,
-    lastErrorMessage:
-      typeof lastErrorMeta?.error === 'string' ? lastErrorMeta.error.slice(0, 500) : null,
+    lastErrorAt: errorIsActive ? lastErrorAt!.toISOString() : null,
+    lastErrorMessage: errorIsActive ? lastErrorMessage : null,
   }
 }
 
