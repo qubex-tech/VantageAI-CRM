@@ -300,7 +300,7 @@ export function AppointmentsView({
           </div>
         </div>
 
-        {practitioners.length > 0 && (
+        {practitioners.length > 1 && (
           <div className="border border-gray-200 rounded-lg p-3">
             <p className="text-sm font-medium text-gray-700 mb-2">Practitioners</p>
             <div className="flex flex-wrap gap-3">

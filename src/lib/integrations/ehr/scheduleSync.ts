@@ -221,6 +221,163 @@ function parsePractitionerRefsFromConfig(config: Record<string, unknown>, issuer
   return [inferDefaultPractitionerRef(issuer)]
 }
 
+function dedupePractitionerReferences(refs: string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const ref of refs) {
+    const normalized = normalizePractitionerReference(ref)
+    if (!normalized || seen.has(normalized)) continue
+    seen.add(normalized)
+    out.push(normalized)
+  }
+  return out
+}
+
+export function collectExplicitEcwPractitionerRefs(
+  writeConfig: Record<string, unknown>,
+  scheduling?: SchedulingSettings
+): string[] {
+  const refs: string[] = [
+    ...parseExplicitPractitionerRefsFromConfig(writeConfig),
+    ...(scheduling ? resolveReadPractitionerRefs(scheduling) : []),
+  ]
+
+  for (const key of [
+    'ecwTelephonePractitionerRef',
+    'ecwTelephoneParticipantPractitionerRef',
+    'ecwTelephoneAssignedToPractitionerRef',
+  ]) {
+    const normalized = normalizePractitionerReference(
+      typeof writeConfig[key] === 'string' ? writeConfig[key] : ''
+    )
+    if (normalized) refs.push(normalized)
+  }
+
+  return dedupePractitionerReferences(refs)
+}
+
+async function getEcwPractitionerRefsFromAppointments(practiceId: string): Promise<string[]> {
+  const rows = await prisma.appointment.groupBy({
+    by: ['providerId'],
+    where: {
+      practiceId,
+      providerId: { not: null },
+    },
+  })
+
+  return dedupePractitionerReferences(
+    rows
+      .map((row) => row.providerId || '')
+      .filter(Boolean)
+  )
+}
+
+function getExplicitEcwScheduleScopeRefs(writeConfig: Record<string, unknown>) {
+  const organizationRef = normalizeLocationOrOrganizationRef(
+    typeof writeConfig.ecwTelephoneOrganizationRef === 'string'
+      ? writeConfig.ecwTelephoneOrganizationRef
+      : typeof writeConfig.ecwScheduleOrganizationRef === 'string'
+        ? writeConfig.ecwScheduleOrganizationRef
+        : undefined,
+    'Organization'
+  )
+  const locationRef = normalizeLocationOrOrganizationRef(
+    typeof writeConfig.ecwTelephoneLocationRef === 'string'
+      ? writeConfig.ecwTelephoneLocationRef
+      : typeof writeConfig.ecwScheduleLocationRef === 'string'
+        ? writeConfig.ecwScheduleLocationRef
+        : undefined,
+    'Location'
+  )
+  return { organizationRef, locationRef }
+}
+
+async function fetchPractitionerRefsFromRoleSearch(
+  client: FhirClient,
+  params: Record<string, string>
+): Promise<string[]> {
+  const search = new URLSearchParams(params)
+  let nextPath: string | undefined = sanitizeEcwFhirRequestPath(
+    `/PractitionerRole?${search.toString()}`
+  )
+  const refs = new Set<string>()
+
+  while (nextPath) {
+    const responseBundle: FhirBundle<FhirPractitionerRole> = await client.request(nextPath)
+    for (const entry of responseBundle.entry || []) {
+      const normalized = normalizePractitionerReference(entry.resource?.practitioner?.reference || '')
+      if (normalized) refs.add(normalized)
+    }
+    const nextLink = responseBundle.link?.find((link) => link.relation === 'next')?.url
+    nextPath = nextLink ? sanitizeEcwFhirRequestPath(nextLink) : undefined
+  }
+
+  return Array.from(refs)
+}
+
+/** Resolve eCW practitioners scoped to this CRM practice — never the full tenant directory. */
+export async function resolveEcwPractitionerRefsForPractice(
+  practiceId: string,
+  options?: {
+    scheduling?: SchedulingSettings
+    explicitRefs?: string[]
+    client?: FhirClient
+    issuer?: string
+    writeConfig?: Record<string, unknown>
+  }
+): Promise<string[]> {
+  const explicitOverride = dedupePractitionerReferences(options?.explicitRefs ?? [])
+  if (explicitOverride.length > 0) {
+    return explicitOverride
+  }
+
+  const settings = await getEhrSettings(practiceId)
+  const writeConfig =
+    options?.writeConfig ||
+    ((settings?.providerConfigs?.[WRITEBACK_PROVIDER_ID] as Record<string, unknown> | undefined) ||
+      {})
+  const scheduling = options?.scheduling ?? (await getSchedulingSettings(practiceId))
+
+  const configuredRefs = collectExplicitEcwPractitionerRefs(writeConfig, scheduling)
+  if (configuredRefs.length > 0) {
+    return configuredRefs
+  }
+
+  const appointmentRefs = await getEcwPractitionerRefsFromAppointments(practiceId)
+  if (appointmentRefs.length > 0) {
+    return appointmentRefs
+  }
+
+  const { organizationRef, locationRef } = getExplicitEcwScheduleScopeRefs(writeConfig)
+  if (options?.client && (organizationRef || locationRef)) {
+    const scopedRefs = new Set<string>()
+    if (organizationRef) {
+      for (const ref of await fetchPractitionerRefsFromRoleSearch(options.client, {
+        organization: organizationRef,
+      })) {
+        scopedRefs.add(ref)
+      }
+    }
+    if (locationRef) {
+      for (const ref of await fetchPractitionerRefsFromRoleSearch(options.client, {
+        location: locationRef,
+      })) {
+        scopedRefs.add(ref)
+      }
+    }
+    if (scopedRefs.size > 0) {
+      return Array.from(scopedRefs)
+    }
+  }
+
+  const issuer =
+    options?.issuer ||
+    (await createEhrClientForPractice(practiceId, { timeoutMs: ECW_SYNC_TIMEOUT_MS }))?.connection
+      .issuer ||
+    ''
+  return parsePractitionerRefsFromConfig(writeConfig, issuer)
+}
+
 /** Resolve which eCW practitioners to pull schedule data for (settings → config → all → issuer default). */
 export async function resolveEcwSchedulePractitionerRefs(
   practiceId: string,
@@ -229,32 +386,18 @@ export async function resolveEcwSchedulePractitionerRefs(
     explicitRefs?: string[]
   }
 ): Promise<string[]> {
-  const explicit = (options?.explicitRefs ?? [])
-    .map((value) => normalizePractitionerReference(value.trim()))
-    .filter((value): value is string => Boolean(value))
-  if (explicit.length > 0) {
-    return Array.from(new Set(explicit))
-  }
-
-  const scheduling = options?.scheduling ?? (await getSchedulingSettings(practiceId))
-  const fromScheduling = resolveReadPractitionerRefs(scheduling)
-  if (fromScheduling.length > 0) {
-    return fromScheduling
-  }
-
-  const allPractitioners = await listEhrPractitionersForPractice(practiceId)
-  if (allPractitioners.length > 0) {
-    return allPractitioners.map((practitioner) => practitioner.reference)
-  }
-
-  const ehrContext = await createEhrClientForPractice(practiceId)
-  if (!ehrContext) {
-    return []
-  }
+  const ehrContext = await createEhrClientForPractice(practiceId, { timeoutMs: ECW_SYNC_TIMEOUT_MS })
   const settings = await getEhrSettings(practiceId)
   const writeConfig =
     (settings?.providerConfigs?.[WRITEBACK_PROVIDER_ID] as Record<string, unknown> | undefined) || {}
-  return parsePractitionerRefsFromConfig(writeConfig, ehrContext.connection.issuer)
+
+  return resolveEcwPractitionerRefsForPractice(practiceId, {
+    scheduling: options?.scheduling ?? (await getSchedulingSettings(practiceId)),
+    explicitRefs: options?.explicitRefs,
+    client: ehrContext?.client,
+    issuer: ehrContext?.connection.issuer,
+    writeConfig,
+  })
 }
 
 function formatTzDate(date: Date, timeZone: string) {
@@ -1162,18 +1305,37 @@ export async function listEhrPractitionersForPractice(practiceId: string): Promi
     return []
   }
 
-  const { client } = ehrContext
-  const practitioners = await fetchPractitionerPages(client, '/Practitioner')
-  const options = practitioners
-    .filter((practitioner) => Boolean(practitioner.id))
-    .map((practitioner) => {
-      const id = practitioner.id as string
-      return {
-        id,
-        reference: `Practitioner/${id}`,
-        name: formatPractitionerName(practitioner) || `Practitioner ${id.slice(0, 8)}`,
+  const { client, connection } = ehrContext
+  const settings = await getEhrSettings(practiceId)
+  const writeConfig =
+    (settings?.providerConfigs?.[WRITEBACK_PROVIDER_ID] as Record<string, unknown> | undefined) || {}
+  const scheduling = await getSchedulingSettings(practiceId)
+
+  const targetRefs = await resolveEcwPractitionerRefsForPractice(practiceId, {
+    scheduling,
+    client,
+    issuer: connection.issuer,
+    writeConfig,
+  })
+
+  const options: EhrPractitionerOption[] = []
+  for (const reference of targetRefs) {
+    const practitionerId = reference.replace(/^Practitioner\//, '')
+    let name = `Practitioner ${practitionerId.slice(0, 8)}`
+    try {
+      const practitioner = await fetchPractitionerByIdSearch(client, practitionerId)
+      if (practitioner?.id) {
+        name = formatPractitionerName(practitioner) || name
       }
+    } catch {
+      // Keep fallback label when a single configured ref cannot be resolved.
+    }
+    options.push({
+      id: practitionerId,
+      reference,
+      name,
     })
+  }
 
   const deduped = new Map<string, EhrPractitionerOption>()
   for (const option of options) {

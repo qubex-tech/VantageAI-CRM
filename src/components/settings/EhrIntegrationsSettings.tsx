@@ -124,6 +124,21 @@ const fallbackProviders: Provider[] = [
         label: 'Telephone Encounter Organization Ref',
         type: 'text',
       },
+      {
+        id: 'ecwSchedulePractitionerRefs',
+        label: 'Schedule practitioner refs (comma-separated Practitioner/{id})',
+        type: 'text',
+      },
+      {
+        id: 'ecwScheduleOrganizationRef',
+        label: 'Schedule organization scope (Organization/{id}, optional)',
+        type: 'text',
+      },
+      {
+        id: 'ecwScheduleLocationRef',
+        label: 'Schedule location scope (Location/{id}, optional)',
+        type: 'text',
+      },
     ],
   },
   {
