@@ -27,10 +27,9 @@ import { maybeNotifyUnsuccessfulTransfer } from './outbound-customer-notificatio
 import { persistInsuranceVerificationNote } from './insurance-verification-note'
 import {
   buildSafePatientUpdate,
-  demographicsMatch,
   fetchOpenDentalChartFacts,
-  phoneMatchKey,
   resolveDemographics,
+  resolvePostCallPatientMatch,
 } from './patient-identity'
 
 function metadataObjectFromRow(value: unknown): Record<string, unknown> {
@@ -1223,16 +1222,25 @@ export async function processCallDataForPatient(
     }
   }
 
+  // Callback/ANI is used only to find an existing chart when patient-stated phone is missing.
+  const phoneForMatching =
+    phoneNumber ||
+    callData.user_phone_number ||
+    (callData.retell_custom_data?.['Callback Number']
+      ? String(callData.retell_custom_data['Callback Number']).trim()
+      : undefined)
+
   // Log extracted data for debugging
   console.log('[processCallDataForPatient] Extracted call data:', {
     patient_name: patientName,
     patient_stated_phone: phoneNumber,
+    phone_for_matching: phoneForMatching,
     callback_or_ani: callData.user_phone_number,
     user_age: callData.user_age,
     callId,
   })
 
-  if (!phoneNumber && !patientName) {
+  if (!phoneForMatching && !patientName) {
     console.warn('[processCallDataForPatient] No phone number or patient name in extracted call data, skipping patient creation.', {
       callId,
       extractedKeys: Object.keys(callData),
@@ -1242,9 +1250,7 @@ export async function processCallDataForPatient(
     return { patientId: null, isNew: false }
   }
 
-  // Normalize phone number - ensure it's a string before calling replace
-  const normalizedPhone = phoneNumber ? String(phoneNumber).replace(/\D/g, '') : null
-  const incomingKey = normalizedPhone ? phoneMatchKey(normalizedPhone) : ''
+  const normalizedPhone = phoneForMatching ? String(phoneForMatching).replace(/\D/g, '') : null
   const callerDemo = resolveDemographics({
     name: patientName ?? undefined,
     dateOfBirth: callData.patient_dob,
@@ -1265,30 +1271,13 @@ export async function processCallDataForPatient(
     },
   })
 
-  let patient: (typeof allPatients)[number] | null = null
-
-  // Prefer exact demographics (name + full DOB) over phone-only matching.
-  if (callerDemo.firstName && callerDemo.lastName && callerDemo.dateOfBirth) {
-    patient =
-      allPatients.find((p) =>
-        demographicsMatch(p, {
-          firstName: callerDemo.firstName!,
-          lastName: callerDemo.lastName!,
-          dateOfBirth: callerDemo.dateOfBirth!,
-        })
-      ) ?? null
-  }
-
-  if (!patient && incomingKey) {
-    const phoneMatches = allPatients.filter(
-      (p) =>
-        phoneMatchKey(p.phone) === incomingKey || phoneMatchKey(p.primaryPhone) === incomingKey
-    )
-    if (phoneMatches.length === 1 && demographicsMatch(phoneMatches[0], { name: patientName ?? undefined, dateOfBirth: callData.patient_dob })) {
-      patient = phoneMatches[0]
-    }
-    // Phone collision with different identity → do not attach; a new patient will be created below.
-  }
+  const { patient: matchedPatient, blockCreate } = await resolvePostCallPatientMatch(
+    practiceId,
+    allPatients,
+    { name: patientName ?? undefined, dateOfBirth: callData.patient_dob },
+    phoneForMatching
+  )
+  let patient: (typeof allPatients)[number] | null = matchedPatient
 
   let isNew = false
   const updateData: Record<string, unknown> = {}
@@ -1353,6 +1342,14 @@ export async function processCallDataForPatient(
 
     return { patientId: patient.id, isNew: false }
   } else {
+    if (blockCreate) {
+      console.warn(
+        '[processCallDataForPatient] Skipping patient create — phone shared by multiple charts and caller identity did not match any existing record (including Open Dental).',
+        { callId, patientName, patient_dob: callData.patient_dob, phoneForMatching }
+      )
+      return { patientId: null, isNew: false }
+    }
+
     // Create new patient
     if (!patientName) {
       console.warn('Cannot create patient without name')
@@ -1375,6 +1372,8 @@ export async function processCallDataForPatient(
       data: {
         practiceId,
         name: patientName,
+        firstName: callerDemo.firstName ?? undefined,
+        lastName: callerDemo.lastName ?? undefined,
         phone: phoneForCreation,
         dateOfBirth: dobForCreate,
         preferredContactMethod: 'phone',

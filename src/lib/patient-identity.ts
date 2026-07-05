@@ -357,6 +357,81 @@ export function buildPatientIdentityFacts(params: {
   }
 }
 
+export type PostCallPatientResolution = {
+  patient: PatientIdentityRow | null
+  /** When true, do not create a new CRM patient (ambiguous phone / identity collision). */
+  blockCreate: boolean
+}
+
+function phoneCollisionsForKey(
+  allPatients: PatientIdentityRow[],
+  incomingKey: string
+): PatientIdentityRow[] {
+  if (!incomingKey) return []
+  return allPatients.filter(
+    (p) =>
+      phoneMatchKey(p.phone) === incomingKey || phoneMatchKey(p.primaryPhone) === incomingKey
+  )
+}
+
+/**
+ * Resolve an existing CRM patient after a Retell call ends.
+ * Uses callback/ANI as a phone fallback for matching only (never for identity by itself).
+ * Matches via Open Dental chart facts when CRM demographics are wrong (e.g. Amin vs Amir).
+ * Returns blockCreate when the phone is shared and caller identity does not resolve cleanly.
+ */
+export async function resolvePostCallPatientMatch(
+  practiceId: string,
+  allPatients: PatientIdentityRow[],
+  caller: DemographicsInput,
+  phoneForMatching: string | null | undefined
+): Promise<PostCallPatientResolution> {
+  const callerResolved = resolveDemographics(caller)
+  const callerHasFullIdentity = Boolean(
+    callerResolved.firstName && callerResolved.lastName && callerResolved.dateOfBirth
+  )
+  const incomingKey = phoneForMatching ? phoneMatchKey(phoneForMatching) : ''
+  const phoneCollisions = phoneCollisionsForKey(allPatients, incomingKey)
+
+  if (callerHasFullIdentity) {
+    const demoMatch = allPatients.find((p) =>
+      demographicsMatch(p, {
+        firstName: callerResolved.firstName!,
+        lastName: callerResolved.lastName!,
+        dateOfBirth: callerResolved.dateOfBirth!,
+      })
+    )
+    if (demoMatch) {
+      return { patient: demoMatch, blockCreate: false }
+    }
+  }
+
+  if (callerHasFullIdentity && phoneCollisions.length > 0) {
+    for (const p of phoneCollisions) {
+      const od = await fetchOpenDentalChartFacts(practiceId, p.externalEhrId)
+      if (od && openDentalChartMatchesCaller(od, caller)) {
+        return { patient: p, blockCreate: false }
+      }
+    }
+  }
+
+  if (phoneCollisions.length === 1) {
+    const only = phoneCollisions[0]
+    if (demographicsMatch(only, caller)) {
+      return { patient: only, blockCreate: false }
+    }
+    if (!callerHasFullIdentity) {
+      return { patient: only, blockCreate: false }
+    }
+  }
+
+  if (phoneCollisions.length > 0 && callerHasFullIdentity) {
+    return { patient: null, blockCreate: true }
+  }
+
+  return { patient: null, blockCreate: false }
+}
+
 /** Safe fields to update on an existing patient when identity already matches. */
 export function buildSafePatientUpdate(
   patient: PatientIdentityRow,
