@@ -186,6 +186,16 @@ export interface VariableContext {
     time?: string
     location?: string
     providerName?: string
+    /** Patient's current scheduled visit (when populated). */
+    currentDate?: string
+    currentTime?: string
+  }
+  /** Earlier open slot being offered (slot-fill SMS). */
+  offeredSlot?: {
+    date?: string
+    time?: string
+    dateTime?: string
+    visitType?: string
   }
   links?: {
     confirm?: string

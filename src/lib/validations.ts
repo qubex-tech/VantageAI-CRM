@@ -510,6 +510,7 @@ export const outboundAgentsSettingsSchema = z.object({
   appointmentOptimizationEnabled: z.boolean().default(false),
   outreachChannel: z.enum(['sms', 'voice', 'prefer_sms', 'prefer_voice']).optional(),
   smsTemplateName: z.string().optional(),
+  smsReplyHandling: z.enum(['telnyx_inbound', 'practice_number']).optional(),
   triggerScenarios: openSlotTriggerScenariosSchema.optional(),
   slotFillRules: z.array(slotFillRuleSchema).max(20).optional(),
 })

@@ -7,6 +7,7 @@ import {
   resolveTelnyxWebhookPublicKey,
   TelnyxWebhookVerificationError,
 } from '@/lib/telnyx-webhook'
+import { handleSlotFillInboundSms } from '@/lib/appointment-optimization/slotFillInboundReply'
 
 export const dynamic = 'force-dynamic'
 
@@ -143,6 +144,24 @@ async function handleInboundMessage(
       telnyxIntegrationPracticeIds: integrationPracticeIds,
     },
   })
+
+  try {
+    const slotFillResult = await handleSlotFillInboundSms({
+      practiceId: patient.practiceId,
+      patientId: patient.id,
+      body: bodyText,
+    })
+    if (slotFillResult.handled) {
+      console.info('[SlotFill] inbound SMS handled', {
+        practiceId: patient.practiceId,
+        patientId: patient.id,
+        action: slotFillResult.action,
+        reason: slotFillResult.reason,
+      })
+    }
+  } catch (error) {
+    console.error('[SlotFill] inbound SMS handler failed', error)
+  }
 }
 
 async function handleStopOptOut(

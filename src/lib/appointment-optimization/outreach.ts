@@ -149,6 +149,8 @@ export async function processSlotWave(params: {
       providerName: providerDisplayFromRef(slot.providerId),
       slotStart: slot.slotStart,
       timezone: 'America/Chicago',
+      visitType: slot.appointmentType,
+      currentAppointmentStart: candidate.appointmentStart,
     })
 
     const attempt = await prisma.outreachAttempt.create({

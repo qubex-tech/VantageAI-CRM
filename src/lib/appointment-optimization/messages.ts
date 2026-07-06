@@ -1,8 +1,14 @@
 import { prisma } from '@/lib/db'
 import { replaceVariables } from '@/lib/marketing/variables'
 import type { VariableContext } from '@/lib/marketing/types'
+import {
+  formatSlotDate,
+  formatSlotTime,
+  formatSlotDateTime,
+} from '@/lib/appointment-optimization/formatSlotTimes'
+
 const DEFAULT_SMS_TEMPLATE =
-  'Hi {{patient.firstName}} — an earlier appointment just opened with {{appointment.providerName}} on {{appointment.date}} at {{appointment.time}}. You can move your visit here: {{links.portalAppointments}}. This slot is first come, first served.'
+  'Hi {{patient.firstName}} — an earlier {{offeredSlot.visitType}} appointment opened on {{offeredSlot.date}} at {{offeredSlot.time}}. You are currently scheduled for {{appointment.currentDate}} at {{appointment.currentTime}}. Reply YES to move to the earlier time, or visit {{links.portalAppointments}}.'
 
 function getPortalAppointmentsUrl() {
   const base = (process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/+$/, '')
@@ -16,6 +22,8 @@ export async function resolveEarlierSlotSmsBody(params: {
   providerName: string
   slotStart: Date
   timezone: string
+  visitType?: string
+  currentAppointmentStart?: Date
 }) {
   const template = await prisma.marketingTemplate.findFirst({
     where: {
@@ -28,26 +36,29 @@ export async function resolveEarlierSlotSmsBody(params: {
   })
 
   const bodyTemplate = template?.bodyText?.trim() || DEFAULT_SMS_TEMPLATE
-  const dateStr = new Intl.DateTimeFormat('en-US', {
-    timeZone: params.timezone,
-    weekday: 'long',
-    month: 'short',
-    day: 'numeric',
-  }).format(params.slotStart)
-  const timeStr = new Intl.DateTimeFormat('en-US', {
-    timeZone: params.timezone,
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(params.slotStart)
+  const offeredDate = formatSlotDate(params.slotStart, params.timezone)
+  const offeredTime = formatSlotTime(params.slotStart, params.timezone)
 
   const context: VariableContext = {
     patient: {
       firstName: params.patientFirstName,
     },
     appointment: {
-      date: dateStr,
-      time: timeStr,
+      date: offeredDate,
+      time: offeredTime,
       providerName: params.providerName,
+      currentDate: params.currentAppointmentStart
+        ? formatSlotDate(params.currentAppointmentStart, params.timezone)
+        : '',
+      currentTime: params.currentAppointmentStart
+        ? formatSlotTime(params.currentAppointmentStart, params.timezone)
+        : '',
+    },
+    offeredSlot: {
+      date: offeredDate,
+      time: offeredTime,
+      dateTime: formatSlotDateTime(params.slotStart, params.timezone),
+      visitType: params.visitType || '',
     },
     links: {
       portalAppointments: getPortalAppointmentsUrl(),

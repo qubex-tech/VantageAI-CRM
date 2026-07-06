@@ -24,14 +24,26 @@ Automatically detects open appointment slots (from cancellations) and notifies e
    - Enable outbound agents (master)
    - Enable **Outbound Appointment Optimization Agent**
    - Select a **published** SMS template from Marketing (dropdown)
+   - **SMS reply handling**: use *Vantage Telnyx number* for auto-book on YES; choose *Practice-owned number* if replies won't reach Vantage
 
-6. **Marketing template** — create/publish SMS template named e.g. `Earlier Appointment Available`:
+6. **Marketing template** — include offered slot placeholders, e.g.:
 
    ```
-   Hi {{patient.firstName}} — an earlier appointment just opened with {{appointment.providerName}} on {{appointment.date}} at {{appointment.time}}. You can move your visit here: {{links.portalAppointments}}. This slot is first come, first served.
+   Hi {{patient.firstName}} — an earlier {{offeredSlot.visitType}} slot opened {{offeredSlot.date}} at {{offeredSlot.time}}. You're currently scheduled {{appointment.currentDate}} at {{appointment.currentTime}}. Reply YES to move, or {{links.portalAppointments}}.
    ```
 
 7. **Patient opt-in** — Portal → Profile and Preferences → **Earlier appointment offers**.
+
+## Inbound SMS (YES → book)
+
+When **SMS reply handling** is `telnyx_inbound`, patient replies route through `/api/webhooks/telnyx`:
+
+1. Match patient to the most recent open slot-fill outreach (14-day window)
+2. Classify reply (keyword YES/NO, then LLM on anonymized text)
+3. On accept: reschedule the patient's later appointment into the offered slot (CRM + Open Dental writeback or Cal.com cancel/rebook)
+4. Mark open slot **filled** and send confirmation SMS
+
+If the practice sends from their **own number**, set reply handling to `practice_number` — only portal self-serve works.
 
 ## Workflow
 

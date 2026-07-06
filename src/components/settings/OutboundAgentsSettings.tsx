@@ -465,6 +465,34 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
                 </SelectContent>
               </Select>
             </div>
+            <div>
+              <Label>SMS reply handling</Label>
+              <Select
+                value={settings.smsReplyHandling || 'telnyx_inbound'}
+                onValueChange={(value) =>
+                  setSettings((s) => ({
+                    ...s,
+                    smsReplyHandling: value as 'telnyx_inbound' | 'practice_number',
+                  }))
+                }
+              >
+                <SelectTrigger className="mt-2 w-full max-w-md">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="telnyx_inbound">
+                    Vantage Telnyx number (auto-book on YES reply)
+                  </SelectItem>
+                  <SelectItem value="practice_number">
+                    Practice-owned number (no inbound replies)
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-500 mt-1">
+                If SMS is sent from the practice&apos;s own number, replies won&apos;t reach Vantage —
+                use the portal link in your template instead of reply-to-book.
+              </p>
+            </div>
             {needsSmsTemplate && (
               <div>
                 <Label>SMS template (Marketing)</Label>
@@ -513,8 +541,9 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
                   </p>
                 )}
                 <p className="text-xs text-gray-500 mt-1">
-                  Variables: patient.firstName, appointment.date, appointment.time,
-                  appointment.providerName, links.portalAppointments
+                  Offered slot: offeredSlot.date, offeredSlot.time, offeredSlot.dateTime,
+                  offeredSlot.visitType. Current visit: appointment.currentDate,
+                  appointment.currentTime. Also: patient.firstName, links.portalAppointments
                 </p>
               </div>
             )}

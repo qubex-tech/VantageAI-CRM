@@ -83,6 +83,10 @@ export function parseOutboundAgentsSettings(value: unknown): OutboundAgentsSetti
       typeof raw.outreachChannel === 'string' ? raw.outreachChannel : DEFAULT_OUTBOUND_AGENTS.outreachChannel,
     smsTemplateName:
       typeof raw.smsTemplateName === 'string' ? raw.smsTemplateName : DEFAULT_OUTBOUND_AGENTS.smsTemplateName,
+    smsReplyHandling:
+      raw.smsReplyHandling === 'practice_number' || raw.smsReplyHandling === 'telnyx_inbound'
+        ? raw.smsReplyHandling
+        : DEFAULT_OUTBOUND_AGENTS.smsReplyHandling,
     triggerScenarios: parseTriggerScenarios(raw.triggerScenarios),
     slotFillRules: parseSlotFillRules(raw.slotFillRules),
   }

@@ -108,6 +108,16 @@ export type OpenSlotEventMetadata = {
   lookAheadBusinessDays: number
 }
 
+/** How inbound SMS replies to slot-fill offers are handled. */
+export type SmsReplyHandling = 'telnyx_inbound' | 'practice_number'
+
+export type SlotFillReplyIntent =
+  | 'accept_earlier_slot'
+  | 'decline'
+  | 'question'
+  | 'unrelated'
+  | 'unclear'
+
 export type OutboundAgentsSettings = {
   masterEnabled: boolean
   insuranceVerificationEnabled: boolean
@@ -116,6 +126,11 @@ export type OutboundAgentsSettings = {
   outreachChannel?: string
   /** Marketing template name for SMS body */
   smsTemplateName?: string
+  /**
+   * telnyx_inbound — replies route to Vantage Telnyx webhook (auto book on accept).
+   * practice_number — practice sends from their own number; inbound replies are not received.
+   */
+  smsReplyHandling?: SmsReplyHandling
   /** Which events create open slots and start the optimization agent */
   triggerScenarios?: OpenSlotTriggerScenarios
   /** Per-visit-type buffer / look-ahead rules for proactive and inventory-based slot fill */
@@ -128,6 +143,7 @@ export const DEFAULT_OUTBOUND_AGENTS: OutboundAgentsSettings = {
   appointmentOptimizationEnabled: false,
   outreachChannel: 'sms',
   smsTemplateName: 'Earlier Appointment Available',
+  smsReplyHandling: 'telnyx_inbound',
   triggerScenarios: { ...DEFAULT_TRIGGER_SCENARIOS },
   slotFillRules: [],
 }
