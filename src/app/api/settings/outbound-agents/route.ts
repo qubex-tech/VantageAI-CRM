@@ -7,6 +7,7 @@ import {
   saveOutboundAgentsSettings,
   parseOutboundAgentsSettings,
 } from '@/lib/appointment-optimization/settings'
+import { prisma } from '@/lib/db'
 
 export async function GET(req: NextRequest) {
   try {
@@ -62,6 +63,36 @@ export async function PUT(req: NextRequest) {
     }
 
     const validated = outboundAgentsSettingsSchema.parse(body.settings ?? body)
+
+    const outreachChannel = validated.outreachChannel || 'sms'
+    const needsSmsTemplate =
+      validated.appointmentOptimizationEnabled &&
+      (outreachChannel === 'sms' || outreachChannel === 'prefer_sms')
+    if (needsSmsTemplate) {
+      const templateName = validated.smsTemplateName?.trim()
+      if (!templateName) {
+        return NextResponse.json(
+          { error: 'Select a published SMS marketing template' },
+          { status: 400 }
+        )
+      }
+      const template = await prisma.marketingTemplate.findFirst({
+        where: {
+          tenantId: practiceId,
+          channel: 'sms',
+          name: templateName,
+          status: 'published',
+        },
+        select: { id: true },
+      })
+      if (!template) {
+        return NextResponse.json(
+          { error: 'SMS template not found or not published in Marketing' },
+          { status: 400 }
+        )
+      }
+    }
+
     await saveOutboundAgentsSettings(practiceId, parseOutboundAgentsSettings(validated))
     return NextResponse.json({ settings: validated })
   } catch (error) {

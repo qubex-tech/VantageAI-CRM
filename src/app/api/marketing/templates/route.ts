@@ -4,28 +4,41 @@ import { requireAuth } from '@/lib/middleware'
 import { marketingTemplateSchema } from '@/lib/validations'
 import { createMarketingAuditLog } from '@/lib/marketing/audit'
 import { extractVariables } from '@/lib/marketing/variables'
+import { isVantageAdmin } from '@/lib/permissions'
 
 export const dynamic = 'force-dynamic'
+
+function resolvePracticeId(
+  user: Awaited<ReturnType<typeof requireAuth>>,
+  queryPracticeId: string | null
+): string | null {
+  const normalizedUser = { ...user, name: user.name ?? null }
+  if (queryPracticeId && isVantageAdmin(normalizedUser)) {
+    return queryPracticeId
+  }
+  return user.practiceId
+}
 
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req)
-    
-    if (!user.practiceId) {
+    const searchParams = req.nextUrl.searchParams
+    const practiceId = resolvePracticeId(user, searchParams.get('practiceId'))
+
+    if (!practiceId) {
       return NextResponse.json(
         { error: 'Practice ID is required' },
         { status: 400 }
       )
     }
-    
-    const searchParams = req.nextUrl.searchParams
+
     const channel = searchParams.get('channel') as 'email' | 'sms' | null
     const status = searchParams.get('status') as 'draft' | 'published' | 'archived' | null
     const category = searchParams.get('category') as string | null
     const search = searchParams.get('q') || ''
-    
+
     const where: any = {
-      tenantId: user.practiceId,
+      tenantId: practiceId,
     }
     
     if (channel) {

@@ -28,6 +28,21 @@ function buildApiUrl(practiceId?: string) {
   return `${base}?practiceId=${encodeURIComponent(practiceId)}`
 }
 
+interface SmsMarketingTemplate {
+  id: string
+  name: string
+}
+
+function buildSmsTemplatesUrl(practiceId?: string) {
+  const params = new URLSearchParams({ channel: 'sms', status: 'published' })
+  if (practiceId) params.set('practiceId', practiceId)
+  return `/api/marketing/templates?${params}`
+}
+
+function outreachUsesSms(channel?: string) {
+  return channel === 'sms' || channel === 'prefer_sms' || !channel
+}
+
 export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsProps) {
   const [settings, setSettings] = useState<OutboundAgentsSettings>(DEFAULT_OUTBOUND_AGENTS)
   const [loading, setLoading] = useState(false)
@@ -36,6 +51,8 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
   const [success, setSuccess] = useState('')
 
   const [visitTypes, setVisitTypes] = useState<string[]>([])
+  const [smsTemplates, setSmsTemplates] = useState<SmsMarketingTemplate[]>([])
+  const [loadingSmsTemplates, setLoadingSmsTemplates] = useState(false)
 
   const visitTypesUrl = useMemo(() => {
     const base = '/api/appointments/visit-types'
@@ -44,6 +61,7 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
   }, [practiceId])
 
   const apiUrl = useMemo(() => buildApiUrl(practiceId), [practiceId])
+  const smsTemplatesUrl = useMemo(() => buildSmsTemplatesUrl(practiceId), [practiceId])
 
   const load = async () => {
     setLoading(true)
@@ -87,11 +105,62 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
     loadVisitTypes()
   }, [visitTypesUrl])
 
+  useEffect(() => {
+    if (!practiceId) {
+      setSmsTemplates([])
+      return
+    }
+
+    const loadSmsTemplates = async () => {
+      setLoadingSmsTemplates(true)
+      try {
+        const res = await fetch(smsTemplatesUrl)
+        const data = await res.json()
+        if (res.ok && Array.isArray(data.templates)) {
+          setSmsTemplates(
+            data.templates.map((template: SmsMarketingTemplate) => ({
+              id: template.id,
+              name: template.name,
+            }))
+          )
+        } else {
+          setSmsTemplates([])
+        }
+      } catch {
+        setSmsTemplates([])
+      } finally {
+        setLoadingSmsTemplates(false)
+      }
+    }
+    loadSmsTemplates()
+  }, [practiceId, smsTemplatesUrl])
+
+  const publishedTemplateNames = useMemo(
+    () => new Set(smsTemplates.map((template) => template.name)),
+    [smsTemplates]
+  )
+  const selectedSmsTemplateName = settings.smsTemplateName?.trim() || ''
+  const smsTemplateMissing =
+    Boolean(selectedSmsTemplateName) && !publishedTemplateNames.has(selectedSmsTemplateName)
+  const needsSmsTemplate = outreachUsesSms(settings.outreachChannel)
+
   const save = async () => {
     setSaving(true)
     setError('')
     setSuccess('')
     try {
+      if (
+        settings.appointmentOptimizationEnabled &&
+        settings.masterEnabled &&
+        needsSmsTemplate &&
+        !selectedSmsTemplateName
+      ) {
+        throw new Error('Select a published SMS marketing template')
+      }
+      if (needsSmsTemplate && smsTemplateMissing) {
+        throw new Error('Selected SMS template is not published. Create or publish it in Marketing.')
+      }
+
       const res = await fetch(apiUrl, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -396,22 +465,59 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label>SMS template name (Marketing)</Label>
-              <Input
-                className="mt-2 max-w-md"
-                value={settings.smsTemplateName || 'Earlier Appointment Available'}
-                onChange={(e) =>
-                  setSettings((s) => ({ ...s, smsTemplateName: e.target.value }))
-                }
-                placeholder="Earlier Appointment Available"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Published SMS template in Marketing. Variables: patient.firstName,
-                appointment.date, appointment.time, appointment.providerName,
-                links.portalAppointments
-              </p>
-            </div>
+            {needsSmsTemplate && (
+              <div>
+                <Label>SMS template (Marketing)</Label>
+                <Select
+                  value={selectedSmsTemplateName || undefined}
+                  onValueChange={(value) =>
+                    setSettings((s) => ({ ...s, smsTemplateName: value }))
+                  }
+                  disabled={loading || loadingSmsTemplates || smsTemplates.length === 0}
+                >
+                  <SelectTrigger className="mt-2 w-full max-w-md">
+                    <SelectValue
+                      placeholder={
+                        loadingSmsTemplates
+                          ? 'Loading templates...'
+                          : 'Select a published SMS template'
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {smsTemplateMissing && selectedSmsTemplateName && (
+                      <SelectItem value={selectedSmsTemplateName} disabled>
+                        {selectedSmsTemplateName} (not published)
+                      </SelectItem>
+                    )}
+                    {smsTemplates.map((template) => (
+                      <SelectItem key={template.id} value={template.name}>
+                        {template.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {smsTemplates.length === 0 && !loadingSmsTemplates && (
+                  <p className="text-xs text-amber-700 mt-1">
+                    No published SMS templates for this practice.{' '}
+                    <a href="/marketing/templates?channel=sms&status=published" className="underline">
+                      Create one in Marketing
+                    </a>{' '}
+                    and publish it before saving.
+                  </p>
+                )}
+                {smsTemplateMissing && (
+                  <p className="text-xs text-amber-700 mt-1">
+                    &quot;{selectedSmsTemplateName}&quot; is not a published SMS template. Choose
+                    one from the list or publish it in Marketing.
+                  </p>
+                )}
+                <p className="text-xs text-gray-500 mt-1">
+                  Variables: patient.firstName, appointment.date, appointment.time,
+                  appointment.providerName, links.portalAppointments
+                </p>
+              </div>
+            )}
           </div>
         )}
 

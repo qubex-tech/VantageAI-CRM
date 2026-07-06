@@ -23,7 +23,7 @@ Automatically detects open appointment slots (from cancellations) and notifies e
 5. **Settings → Practice Configuration → AI Configuration → Outbound AI Agents**
    - Enable outbound agents (master)
    - Enable **Outbound Appointment Optimization Agent**
-   - Set SMS template name (published Marketing SMS template)
+   - Select a **published** SMS template from Marketing (dropdown)
 
 6. **Marketing template** — create/publish SMS template named e.g. `Earlier Appointment Available`:
 
