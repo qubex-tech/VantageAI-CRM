@@ -11,6 +11,7 @@ import {
 } from '@/lib/appointment-optimization/settings'
 import type { OpenTimeSlot } from '@/lib/appointment-optimization/types'
 import { prisma } from '@/lib/db'
+import { Prisma } from '@prisma/client'
 
 export type RunSlotFillRulesSummary = {
   practiceId: string
@@ -67,7 +68,7 @@ export async function ingestAndEvaluateOpenTimeSlot(slot: OpenTimeSlot) {
 
 export async function listPracticesWithActiveSlotFillRules(): Promise<string[]> {
   const rows = await prisma.practiceSettings.findMany({
-    where: { outboundAgents: { not: null } },
+    where: { outboundAgents: { not: Prisma.JsonNull } },
     select: { practiceId: true, outboundAgents: true },
   })
   const practiceIds: string[] = []
