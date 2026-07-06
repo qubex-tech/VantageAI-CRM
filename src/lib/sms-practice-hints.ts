@@ -55,7 +55,7 @@ export async function getTelnyxPracticeMismatchHint(
     return (
       `Telnyx is configured on ${formatPracticeRef(configured.practice.name, configuredPatientCount, configured.practice.id)} ` +
       `but this send uses ${formatPracticeRef(practice.name, targetPatientCount, practiceId)}. ` +
-      `In Settings → Practice API Configuration, select the "${practice.name}" entry with ${targetPatientCount} patients and save Telnyx there.`
+      `In Settings → Practice Configuration, select the "${practice.name}" entry with ${targetPatientCount} patients and save Telnyx there.`
     )
   }
 

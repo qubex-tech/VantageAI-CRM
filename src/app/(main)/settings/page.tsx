@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { requireAuthenticatedUser } from '@/lib/auth-server'
 import { prisma } from '@/lib/db'
-import { isVantageAdmin, canConfigureAPIs, canManageUsers, canManagePractice } from '@/lib/permissions'
+import { isVantageAdmin, canConfigureAPIs, canManageUsers } from '@/lib/permissions'
 import { CalSettings } from '@/components/settings/CalSettings'
 import { TeamManagement } from '@/components/settings/TeamManagement'
 import { RetellSettings } from '@/components/settings/RetellSettings'
@@ -12,8 +12,6 @@ import { CommunicationsSettings } from '@/components/settings/CommunicationsSett
 import { SmsFromNumberSettings } from '@/components/settings/SmsFromNumberSettings'
 import { PracticeManagement } from '@/components/settings/PracticeManagement'
 import { PracticeAPIConfiguration } from '@/components/settings/PracticeAPIConfiguration'
-import { PreChartTemplateSettings } from '@/components/settings/PreChartTemplateSettings'
-import { OutboundAgentsSettings } from '@/components/settings/OutboundAgentsSettings'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { PageIntro } from '@/components/layout/PageIntro'
 
@@ -88,21 +86,18 @@ export default async function SettingsPage() {
   }
 
   const hasTeamTab = !!user.practiceId && canManageUsers(userForPermissions, user.practiceId)
-  const hasAiConfigTab = !!user.practiceId && canManagePractice(userForPermissions, user.practiceId)
 
   // Determine default tab
   const hasVantageAdminTab = isVantageAdminUser
-  const hasPracticeApiTab = isVantageAdminUser
+  const hasPracticeConfigTab = isVantageAdminUser
   const hasApiTab = canConfigureAPI && user.practiceId
-  const hasAnyTab = hasVantageAdminTab || hasPracticeApiTab || hasApiTab || hasTeamTab || hasAiConfigTab
+  const hasAnyTab = hasVantageAdminTab || hasPracticeConfigTab || hasApiTab || hasTeamTab
   const defaultTab = hasVantageAdminTab
     ? 'vantage-admin'
     : hasTeamTab
       ? 'team'
-      : hasAiConfigTab
-        ? 'ai-config'
-      : hasPracticeApiTab
-        ? 'practice-api'
+      : hasPracticeConfigTab
+        ? 'practice-config'
         : hasApiTab
           ? 'api'
           : undefined
@@ -117,14 +112,11 @@ export default async function SettingsPage() {
             {hasTeamTab && (
               <TabsTrigger value="team">Team</TabsTrigger>
             )}
-            {hasAiConfigTab && (
-              <TabsTrigger value="ai-config">AI Configuration</TabsTrigger>
-            )}
             {hasVantageAdminTab && (
               <TabsTrigger value="vantage-admin">Vantage Admin</TabsTrigger>
             )}
-            {hasPracticeApiTab && (
-              <TabsTrigger value="practice-api">Practice API Configuration</TabsTrigger>
+            {hasPracticeConfigTab && (
+              <TabsTrigger value="practice-config">Practice Configuration</TabsTrigger>
             )}
             {hasApiTab && (
               <TabsTrigger value="api">API Configuration</TabsTrigger>
@@ -137,13 +129,6 @@ export default async function SettingsPage() {
             </TabsContent>
           )}
 
-          {hasAiConfigTab && (
-            <TabsContent value="ai-config" className="mt-6 space-y-6">
-              <OutboundAgentsSettings practiceId={user.practiceId ?? undefined} />
-              <PreChartTemplateSettings />
-            </TabsContent>
-          )}
-
           {/* Vantage Admin Tab - Only visible to Vantage Admins */}
           {hasVantageAdminTab && (
             <TabsContent value="vantage-admin" className="mt-6">
@@ -151,9 +136,9 @@ export default async function SettingsPage() {
             </TabsContent>
           )}
 
-          {/* Practice API Configuration Tab - Only visible to Vantage Admins */}
-          {hasPracticeApiTab && (
-            <TabsContent value="practice-api" className="mt-6">
+          {/* Practice Configuration Tab - Only visible to Vantage Admins */}
+          {hasPracticeConfigTab && (
+            <TabsContent value="practice-config" className="mt-6">
               <PracticeAPIConfiguration />
             </TabsContent>
           )}

@@ -19,6 +19,8 @@ import { CommunicationsSettings } from './CommunicationsSettings'
 import { SmsFromNumberSettings } from './SmsFromNumberSettings'
 import { ClinicalIntegrationsSettings } from './ClinicalIntegrationsSettings'
 import { OutboundCustomerNotificationsSettings } from './OutboundCustomerNotificationsSettings'
+import { OutboundAgentsSettings } from './OutboundAgentsSettings'
+import { PreChartTemplateSettings } from './PreChartTemplateSettings'
 
 interface Practice {
   id: string
@@ -148,9 +150,9 @@ export function PracticeAPIConfiguration() {
     <div className="space-y-6">
       <Card className="border border-gray-200">
         <CardHeader>
-          <CardTitle className="text-lg font-semibold text-gray-900">Practice API Configuration</CardTitle>
+          <CardTitle className="text-lg font-semibold text-gray-900">Practice Configuration</CardTitle>
           <CardDescription className="text-sm text-gray-500">
-            Configure API keys and integrations for each practice
+            Configure practice settings, API keys, integrations, and AI for each practice
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -222,6 +224,8 @@ export function PracticeAPIConfiguration() {
           ) : (
             <>
               <ClinicalIntegrationsSettings practiceId={selectedPracticeId} />
+              <OutboundAgentsSettings practiceId={selectedPracticeId} />
+              <PreChartTemplateSettings practiceId={selectedPracticeId} />
               <SmsFromNumberSettings practiceId={selectedPracticeId} />
               <CalSettingsWithPracticeId 
                 practiceId={selectedPracticeId}
@@ -280,7 +284,7 @@ export function PracticeAPIConfiguration() {
         <Card className="border border-gray-200">
           <CardContent className="py-12 text-center">
             <p className="text-sm text-gray-500">
-              Select a practice above to configure its API integrations
+              Select a practice above to configure its settings
             </p>
           </CardContent>
         </Card>

@@ -138,7 +138,7 @@ export function ComposeSms({
           errorMessage.includes('Telnyx integration not configured') ||
           errorMessage.includes('SMS integration is not configured')
         ) {
-          errorMessage = 'SMS is not configured for this practice. Configure Telnyx in Settings → Practice API Configuration.'
+          errorMessage = 'SMS is not configured for this practice. Configure Telnyx in Settings → Practice Configuration.'
         } else if (
           errorMessage.includes('Telnyx rejected the API key') ||
           errorMessage.includes('Authenticate') ||

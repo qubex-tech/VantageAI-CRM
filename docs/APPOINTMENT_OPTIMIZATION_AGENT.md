@@ -20,7 +20,7 @@ Automatically detects open appointment slots (from cancellations) and notifies e
 
 4. **Retell** (optional voice) — `RETELL_FROM_NUMBER` + practice Retell integration.
 
-5. **Settings → AI Configuration → Outbound AI Agents**
+5. **Settings → Practice Configuration → Outbound AI Agents**
    - Enable outbound agents (master)
    - Enable **Outbound Appointment Optimization Agent**
    - Set SMS template name (published Marketing SMS template)
@@ -42,7 +42,7 @@ Automatically detects open appointment slots (from cancellations) and notifies e
 5. Wait 10 minutes → re-check schedule; if still open, next wave (up to 3 waves)
 6. Portal booking fills slot → status **filled**
 
-Configure rules under **Settings → AI Configuration → Slot fill rules**. Daily cron at 6:00 AM CT processes pending inventory (`slot-fill-rules-eval-daily`).
+Configure rules under **Settings → Practice Configuration → Slot fill rules**. Daily cron at 6:00 AM CT processes pending inventory (`slot-fill-rules-eval-daily`).
 
 ## APIs
 

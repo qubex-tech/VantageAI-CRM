@@ -89,7 +89,7 @@ export async function getSmsClient(practiceId: string): Promise<SmsClient> {
         select: { name: true },
       })
       throw new Error(
-        `Telnyx is configured for "${configuredElsewhere.practice.name}" but not for "${practice?.name || 'this practice'}". In Settings → Practice API Configuration, select "${practice?.name || 'this practice'}" and save the same Telnyx API key and phone number.`
+        `Telnyx is configured for "${configuredElsewhere.practice.name}" but not for "${practice?.name || 'this practice'}". In Settings → Practice Configuration, select "${practice?.name || 'this practice'}" and save the same Telnyx API key and phone number.`
       )
     }
 
