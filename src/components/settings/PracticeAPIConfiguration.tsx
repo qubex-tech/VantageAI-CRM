@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Loader2 } from 'lucide-react'
 import { CalSettings } from './CalSettings'
 import { RetellSettings } from './RetellSettings'
@@ -191,7 +192,7 @@ export function PracticeAPIConfiguration() {
             {selectedPracticeId && selectedPractice && (
               <div className="pt-4 border-t space-y-3">
                 <p className="text-sm text-gray-600">
-                  Configuring APIs for:{' '}
+                  Configuring:{' '}
                   <span className="font-semibold">{formatPracticeLabel(selectedPractice)}</span>
                 </p>
                 {duplicateNamePractices.length > 0 && (
@@ -216,68 +217,78 @@ export function PracticeAPIConfiguration() {
       </Card>
 
       {selectedPracticeId && (
-        <div className="space-y-6">
+        <Tabs defaultValue="configuration" className="w-full">
+          <TabsList>
+            <TabsTrigger value="configuration">Configuration</TabsTrigger>
+            <TabsTrigger value="ai-configuration">AI Configuration</TabsTrigger>
+          </TabsList>
+
           {loadingIntegrations ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
             </div>
           ) : (
             <>
-              <ClinicalIntegrationsSettings practiceId={selectedPracticeId} />
-              <OutboundAgentsSettings practiceId={selectedPracticeId} />
-              <PreChartTemplateSettings practiceId={selectedPracticeId} />
-              <SmsFromNumberSettings practiceId={selectedPracticeId} />
-              <CalSettingsWithPracticeId 
-                practiceId={selectedPracticeId}
-                initialIntegration={calIntegration}
-                initialMappings={eventTypeMappings}
-              />
-              <RetellSettingsWithPracticeId 
-                practiceId={selectedPracticeId}
-                initialIntegration={retellIntegration}
-              />
-              <ResendSettingsWithPracticeId 
-                practiceId={selectedPracticeId}
-                initialIntegration={resendIntegration}
-              />
-              <OutboundCustomerNotificationsSettings
-                practiceId={selectedPracticeId}
-                resendConfigured={Boolean(
-                  resendIntegration?.apiKey &&
-                    resendIntegration?.fromEmail &&
-                    resendIntegration?.isActive !== false
-                )}
-              />
-              <div className="space-y-4">
-                <Card className="border border-gray-200">
-                  <CardHeader>
-                    <CardTitle className="text-base font-semibold text-gray-900">
-                      Communications
-                    </CardTitle>
-                    <CardDescription className="text-sm text-gray-500">
-                      This section controls outbound communication vendors and provider-specific configurations.
-                    </CardDescription>
-                  </CardHeader>
-                </Card>
-                <div className="text-sm font-medium text-gray-700">1. Communication Integration Platform</div>
-                <CommunicationsSettings
+              <TabsContent value="configuration" className="mt-6 space-y-6">
+                <ClinicalIntegrationsSettings practiceId={selectedPracticeId} />
+                <SmsFromNumberSettings practiceId={selectedPracticeId} />
+                <CalSettingsWithPracticeId
                   practiceId={selectedPracticeId}
-                  initialRetellIntegration={retellIntegration}
+                  initialIntegration={calIntegration}
+                  initialMappings={eventTypeMappings}
                 />
-                <div className="text-sm font-medium text-gray-700">2. Telnyx Configuration</div>
-                <TelnyxSettingsWithPracticeId
+                <RetellSettingsWithPracticeId
                   practiceId={selectedPracticeId}
-                  initialIntegration={telnyxIntegration}
+                  initialIntegration={retellIntegration}
                 />
-                <div className="text-sm font-medium text-gray-700">3. Twilio Configuration</div>
-                <TwilioSettingsWithPracticeId
+                <ResendSettingsWithPracticeId
                   practiceId={selectedPracticeId}
-                  initialIntegration={twilioIntegration}
+                  initialIntegration={resendIntegration}
                 />
-              </div>
+                <OutboundCustomerNotificationsSettings
+                  practiceId={selectedPracticeId}
+                  resendConfigured={Boolean(
+                    resendIntegration?.apiKey &&
+                      resendIntegration?.fromEmail &&
+                      resendIntegration?.isActive !== false
+                  )}
+                />
+                <div className="space-y-4">
+                  <Card className="border border-gray-200">
+                    <CardHeader>
+                      <CardTitle className="text-base font-semibold text-gray-900">
+                        Communications
+                      </CardTitle>
+                      <CardDescription className="text-sm text-gray-500">
+                        This section controls outbound communication vendors and provider-specific configurations.
+                      </CardDescription>
+                    </CardHeader>
+                  </Card>
+                  <div className="text-sm font-medium text-gray-700">1. Communication Integration Platform</div>
+                  <CommunicationsSettings
+                    practiceId={selectedPracticeId}
+                    initialRetellIntegration={retellIntegration}
+                  />
+                  <div className="text-sm font-medium text-gray-700">2. Telnyx Configuration</div>
+                  <TelnyxSettingsWithPracticeId
+                    practiceId={selectedPracticeId}
+                    initialIntegration={telnyxIntegration}
+                  />
+                  <div className="text-sm font-medium text-gray-700">3. Twilio Configuration</div>
+                  <TwilioSettingsWithPracticeId
+                    practiceId={selectedPracticeId}
+                    initialIntegration={twilioIntegration}
+                  />
+                </div>
+              </TabsContent>
+
+              <TabsContent value="ai-configuration" className="mt-6 space-y-6">
+                <OutboundAgentsSettings practiceId={selectedPracticeId} />
+                <PreChartTemplateSettings practiceId={selectedPracticeId} />
+              </TabsContent>
             </>
           )}
-        </div>
+        </Tabs>
       )}
 
       {!selectedPracticeId && (
