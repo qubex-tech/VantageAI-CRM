@@ -2,6 +2,7 @@ import { prisma } from '@/lib/db'
 import { getSmsClient } from '@/lib/sms'
 import { getRetellIntegrationConfig, RetellApiClient } from '@/lib/retell-api'
 import { findEligibleCandidates } from '@/lib/appointment-optimization/candidates'
+import { parseOpenSlotEventMetadata } from '@/lib/appointment-optimization/slotFillUtils'
 import {
   formatProviderDisplayName,
   resolveEarlierSlotSmsBody,
@@ -107,6 +108,8 @@ export async function processSlotWave(params: {
     },
   })
 
+  const { lookAheadEnd, slotFillRuleId } = parseOpenSlotEventMetadata(slot.metadata)
+
   const candidates = await findEligibleCandidates({
     practiceId: params.practiceId,
     providerId: slot.providerId,
@@ -117,6 +120,8 @@ export async function processSlotWave(params: {
     openSlotEventId: slot.id,
     waveNumber: params.waveNumber,
     limit: WAVE_BATCH_SIZE,
+    lookAheadEnd,
+    slotFillRuleId,
   })
 
   if (candidates.length === 0) {

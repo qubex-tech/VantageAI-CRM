@@ -14,6 +14,7 @@ Automatically detects open appointment slots (from cancellations) and notifies e
 2. **Inngest** — ensure `INNGEST_EVENT_KEY` and `/api/inngest` are registered. Functions:
    - `appointment-optimization-open-slot-created` — waves 1–3 with 10-minute waits
    - `appointment-optimization-slot-check` — manual fill checks
+   - `slot-fill-rules-eval-daily` — evaluates pending open slot inventory (6:00 AM CT)
 
 3. **Twilio** (SMS) — configure under Settings → API Configuration.
 
@@ -34,17 +35,23 @@ Automatically detects open appointment slots (from cancellations) and notifies e
 
 ## Workflow
 
-1. Appointment cancelled (CRM or Cal.com webhook) → `OpenSlotEvent` + Inngest `crm/open-slot.created`
-2. Match patients: same provider + visit type, later appointment, opted in, batch of 5
-3. Send SMS/voice with portal link
-4. Wait 10 minutes → re-check schedule; if still open, next wave (up to 3 waves in MVP job)
-5. Portal booking fills slot locally → status check marks slot **filled**
+1. **Open slot ingested** (cancellation, `POST /open-slots`, or future EHR adapter) — source-agnostic
+2. **Slot fill rules** (optional): visit type + buffer + look-ahead → `OpenSlotEvent` + Inngest `crm/open-slot.created`
+3. Match patients: same provider + visit type, later appointment within look-ahead window, opted in, batch of 5
+4. Send SMS/voice with portal link
+5. Wait 10 minutes → re-check schedule; if still open, next wave (up to 3 waves)
+6. Portal booking fills slot → status **filled**
+
+Configure rules under **Settings → AI Configuration → Slot fill rules**. Daily cron at 6:00 AM CT processes pending inventory (`slot-fill-rules-eval-daily`).
 
 ## APIs
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET/PUT | `/api/settings/outbound-agents` | Agent toggles |
+| GET/PUT | `/api/settings/outbound-agents` | Agent toggles + slot fill rules |
+| POST | `/api/appointment-optimization/open-slots` | Ingest normalized open time slot |
+| POST | `/api/appointment-optimization/evaluate` | Run rules on pending inventory (or ingest+evaluate one slot) |
+| GET | `/api/appointments/visit-types` | Visit types for rules dropdown |
 | GET | `/api/appointment-optimization/slots` | Dashboard data |
 | GET | `/api/appointment-optimization/slots/[id]/status` | Re-check fill |
 | GET | `/api/appointment-optimization/outreach` | Outreach history |

@@ -496,6 +496,14 @@ export const openSlotTriggerScenariosSchema = z.object({
   availability: z.boolean().default(false),
 })
 
+export const slotFillRuleSchema = z.object({
+  id: z.string().min(1),
+  visitType: z.string().min(1),
+  bufferBusinessDays: z.number().int().min(1).max(90),
+  lookAheadBusinessDays: z.number().int().min(1).max(90),
+  enabled: z.boolean().optional(),
+})
+
 export const outboundAgentsSettingsSchema = z.object({
   masterEnabled: z.boolean().default(false),
   insuranceVerificationEnabled: z.boolean().default(false),
@@ -503,6 +511,7 @@ export const outboundAgentsSettingsSchema = z.object({
   outreachChannel: z.enum(['sms', 'voice', 'prefer_sms', 'prefer_voice']).optional(),
   smsTemplateName: z.string().optional(),
   triggerScenarios: openSlotTriggerScenariosSchema.optional(),
+  slotFillRules: z.array(slotFillRuleSchema).max(20).optional(),
 })
 
 export const communicationIntegrationPlatformSchema = z.enum([

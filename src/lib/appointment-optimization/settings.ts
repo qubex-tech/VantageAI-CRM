@@ -2,9 +2,11 @@ import { prisma } from '@/lib/db'
 import {
   DEFAULT_OUTBOUND_AGENTS,
   DEFAULT_TRIGGER_SCENARIOS,
+  MAX_SLOT_FILL_RULES,
   type OpenSlotTriggerScenario,
   type OpenSlotTriggerScenarios,
   type OutboundAgentsSettings,
+  type SlotFillRule,
 } from '@/lib/appointment-optimization/types'
 
 function parseTriggerScenarios(value: unknown): OpenSlotTriggerScenarios {
@@ -23,6 +25,51 @@ function parseTriggerScenarios(value: unknown): OpenSlotTriggerScenarios {
   return parsed
 }
 
+function parseSlotFillRules(value: unknown): SlotFillRule[] {
+  if (!Array.isArray(value)) return []
+  const rules: SlotFillRule[] = []
+  for (const item of value.slice(0, MAX_SLOT_FILL_RULES)) {
+    if (!item || typeof item !== 'object') continue
+    const raw = item as Record<string, unknown>
+    const visitType = typeof raw.visitType === 'string' ? raw.visitType.trim() : ''
+    if (!visitType) continue
+    const bufferBusinessDays =
+      typeof raw.bufferBusinessDays === 'number' && Number.isFinite(raw.bufferBusinessDays)
+        ? Math.min(90, Math.max(1, Math.round(raw.bufferBusinessDays)))
+        : 3
+    const lookAheadBusinessDays =
+      typeof raw.lookAheadBusinessDays === 'number' && Number.isFinite(raw.lookAheadBusinessDays)
+        ? Math.min(90, Math.max(1, Math.round(raw.lookAheadBusinessDays)))
+        : 14
+    const id =
+      typeof raw.id === 'string' && raw.id.trim()
+        ? raw.id.trim()
+        : `rule-${rules.length + 1}`
+    rules.push({
+      id,
+      visitType,
+      bufferBusinessDays,
+      lookAheadBusinessDays,
+      enabled: raw.enabled !== false,
+    })
+  }
+  return rules
+}
+
+export function getSlotFillRuleForVisitType(
+  settings: OutboundAgentsSettings,
+  visitType: string
+): SlotFillRule | null {
+  const rules = settings.slotFillRules ?? []
+  return (
+    rules.find((rule) => rule.enabled !== false && rule.visitType === visitType) ?? null
+  )
+}
+
+export function hasActiveSlotFillRules(settings: OutboundAgentsSettings) {
+  return (settings.slotFillRules ?? []).some((rule) => rule.enabled !== false && rule.visitType)
+}
+
 export function parseOutboundAgentsSettings(value: unknown): OutboundAgentsSettings {
   if (!value || typeof value !== 'object') {
     return { ...DEFAULT_OUTBOUND_AGENTS, triggerScenarios: { ...DEFAULT_TRIGGER_SCENARIOS } }
@@ -37,6 +84,7 @@ export function parseOutboundAgentsSettings(value: unknown): OutboundAgentsSetti
     smsTemplateName:
       typeof raw.smsTemplateName === 'string' ? raw.smsTemplateName : DEFAULT_OUTBOUND_AGENTS.smsTemplateName,
     triggerScenarios: parseTriggerScenarios(raw.triggerScenarios),
+    slotFillRules: parseSlotFillRules(raw.slotFillRules),
   }
 }
 

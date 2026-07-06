@@ -9,6 +9,7 @@ import {
   handleOpenSlotCreated,
   checkOpenSlotStatus,
   enrichPatientFromEhrJob,
+  slotFillRulesEvalDaily,
 } from '@/inngest/functions'
 
 // Export runtime configuration for Edge/Serverless
@@ -29,6 +30,7 @@ const handler = serve({
     handleOpenSlotCreated,
     checkOpenSlotStatus,
     enrichPatientFromEhrJob,
+    slotFillRulesEvalDaily,
   ],
 })
 

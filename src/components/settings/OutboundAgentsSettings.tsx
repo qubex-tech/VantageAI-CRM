@@ -1,16 +1,19 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { Plus, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
-import type { OutboundAgentsSettings } from '@/lib/appointment-optimization/types'
+import type { OutboundAgentsSettings, SlotFillRule } from '@/lib/appointment-optimization/types'
 import {
   DEFAULT_OUTBOUND_AGENTS,
+  DEFAULT_SLOT_FILL_RULE,
   DEFAULT_TRIGGER_SCENARIOS,
+  MAX_SLOT_FILL_RULES,
   OPEN_SLOT_TRIGGER_SCENARIO_OPTIONS,
   type OpenSlotTriggerScenario,
 } from '@/lib/appointment-optimization/types'
@@ -32,6 +35,14 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
+  const [visitTypes, setVisitTypes] = useState<string[]>([])
+
+  const visitTypesUrl = useMemo(() => {
+    const base = '/api/appointments/visit-types'
+    if (!practiceId) return base
+    return `${base}?practiceId=${encodeURIComponent(practiceId)}`
+  }, [practiceId])
+
   const apiUrl = useMemo(() => buildApiUrl(practiceId), [practiceId])
 
   const load = async () => {
@@ -48,6 +59,7 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
           ...DEFAULT_TRIGGER_SCENARIOS,
           ...data.settings?.triggerScenarios,
         },
+        slotFillRules: data.settings?.slotFillRules ?? [],
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load')
@@ -59,6 +71,21 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
   useEffect(() => {
     load()
   }, [apiUrl])
+
+  useEffect(() => {
+    const loadVisitTypes = async () => {
+      try {
+        const res = await fetch(visitTypesUrl)
+        const data = await res.json()
+        if (res.ok && Array.isArray(data.visitTypes)) {
+          setVisitTypes(data.visitTypes)
+        }
+      } catch {
+        // Non-blocking; admin can still type if needed
+      }
+    }
+    loadVisitTypes()
+  }, [visitTypesUrl])
 
   const save = async () => {
     setSaving(true)
@@ -79,6 +106,7 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
           ...DEFAULT_TRIGGER_SCENARIOS,
           ...data.settings?.triggerScenarios,
         },
+        slotFillRules: data.settings?.slotFillRules ?? [],
       })
       setSuccess('Outbound agent settings saved.')
     } catch (err) {
@@ -91,6 +119,8 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
   const masterOff = !settings.masterEnabled
   const triggerScenarios = settings.triggerScenarios ?? DEFAULT_TRIGGER_SCENARIOS
 
+  const slotFillRules = settings.slotFillRules ?? []
+
   const setTriggerScenario = (key: OpenSlotTriggerScenario, enabled: boolean) => {
     setSettings((s) => ({
       ...s,
@@ -98,6 +128,40 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
         ...(s.triggerScenarios ?? DEFAULT_TRIGGER_SCENARIOS),
         [key]: enabled,
       },
+    }))
+  }
+
+  const updateSlotFillRule = (id: string, patch: Partial<SlotFillRule>) => {
+    setSettings((s) => ({
+      ...s,
+      slotFillRules: (s.slotFillRules ?? []).map((rule) =>
+        rule.id === id ? { ...rule, ...patch } : rule
+      ),
+    }))
+  }
+
+  const addSlotFillRule = () => {
+    setSettings((s) => {
+      const rules = s.slotFillRules ?? []
+      if (rules.length >= MAX_SLOT_FILL_RULES) return s
+      return {
+        ...s,
+        slotFillRules: [
+          ...rules,
+          {
+            id: crypto.randomUUID(),
+            visitType: visitTypes[0] ?? '',
+            ...DEFAULT_SLOT_FILL_RULE,
+          },
+        ],
+      }
+    })
+  }
+
+  const removeSlotFillRule = (id: string) => {
+    setSettings((s) => ({
+      ...s,
+      slotFillRules: (s.slotFillRules ?? []).filter((rule) => rule.id !== id),
     }))
   }
 
@@ -203,6 +267,114 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
                     least one scenario is turned on.
                   </p>
                 )}
+            </div>
+
+            <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-4 space-y-4">
+              <div>
+                <Label className="text-base font-medium">Slot fill rules</Label>
+                <p className="text-sm text-gray-500 mt-1">
+                  Rules apply to any open slot ingested into Slot Fill — from a cancellation,
+                  EHR schedule, Cal.com, Open Dental, or manual ingest — regardless of source.
+                  Buffer time limits how soon empty slots are acted on; look ahead finds patients
+                  scheduled after that slot within the window.
+                </p>
+              </div>
+
+              {slotFillRules.length === 0 && (
+                <p className="text-sm text-gray-600">
+                  No rules configured. Cancellations and other triggers use legacy outreach (no
+                  buffer / look-ahead). Add a rule to enable visit-type-specific windows.
+                </p>
+              )}
+
+              <div className="space-y-3">
+                {slotFillRules.map((rule) => (
+                  <div
+                    key={rule.id}
+                    className="grid gap-3 rounded-lg border border-gray-200 bg-white p-4 md:grid-cols-[1fr_140px_140px_auto_auto] md:items-end"
+                  >
+                    <div>
+                      <Label className="text-xs text-gray-500">Visit type</Label>
+                      <Select
+                        value={rule.visitType || undefined}
+                        onValueChange={(value) => updateSlotFillRule(rule.id, { visitType: value })}
+                      >
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="Select visit type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {visitTypes.map((vt) => (
+                            <SelectItem key={vt} value={vt}>
+                              {vt}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-500">Buffer time (business days)</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={90}
+                        className="mt-1"
+                        value={rule.bufferBusinessDays}
+                        onChange={(e) =>
+                          updateSlotFillRule(rule.id, {
+                            bufferBusinessDays: Number(e.target.value) || 1,
+                          })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-500">Look ahead (business days)</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={90}
+                        className="mt-1"
+                        value={rule.lookAheadBusinessDays}
+                        onChange={(e) =>
+                          updateSlotFillRule(rule.id, {
+                            lookAheadBusinessDays: Number(e.target.value) || 1,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 pb-1">
+                      <Switch
+                        checked={rule.enabled !== false}
+                        onCheckedChange={(checked) =>
+                          updateSlotFillRule(rule.id, { enabled: checked })
+                        }
+                        aria-label="Enable rule"
+                      />
+                      <span className="text-xs text-gray-500">On</span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="text-gray-500 hover:text-red-600"
+                      onClick={() => removeSlotFillRule(rule.id)}
+                      aria-label="Remove rule"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addSlotFillRule}
+                disabled={loading || slotFillRules.length >= MAX_SLOT_FILL_RULES}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add rule
+              </Button>
             </div>
 
             <div>

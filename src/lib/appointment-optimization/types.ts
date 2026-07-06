@@ -59,6 +59,55 @@ export const SCENARIO_TO_SOURCE: Record<OpenSlotTriggerScenario, OpenSlotSource>
   availability: 'availability',
 }
 
+/** Normalized open time slot — input to the rules engine. Source is opaque metadata only. */
+export type OpenTimeSlotOriginSystem =
+  | 'crm'
+  | 'ecw'
+  | 'opendental'
+  | 'calcom'
+  | 'manual'
+  | 'unknown'
+
+export type OpenTimeSlot = {
+  start: Date
+  end: Date
+  visitType: string
+  providerId: string | null
+  practiceId: string
+  /** Maps to OpenSlotEvent.source when outreach starts */
+  openSlotSource?: OpenSlotSource
+  sourceAppointmentId?: string | null
+  /** Set when loaded from open_slot_inventory */
+  inventoryId?: string
+  origin?: {
+    system: OpenTimeSlotOriginSystem
+    externalId?: string | null
+  }
+}
+
+export type SlotFillRule = {
+  id: string
+  visitType: string
+  bufferBusinessDays: number
+  lookAheadBusinessDays: number
+  enabled?: boolean
+}
+
+export const MAX_SLOT_FILL_RULES = 20
+
+export const DEFAULT_SLOT_FILL_RULE: Omit<SlotFillRule, 'id' | 'visitType'> = {
+  bufferBusinessDays: 3,
+  lookAheadBusinessDays: 14,
+  enabled: true,
+}
+
+export type OpenSlotEventMetadata = {
+  slotFillRuleId: string
+  lookAheadEnd: string
+  bufferBusinessDays: number
+  lookAheadBusinessDays: number
+}
+
 export type OutboundAgentsSettings = {
   masterEnabled: boolean
   insuranceVerificationEnabled: boolean
@@ -69,6 +118,8 @@ export type OutboundAgentsSettings = {
   smsTemplateName?: string
   /** Which events create open slots and start the optimization agent */
   triggerScenarios?: OpenSlotTriggerScenarios
+  /** Per-visit-type buffer / look-ahead rules for proactive and inventory-based slot fill */
+  slotFillRules?: SlotFillRule[]
 }
 
 export const DEFAULT_OUTBOUND_AGENTS: OutboundAgentsSettings = {
@@ -78,6 +129,7 @@ export const DEFAULT_OUTBOUND_AGENTS: OutboundAgentsSettings = {
   outreachChannel: 'sms',
   smsTemplateName: 'Earlier Appointment Available',
   triggerScenarios: { ...DEFAULT_TRIGGER_SCENARIOS },
+  slotFillRules: [],
 }
 
 export type OpenSlotCreatedPayload = {

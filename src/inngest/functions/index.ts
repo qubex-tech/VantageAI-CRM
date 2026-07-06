@@ -7,5 +7,6 @@ export { runEhrBulkNightly } from './ehr-bulk-nightly'
 export { syncEhrAppointmentsDaily } from './sync-ehr-appointments'
 export { syncOpenDentalDaily } from './sync-opendental-daily'
 export { handleOpenSlotCreated, checkOpenSlotStatus } from './appointment-optimization'
+export { slotFillRulesEvalDaily } from './slot-fill-rules-eval'
 export { enrichPatientFromEhrJob } from './enrich-patient-from-ehr'
 

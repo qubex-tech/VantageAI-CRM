@@ -4,7 +4,7 @@ import {
   getOutboundAgentsSettings,
   isAppointmentOptimizationEnabled,
 } from '@/lib/appointment-optimization/settings'
-import type { OpenSlotCreatedPayload } from '@/lib/appointment-optimization/types'
+import type { OpenSlotCreatedPayload, OpenSlotEventMetadata } from '@/lib/appointment-optimization/types'
 
 import type { OpenSlotSource } from '@/lib/appointment-optimization/types'
 
@@ -17,6 +17,7 @@ export type CreateOpenSlotInput = {
   locationId?: string | null
   source: OpenSlotSource
   sourceAppointmentId?: string | null
+  metadata?: OpenSlotEventMetadata
 }
 
 function buildIdempotencyKey(input: CreateOpenSlotInput) {
@@ -65,6 +66,7 @@ export async function createOpenSlotEvent(input: CreateOpenSlotInput) {
       source: input.source,
       sourceAppointmentId: input.sourceAppointmentId ?? null,
       idempotencyKey,
+      metadata: input.metadata ?? undefined,
       status: 'open',
     },
   })

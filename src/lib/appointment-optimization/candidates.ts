@@ -23,6 +23,8 @@ export async function findEligibleCandidates(params: {
   openSlotEventId: string
   waveNumber: number
   limit?: number
+  lookAheadEnd?: Date
+  slotFillRuleId?: string
 }): Promise<SlotFillCandidate[]> {
   const limit = params.limit ?? WAVE_BATCH_SIZE
   const slotDurationMs = params.durationMinutes * 60 * 1000
@@ -42,7 +44,10 @@ export async function findEligibleCandidates(params: {
       practiceId: params.practiceId,
       status: { in: ['scheduled', 'confirmed'] },
       visitType: params.appointmentType,
-      startTime: { gt: params.slotStart },
+      startTime: {
+        gt: params.slotStart,
+        ...(params.lookAheadEnd ? { lte: params.lookAheadEnd } : {}),
+      },
       ...(params.providerId ? { providerId: params.providerId } : {}),
     },
     include: {

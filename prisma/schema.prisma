@@ -26,6 +26,7 @@ model Practice {
   insurancePolicies          InsurancePolicy[]
   appointments               Appointment[]
   openSlotEvents             OpenSlotEvent[]
+  openSlotInventory          OpenSlotInventory[]
   slotWaves                  SlotWave[]
   outreachAttempts           OutreachAttempt[]
   calIntegrations            CalIntegration[]
@@ -349,6 +350,7 @@ model OpenSlotEvent {
   source                String // cancellation | reschedule | availability
   sourceAppointmentId   String?
   idempotencyKey        String
+  metadata              Json?
   wavesSent             Int       @default(0)
   patientsContacted     Int       @default(0)
   filledAt              DateTime?
@@ -364,6 +366,28 @@ model OpenSlotEvent {
   @@index([practiceId, slotStart])
   @@index([providerId, slotStart])
   @@map("open_slot_events")
+}
+
+/// Source-agnostic queue of open time slots awaiting rules-engine evaluation
+model OpenSlotInventory {
+  id                String    @id @default(cuid())
+  practiceId        String
+  visitType         String
+  providerId        String?
+  slotStart         DateTime
+  slotEnd           DateTime
+  openSlotSource    String    @default("availability")
+  sourceAppointmentId String?
+  origin            Json?
+  status            String    @default("pending") // pending | processed | skipped
+  openSlotEventId   String?
+  processedAt       DateTime?
+  createdAt         DateTime  @default(now())
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId, status, slotStart])
+  @@map("open_slot_inventory")
 }
 
 model SlotWave {
