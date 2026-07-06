@@ -1278,6 +1278,8 @@ export async function processCallDataForPatient(
     phoneForMatching
   )
   let patient: (typeof allPatients)[number] | null = matchedPatient
+    ? allPatients.find((p) => p.id === matchedPatient.id) ?? null
+    : null
 
   let isNew = false
   const updateData: Record<string, unknown> = {}
