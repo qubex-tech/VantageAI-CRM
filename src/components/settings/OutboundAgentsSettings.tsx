@@ -541,9 +541,10 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
                   </p>
                 )}
                 <p className="text-xs text-gray-500 mt-1">
-                  Offered slot: offeredSlot.date, offeredSlot.time, offeredSlot.dateTime,
-                  offeredSlot.visitType. Current visit: appointment.currentDate,
-                  appointment.currentTime. Also: patient.firstName, links.portalAppointments
+                  Current visit: currentAppointment.date, currentAppointment.time,
+                  currentAppointment.dateTime. Offered slot: offeredSlot.date,
+                  offeredSlot.time, offeredSlot.dateTime. Also: patient.firstName,
+                  links.portalAppointments
                 </p>
               </div>
             )}

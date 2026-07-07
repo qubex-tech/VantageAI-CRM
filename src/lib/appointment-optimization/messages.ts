@@ -8,7 +8,7 @@ import {
 } from '@/lib/appointment-optimization/formatSlotTimes'
 
 const DEFAULT_SMS_TEMPLATE =
-  'Hi {{patient.firstName}} — an earlier {{offeredSlot.visitType}} appointment opened on {{offeredSlot.date}} at {{offeredSlot.time}}. You are currently scheduled for {{appointment.currentDate}} at {{appointment.currentTime}}. Reply YES to move to the earlier time, or visit {{links.portalAppointments}}.'
+  'Hi {{patient.firstName}} — an earlier {{offeredSlot.visitType}} slot opened {{offeredSlot.date}} at {{offeredSlot.time}}. You are currently scheduled {{currentAppointment.date}} at {{currentAppointment.time}}. Reply YES to move to the earlier time, or visit {{links.portalAppointments}}.'
 
 function getPortalAppointmentsUrl() {
   const base = (process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/+$/, '')
@@ -38,21 +38,31 @@ export async function resolveEarlierSlotSmsBody(params: {
   const bodyTemplate = template?.bodyText?.trim() || DEFAULT_SMS_TEMPLATE
   const offeredDate = formatSlotDate(params.slotStart, params.timezone)
   const offeredTime = formatSlotTime(params.slotStart, params.timezone)
+  const currentDate = params.currentAppointmentStart
+    ? formatSlotDate(params.currentAppointmentStart, params.timezone)
+    : ''
+  const currentTime = params.currentAppointmentStart
+    ? formatSlotTime(params.currentAppointmentStart, params.timezone)
+    : ''
 
   const context: VariableContext = {
     patient: {
       firstName: params.patientFirstName,
     },
     appointment: {
-      date: offeredDate,
-      time: offeredTime,
+      date: currentDate,
+      time: currentTime,
       providerName: params.providerName,
-      currentDate: params.currentAppointmentStart
-        ? formatSlotDate(params.currentAppointmentStart, params.timezone)
+      currentDate,
+      currentTime,
+    },
+    currentAppointment: {
+      date: currentDate,
+      time: currentTime,
+      dateTime: params.currentAppointmentStart
+        ? formatSlotDateTime(params.currentAppointmentStart, params.timezone)
         : '',
-      currentTime: params.currentAppointmentStart
-        ? formatSlotTime(params.currentAppointmentStart, params.timezone)
-        : '',
+      visitType: params.visitType || '',
     },
     offeredSlot: {
       date: offeredDate,

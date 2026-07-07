@@ -65,6 +65,18 @@ export async function POST(
         location: 'Main Office',
         providerName: 'Dr. Smith',
       },
+      currentAppointment: sampleContext?.currentAppointment || {
+        date: 'Tuesday, July 14',
+        time: '9:30 AM',
+        dateTime: 'Tuesday, July 14 at 9:30 AM',
+        visitType: 'Consultation',
+      },
+      offeredSlot: sampleContext?.offeredSlot || {
+        date: 'Tuesday, July 7',
+        time: '9:30 AM',
+        dateTime: 'Tuesday, July 7 at 9:30 AM',
+        visitType: 'Consultation',
+      },
       links: sampleContext?.links || {
         confirm: 'https://example.com/confirm',
         reschedule: 'https://example.com/reschedule',

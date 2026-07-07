@@ -38,6 +38,24 @@ const VARIABLE_CATEGORIES = [
     ],
   },
   {
+    label: 'Current appointment (slot fill)',
+    variables: [
+      { key: 'currentAppointment.date', label: 'Current date', example: 'Tuesday, Jul 14' },
+      { key: 'currentAppointment.time', label: 'Current time', example: '9:30 AM' },
+      { key: 'currentAppointment.dateTime', label: 'Current date & time', example: 'Tuesday, Jul 14 at 9:30 AM' },
+      { key: 'currentAppointment.visitType', label: 'Visit type', example: 'Consultation' },
+    ],
+  },
+  {
+    label: 'Offered slot (slot fill)',
+    variables: [
+      { key: 'offeredSlot.date', label: 'Offered date', example: 'Tuesday, Jul 7' },
+      { key: 'offeredSlot.time', label: 'Offered time', example: '9:30 AM' },
+      { key: 'offeredSlot.dateTime', label: 'Offered date & time', example: 'Tuesday, Jul 7 at 9:30 AM' },
+      { key: 'offeredSlot.visitType', label: 'Visit type', example: 'Consultation' },
+    ],
+  },
+  {
     label: 'Links',
     variables: [
       { key: 'links.confirm', label: 'Confirm Link', example: 'https://example.com/confirm' },

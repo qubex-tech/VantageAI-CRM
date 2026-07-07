@@ -186,11 +186,19 @@ export interface VariableContext {
     time?: string
     location?: string
     providerName?: string
-    /** Patient's current scheduled visit (when populated). */
+    /** @deprecated Prefer currentAppointment.date for slot-fill templates */
     currentDate?: string
+    /** @deprecated Prefer currentAppointment.time for slot-fill templates */
     currentTime?: string
   }
-  /** Earlier open slot being offered (slot-fill SMS). */
+  /** Patient's existing scheduled visit (slot-fill outreach). */
+  currentAppointment?: {
+    date?: string
+    time?: string
+    dateTime?: string
+    visitType?: string
+  }
+  /** Earlier open slot being offered (slot-fill outreach). */
   offeredSlot?: {
     date?: string
     time?: string

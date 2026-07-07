@@ -29,7 +29,7 @@ Automatically detects open appointment slots (from cancellations) and notifies e
 6. **Marketing template** — include offered slot placeholders, e.g.:
 
    ```
-   Hi {{patient.firstName}} — an earlier {{offeredSlot.visitType}} slot opened {{offeredSlot.date}} at {{offeredSlot.time}}. You're currently scheduled {{appointment.currentDate}} at {{appointment.currentTime}}. Reply YES to move, or {{links.portalAppointments}}.
+   Hi {{patient.firstName}} — an earlier {{offeredSlot.visitType}} slot opened {{offeredSlot.date}} at {{offeredSlot.time}}. You're currently scheduled {{currentAppointment.date}} at {{currentAppointment.time}}. Reply YES to move, or {{links.portalAppointments}}.
    ```
 
 7. **Patient opt-in** — Portal → Profile and Preferences → **Earlier appointment offers**.

@@ -294,6 +294,18 @@ export const previewTemplateSchema = z.object({
       location: z.string().optional(),
       providerName: z.string().optional(),
     }).optional(),
+    currentAppointment: z.object({
+      date: z.string().optional(),
+      time: z.string().optional(),
+      dateTime: z.string().optional(),
+      visitType: z.string().optional(),
+    }).optional(),
+    offeredSlot: z.object({
+      date: z.string().optional(),
+      time: z.string().optional(),
+      dateTime: z.string().optional(),
+      visitType: z.string().optional(),
+    }).optional(),
     links: z.object({
       confirm: z.string().url().optional(),
       reschedule: z.string().url().optional(),

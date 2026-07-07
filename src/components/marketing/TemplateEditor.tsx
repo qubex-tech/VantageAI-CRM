@@ -866,6 +866,24 @@ export default function TemplateEditor({ template: initialTemplate, brandProfile
                   type="button"
                   variant="outline"
                   size="sm"
+                  onClick={() => setBodyText(bodyText + '{{currentAppointment.date}}')}
+                  className="text-xs"
+                >
+                  Insert: currentAppointment.date
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBodyText(bodyText + '{{offeredSlot.date}}')}
+                  className="text-xs"
+                >
+                  Insert: offeredSlot.date
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
                   onClick={() => setBodyText(bodyText + '{{appointment.date}}')}
                   className="text-xs"
                 >
