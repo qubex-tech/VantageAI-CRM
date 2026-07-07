@@ -12,6 +12,11 @@ import { CalBooking } from './cal'
 import { getCalClient } from './cal'
 import { logAppointmentActivity, logCustomActivity } from './patient-activity'
 import { resolvePatientByContact } from './patient-identity'
+import {
+  canonicalCalBookingId,
+  consolidateCalBookingDuplicates,
+  calBookingIdOrWhere,
+} from './cal-booking-id'
 
 export interface SyncBookingResult {
   patientId: string
@@ -54,17 +59,29 @@ export async function syncBookingToPatient(
 
   // Normalize phone number for matching
   const normalizedPhone = attendeePhone?.replace(/\D/g, '') || null
-  const bookingId = booking.uid || String(booking.id)
+  const bookingId = canonicalCalBookingId(booking.uid, booking.id)
+  if (!bookingId) {
+    throw new Error('Cal.com booking is missing id and uid')
+  }
+
+  await consolidateCalBookingDuplicates({
+    practiceId,
+    uid: booking.uid,
+    id: booking.id,
+  })
 
   // Appointment already linked to a patient profile — never re-match by shared email/phone.
-  const linkedAppointment = await prisma.appointment.findFirst({
-    where: { calBookingId: bookingId },
-    include: {
-      patient: {
-        select: { id: true, name: true, phone: true, email: true },
-      },
-    },
-  })
+  const bookingWhere = calBookingIdOrWhere(booking.uid, booking.id)
+  const linkedAppointment = bookingWhere
+    ? await prisma.appointment.findFirst({
+        where: { practiceId, ...bookingWhere },
+        include: {
+          patient: {
+            select: { id: true, name: true, phone: true, email: true },
+          },
+        },
+      })
+    : null
   if (linkedAppointment?.patient) {
     return {
       patientId: linkedAppointment.patient.id,
@@ -136,11 +153,11 @@ export async function syncBookingToPatient(
   if (booking.description) notesParts.push(`Description: ${booking.description}`)
   if (booking.location) notesParts.push(`Location: ${booking.location}`)
   
-  const bookingNote = `[Cal.com Booking ${booking.uid || booking.id}]\n${notesParts.join('\n')}`
+  const bookingNote = `[Cal.com Booking ${bookingId}]\n${notesParts.join('\n')}`
   
   if (patient?.notes) {
     // Check if this booking note already exists
-    if (!patient.notes.includes(`[Cal.com Booking ${booking.uid || booking.id}]`)) {
+    if (!patient.notes.includes(`[Cal.com Booking ${bookingId}]`)) {
       updateData.notes = `${patient.notes}\n\n${bookingNote}`
     }
   } else {
@@ -169,9 +186,11 @@ export async function syncBookingToPatient(
     // Check if appointment already exists for this booking (any patient)
     const existingAppointment =
       linkedAppointment ??
-      (await prisma.appointment.findFirst({
-        where: { calBookingId: bookingId },
-      }))
+      (bookingWhere
+        ? await prisma.appointment.findFirst({
+            where: { practiceId, ...bookingWhere },
+          })
+        : null)
 
     // Create or get appointment for timeline entry
     let appointmentForTimeline = existingAppointment
@@ -230,7 +249,7 @@ export async function syncBookingToPatient(
         title: 'Appointment booking synced from Cal.com',
         description: `Booking ${booking.title || 'appointment'} synced from Cal.com (matched by ${matchReason})`,
         metadata: {
-          bookingId: booking.uid || String(booking.id),
+          bookingId,
           bookingTitle: booking.title,
           bookingStart: booking.start,
           bookingEnd: booking.end,
@@ -293,7 +312,7 @@ export async function syncBookingToPatient(
         title: 'Patient created from Cal.com booking',
         description: `Patient created from Cal.com booking: ${booking.title || 'appointment'}`,
         metadata: {
-          bookingId: booking.uid || String(booking.id),
+          bookingId,
           bookingTitle: booking.title,
           bookingStart: booking.start,
           bookingEnd: booking.end,

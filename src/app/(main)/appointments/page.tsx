@@ -5,6 +5,12 @@ import { format } from 'date-fns'
 import { getCalClient } from '@/lib/cal'
 import { syncBookingToPatient } from '@/lib/sync-booking-to-patient'
 import { resolvePatientByContact } from '@/lib/patient-identity'
+import {
+  calBookingAlreadyInLocalAppointments,
+  canonicalCalBookingId,
+  consolidateCalBookingDuplicates,
+  findAppointmentByCalBookingIds,
+} from '@/lib/cal-booking-id'
 import { AppointmentsView } from '@/components/appointments/AppointmentsView'
 import { PageIntro } from '@/components/layout/PageIntro'
 import { Card, CardContent } from '@/components/ui/card'
@@ -191,15 +197,38 @@ export default async function AppointmentsPage({
     console.error('Error fetching Cal.com bookings:', error)
   }
 
-  // Combine local appointments and Cal.com bookings
-  // Create a map to avoid duplicates (bookings that already exist in local DB)
-  const localBookingIds = new Set(localAppointments.map(apt => apt.calBookingId).filter(Boolean))
-  
-  // Filter out Cal.com bookings that are already in local DB
-  const newCalBookings = calBookings.filter(booking => {
-    const bookingId = booking.uid || String(booking.id)
-    return !localBookingIds.has(bookingId)
-  })
+  // Merge duplicate CRM rows (numeric Cal id vs UID) before combining with Cal API data.
+  for (const booking of calBookings) {
+    await consolidateCalBookingDuplicates({
+      practiceId,
+      uid: booking.uid,
+      id: booking.id,
+    })
+  }
+
+  const refreshedLocalAppointments = calBookings.length
+    ? await prisma.appointment.findMany({
+        where,
+        include: {
+          patient: {
+            select: {
+              id: true,
+              name: true,
+              phone: true,
+              primaryPhone: true,
+            },
+          },
+        },
+        orderBy: {
+          startTime: 'asc',
+        },
+      })
+    : localAppointments
+
+  // Filter out Cal.com bookings that already exist in the local DB (uid or numeric id).
+  const newCalBookings = calBookings.filter(
+    (booking) => !calBookingAlreadyInLocalAppointments(refreshedLocalAppointments, booking)
+  )
 
   // Transform Cal.com bookings to match appointment structure for display
   // Also sync each booking to patient records
@@ -257,9 +286,9 @@ export default async function AppointmentsPage({
       }
       
       return {
-        id: `cal-${booking.uid || booking.id}`,
-        calBookingId: booking.uid || String(booking.id),
-        calBookingUid: booking.uid, // Store UID separately for fetching details
+        id: `cal-${canonicalCalBookingId(booking.uid, booking.id)}`,
+        calBookingId: canonicalCalBookingId(booking.uid, booking.id),
+        calBookingUid: booking.uid,
         patient: patient || {
           id: null,
           name: booking.attendees?.[0]?.name || 'Unknown',
@@ -280,7 +309,7 @@ export default async function AppointmentsPage({
   )
 
   // Combine and sort all appointments
-  const allAppointments = [...localAppointments, ...transformedCalBookings].sort((a, b) => {
+  const allAppointments = [...refreshedLocalAppointments, ...transformedCalBookings].sort((a, b) => {
     return new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
   })
   

@@ -7,6 +7,7 @@
 
 import { prisma } from './db'
 import { getCalClient } from './cal'
+import { canonicalCalBookingId } from './cal-booking-id'
 import { createAuditLog, createTimelineEntry } from './audit'
 import { redactPHI } from './phi'
 import { getSchedulingSettings } from '@/lib/integrations/clinical-system/server'
@@ -611,7 +612,7 @@ export async function bookAppointment(
       status: 'scheduled',
       reason: reason || undefined,
       calEventId: eventTypeId,
-      calBookingId: calBooking.uid || String(calBooking.id),
+      calBookingId: canonicalCalBookingId(calBooking.uid, calBooking.id),
     },
   })
 
@@ -624,13 +625,13 @@ export async function bookAppointment(
     title: `Appointment scheduled: ${eventMapping.visitTypeName}`,
     description: `Scheduled for ${start.toLocaleString()}`,
     metadata: {
-      calBookingId: calBooking.uid || String(calBooking.id),
+      calBookingId: canonicalCalBookingId(calBooking.uid, calBooking.id),
     },
   })
 
   return {
     appointmentId: appointment.id,
-    calBookingId: calBooking.uid || String(calBooking.id),
+    calBookingId: canonicalCalBookingId(calBooking.uid, calBooking.id) ?? String(calBooking.id),
     startTime: start.toISOString(),
     endTime: end.toISOString(),
     confirmationMessage: `Your appointment has been scheduled for ${start.toLocaleString('en-US', { timeZone: timezone })}. You will receive a confirmation email shortly.`,

@@ -5,6 +5,11 @@ import { createAuditLog, createTimelineEntry } from '@/lib/audit'
 import { syncBookingToPatient } from '@/lib/sync-booking-to-patient'
 import { handleAppointmentChangeForSlotFill } from '@/lib/appointment-optimization/appointmentChangeHandler'
 import { resolvePatientByContact } from '@/lib/patient-identity'
+import {
+  canonicalCalBookingId,
+  consolidateCalBookingDuplicates,
+  findAppointmentsByCalBookingIds,
+} from '@/lib/cal-booking-id'
 
 /**
  * Cal.com webhook endpoint
@@ -128,25 +133,21 @@ export async function POST(req: NextRequest) {
       status,
     })
 
-    // Find appointment by calBookingId (using bookingId or uid)
-    const calBookingId = bookingId?.toString() || bookingUid
-    const possibleBookingIds = [
-      bookingId?.toString(),
+    // Cal.com UID is canonical; numeric id is a legacy alias stored by older code paths.
+    const calBookingId = canonicalCalBookingId(bookingUid, bookingId)
+    
+    console.log(`[${requestId}] Searching for appointment with calBookingId:`, calBookingId, {
       bookingUid,
-    ].filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+      bookingId,
+    })
     
-    console.log(`[${requestId}] Searching for appointment with calBookingId:`, possibleBookingIds)
+    let appointments = await findAppointmentsByCalBookingIds({
+      uid: bookingUid,
+      id: bookingId,
+    })
+    let appointment = appointments[0] ?? null
     
-    let appointment = possibleBookingIds.length > 0
-      ? await prisma.appointment.findFirst({
-          where: {
-            OR: possibleBookingIds.map(id => ({ calBookingId: id })),
-          },
-          include: { patient: true },
-        })
-      : null
-    
-    console.log(`[${requestId}] Found appointment:`, appointment ? appointment.id : 'none')
+    console.log(`[${requestId}] Found appointment(s):`, appointments.map((a) => a.id))
 
     // Handle different trigger events
     switch (triggerEvent) {
@@ -155,6 +156,13 @@ export async function POST(req: NextRequest) {
         // If appointment already exists (created by agent), update it
         if (appointment) {
           const existingAppointment = appointment
+          if (existingAppointment.practiceId) {
+            await consolidateCalBookingDuplicates({
+              practiceId: existingAppointment.practiceId,
+              uid: bookingUid,
+              id: bookingId,
+            })
+          }
           console.log(`[${requestId}] Updating existing appointment:`, existingAppointment.id)
           await prisma.appointment.update({
             where: { id: existingAppointment.id },
@@ -162,7 +170,6 @@ export async function POST(req: NextRequest) {
               status: status === 'ACCEPTED' ? 'confirmed' : 'scheduled',
               startTime: startTime ? new Date(startTime) : undefined,
               endTime: endTime ? new Date(endTime) : undefined,
-              // Ensure calBookingId is set if it wasn't before
               calBookingId: calBookingId || existingAppointment.calBookingId,
             },
           })
@@ -318,25 +325,38 @@ export async function POST(req: NextRequest) {
 
       case 'BOOKING_CANCELLED':
       case 'booking.cancelled':
-        if (appointment) {
-          const cancelled = await prisma.appointment.update({
-            where: { id: appointment.id },
-            data: { status: 'cancelled' },
-          })
+        if (appointments.length > 0) {
+          for (const appt of appointments) {
+            if (appt.status === 'cancelled') continue
+            const cancelled = await prisma.appointment.update({
+              where: { id: appt.id },
+              data: { status: 'cancelled' },
+            })
 
-          await handleAppointmentChangeForSlotFill({ before: appointment, after: cancelled })
+            await handleAppointmentChangeForSlotFill({ before: appt, after: cancelled })
 
-          if (appointment.patientId) {
-            await createTimelineEntry({
-              patientId: appointment.patientId,
-              type: 'appointment',
-              title: 'Appointment cancelled',
-              description: cancellationReason
-                ? `Appointment cancelled: ${cancellationReason}`
-                : `Appointment for ${appointment.visitType} was cancelled`,
-              metadata: { appointmentId: appointment.id, cancellationReason },
+            if (appt.patientId) {
+              await createTimelineEntry({
+                patientId: appt.patientId,
+                type: 'appointment',
+                title: 'Appointment cancelled',
+                description: cancellationReason
+                  ? `Appointment cancelled: ${cancellationReason}`
+                  : `Appointment for ${appt.visitType} was cancelled`,
+                metadata: { appointmentId: appt.id, cancellationReason },
+              })
+            }
+          }
+
+          const practiceIdForMerge = appointments[0]?.practiceId
+          if (practiceIdForMerge) {
+            await consolidateCalBookingDuplicates({
+              practiceId: practiceIdForMerge,
+              uid: bookingUid,
+              id: bookingId,
             })
           }
+          appointment = appointments[0]
         } else {
           console.warn(`[${requestId}] Cal.com webhook: Appointment not found for cancellation`, calBookingId)
         }
@@ -344,29 +364,45 @@ export async function POST(req: NextRequest) {
 
       case 'BOOKING_RESCHEDULED':
       case 'booking.rescheduled':
-        if (appointment && startTime && endTime) {
+        if (appointments.length > 0 && startTime && endTime) {
           const newStartTime = new Date(startTime)
           const newEndTime = new Date(endTime)
+          const practiceIdForMerge = appointments[0]?.practiceId
 
-          const rescheduled = await prisma.appointment.update({
-            where: { id: appointment.id },
-            data: {
-              startTime: newStartTime,
-              endTime: newEndTime,
-              status: 'confirmed',
-            },
-          })
-
-          await handleAppointmentChangeForSlotFill({ before: appointment, after: rescheduled })
-
-          if (appointment.patientId) {
-            await createTimelineEntry({
-              patientId: appointment.patientId,
-              type: 'appointment',
-              title: 'Appointment rescheduled',
-              description: `Appointment for ${appointment.visitType} was rescheduled`,
-              metadata: { appointmentId: appointment.id, rescheduleUid },
+          if (practiceIdForMerge) {
+            const merged = await consolidateCalBookingDuplicates({
+              practiceId: practiceIdForMerge,
+              uid: bookingUid,
+              id: bookingId,
             })
+            if (merged.keptId) {
+              appointment =
+                appointments.find((a) => a.id === merged.keptId) ?? appointments[0]
+            }
+          }
+
+          if (appointment) {
+            const rescheduled = await prisma.appointment.update({
+              where: { id: appointment.id },
+              data: {
+                startTime: newStartTime,
+                endTime: newEndTime,
+                status: 'confirmed',
+                calBookingId: calBookingId || appointment.calBookingId,
+              },
+            })
+
+            await handleAppointmentChangeForSlotFill({ before: appointment, after: rescheduled })
+
+            if (appointment.patientId) {
+              await createTimelineEntry({
+                patientId: appointment.patientId,
+                type: 'appointment',
+                title: 'Appointment rescheduled',
+                description: `Appointment for ${appointment.visitType} was rescheduled`,
+                metadata: { appointmentId: appointment.id, rescheduleUid },
+              })
+            }
           }
         } else {
           console.warn(`[${requestId}] Cal.com webhook: Appointment not found for reschedule`, calBookingId)

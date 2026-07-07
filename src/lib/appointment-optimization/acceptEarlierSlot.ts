@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
 import { getCalClient } from '@/lib/cal'
+import { canonicalCalBookingId } from '@/lib/cal-booking-id'
 import { writeBackAppointmentToOpenDental } from '@/lib/integrations/opendental/appointmentWriteback'
 import {
   getSchedulingSettings,
@@ -205,7 +206,7 @@ async function syncExternalReschedule(params: {
     await prisma.appointment.update({
       where: { id: params.appointment.id },
       data: {
-        calBookingId: calBooking.uid || String(calBooking.id),
+        calBookingId: canonicalCalBookingId(calBooking.uid, calBooking.id),
         calEventId: mapping.calEventTypeId,
       },
     })

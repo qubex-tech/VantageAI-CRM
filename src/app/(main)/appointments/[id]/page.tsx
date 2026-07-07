@@ -7,6 +7,11 @@ import Link from 'next/link'
 import { getCalClient } from '@/lib/cal'
 import { syncBookingToPatient } from '@/lib/sync-booking-to-patient'
 import { resolvePatientByContact } from '@/lib/patient-identity'
+import {
+  canonicalCalBookingId,
+  consolidateCalBookingDuplicates,
+  calBookingIdOrWhere,
+} from '@/lib/cal-booking-id'
 import { getOpenDentalConnection } from '@/lib/integrations/opendental/factory'
 import { AppointmentActionsBar } from '@/components/appointments/AppointmentActionsBar'
 
@@ -97,11 +102,18 @@ export default async function AppointmentDetailPage({
   // For Cal.com bookings, get the patient (should already exist after sync)
   if (calBooking) {
     const attendee = calBooking.attendees?.[0]
-    const bookingId = calBooking.uid || String(calBooking.id)
-    const linkedAppointment = await prisma.appointment.findFirst({
-      where: { practiceId, calBookingId: bookingId },
-      include: { patient: true },
+    await consolidateCalBookingDuplicates({
+      practiceId,
+      uid: calBooking.uid,
+      id: calBooking.id,
     })
+    const bookingWhere = calBookingIdOrWhere(calBooking.uid, calBooking.id)
+    const linkedAppointment = bookingWhere
+      ? await prisma.appointment.findFirst({
+          where: { practiceId, ...bookingWhere },
+          include: { patient: true },
+        })
+      : null
     if (linkedAppointment?.patient) {
       calBooking.patient = linkedAppointment.patient
     } else {
