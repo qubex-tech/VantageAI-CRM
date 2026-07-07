@@ -40,8 +40,21 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import EmailBuilder, { EmailBuilderRef } from './EmailBuilder'
+import VariablePicker, { VARIABLE_CATEGORIES } from './VariablePicker'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useSidebar } from '@/components/layout/SidebarProvider'
+
+const SMS_SLOT_FILL_CATEGORIES = VARIABLE_CATEGORIES.filter((c) =>
+  c.label.includes('slot fill')
+)
+
+const SMS_OTHER_INSERT_VARS = [
+  { key: 'patient.firstName', label: 'patient.firstName' },
+  { key: 'practice.name', label: 'practice.name' },
+  { key: 'practice.phone', label: 'practice.phone' },
+  { key: 'links.portalAppointments', label: 'links.portalAppointments' },
+  { key: 'links.confirm', label: 'links.confirm' },
+]
 
 // Client-safe SMS stats calculation
 function calculateSmsStats(text: string): { characterCount: number; segments: number; encoding: 'GSM-7' | 'Unicode' } {
@@ -139,6 +152,11 @@ export default function TemplateEditor({ template: initialTemplate, brandProfile
   const [activeTab, setActiveTab] = useState<'details' | 'content'>('details')
   const [savedBlocks, setSavedBlocks] = useState<Array<{ id: string; name: string; category?: string }>>([])
   const [loadingSavedBlocks, setLoadingSavedBlocks] = useState(false)
+  const [showVariablePicker, setShowVariablePicker] = useState(false)
+
+  const insertVariable = (key: string) => {
+    setBodyText((prev) => prev + `{{${key}}}`)
+  }
   
   // Form state
   const [name, setName] = useState(template.name)
@@ -834,135 +852,141 @@ export default function TemplateEditor({ template: initialTemplate, brandProfile
             </div>
           ) : (
             /* SMS Template Editor */
-            <div className="flex-1 flex flex-col p-6 bg-white">
-              <div className="mb-4">
-                <Label htmlFor="bodyText" className="text-sm font-medium text-gray-700">Message Text *</Label>
-                <p className="text-xs text-gray-500 mt-1">
-                  SMS is text-only. Keep messages short and use {'{{'}variable{'}}'} placeholders.
-                </p>
-                <p className="text-xs text-gray-400 mt-1">
-                  GSM-7: 160 chars per segment. Unicode (emojis/non-Latin): 70 chars per segment.
-                </p>
-              </div>
-              <Textarea
-                id="bodyText"
-                value={bodyText}
-                onChange={(e) => setBodyText(e.target.value)}
-                placeholder="Enter SMS message. Use {{variable}} syntax for personalization."
-                className="flex-1 font-mono text-sm min-h-[400px] mb-4"
-              />
-              
-              <div className="flex flex-wrap gap-2 mb-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setBodyText(bodyText + '{{patient.firstName}}')}
-                  className="text-xs"
-                >
-                  Insert: patient.firstName
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setBodyText(bodyText + '{{currentAppointment.date}}')}
-                  className="text-xs"
-                >
-                  Insert: currentAppointment.date
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setBodyText(bodyText + '{{offeredSlot.date}}')}
-                  className="text-xs"
-                >
-                  Insert: offeredSlot.date
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setBodyText(bodyText + '{{appointment.date}}')}
-                  className="text-xs"
-                >
-                  Insert: appointment.date
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setBodyText(bodyText + '{{practice.name}}')}
-                  className="text-xs"
-                >
-                  Insert: practice.name
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setBodyText(bodyText + '{{practice.phone}}')}
-                  className="text-xs"
-                >
-                  Insert: practice.phone
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setBodyText(bodyText + '{{links.confirm}}')}
-                  className="text-xs"
-                >
-                  Insert: links.confirm
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setBodyText(bodyText + ' Reply STOP to opt out.')}
-                  className="text-xs"
-                >
-                  Insert: opt-out text
-                </Button>
-              </div>
-              
-              {smsStats && (
-                <div className="mb-4 p-3 bg-gray-50 rounded-lg text-xs text-gray-600">
-                  <div className="flex justify-between mb-1">
-                    <span>Characters:</span>
-                    <span className="font-medium">{smsStats.characterCount}</span>
-                  </div>
-                  <div className="flex justify-between mb-1">
-                    <span>Segments:</span>
-                    <span className="font-medium">{smsStats.segments}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Encoding:</span>
-                    <span className="font-medium">{smsStats.encoding}</span>
-                  </div>
-                  {smsStats.segments > 1 && (
-                    <div className="mt-2 pt-2 border-t border-gray-200 text-yellow-700">
-                      <AlertCircle className="h-3 w-3 inline mr-1" />
-                      This message will be sent as {smsStats.segments} segment(s), which may increase cost.
-                    </div>
-                  )}
+            <div className="flex-1 overflow-y-auto">
+              <div className="p-6 bg-white space-y-4 pb-8">
+                <div>
+                  <Label htmlFor="bodyText" className="text-sm font-medium text-gray-700">Message Text *</Label>
+                  <p className="text-xs text-gray-500 mt-1">
+                    SMS is text-only. Keep messages short and use {'{{'}variable{'}}'} placeholders.
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    GSM-7: 160 chars per segment. Unicode (emojis/non-Latin): 70 chars per segment.
+                  </p>
                 </div>
-              )}
-              
-              <div className="flex gap-2">
-                <Button size="sm" onClick={handleSave} disabled={saving}>
-                  <Save className="h-4 w-4 mr-2" />
-                  {saving ? 'Saving...' : 'Save'}
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => setShowPreview(true)}>
-                  <Eye className="h-4 w-4 mr-2" />
-                  Preview
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => setShowTest(true)}>
-                  <Send className="h-4 w-4 mr-2" />
-                  Test Send
-                </Button>
+                <Textarea
+                  id="bodyText"
+                  value={bodyText}
+                  onChange={(e) => setBodyText(e.target.value)}
+                  placeholder="Enter SMS message. Use {{variable}} syntax for personalization."
+                  className="font-mono text-sm min-h-[240px] resize-y"
+                />
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-gray-700">Placeholders</p>
+                    <div className="relative">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowVariablePicker((open) => !open)}
+                        className="text-xs"
+                      >
+                        Browse all variables
+                      </Button>
+                      {showVariablePicker && (
+                        <div className="absolute right-0 top-full mt-1 z-50">
+                          <VariablePicker
+                            onSelect={insertVariable}
+                            onClose={() => setShowVariablePicker(false)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {SMS_SLOT_FILL_CATEGORIES.map((category) => (
+                    <div
+                      key={category.label}
+                      className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2"
+                    >
+                      <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+                        {category.label.replace(' (slot fill)', '')}
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {category.variables.map((variable) => (
+                          <Button
+                            key={variable.key}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => insertVariable(variable.key)}
+                            className="text-xs bg-white"
+                          >
+                            {variable.label}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className="rounded-lg border border-gray-200 p-3 space-y-2">
+                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                      Other
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {SMS_OTHER_INSERT_VARS.map((variable) => (
+                        <Button
+                          key={variable.key}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => insertVariable(variable.key)}
+                          className="text-xs"
+                        >
+                          {variable.label}
+                        </Button>
+                      ))}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setBodyText((prev) => prev + ' Reply STOP to opt out.')}
+                        className="text-xs"
+                      >
+                        opt-out text
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {smsStats && (
+                  <div className="p-3 bg-gray-50 rounded-lg text-xs text-gray-600">
+                    <div className="flex justify-between mb-1">
+                      <span>Characters:</span>
+                      <span className="font-medium">{smsStats.characterCount}</span>
+                    </div>
+                    <div className="flex justify-between mb-1">
+                      <span>Segments:</span>
+                      <span className="font-medium">{smsStats.segments}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Encoding:</span>
+                      <span className="font-medium">{smsStats.encoding}</span>
+                    </div>
+                    {smsStats.segments > 1 && (
+                      <div className="mt-2 pt-2 border-t border-gray-200 text-yellow-700">
+                        <AlertCircle className="h-3 w-3 inline mr-1" />
+                        This message will be sent as {smsStats.segments} segment(s), which may increase cost.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-200">
+                  <Button size="sm" onClick={handleSave} disabled={saving}>
+                    <Save className="h-4 w-4 mr-2" />
+                    {saving ? 'Saving...' : 'Save'}
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setShowPreview(true)}>
+                    <Eye className="h-4 w-4 mr-2" />
+                    Preview
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setShowTest(true)}>
+                    <Send className="h-4 w-4 mr-2" />
+                    Test Send
+                  </Button>
+                </div>
               </div>
             </div>
           )}

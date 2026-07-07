@@ -11,7 +11,7 @@ interface VariablePickerProps {
   onClose: () => void
 }
 
-const VARIABLE_CATEGORIES = [
+export const VARIABLE_CATEGORIES = [
   {
     label: 'Patient',
     variables: [
@@ -62,6 +62,7 @@ const VARIABLE_CATEGORIES = [
       { key: 'links.reschedule', label: 'Reschedule Link', example: 'https://example.com/reschedule' },
       { key: 'links.cancel', label: 'Cancel Link', example: 'https://example.com/cancel' },
       { key: 'links.portalVerified', label: 'Verified Portal Link', example: 'https://portal.getvantage.tech/portal/invite?token=…' },
+      { key: 'links.portalAppointments', label: 'Portal Appointments Link', example: 'https://portal.getvantage.tech/portal/appointments' },
       { key: 'links.formRequest', label: 'Form Request Link', example: 'https://portal.getvantage.tech/portal/invite?token=…&redirect=/portal/forms/…' },
     ],
   },
