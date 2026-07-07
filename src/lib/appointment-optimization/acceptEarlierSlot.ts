@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db'
 import { getCalClient } from '@/lib/cal'
 import { canonicalCalBookingId } from '@/lib/cal-booking-id'
+import { cancelAppointmentInCal } from '@/lib/integrations/cal/appointmentWriteback'
 import { writeBackAppointmentToOpenDental } from '@/lib/integrations/opendental/appointmentWriteback'
 import {
   getSchedulingSettings,
@@ -75,8 +76,9 @@ export async function acceptEarlierSlotOffer(params: {
     status: appointment.status,
   }
 
+  let externalSync: Awaited<ReturnType<typeof syncExternalReschedule>>
   try {
-    await syncExternalReschedule({
+    externalSync = await syncExternalReschedule({
       practiceId,
       appointment,
       patient: attempt.patient,
@@ -88,6 +90,13 @@ export async function acceptEarlierSlotOffer(params: {
       status: 'failed',
       reason: error instanceof Error ? error.message : 'external_booking_failed',
     }
+  }
+
+  if (externalSync.mode === 'crm_fallback') {
+    console.warn('[acceptEarlierSlot] Proceeding with CRM-only reschedule after Cal.com sync issue', {
+      appointmentId: appointment.id,
+      warning: externalSync.warning,
+    })
   }
 
   const updated = await prisma.appointment.update({
@@ -154,7 +163,7 @@ async function syncExternalReschedule(params: {
   }
   newStart: Date
   newEnd: Date
-}) {
+}): Promise<{ mode: 'none' | 'cal' | 'crm_fallback'; warning?: string }> {
   const scheduling = await getSchedulingSettings(params.practiceId)
   const isOdLinked = params.appointment.calBookingId?.startsWith('opendental:')
   const isCalLinked =
@@ -163,8 +172,7 @@ async function syncExternalReschedule(params: {
     !params.appointment.calBookingId.startsWith('opendental:')
 
   if (usesOpenDentalForWrite(scheduling) || isOdLinked) {
-    // Local update + writeback happens after; OD path uses appointment row times.
-    return
+    return { mode: 'none' }
   }
 
   if (isCalLinked && params.appointment.calBookingId) {
@@ -183,37 +191,60 @@ async function syncExternalReschedule(params: {
     }
 
     const calClient = await getCalClient(params.practiceId)
-    await calClient.cancelBooking(params.appointment.calBookingId)
+    const cancelResult = await cancelAppointmentInCal({
+      practiceId: params.practiceId,
+      calBookingId: params.appointment.calBookingId,
+    })
+    if (cancelResult.status === 'error') {
+      throw new Error(cancelResult.reason || 'cal_cancel_failed')
+    }
 
     const email = params.patient.email?.trim()
     if (!email) {
       throw new Error('Patient email is required for Cal.com booking')
     }
 
-    const calBooking = await calClient.createBooking({
-      eventTypeId: mapping.calEventTypeId,
-      start: params.newStart.toISOString(),
-      end: params.newEnd.toISOString(),
-      timeZone: params.appointment.timezone,
-      responses: {
-        name: params.patient.name,
-        email,
-        phone: params.patient.primaryPhone || params.patient.phone || undefined,
-        notes: 'Rescheduled via earlier appointment SMS offer',
-      },
-    })
+    try {
+      const calBooking = await calClient.createBooking({
+        eventTypeId: mapping.calEventTypeId,
+        start: params.newStart.toISOString(),
+        end: params.newEnd.toISOString(),
+        timeZone: params.appointment.timezone,
+        responses: {
+          name: params.patient.name,
+          email,
+          phone: params.patient.primaryPhone || params.patient.phone || undefined,
+          notes: 'Rescheduled via earlier appointment SMS offer',
+        },
+      })
 
-    await prisma.appointment.update({
-      where: { id: params.appointment.id },
-      data: {
-        calBookingId: canonicalCalBookingId(calBooking.uid, calBooking.id),
-        calEventId: mapping.calEventTypeId,
-      },
-    })
-    return
+      await prisma.appointment.update({
+        where: { id: params.appointment.id },
+        data: {
+          calBookingId: canonicalCalBookingId(calBooking.uid, calBooking.id),
+          calEventId: mapping.calEventTypeId,
+        },
+      })
+      return { mode: 'cal' }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (shouldFallbackToCrmOnlyCalReschedule(message)) {
+        return { mode: 'crm_fallback', warning: message }
+      }
+      throw error
+    }
   }
 
-  // CRM-only — no external sync required.
+  return { mode: 'none' }
+}
+
+function shouldFallbackToCrmOnlyCalReschedule(message: string): boolean {
+  return (
+    /already has booking at this time/i.test(message) ||
+    /not available/i.test(message) ||
+    /NotFoundException/i.test(message) ||
+    message.includes('404')
+  )
 }
 
 /** After local appointment times are updated, push to Open Dental if configured. */
