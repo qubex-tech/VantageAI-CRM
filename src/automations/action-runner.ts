@@ -1051,6 +1051,15 @@ async function updateAppointmentStatus(
   }
 
   const oldStatus = appointment.status
+
+  if (args.status === 'cancelled' && oldStatus !== 'cancelled') {
+    const { cancelAppointmentInCal } = await import('@/lib/integrations/cal/appointmentWriteback')
+    await cancelAppointmentInCal({
+      practiceId,
+      calBookingId: appointment.calBookingId,
+    })
+  }
+
   const updated = await prisma.appointment.update({
     where: { id: args.appointmentId },
     data: { status: args.status },

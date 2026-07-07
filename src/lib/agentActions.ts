@@ -8,6 +8,7 @@
 import { prisma } from './db'
 import { getCalClient } from './cal'
 import { canonicalCalBookingId } from './cal-booking-id'
+import { cancelAppointmentInCal } from '@/lib/integrations/cal/appointmentWriteback'
 import { createAuditLog, createTimelineEntry } from './audit'
 import { redactPHI } from './phi'
 import { getSchedulingSettings } from '@/lib/integrations/clinical-system/server'
@@ -658,16 +659,10 @@ export async function cancelAppointment(
 
   const isOpenDentalLinked = !!appointment.calBookingId?.startsWith('opendental:')
 
-  // Cancel in Cal.com only for Cal-booked appointments (not Open Dental links).
-  if (appointment.calBookingId && !isOpenDentalLinked) {
-    try {
-      const calClient = await getCalClient(practiceId)
-      await calClient.cancelBooking(appointment.calBookingId)
-    } catch (error) {
-      console.error('Error canceling Cal.com booking:', error)
-      // Continue with local cancellation even if Cal.com fails
-    }
-  }
+  await cancelAppointmentInCal({
+    practiceId,
+    calBookingId: appointment.calBookingId,
+  })
 
   // Update local appointment
   await prisma.appointment.update({

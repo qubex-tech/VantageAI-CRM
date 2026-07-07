@@ -6,6 +6,7 @@ import { createAuditLog } from '@/lib/audit'
 import { emitEvent } from '@/lib/outbox'
 import { handleAppointmentChangeForSlotFill } from '@/lib/appointment-optimization/appointmentChangeHandler'
 import { writeBackAppointmentToOpenDental } from '@/lib/integrations/opendental/appointmentWriteback'
+import { cancelAppointmentInCal } from '@/lib/integrations/cal/appointmentWriteback'
 
 export async function GET(
   req: NextRequest,
@@ -75,6 +76,13 @@ export async function PATCH(
     }
 
     const validated = appointmentSchema.partial().parse(body)
+
+    if (validated.status === 'cancelled' && existing.status !== 'cancelled') {
+      await cancelAppointmentInCal({
+        practiceId,
+        calBookingId: existing.calBookingId,
+      })
+    }
 
     const appointment = await prisma.appointment.update({
       where: { id },
@@ -240,6 +248,11 @@ export async function DELETE(
     if (!existing) {
       return NextResponse.json({ error: 'Appointment not found' }, { status: 404 })
     }
+
+    await cancelAppointmentInCal({
+      practiceId,
+      calBookingId: existing.calBookingId,
+    })
 
     // Update status to cancelled instead of deleting
     const appointment = await prisma.appointment.update({

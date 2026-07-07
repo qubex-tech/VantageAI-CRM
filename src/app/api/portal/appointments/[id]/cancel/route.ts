@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requirePatientSession } from '@/lib/portal-session'
 import { appointmentCancelSchema } from '@/lib/validations'
 import { handleAppointmentChangeForSlotFill } from '@/lib/appointment-optimization/appointmentChangeHandler'
+import { cancelAppointmentInCal } from '@/lib/integrations/cal/appointmentWriteback'
 
 /**
  * POST /api/portal/appointments/[id]/cancel
@@ -34,6 +35,11 @@ export async function POST(
         { status: 404 }
       )
     }
+
+    await cancelAppointmentInCal({
+      practiceId,
+      calBookingId: appointment.calBookingId,
+    })
 
     // Update appointment status
     const updated = await prisma.appointment.update({
