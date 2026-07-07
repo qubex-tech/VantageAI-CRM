@@ -6,6 +6,7 @@ import { format } from 'date-fns'
 import Link from 'next/link'
 import { getCalClient } from '@/lib/cal'
 import { syncBookingToPatient } from '@/lib/sync-booking-to-patient'
+import { resolvePatientByContact } from '@/lib/patient-identity'
 import { getOpenDentalConnection } from '@/lib/integrations/opendental/factory'
 import { AppointmentActionsBar } from '@/components/appointments/AppointmentActionsBar'
 
@@ -95,55 +96,30 @@ export default async function AppointmentDetailPage({
 
   // For Cal.com bookings, get the patient (should already exist after sync)
   if (calBooking) {
-    const attendeeEmail = calBooking.attendees?.[0]?.email
-    const attendeePhone = calBooking.attendees?.[0]?.phoneNumber?.replace(/\D/g, '')
-    const attendeeName = calBooking.attendees?.[0]?.name
-    
-    // Try to find patient by email first
-    if (attendeeEmail) {
-      const patient = await prisma.patient.findFirst({
-        where: {
-          practiceId: practiceId,
-          email: attendeeEmail,
-          deletedAt: null,
-        },
+    const attendee = calBooking.attendees?.[0]
+    const bookingId = calBooking.uid || String(calBooking.id)
+    const linkedAppointment = await prisma.appointment.findFirst({
+      where: { practiceId, calBookingId: bookingId },
+      include: { patient: true },
+    })
+    if (linkedAppointment?.patient) {
+      calBooking.patient = linkedAppointment.patient
+    } else {
+      const attendeeDob =
+        (calBooking.metadata?.dateOfBirth as string | undefined) ||
+        (calBooking.metadata?.dob as string | undefined) ||
+        null
+      const resolution = await resolvePatientByContact({
+        practiceId,
+        email: attendee?.email,
+        phone: attendee?.phoneNumber?.replace(/\D/g, '') || null,
+        name: attendee?.name,
+        dateOfBirth: attendeeDob,
       })
-      
-      if (patient) {
-        calBooking.patient = patient
-      }
-    }
-    
-    // If not found by email, try by phone
-    if (!calBooking.patient && attendeePhone) {
-      const patient = await prisma.patient.findFirst({
-        where: {
-          practiceId: practiceId,
-          phone: attendeePhone,
-          deletedAt: null,
-        },
-      })
-      
-      if (patient) {
-        calBooking.patient = patient
-      }
-    }
-    
-    // If still not found, try by name
-    if (!calBooking.patient && attendeeName) {
-      const patient = await prisma.patient.findFirst({
-        where: {
-          practiceId: practiceId,
-          name: {
-            contains: attendeeName,
-            mode: 'insensitive',
-          },
-          deletedAt: null,
-        },
-      })
-      
-      if (patient) {
-        calBooking.patient = patient
+      if (resolution.patient) {
+        calBooking.patient = await prisma.patient.findFirst({
+          where: { id: resolution.patient.id, practiceId, deletedAt: null },
+        })
       }
     }
   }

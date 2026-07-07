@@ -4,6 +4,7 @@ import { verifyCalSignature, rateLimit } from '@/lib/middleware'
 import { createAuditLog, createTimelineEntry } from '@/lib/audit'
 import { syncBookingToPatient } from '@/lib/sync-booking-to-patient'
 import { handleAppointmentChangeForSlotFill } from '@/lib/appointment-optimization/appointmentChangeHandler'
+import { resolvePatientByContact } from '@/lib/patient-identity'
 
 /**
  * Cal.com webhook endpoint
@@ -188,48 +189,39 @@ export async function POST(req: NextRequest) {
           
           console.log(`[${requestId}] Found ${calIntegrations.length} Cal integrations`)
           
-          // Search for patient in those practices
+          // Search for patient in those practices (DOB-aware; never guess among duplicates)
           let patient = null
           let practiceId = null
-          
-          if (attendeeEmail) {
-            for (const integration of calIntegrations) {
-              const foundPatient = await prisma.patient.findFirst({
-                where: {
-                  practiceId: integration.practiceId,
-                  email: attendeeEmail,
-                  deletedAt: null,
-                },
+          const attendeeDob =
+            (payload?.responses?.dateOfBirth?.value as string | undefined) ||
+            (payload?.metadata?.dateOfBirth as string | undefined) ||
+            null
+          const normalizedPhone = attendeePhone?.replace(/\D/g, '') || null
+
+          for (const integration of calIntegrations) {
+            const resolution = await resolvePatientByContact({
+              practiceId: integration.practiceId,
+              email: attendeeEmail,
+              phone: normalizedPhone,
+              name: attendeeName,
+              dateOfBirth: attendeeDob,
+            })
+            if (resolution.ambiguous) {
+              console.warn(`[${requestId}] Ambiguous patient match for booking — shared contact info`, {
+                practiceId: integration.practiceId,
+                candidateCount: resolution.candidateCount,
+                attendeeEmail,
+                attendeeName,
               })
-              
-              if (foundPatient) {
-                patient = foundPatient
-                practiceId = integration.practiceId
-                console.log(`[${requestId}] Found existing patient by email:`, patient.id)
-                break
-              }
+              continue
             }
-          }
-          
-          // If patient not found, try to find by phone number if available
-          if (!patient && attendeePhone) {
-            const phoneNumber = attendeePhone.replace(/\D/g, '')
-            console.log(`[${requestId}] Searching for patient by phone:`, phoneNumber)
-            for (const integration of calIntegrations) {
-              const foundPatient = await prisma.patient.findFirst({
-                where: {
-                  practiceId: integration.practiceId,
-                  phone: phoneNumber,
-                  deletedAt: null,
-                },
+            if (resolution.patient) {
+              patient = await prisma.patient.findFirst({
+                where: { id: resolution.patient.id, deletedAt: null },
               })
-              
-              if (foundPatient) {
-                patient = foundPatient
-                practiceId = integration.practiceId
-                console.log(`[${requestId}] Found existing patient by phone:`, patient.id)
-                break
-              }
+              practiceId = integration.practiceId
+              console.log(`[${requestId}] Matched patient by ${resolution.matchReason}:`, patient?.id)
+              break
             }
           }
           

@@ -1,4 +1,8 @@
 import { prisma } from '@/lib/db'
+import {
+  normalizeDobToIso,
+  patientDobMatches,
+} from '@/lib/patient-identity'
 
 export function normalizePhoneDigits(value?: string | null): string {
   if (!value) return ''
@@ -37,6 +41,10 @@ function patientPhoneLast10Values(patient: {
 const patientSelect = {
   id: true,
   practiceId: true,
+  name: true,
+  firstName: true,
+  lastName: true,
+  dateOfBirth: true,
   phone: true,
   primaryPhone: true,
   secondaryPhone: true,
@@ -45,6 +53,10 @@ const patientSelect = {
 export type PatientPhoneMatch = {
   id: string
   practiceId: string
+  name: string
+  firstName: string | null
+  lastName: string | null
+  dateOfBirth: Date | null
   phone: string | null
   primaryPhone: string | null
   secondaryPhone: string | null
@@ -82,6 +94,9 @@ export async function findPatientBySmsPhone(params: {
   preferPracticeIds?: string[]
   /** When set, only consider patients in these practices (no global fallback). */
   onlyPracticeIds?: string[]
+  /** Disambiguate when multiple patients share the phone in one practice. */
+  preferredPatientId?: string | null
+  dateOfBirth?: string | Date | null
 }): Promise<PatientPhoneMatch | null> {
   const fromLast10 = getPhoneLast10(params.from)
   if (fromLast10.length < 10) {
@@ -106,8 +121,12 @@ export async function findPatientBySmsPhone(params: {
       select: patientSelect,
       take: 500,
     })
-    const match = scoped.find((patient) => matchesLast10(patient, fromLast10))
-    if (match) return match
+    const matches = scoped.filter((patient) => matchesLast10(patient, fromLast10))
+    const picked = pickScopedPhoneMatch(matches, {
+      preferredPatientId: params.preferredPatientId,
+      dateOfBirth: params.dateOfBirth,
+    })
+    if (picked) return picked
   }
 
   if (params.onlyPracticeIds?.length) {
@@ -128,5 +147,31 @@ export async function findPatientBySmsPhone(params: {
   })
 
   const matches = globalCandidates.filter((patient) => matchesLast10(patient, fromLast10))
+  const scopedPick = pickScopedPhoneMatch(matches, {
+    preferredPatientId: params.preferredPatientId,
+    dateOfBirth: params.dateOfBirth,
+  })
+  if (scopedPick) return scopedPick
   return pickPatientMatchForInbound(matches, params.preferPracticeIds || practiceIdsToTry)
+}
+
+export function pickScopedPhoneMatch(
+  matches: PatientPhoneMatch[],
+  params: { preferredPatientId?: string | null; dateOfBirth?: string | Date | null }
+): PatientPhoneMatch | null {
+  if (matches.length === 0) return null
+  if (params.preferredPatientId) {
+    const preferred = matches.find((p) => p.id === params.preferredPatientId)
+    if (preferred) return preferred
+  }
+  if (matches.length === 1) return matches[0]
+
+  const dob = normalizeDobToIso(params.dateOfBirth)
+  if (dob) {
+    const identityMatches = matches.filter((p) => patientDobMatches(p, dob))
+    if (identityMatches.length === 1) return identityMatches[0]
+  }
+
+  // Same phone, different people (e.g. two Steve Maddens) — do not guess.
+  return null
 }

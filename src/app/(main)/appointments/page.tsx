@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { format } from 'date-fns'
 import { getCalClient } from '@/lib/cal'
 import { syncBookingToPatient } from '@/lib/sync-booking-to-patient'
+import { resolvePatientByContact } from '@/lib/patient-identity'
 import { AppointmentsView } from '@/components/appointments/AppointmentsView'
 import { PageIntro } from '@/components/layout/PageIntro'
 import { Card, CardContent } from '@/components/ui/card'
@@ -229,16 +230,23 @@ export default async function AppointmentsPage({
         })
       }
       
-      // Fallback to attendee data if sync didn't work
+      // Fallback to attendee data if sync didn't work (DOB-aware; never guess among duplicates)
       if (!patient) {
-        const attendeeEmail = booking.attendees?.[0]?.email
-        if (attendeeEmail) {
-          patient = await prisma.patient.findFirst({
-            where: {
-              practiceId: practiceId,
-              email: attendeeEmail,
-              deletedAt: null,
-            },
+        const attendee = booking.attendees?.[0]
+        const attendeeDob =
+          (booking.metadata?.dateOfBirth as string | undefined) ||
+          (booking.metadata?.dob as string | undefined) ||
+          null
+        const resolution = await resolvePatientByContact({
+          practiceId,
+          email: attendee?.email,
+          phone: attendee?.phoneNumber?.replace(/\D/g, '') || null,
+          name: attendee?.name,
+          dateOfBirth: attendeeDob,
+        })
+        if (resolution.patient) {
+          patient = await prisma.patient.findUnique({
+            where: { id: resolution.patient.id },
             select: {
               id: true,
               name: true,

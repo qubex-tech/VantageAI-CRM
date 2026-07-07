@@ -3,6 +3,8 @@
  * Phone numbers are NOT unique — family members often share one number.
  */
 
+import { prisma } from '@/lib/db'
+
 export type ParsedName = { firstName: string; lastName: string; fullName: string }
 
 export type DemographicsInput = {
@@ -167,6 +169,16 @@ export function demographicsMatch(
     pLast.toLowerCase() === c.lastName.toLowerCase() &&
     pDob === c.dateOfBirth
   )
+}
+
+/** Compare stored patient DOB to a caller-supplied date (ISO or parseable). */
+export function patientDobMatches(
+  patient: Pick<PatientIdentityRow, 'dateOfBirth'>,
+  dateOfBirth?: string | Date | null
+): boolean {
+  const callerDob = normalizeDobToIso(dateOfBirth)
+  const patientDob = normalizeDobToIso(patient.dateOfBirth)
+  return Boolean(callerDob && patientDob && callerDob === patientDob)
 }
 
 export function extractPatNum(externalEhrId: string | null | undefined): number | null {
@@ -430,6 +442,154 @@ export async function resolvePostCallPatientMatch(
   }
 
   return { patient: null, blockCreate: false }
+}
+
+export type ResolvePatientByContactParams = {
+  practiceId: string
+  /** Active CRM profile (booking UI, API) — always wins when valid. */
+  preferredPatientId?: string | null
+  email?: string | null
+  phone?: string | null
+  name?: string | null
+  dateOfBirth?: string | Date | null
+}
+
+export type ResolvePatientByContactResult = {
+  patient: PatientIdentityRow | null
+  matchReason?:
+    | 'preferred'
+    | 'email'
+    | 'phone'
+    | 'name'
+    | 'email_dob'
+    | 'phone_dob'
+    | 'name_dob'
+  /** Multiple CRM patients share contact info and DOB did not disambiguate. */
+  ambiguous?: boolean
+  candidateCount?: number
+}
+
+const contactPatientSelect = {
+  id: true,
+  name: true,
+  firstName: true,
+  lastName: true,
+  dateOfBirth: true,
+  phone: true,
+  primaryPhone: true,
+  secondaryPhone: true,
+  email: true,
+  externalEhrId: true,
+} as const
+
+function narrowCandidatesByDob(
+  candidates: PatientIdentityRow[],
+  caller: DemographicsInput
+): PatientIdentityRow[] {
+  const dob = normalizeDobToIso(caller.dateOfBirth)
+  if (!dob || candidates.length <= 1) return candidates
+
+  const c = resolveDemographics(caller)
+  const matched = candidates.filter((p) => {
+    if (c.firstName && c.lastName) {
+      return demographicsMatch(p, caller)
+    }
+    return patientDobMatches(p, dob)
+  })
+  return matched.length > 0 ? matched : candidates
+}
+
+function resolveSingleCandidate(
+  candidates: PatientIdentityRow[],
+  caller: DemographicsInput,
+  baseReason: 'email' | 'phone' | 'name'
+): ResolvePatientByContactResult {
+  if (candidates.length === 0) {
+    return { patient: null }
+  }
+  if (candidates.length === 1) {
+    return { patient: candidates[0], matchReason: baseReason }
+  }
+
+  const narrowed = narrowCandidatesByDob(candidates, caller)
+  if (narrowed.length === 1) {
+    return { patient: narrowed[0], matchReason: `${baseReason}_dob` as ResolvePatientByContactResult['matchReason'] }
+  }
+
+  return {
+    patient: null,
+    ambiguous: true,
+    candidateCount: candidates.length,
+  }
+}
+
+/**
+ * Resolve a CRM patient from contact fields without guessing when name/phone/email
+ * are shared. Use preferredPatientId when booking from a patient profile.
+ */
+export async function resolvePatientByContact(
+  params: ResolvePatientByContactParams
+): Promise<ResolvePatientByContactResult> {
+  const caller: DemographicsInput = {
+    name: params.name,
+    dateOfBirth: params.dateOfBirth,
+  }
+
+  if (params.preferredPatientId) {
+    const preferred = await prisma.patient.findFirst({
+      where: {
+        id: params.preferredPatientId,
+        practiceId: params.practiceId,
+        deletedAt: null,
+      },
+      select: contactPatientSelect,
+    })
+    if (preferred) {
+      return { patient: preferred, matchReason: 'preferred' }
+    }
+  }
+
+  const email = params.email?.trim()
+  if (email) {
+    const emailMatches = await prisma.patient.findMany({
+      where: {
+        practiceId: params.practiceId,
+        deletedAt: null,
+        email: { equals: email, mode: 'insensitive' },
+      },
+      select: contactPatientSelect,
+    })
+    const resolved = resolveSingleCandidate(emailMatches, caller, 'email')
+    if (resolved.patient || resolved.ambiguous) return resolved
+  }
+
+  const phoneKey = params.phone ? phoneMatchKey(params.phone) : ''
+  if (phoneKey) {
+    const practicePatients = await prisma.patient.findMany({
+      where: { practiceId: params.practiceId, deletedAt: null },
+      select: contactPatientSelect,
+      take: 2000,
+    })
+    const phoneMatches = phoneCollisionsForKey(practicePatients, phoneKey)
+    const resolved = resolveSingleCandidate(phoneMatches, caller, 'phone')
+    if (resolved.patient || resolved.ambiguous) return resolved
+  }
+
+  const name = params.name?.trim()
+  if (name) {
+    const exactMatches = await prisma.patient.findMany({
+      where: {
+        practiceId: params.practiceId,
+        deletedAt: null,
+        name: { equals: name, mode: 'insensitive' },
+      },
+      select: contactPatientSelect,
+    })
+    const resolved = resolveSingleCandidate(exactMatches, caller, 'name')
+    if (resolved.patient || resolved.ambiguous) return resolved
+  }
+
+  return { patient: null }
 }
 
 /** Safe fields to update on an existing patient when identity already matches. */

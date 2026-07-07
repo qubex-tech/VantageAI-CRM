@@ -11,6 +11,7 @@ import { prisma } from './db'
 import { CalBooking } from './cal'
 import { getCalClient } from './cal'
 import { logAppointmentActivity, logCustomActivity } from './patient-activity'
+import { resolvePatientByContact } from './patient-identity'
 
 export interface SyncBookingResult {
   patientId: string
@@ -29,7 +30,8 @@ export interface SyncBookingResult {
 export async function syncBookingToPatient(
   practiceId: string,
   booking: CalBooking,
-  userId?: string
+  userId?: string,
+  options?: { preferredPatientId?: string | null }
 ): Promise<SyncBookingResult> {
   console.log('[syncBookingToPatient] Starting sync for booking:', booking.uid || booking.id, 'practiceId:', practiceId)
   
@@ -52,83 +54,57 @@ export async function syncBookingToPatient(
 
   // Normalize phone number for matching
   const normalizedPhone = attendeePhone?.replace(/\D/g, '') || null
+  const bookingId = booking.uid || String(booking.id)
 
-  // Try to find existing patient by email, phone, or name
-  let patient = null
-  let matchReason = ''
-
-  // First, try by email (most reliable)
-  if (attendeeEmail) {
-    patient = await prisma.patient.findFirst({
-      where: {
-        practiceId,
-        email: attendeeEmail,
-        deletedAt: null,
+  // Appointment already linked to a patient profile — never re-match by shared email/phone.
+  const linkedAppointment = await prisma.appointment.findFirst({
+    where: { calBookingId: bookingId },
+    include: {
+      patient: {
+        select: { id: true, name: true, phone: true, email: true },
       },
-    })
-    if (patient) {
-      matchReason = 'email'
+    },
+  })
+  if (linkedAppointment?.patient) {
+    return {
+      patientId: linkedAppointment.patient.id,
+      isNew: false,
+      patient: {
+        id: linkedAppointment.patient.id,
+        name: linkedAppointment.patient.name,
+        phone: linkedAppointment.patient.phone,
+        email: linkedAppointment.patient.email,
+      },
     }
   }
 
-  // If no match by email, try by phone
-  if (!patient && normalizedPhone) {
-    patient = await prisma.patient.findFirst({
-      where: {
-        practiceId,
-        phone: normalizedPhone,
-        deletedAt: null,
-      },
-    })
-    if (patient) {
-      matchReason = 'phone'
-    }
+  const attendeeDob =
+    (booking.metadata?.dateOfBirth as string | undefined) ||
+    (booking.metadata?.dob as string | undefined) ||
+    null
 
-    // Also try normalized matching
-    if (!patient) {
-      const allPatients = await prisma.patient.findMany({
-        where: {
-          practiceId,
-          deletedAt: null,
-        },
-        select: {
-          id: true,
-          phone: true,
-        },
-      })
+  const resolution = await resolvePatientByContact({
+    practiceId,
+    preferredPatientId: options?.preferredPatientId,
+    email: attendeeEmail,
+    phone: normalizedPhone,
+    name: attendeeName,
+    dateOfBirth: attendeeDob,
+  })
 
-      const matchedPatient = allPatients.find(p => p.phone?.replace(/\D/g, '') === normalizedPhone)
-      if (matchedPatient) {
-        patient = await prisma.patient.findUnique({
-          where: { id: matchedPatient.id },
-        })
-        if (patient) {
-          matchReason = 'phone_normalized'
-        }
-      }
-    }
+  if (resolution.ambiguous) {
+    throw new Error(
+      `${resolution.candidateCount ?? 'Multiple'} patients in this practice share the same contact info. ` +
+        'Open the correct patient profile (date of birth must match) before syncing this booking.'
+    )
   }
 
-  // If still no match, try by name (less reliable, so we do it last)
-  if (!patient && attendeeName) {
-    // Use contains for name matching (case-insensitive)
-    const nameMatches = await prisma.patient.findMany({
-      where: {
-        practiceId,
-        name: {
-          contains: attendeeName,
-          mode: 'insensitive',
-        },
-        deletedAt: null,
-      },
-    })
-
-    // Prefer exact match, then partial match
-    patient = nameMatches.find(p => p.name.toLowerCase() === attendeeName.toLowerCase()) || nameMatches[0]
-    if (patient) {
-      matchReason = 'name'
-    }
-  }
+  let patient =
+    resolution.patient &&
+    (await prisma.patient.findFirst({
+      where: { id: resolution.patient.id, practiceId, deletedAt: null },
+    }))
+  const matchReason = resolution.matchReason || ''
 
   const isNew = !patient
 
@@ -179,7 +155,6 @@ export async function syncBookingToPatient(
     })
 
     // Check if timeline entry already exists for this booking to avoid duplicates
-    const bookingId = booking.uid || String(booking.id)
     const existingTimelineEntry = await prisma.patientTimelineEntry.findFirst({
       where: {
         patientId: updatedPatient.id,
@@ -191,13 +166,12 @@ export async function syncBookingToPatient(
       },
     })
 
-    // Check if appointment already exists for this booking
-    const existingAppointment = await prisma.appointment.findFirst({
-      where: {
-        patientId: updatedPatient.id,
-        calBookingId: bookingId,
-      },
-    })
+    // Check if appointment already exists for this booking (any patient)
+    const existingAppointment =
+      linkedAppointment ??
+      (await prisma.appointment.findFirst({
+        where: { calBookingId: bookingId },
+      }))
 
     // Create or get appointment for timeline entry
     let appointmentForTimeline = existingAppointment
@@ -300,7 +274,6 @@ export async function syncBookingToPatient(
     console.log('[syncBookingToPatient] Created new patient:', newPatient.id, 'practiceId:', newPatient.practiceId)
 
     // Check if timeline entry already exists for this booking to avoid duplicates
-    const bookingId = booking.uid || String(booking.id)
     const existingTimelineEntry = await prisma.patientTimelineEntry.findFirst({
       where: {
         patientId: newPatient.id,

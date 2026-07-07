@@ -4,6 +4,7 @@ import {
   normalizePhoneDigits,
   phoneNumbersMatchLoosely,
   pickPatientMatchForInbound,
+  pickScopedPhoneMatch,
 } from '@/lib/patient-phone-match'
 
 describe('patient phone match helpers', () => {
@@ -24,6 +25,10 @@ describe('patient phone match helpers', () => {
       {
         id: 'lonestar',
         practiceId: '8a48db6f-5e3c-461a-bdb9-7eca3d6acb75',
+        name: 'Test Patient',
+        firstName: 'Test',
+        lastName: 'Patient',
+        dateOfBirth: new Date('1990-01-01T00:00:00.000Z'),
         phone: '17088859801',
         primaryPhone: null,
         secondaryPhone: null,
@@ -31,6 +36,10 @@ describe('patient phone match helpers', () => {
       {
         id: 'john-doe',
         practiceId: '9def9875-2d98-4f67-8745-d954ec02a9bb',
+        name: 'Test Patient',
+        firstName: 'Test',
+        lastName: 'Patient',
+        dateOfBirth: new Date('1990-01-01T00:00:00.000Z'),
         phone: '‪(708) 885-9801‬',
         primaryPhone: '‪(708) 885-9801‬',
         secondaryPhone: null,
@@ -41,5 +50,38 @@ describe('patient phone match helpers', () => {
       '9def9875-2d98-4f67-8745-d954ec02a9bb',
     ])
     expect(picked?.id).toBe('john-doe')
+  })
+
+  it('disambiguates duplicate phone by DOB instead of picking arbitrarily', () => {
+    const steve1992 = {
+      id: 'e91fd677-acc7-4423-b5a8-238ebdc3a538',
+      practiceId: '9def9875-2d98-4f67-8745-d954ec02a9bb',
+      name: 'Steve Madden',
+      firstName: 'Steve',
+      lastName: 'Madden',
+      dateOfBirth: new Date('1992-01-23T00:00:00.000Z'),
+      phone: '17088859801',
+      primaryPhone: '17088859801',
+      secondaryPhone: null,
+    }
+    const steve1996 = {
+      id: '3e343cd3-98e9-4737-9519-085263246b81',
+      practiceId: '9def9875-2d98-4f67-8745-d954ec02a9bb',
+      name: 'Steve Madden',
+      firstName: 'Steve',
+      lastName: 'Madden',
+      dateOfBirth: new Date('1996-01-06T00:00:00.000Z'),
+      phone: '17088859801',
+      primaryPhone: '17088859801',
+      secondaryPhone: null,
+    }
+    const matches = [steve1992, steve1996]
+
+    expect(pickScopedPhoneMatch(matches, { dateOfBirth: '1992-01-23' })?.id).toBe(steve1992.id)
+    expect(pickScopedPhoneMatch(matches, { dateOfBirth: '1996-01-06' })?.id).toBe(steve1996.id)
+    expect(pickScopedPhoneMatch(matches, {})).toBeNull()
+    expect(
+      pickScopedPhoneMatch(matches, { preferredPatientId: steve1996.id })?.id
+    ).toBe(steve1996.id)
   })
 })
