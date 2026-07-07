@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/db'
 import { getCalClient } from '@/lib/cal'
 import { canonicalCalBookingId } from '@/lib/cal-booking-id'
-import { cancelAppointmentInCal } from '@/lib/integrations/cal/appointmentWriteback'
+import { cancelAppointmentInCal, cancelSupersededCalBookings } from '@/lib/integrations/cal/appointmentWriteback'
 import { writeBackAppointmentToOpenDental } from '@/lib/integrations/opendental/appointmentWriteback'
 import {
   getSchedulingSettings,
@@ -76,6 +76,9 @@ export async function acceptEarlierSlotOffer(params: {
     status: appointment.status,
   }
 
+  const originalCalBookingId = appointment.calBookingId
+  const originalStartTime = appointment.startTime
+
   let externalSync: Awaited<ReturnType<typeof syncExternalReschedule>>
   try {
     externalSync = await syncExternalReschedule({
@@ -116,6 +119,14 @@ export async function acceptEarlierSlotOffer(params: {
   })
 
   await markOpenSlotFilled(slot.id)
+
+  await cancelSupersededCalBookings({
+    practiceId,
+    originalCalBookingId,
+    originalStartTime,
+    patientEmail: attempt.patient.email,
+    preserveCalBookingId: externalSync.newCalBookingId ?? null,
+  })
 
   await prisma.outreachAttempt.update({
     where: { id: attempt.id },
@@ -163,7 +174,11 @@ async function syncExternalReschedule(params: {
   }
   newStart: Date
   newEnd: Date
-}): Promise<{ mode: 'none' | 'cal' | 'crm_fallback'; warning?: string }> {
+}): Promise<{
+  mode: 'none' | 'cal' | 'crm_fallback'
+  warning?: string
+  newCalBookingId?: string
+}> {
   const scheduling = await getSchedulingSettings(params.practiceId)
   const isOdLinked = params.appointment.calBookingId?.startsWith('opendental:')
   const isCalLinked =
@@ -225,7 +240,10 @@ async function syncExternalReschedule(params: {
           calEventId: mapping.calEventTypeId,
         },
       })
-      return { mode: 'cal' }
+      return {
+        mode: 'cal',
+        newCalBookingId: canonicalCalBookingId(calBooking.uid, calBooking.id) ?? undefined,
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       if (shouldFallbackToCrmOnlyCalReschedule(message)) {

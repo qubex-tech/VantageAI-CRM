@@ -493,15 +493,21 @@ export class CalApiClient {
    * Cancel a booking
    * Documentation: https://cal.com/docs/api-reference/v2/bookings/cancel-a-booking
    */
-  async cancelBooking(bookingId: string): Promise<void> {
+  async cancelBooking(
+    bookingId: string,
+    options?: { cancellationReason?: string }
+  ): Promise<void> {
     try {
       const response = await fetch(`${this.baseUrl}/bookings/${bookingId}/cancel`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
-          'cal-api-version': '2024-09-04',
+          'cal-api-version': '2024-08-13',
         },
+        body: JSON.stringify({
+          cancellationReason: options?.cancellationReason || 'Cancelled from Vantage CRM',
+        }),
       })
 
       if (!response.ok) {
