@@ -5,10 +5,12 @@ import { Search, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
 interface VariablePickerProps {
   onSelect: (variable: string) => void
   onClose: () => void
+  className?: string
 }
 
 export const VARIABLE_CATEGORIES = [
@@ -68,7 +70,7 @@ export const VARIABLE_CATEGORIES = [
   },
 ]
 
-export default function VariablePicker({ onSelect, onClose }: VariablePickerProps) {
+export default function VariablePicker({ onSelect, onClose, className }: VariablePickerProps) {
   const [searchQuery, setSearchQuery] = useState('')
 
   const filteredCategories = VARIABLE_CATEGORIES.map((category) => ({
@@ -81,7 +83,7 @@ export default function VariablePicker({ onSelect, onClose }: VariablePickerProp
   })).filter((category) => category.variables.length > 0)
 
   return (
-    <Card className="absolute z-50 w-96 shadow-xl border border-gray-200">
+    <Card className={cn('absolute z-50 w-96 shadow-xl border border-gray-200', className)}>
       <div className="p-3 border-b border-gray-200 flex items-center justify-between">
         <h3 className="font-semibold text-sm text-gray-900">Insert Variable</h3>
         <Button variant="ghost" size="sm" onClick={onClose} className="h-6 w-6 p-0">

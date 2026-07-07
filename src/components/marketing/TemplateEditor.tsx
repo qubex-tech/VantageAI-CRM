@@ -874,25 +874,15 @@ export default function TemplateEditor({ template: initialTemplate, brandProfile
                 <div className="space-y-4">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-medium text-gray-700">Placeholders</p>
-                    <div className="relative">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowVariablePicker((open) => !open)}
-                        className="text-xs"
-                      >
-                        Browse all variables
-                      </Button>
-                      {showVariablePicker && (
-                        <div className="absolute right-0 top-full mt-1 z-50">
-                          <VariablePicker
-                            onSelect={insertVariable}
-                            onClose={() => setShowVariablePicker(false)}
-                          />
-                        </div>
-                      )}
-                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowVariablePicker(true)}
+                      className="text-xs"
+                    >
+                      Browse all variables
+                    </Button>
                   </div>
 
                   {SMS_SLOT_FILL_CATEGORIES.map((category) => (
@@ -1066,6 +1056,20 @@ export default function TemplateEditor({ template: initialTemplate, brandProfile
               </Button>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Variable Picker Dialog */}
+      <Dialog open={showVariablePicker} onOpenChange={setShowVariablePicker}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-hidden p-0 gap-0">
+          <VariablePicker
+            className="relative w-full max-w-none shadow-none border-0 rounded-none"
+            onSelect={(key) => {
+              insertVariable(key)
+              setShowVariablePicker(false)
+            }}
+            onClose={() => setShowVariablePicker(false)}
+          />
         </DialogContent>
       </Dialog>
 
