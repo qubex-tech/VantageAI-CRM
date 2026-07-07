@@ -5,6 +5,8 @@ import {
   isAppointmentOptimizationEnabled,
 } from '@/lib/appointment-optimization/settings'
 import type { OpenSlotCreatedPayload, OpenSlotEventMetadata } from '@/lib/appointment-optimization/types'
+import { OPEN_SLOT_STATUS } from '@/lib/appointment-optimization/types'
+import { isOpenSlotFilled } from '@/lib/appointment-optimization/slotFilled'
 
 import type { OpenSlotSource } from '@/lib/appointment-optimization/types'
 
@@ -51,6 +53,41 @@ export async function createOpenSlotEvent(input: CreateOpenSlotInput) {
     },
   })
   if (existing) {
+    const canReopen =
+      (existing.status === OPEN_SLOT_STATUS.FILLED ||
+        existing.status === OPEN_SLOT_STATUS.EXHAUSTED) &&
+      !(await isOpenSlotFilled(existing.id))
+
+    if (canReopen) {
+      await prisma.openSlotEvent.update({
+        where: { id: existing.id },
+        data: {
+          status: OPEN_SLOT_STATUS.OPEN,
+          filledAt: null,
+          sourceAppointmentId: input.sourceAppointmentId ?? existing.sourceAppointmentId,
+          metadata: input.metadata ?? existing.metadata ?? undefined,
+        },
+      })
+
+      const payload: OpenSlotCreatedPayload = {
+        openSlotEventId: existing.id,
+        practiceId: existing.practiceId,
+        providerId: existing.providerId,
+        appointmentType: existing.appointmentType,
+        slotStart: existing.slotStart.toISOString(),
+        slotEnd: existing.slotEnd.toISOString(),
+        durationMinutes: existing.durationMinutes,
+      }
+
+      await inngest.send({
+        name: 'crm/open-slot.created',
+        data: payload,
+        id: `open-slot-reopen-${existing.id}-${Date.now()}`,
+      })
+
+      return { created: true as const, openSlotEventId: existing.id, reopened: true as const }
+    }
+
     return { created: false as const, reason: 'duplicate', openSlotEventId: existing.id }
   }
 
