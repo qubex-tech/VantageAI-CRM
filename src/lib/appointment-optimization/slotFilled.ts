@@ -2,16 +2,15 @@ import { prisma } from '@/lib/db'
 import { OPEN_SLOT_STATUS } from '@/lib/appointment-optimization/types'
 
 /**
- * Returns true if the open slot window is now occupied by a scheduled/confirmed appointment.
- * Portal-driven booking updates the local appointments table via Cal/EHR sync.
+ * Returns true when a scheduled/confirmed appointment occupies this slot window.
+ * Uses live appointment data — not the openSlotEvent.status flag — so a slot marked
+ * `filled` can become available again after that appointment is cancelled.
  */
 export async function isOpenSlotFilled(openSlotEventId: string): Promise<boolean> {
   const slot = await prisma.openSlotEvent.findUnique({
     where: { id: openSlotEventId },
   })
-  if (!slot || slot.status !== OPEN_SLOT_STATUS.OPEN) {
-    return slot?.status === OPEN_SLOT_STATUS.FILLED
-  }
+  if (!slot) return false
 
   const overlapping = await prisma.appointment.findFirst({
     where: {

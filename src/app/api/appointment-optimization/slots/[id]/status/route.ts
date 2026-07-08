@@ -5,6 +5,7 @@ import {
   isOpenSlotFilled,
   markOpenSlotFilled,
 } from '@/lib/appointment-optimization/slotFilled'
+import { OPEN_SLOT_STATUS } from '@/lib/appointment-optimization/types'
 
 /**
  * GET /api/appointment-optimization/slots/[id]/status
@@ -28,9 +29,18 @@ export async function GET(
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
 
-    const filled = await isOpenSlotFilled(id)
-    if (filled && slot.status === 'open') {
+    const occupied = await isOpenSlotFilled(id)
+    if (occupied && slot.status === OPEN_SLOT_STATUS.OPEN) {
       await markOpenSlotFilled(id)
+    } else if (
+      !occupied &&
+      (slot.status === OPEN_SLOT_STATUS.FILLED ||
+        slot.status === OPEN_SLOT_STATUS.EXHAUSTED)
+    ) {
+      await prisma.openSlotEvent.update({
+        where: { id },
+        data: { status: OPEN_SLOT_STATUS.OPEN, filledAt: null },
+      })
     }
 
     const updated = await prisma.openSlotEvent.findUnique({
@@ -43,7 +53,7 @@ export async function GET(
 
     return NextResponse.json({
       openSlotEventId: id,
-      filled,
+      filled: occupied,
       slot: updated,
     })
   } catch (error) {
