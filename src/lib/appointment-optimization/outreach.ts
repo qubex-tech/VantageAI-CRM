@@ -13,8 +13,8 @@ import {
 } from '@/lib/appointment-optimization/settings'
 import {
   isOpenSlotFilled,
-  markOpenSlotExhausted,
   markOpenSlotFilled,
+  syncOpenSlotLifecycle,
 } from '@/lib/appointment-optimization/slotFilled'
 import { WAVE_BATCH_SIZE } from '@/lib/appointment-optimization/types'
 import { formatAppointmentForVoice, type VoiceAppointment } from '@/lib/appointments/voice-context'
@@ -129,8 +129,12 @@ export async function processSlotWave(params: {
       where: { id: wave.id },
       data: { status: 'completed', completedAt: new Date(), patientsTargeted: 0 },
     })
-    await markOpenSlotExhausted(slot.id)
-    return { status: 'exhausted', patientsContacted: 0 }
+    if (await isOpenSlotFilled(slot.id)) {
+      await markOpenSlotFilled(slot.id)
+      return { status: 'skipped', reason: 'slot_already_filled' }
+    }
+    // Keep the slot open for wave-1 replies until the time is actually occupied.
+    return { status: 'no_more_candidates', patientsContacted: 0 }
   }
 
   const practice = await prisma.practice.findUnique({
@@ -318,9 +322,19 @@ export async function handleSlotFillCheck(params: {
   })
   if (!slot) return { action: 'missing' }
 
-  if (await isOpenSlotFilled(params.openSlotEventId)) {
-    await markOpenSlotFilled(params.openSlotEventId)
+  await syncOpenSlotLifecycle(params.openSlotEventId)
+
+  const refreshed = await prisma.openSlotEvent.findFirst({
+    where: { id: params.openSlotEventId, practiceId: params.practiceId },
+  })
+  if (!refreshed) return { action: 'missing' }
+
+  if (refreshed.status === 'filled' || (await isOpenSlotFilled(params.openSlotEventId))) {
     return { action: 'filled' }
+  }
+
+  if (refreshed.status === 'exhausted' || refreshed.slotStart <= new Date()) {
+    return { action: 'expired' }
   }
 
   const nextWave = params.waveNumber + 1

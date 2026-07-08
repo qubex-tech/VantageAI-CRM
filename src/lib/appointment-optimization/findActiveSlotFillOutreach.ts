@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/db'
-import { OPEN_SLOT_STATUS } from '@/lib/appointment-optimization/types'
 import { patientMatchesReplyPhone } from '@/lib/patient-phone-match'
+import { isSlotOpenForReplies } from '@/lib/appointment-optimization/slotFilled'
 
 const REPLY_WINDOW_MS = 14 * 24 * 60 * 60 * 1000
 
@@ -37,17 +37,48 @@ type OutreachAttemptWithContext = Awaited<
   ReturnType<typeof prisma.outreachAttempt.findMany<{ include: typeof outreachAttemptInclude }>>
 >[number]
 
-function pickActiveSlotFillAttempt(
+export function canAcceptSlotFillReply(params: {
+  slotStart: Date
+  slotUnfilled: boolean
+  appointmentId: string | null
+  appointmentStatus: string | null | undefined
+}): boolean {
+  if (params.slotStart <= new Date()) return false
+  if (!params.slotUnfilled) return false
+  if (!params.appointmentId) return false
+  if (!params.appointmentStatus) return false
+  return ['scheduled', 'confirmed'].includes(params.appointmentStatus)
+}
+
+async function pickActiveSlotFillAttempt(
   attempts: OutreachAttemptWithContext[]
-): OutreachAttemptWithContext | null {
+): Promise<OutreachAttemptWithContext | null> {
+  const slotUnfilledCache = new Map<string, boolean>()
+
   for (const attempt of attempts) {
     const slot = attempt.openSlotEvent
-    if (!slot || slot.status !== OPEN_SLOT_STATUS.OPEN) continue
-    if (slot.slotStart <= new Date()) continue
-    if (!attempt.appointmentId || !attempt.appointment) continue
-    if (!['scheduled', 'confirmed'].includes(attempt.appointment.status)) continue
+    if (!slot) continue
+
+    let slotUnfilled = slotUnfilledCache.get(slot.id)
+    if (slotUnfilled === undefined) {
+      slotUnfilled = await isSlotOpenForReplies(slot.id)
+      slotUnfilledCache.set(slot.id, slotUnfilled)
+    }
+
+    if (
+      !canAcceptSlotFillReply({
+        slotStart: slot.slotStart,
+        slotUnfilled,
+        appointmentId: attempt.appointmentId,
+        appointmentStatus: attempt.appointment?.status,
+      })
+    ) {
+      continue
+    }
+
     return attempt
   }
+
   return null
 }
 

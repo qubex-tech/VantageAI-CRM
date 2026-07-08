@@ -2,6 +2,13 @@ import { inngest } from '../client'
 import { processSlotWave, handleSlotFillCheck } from '@/lib/appointment-optimization/outreach'
 import { WAVE_WAIT_MS } from '@/lib/appointment-optimization/types'
 
+function shouldStopWaves(result: { status?: string; reason?: string } | undefined) {
+  if (!result) return false
+  if (result.status === 'no_more_candidates') return true
+  if (result.status === 'skipped' && result.reason === 'slot_already_filled') return true
+  return false
+}
+
 export const handleOpenSlotCreated = inngest.createFunction(
   {
     id: 'appointment-optimization-open-slot-created',
@@ -24,26 +31,32 @@ export const handleOpenSlotCreated = inngest.createFunction(
     const check1 = await step.run('check-after-wave-1', async () => {
       return handleSlotFillCheck({ openSlotEventId, practiceId, waveNumber: 1 })
     })
-    if (check1.action === 'filled' || check1.action === 'missing') {
+    if (check1.action === 'filled' || check1.action === 'missing' || check1.action === 'expired') {
       return check1
     }
 
-    await step.run('wave-2-send', async () => {
+    const wave2 = await step.run('wave-2-send', async () => {
       return processSlotWave({ openSlotEventId, practiceId, waveNumber: 2 })
     })
+    if (shouldStopWaves(wave2)) {
+      return { ...check1, awaitingReplies: true, lastWave: 2, wave2 }
+    }
 
     await step.sleep('wait-after-wave-2', WAVE_WAIT_MS)
 
     const check2 = await step.run('check-after-wave-2', async () => {
       return handleSlotFillCheck({ openSlotEventId, practiceId, waveNumber: 2 })
     })
-    if (check2.action === 'filled' || check2.action === 'missing') {
+    if (check2.action === 'filled' || check2.action === 'missing' || check2.action === 'expired') {
       return check2
     }
 
-    await step.run('wave-3-send', async () => {
+    const wave3 = await step.run('wave-3-send', async () => {
       return processSlotWave({ openSlotEventId, practiceId, waveNumber: 3 })
     })
+    if (shouldStopWaves(wave3)) {
+      return { ...check2, awaitingReplies: true, lastWave: 3, wave3 }
+    }
 
     return { completed: true, waves: 3 }
   }

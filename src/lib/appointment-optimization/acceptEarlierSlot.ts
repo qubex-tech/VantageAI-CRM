@@ -12,7 +12,7 @@ import {
 } from '@/lib/integrations/clinical-system/types'
 import { handleAppointmentChangeForSlotFill } from '@/lib/appointment-optimization/appointmentChangeHandler'
 import { formatSlotDateTime } from '@/lib/appointment-optimization/formatSlotTimes'
-import { markOpenSlotFilled } from '@/lib/appointment-optimization/slotFilled'
+import { markOpenSlotFilled, isSlotOpenForReplies, syncOpenSlotLifecycle } from '@/lib/appointment-optimization/slotFilled'
 import { getPracticeTimeZone } from '@/lib/practice-timezone'
 
 export type AcceptEarlierSlotResult =
@@ -44,11 +44,10 @@ export async function acceptEarlierSlotOffer(params: {
   const appointment = attempt.appointment
   const { practiceId } = attempt
 
-  if (slot.status !== 'open') {
+  await syncOpenSlotLifecycle(slot.id)
+
+  if (!(await isSlotOpenForReplies(slot.id))) {
     return { status: 'skipped', reason: 'slot_not_open' }
-  }
-  if (slot.slotStart <= new Date()) {
-    return { status: 'skipped', reason: 'slot_in_past' }
   }
   if (!['scheduled', 'confirmed'].includes(appointment.status)) {
     return { status: 'skipped', reason: 'appointment_not_active' }

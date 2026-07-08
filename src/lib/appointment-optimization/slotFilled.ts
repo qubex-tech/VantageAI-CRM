@@ -26,6 +26,52 @@ export async function isOpenSlotFilled(openSlotEventId: string): Promise<boolean
   return Boolean(overlapping)
 }
 
+/** True while the slot time is still in the future and no appointment occupies it. */
+export async function isSlotOpenForReplies(openSlotEventId: string): Promise<boolean> {
+  const slot = await prisma.openSlotEvent.findUnique({
+    where: { id: openSlotEventId },
+    select: { slotStart: true },
+  })
+  if (!slot) return false
+  if (slot.slotStart <= new Date()) return false
+  return !(await isOpenSlotFilled(openSlotEventId))
+}
+
+/**
+ * Align slot status with reality: filled when occupied, exhausted only after slot time passes unfilled.
+ */
+export async function syncOpenSlotLifecycle(openSlotEventId: string): Promise<void> {
+  const slot = await prisma.openSlotEvent.findUnique({
+    where: { id: openSlotEventId },
+  })
+  if (!slot) return
+
+  if (await isOpenSlotFilled(openSlotEventId)) {
+    if (slot.status !== OPEN_SLOT_STATUS.FILLED) {
+      await markOpenSlotFilled(openSlotEventId)
+    }
+    return
+  }
+
+  if (
+    slot.slotStart <= new Date() &&
+    (slot.status === OPEN_SLOT_STATUS.OPEN || slot.status === OPEN_SLOT_STATUS.EXHAUSTED)
+  ) {
+    await markOpenSlotExhausted(openSlotEventId)
+    return
+  }
+
+  if (
+    slot.status === OPEN_SLOT_STATUS.FILLED ||
+    slot.status === OPEN_SLOT_STATUS.EXHAUSTED
+  ) {
+    await prisma.openSlotEvent.update({
+      where: { id: openSlotEventId },
+      data: { status: OPEN_SLOT_STATUS.OPEN, filledAt: null },
+    })
+  }
+}
+
 export async function markOpenSlotFilled(openSlotEventId: string) {
   return prisma.openSlotEvent.update({
     where: { id: openSlotEventId },
