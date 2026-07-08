@@ -32,6 +32,8 @@ model Practice {
   calIntegrations            CalIntegration[]
   calEventTypeMappings       CalEventTypeMapping[]
   retellIntegrations         RetellIntegration[]
+  availityIntegrations       AvailityIntegration[]
+  eligibilityChecks          EligibilityCheck[]
   sendgridIntegrations       SendgridIntegration[]
   twilioIntegrations         TwilioIntegration[]
   telnyxIntegrations         TelnyxIntegration[]
@@ -182,6 +184,7 @@ model Patient {
 
   practice                   Practice                    @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   insurancePolicies          InsurancePolicy[]
+  eligibilityChecks          EligibilityCheck[]
   appointments               Appointment[]
   outreachAttempts           OutreachAttempt[]
   voiceConversations         VoiceConversation[]
@@ -294,16 +297,75 @@ model InsurancePolicy {
   rxGroup                String?
   cardFrontRef           String? // Blob storage ref/URL only
   cardBackRef            String? // Blob storage ref/URL only
+  availityPayerId        String? // Availity payer identifier for 270/271
+  eligibilityStatus      String? // active, inactive, unknown, error, pending
+  lastEligibilityCheckedAt DateTime?
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
-  patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  practice          Practice           @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient           Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  eligibilityChecks EligibilityCheck[]
 
   @@index([practiceId])
   @@index([patientId])
   @@index([memberId])
+  @@index([availityPayerId])
   @@map("insurance_policies")
+}
+
+model AvailityIntegration {
+  id                    String   @id @default(uuid())
+  practiceId            String   @unique
+  clientId              String?
+  clientSecretEnc       String?
+  environment           String   @default("demo") // demo | production
+  apiBaseUrl            String?  // override if Availity path differs per env
+  defaultProviderNpi    String?
+  defaultProviderTaxId  String?
+  defaultServiceType    String   @default("30")
+  submitterId           String?
+  submitterStateCode    String?
+  useMockResponses      Boolean  @default(true)
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId])
+  @@map("availity_integrations")
+}
+
+model EligibilityCheck {
+  id                  String    @id @default(uuid())
+  practiceId          String
+  patientId           String
+  policyId            String
+  source              String    @default("availity_api") // availity_api | voice_agent
+  status              String    @default("pending") // pending | in_progress | complete | failed | fallback_voice
+  availityCoverageId  String?
+  availityStatusCode  String?
+  requestPayload      Json?
+  rawResponse         Json?
+  parsedSummary       Json?
+  errorMessage        String?
+  fallbackCallId      String?
+  fallbackConversationId String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  completedAt         DateTime?
+
+  practice Practice        @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient  Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  policy   InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId])
+  @@index([patientId])
+  @@index([policyId])
+  @@index([status])
+  @@index([practiceId, patientId])
+  @@map("eligibility_checks")
 }
 
 model Appointment {

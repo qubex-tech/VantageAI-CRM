@@ -31,6 +31,7 @@ function mapBodyToUpdateData(body: Record<string, unknown>) {
   if (validated.rxGroup !== undefined) data.rxGroup = validated.rxGroup || null
   if (validated.cardFrontRef !== undefined) data.cardFrontRef = validated.cardFrontRef || null
   if (validated.cardBackRef !== undefined) data.cardBackRef = validated.cardBackRef || null
+  if (validated.availityPayerId !== undefined) data.availityPayerId = validated.availityPayerId || null
   return data
 }
 

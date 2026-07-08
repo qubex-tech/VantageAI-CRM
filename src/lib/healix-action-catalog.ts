@@ -82,6 +82,15 @@ export const HEALIX_ACTION_CATALOG: HealixActionCatalogEntry[] = [
     executable: true,
   },
   {
+    id: 'check-insurance-eligibility',
+    label: 'Check insurance eligibility (Availity)',
+    description: 'Run Availity API eligibility check; falls back to voice verification if needed.',
+    toolName: 'checkInsuranceEligibility',
+    requiredArgs: ['patientId|patientName', 'policyId(optional)'],
+    example: 'Check if this patient\'s insurance is active before their visit.',
+    executable: true,
+  },
+  {
     id: 'start-insurance-verification-call',
     label: 'Start insurance verification call',
     description: 'Initiate an outbound Retell call to the insurer using patient + policy context.',

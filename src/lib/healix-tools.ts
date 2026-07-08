@@ -30,6 +30,7 @@ import {
   resolveReadSource,
 } from '@/lib/integrations/clinical-system/types'
 import { initiateInsuranceOutboundCall } from './outbound-insurance-call'
+import { runInsuranceVerification } from './eligibility/run-insurance-verification'
 
 export interface HealixToolResult {
   success: boolean
@@ -154,6 +155,15 @@ export interface StartInsuranceVerificationCallParams {
   agentId?: string
 }
 
+export interface CheckInsuranceEligibilityParams {
+  clinicId: string
+  patientId?: string
+  patientName?: string
+  policyId?: string
+  insurerPhone?: string
+  agentId?: string
+}
+
 /**
  * Allowed tool names for validation
  */
@@ -173,6 +183,7 @@ export const ALLOWED_TOOLS = [
   'getPatientSummary',
   'getAppointmentSummary',
   'startInsuranceVerificationCall',
+  'checkInsuranceEligibility',
 ] as const
 
 export type AllowedToolName = typeof ALLOWED_TOOLS[number]
@@ -1843,6 +1854,60 @@ export async function getAppointmentSummary(
 }
 
 /**
+ * Check insurance eligibility via Availity API (voice fallback on failure).
+ */
+export async function checkInsuranceEligibility(
+  params: CheckInsuranceEligibilityParams,
+  userId: string
+): Promise<HealixToolResult> {
+  try {
+    const { hasAccess } = await validateClinicAccess(userId, params.clinicId)
+    if (!hasAccess) {
+      return {
+        success: false,
+        message: 'Access denied: You do not have permission to run eligibility checks in this clinic',
+      }
+    }
+
+    const resolved = await resolvePatientId(params.clinicId, params.patientId, params.patientName)
+    if (resolved.candidates) {
+      return {
+        success: false,
+        message: `Multiple patients match "${params.patientName}". Please specify the patient.`,
+        data: { candidates: resolved.candidates },
+      }
+    }
+    if (!resolved.patientId) {
+      return {
+        success: false,
+        message: resolved.error || 'Patient not found',
+      }
+    }
+
+    const result = await runInsuranceVerification({
+      practiceId: params.clinicId,
+      userId,
+      patientId: resolved.patientId,
+      policyId: params.policyId,
+      insurerPhone: params.insurerPhone,
+      agentId: params.agentId,
+      source: 'healix',
+    })
+
+    return {
+      success: true,
+      message: result.message,
+      data: result,
+    }
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to check insurance eligibility',
+    }
+  }
+}
+
+/**
  * Start an outbound insurance verification call via Retell MCP.
  */
 export async function startInsuranceVerificationCall(
@@ -1954,6 +2019,8 @@ export async function executeTool(
       return getAppointmentSummary(args as GetAppointmentSummaryParams, userId)
     case 'startInsuranceVerificationCall':
       return startInsuranceVerificationCall(args as StartInsuranceVerificationCallParams, userId)
+    case 'checkInsuranceEligibility':
+      return checkInsuranceEligibility(args as CheckInsuranceEligibilityParams, userId)
     default:
       return {
         success: false,

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { computeInsuranceCompleteness, maskMemberId } from '@/lib/insurance-completeness'
 import { InsurancePolicyFormModal } from './InsurancePolicyFormModal'
-import { Shield, Plus, Pencil, Trash2, User, UserCircle, RefreshCw } from 'lucide-react'
+import { Shield, Plus, Pencil, Trash2, User, UserCircle, RefreshCw, CheckCircle2 } from 'lucide-react'
 
 type InsurancePolicy = {
   id: string
@@ -27,6 +27,18 @@ type InsurancePolicy = {
   rxBin?: string | null
   rxPcn?: string | null
   rxGroup?: string | null
+  availityPayerId?: string | null
+  eligibilityStatus?: string | null
+  lastEligibilityCheckedAt?: Date | string | null
+}
+
+type EligibilityCheckSummary = {
+  id: string
+  status: string
+  errorMessage?: string | null
+  parsedSummary?: { eligibilityStatus?: string } | null
+  createdAt: string
+  policy?: { payerNameRaw?: string }
 }
 
 type Patient = {
@@ -50,6 +62,44 @@ interface InsuranceTabProps {
   onRefresh: () => void
 }
 
+function eligibilityBadge(status?: string | null) {
+  if (!status) return null
+  const normalized = status.toLowerCase()
+  if (normalized === 'active') {
+    return (
+      <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+        Eligible
+      </span>
+    )
+  }
+  if (normalized === 'inactive') {
+    return (
+      <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+        Inactive
+      </span>
+    )
+  }
+  if (normalized === 'pending' || normalized === 'in_progress') {
+    return (
+      <span className="rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+        Checking…
+      </span>
+    )
+  }
+  if (normalized === 'error' || normalized === 'failed') {
+    return (
+      <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+        Check failed
+      </span>
+    )
+  }
+  return (
+    <span className="rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
+      {status}
+    </span>
+  )
+}
+
 export function InsuranceTab({
   patientId,
   practiceId,
@@ -62,7 +112,25 @@ export function InsuranceTab({
   const [editingPolicy, setEditingPolicy] = useState<InsurancePolicy | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
+  const [checkingPolicyId, setCheckingPolicyId] = useState<string | null>(null)
+  const [checkMessage, setCheckMessage] = useState<string | null>(null)
+  const [recentChecks, setRecentChecks] = useState<EligibilityCheckSummary[]>([])
   const autoSyncAttempted = useRef(false)
+
+  const loadRecentChecks = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/insurance/eligibility-check?patientId=${patientId}`)
+      if (!res.ok) return
+      const data = await res.json()
+      setRecentChecks(data.checks || [])
+    } catch {
+      // non-blocking
+    }
+  }, [patientId])
+
+  useEffect(() => {
+    void loadRecentChecks()
+  }, [loadRecentChecks, policies])
 
   const syncFromEhr = useCallback(async () => {
     if (!externalEhrId?.trim()) {
@@ -117,6 +185,52 @@ export function InsuranceTab({
     }
   }
 
+  const handleCheckEligibility = async (policy: InsurancePolicy) => {
+    setCheckingPolicyId(policy.id)
+    setCheckMessage(null)
+    try {
+      const res = await fetch('/api/insurance/eligibility-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ patientId, policyId: policy.id }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data?.error || 'Eligibility check failed')
+      }
+      setCheckMessage(data.message || 'Eligibility check started')
+      await loadRecentChecks()
+      onRefresh()
+
+      const checkId = data.eligibility?.eligibilityCheckId
+      if (checkId && (data.path === 'availity_in_progress' || data.eligibility?.status === 'in_progress')) {
+        for (let i = 0; i < 20; i++) {
+          await new Promise((r) => setTimeout(r, 3000))
+          const poll = await fetch(`/api/insurance/eligibility-check/${checkId}`)
+          if (!poll.ok) break
+          const pollData = await poll.json()
+          const status = pollData.check?.status
+          if (status === 'complete' || status === 'failed' || status === 'fallback_voice') {
+            setCheckMessage(
+              status === 'complete'
+                ? 'Eligibility check completed'
+                : status === 'fallback_voice'
+                  ? 'Availity check failed — voice verification started'
+                  : pollData.check?.errorMessage || 'Eligibility check failed'
+            )
+            await loadRecentChecks()
+            onRefresh()
+            break
+          }
+        }
+      }
+    } catch (err) {
+      setCheckMessage(err instanceof Error ? err.message : 'Eligibility check failed')
+    } finally {
+      setCheckingPolicyId(null)
+    }
+  }
+
   const handleModalSuccess = () => {
     onRefresh()
   }
@@ -148,6 +262,12 @@ export function InsuranceTab({
       {syncError && (
         <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
           {syncError}
+        </p>
+      )}
+
+      {checkMessage && (
+        <p className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+          {checkMessage}
         </p>
       )}
 
@@ -188,14 +308,21 @@ export function InsuranceTab({
                           ⚠️ Missing info
                         </span>
                       )}
+                      {eligibilityBadge(policy.eligibilityStatus)}
                     </div>
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
                       <span>Member ID: {maskMemberId(policy.memberId)}</span>
                       {policy.insurerPhoneRaw && <span>Insurer phone: {policy.insurerPhoneRaw}</span>}
+                      {policy.availityPayerId && <span>Availity payer: {policy.availityPayerId}</span>}
                       {policy.groupNumber && (
                         <span>Group #: {policy.groupNumber}</span>
                       )}
                       {policy.planName && <span>Plan: {policy.planName}</span>}
+                      {policy.lastEligibilityCheckedAt && (
+                        <span>
+                          Last checked: {new Date(policy.lastEligibilityCheckedAt).toLocaleString()}
+                        </span>
+                      )}
                       <span className="inline-flex items-center gap-1">
                         Subscriber: {policy.subscriberIsPatient ? (
                           <>
@@ -221,6 +348,16 @@ export function InsuranceTab({
                   </div>
                   <div className="flex items-center gap-2">
                     <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void handleCheckEligibility(policy)}
+                      disabled={checkingPolicyId === policy.id}
+                      className="gap-1"
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      {checkingPolicyId === policy.id ? 'Checking…' : 'Check eligibility'}
+                    </Button>
+                    <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => handleEdit(policy)}
@@ -244,6 +381,24 @@ export function InsuranceTab({
             )
           })}
         </ul>
+      )}
+
+      {recentChecks.length > 0 && (
+        <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-4">
+          <h3 className="text-sm font-semibold text-gray-900">Recent eligibility checks</h3>
+          <ul className="mt-2 space-y-2">
+            {recentChecks.slice(0, 5).map((check) => (
+              <li key={check.id} className="text-sm text-gray-600">
+                {new Date(check.createdAt).toLocaleString()} — {check.policy?.payerNameRaw || 'Policy'}:{' '}
+                {check.status}
+                {check.parsedSummary?.eligibilityStatus
+                  ? ` (${check.parsedSummary.eligibilityStatus})`
+                  : ''}
+                {check.errorMessage ? ` — ${check.errorMessage}` : ''}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       <InsurancePolicyFormModal

@@ -9,4 +9,5 @@ export { syncOpenDentalDaily } from './sync-opendental-daily'
 export { handleOpenSlotCreated, checkOpenSlotStatus } from './appointment-optimization'
 export { slotFillRulesEvalDaily } from './slot-fill-rules-eval'
 export { enrichPatientFromEhrJob } from './enrich-patient-from-ehr'
+export { pollAvailityCoverage } from './poll-availity-coverage'
 

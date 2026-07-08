@@ -52,6 +52,7 @@ type InsurancePolicy = {
   rxBin?: string | null
   rxPcn?: string | null
   rxGroup?: string | null
+  availityPayerId?: string | null
 }
 
 interface InsurancePolicyFormModalProps {
@@ -88,6 +89,7 @@ const defaultValues: InsurancePolicyFormValues = {
   rxBin: '',
   rxPcn: '',
   rxGroup: '',
+  availityPayerId: '',
 }
 
 function isBcbsPayer(name: string): boolean {
@@ -142,6 +144,7 @@ export function InsurancePolicyFormModal({
         rxBin: policy.rxBin ?? '',
         rxPcn: policy.rxPcn ?? '',
         rxGroup: policy.rxGroup ?? '',
+        availityPayerId: policy.availityPayerId ?? '',
       })
     } else {
       setFormValues(defaultValues)
@@ -276,6 +279,19 @@ export function InsurancePolicyFormModal({
                 {errors.payerNameRaw && (
                   <p className="mt-1 text-xs text-red-600">{errors.payerNameRaw}</p>
                 )}
+              </div>
+              <div className="sm:col-span-2">
+                <Label htmlFor="availityPayerId">Availity payer ID</Label>
+                <Input
+                  id="availityPayerId"
+                  value={formValues.availityPayerId ?? ''}
+                  onChange={(e) => setValue('availityPayerId', e.target.value)}
+                  placeholder="e.g. BCBSF, AETNA"
+                  className="mt-1"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Required for API eligibility checks. Search payers in Settings → Availity.
+                </p>
               </div>
               <div>
                 <Label htmlFor="insurerPhone">Insurer phone</Label>

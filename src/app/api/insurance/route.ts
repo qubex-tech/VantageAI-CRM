@@ -31,6 +31,7 @@ function mapBodyToPolicyData(body: Record<string, unknown>, practiceId: string, 
     rxGroup: validated.rxGroup || null,
     cardFrontRef: validated.cardFrontRef || null,
     cardBackRef: validated.cardBackRef || null,
+    availityPayerId: validated.availityPayerId || null,
   }
 }
 

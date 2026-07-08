@@ -21,6 +21,7 @@ import { SmsFromNumberSettings } from './SmsFromNumberSettings'
 import { ClinicalIntegrationsSettings } from './ClinicalIntegrationsSettings'
 import { OutboundCustomerNotificationsSettings } from './OutboundCustomerNotificationsSettings'
 import { OutboundAgentsSettings } from './OutboundAgentsSettings'
+import { AvailitySettings } from './AvailitySettings'
 import { PreChartTemplateSettings } from './PreChartTemplateSettings'
 
 interface Practice {
@@ -52,6 +53,7 @@ export function PracticeAPIConfiguration() {
   const [loadingIntegrations, setLoadingIntegrations] = useState(false)
   const [calIntegration, setCalIntegration] = useState<any>(null)
   const [retellIntegration, setRetellIntegration] = useState<any>(null)
+  const [availityIntegration, setAvailityIntegration] = useState<any>(null)
   const [resendIntegration, setResendIntegration] = useState<any>(null)
   const [twilioIntegration, setTwilioIntegration] = useState<any>(null)
   const [telnyxIntegration, setTelnyxIntegration] = useState<any>(null)
@@ -82,6 +84,7 @@ export function PracticeAPIConfiguration() {
     if (!selectedPracticeId) {
       setCalIntegration(null)
       setRetellIntegration(null)
+      setAvailityIntegration(null)
       setResendIntegration(null)
       setTwilioIntegration(null)
       setTelnyxIntegration(null)
@@ -111,6 +114,12 @@ export function PracticeAPIConfiguration() {
         if (retellResponse.ok) {
           const retellData = await retellResponse.json()
           setRetellIntegration(retellData.integration)
+        }
+
+        const availityResponse = await fetch(`/api/settings/availity?practiceId=${selectedPracticeId}`)
+        if (availityResponse.ok) {
+          const availityData = await availityResponse.json()
+          setAvailityIntegration(availityData.integration)
         }
 
         // Fetch Resend integration
@@ -241,6 +250,10 @@ export function PracticeAPIConfiguration() {
                   practiceId={selectedPracticeId}
                   initialIntegration={retellIntegration}
                 />
+                <AvailitySettingsWithPracticeId
+                  practiceId={selectedPracticeId}
+                  initialIntegration={availityIntegration}
+                />
                 <ResendSettingsWithPracticeId
                   practiceId={selectedPracticeId}
                   initialIntegration={resendIntegration}
@@ -325,6 +338,16 @@ function RetellSettingsWithPracticeId({
   initialIntegration: any
 }) {
   return <RetellSettings initialIntegration={initialIntegration} practiceId={practiceId} />
+}
+
+function AvailitySettingsWithPracticeId({
+  practiceId,
+  initialIntegration,
+}: {
+  practiceId: string
+  initialIntegration: any
+}) {
+  return <AvailitySettings initialIntegration={initialIntegration} practiceId={practiceId} />
 }
 
 function ResendSettingsWithPracticeId({ 

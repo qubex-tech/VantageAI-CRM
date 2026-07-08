@@ -414,17 +414,21 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
 
     const prompt = insurerPhone
       ? [
-          'Start insurance verification outbound call flow.',
+          'Run insurance verification for this patient.',
+          'First call POST /api/insurance/eligibility-check (Availity API).',
+          'Only if Availity fails or prerequisites are missing, fall back to voice insurer call.',
           `Patient: ${patientName} (${patient.id})`,
           `Policy: ${policyContext}`,
           `Insurer phone on file: ${insurerPhone}`,
-          'Confirm the phone number and then call POST /api/calls with patientId, policyId, and insurerPhone.',
+          'Use patientId and policyId in the API request.',
         ].join('\n')
       : [
-          'Start insurance verification outbound call flow.',
+          'Run insurance verification for this patient.',
+          'First call POST /api/insurance/eligibility-check (Availity API).',
+          'Only if Availity fails, ask for insurer phone and start voice verification.',
           `Patient: ${patientName} (${patient.id})`,
           `Policy: ${policyContext}`,
-          'Ask me for the insurance company phone number first, then call POST /api/calls with patientId, policyId, and insurerPhone.',
+          'Use patientId and policyId in the API request.',
         ].join('\n')
 
     setHealixContextOverride({

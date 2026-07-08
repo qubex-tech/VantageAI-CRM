@@ -107,6 +107,7 @@ const insurancePolicyFormSchemaBase = z.object({
   rxBin: z.string().optional(),
   rxPcn: z.string().optional(),
   rxGroup: z.string().optional(),
+  availityPayerId: z.string().optional(),
 })
 
 export const insurancePolicyFormSchema = insurancePolicyFormSchemaBase.refine(
