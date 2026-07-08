@@ -38,6 +38,20 @@ function patientPhoneLast10Values(patient: {
     .filter((digits) => digits.length === 10)
 }
 
+/** Whether a patient's stored numbers match an inbound SMS reply number. */
+export function patientMatchesReplyPhone(
+  patient: {
+    phone: string | null
+    primaryPhone: string | null
+    secondaryPhone: string | null
+  },
+  replyFrom: string
+): boolean {
+  const fromLast10 = getPhoneLast10(replyFrom)
+  if (fromLast10.length < 10) return false
+  return patientPhoneLast10Values(patient).includes(fromLast10)
+}
+
 const patientSelect = {
   id: true,
   practiceId: true,

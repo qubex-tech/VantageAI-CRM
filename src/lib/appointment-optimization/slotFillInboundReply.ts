@@ -8,7 +8,10 @@ import {
   classifySlotFillReply,
   type SlotFillReplyContext,
 } from '@/lib/appointment-optimization/classifySlotFillReply'
-import { findActiveSlotFillOutreach } from '@/lib/appointment-optimization/findActiveSlotFillOutreach'
+import {
+  findActiveSlotFillOutreach,
+  findActiveSlotFillOutreachByReplyPhone,
+} from '@/lib/appointment-optimization/findActiveSlotFillOutreach'
 import { formatSlotDateTime } from '@/lib/appointment-optimization/formatSlotTimes'
 import {
   getOutboundAgentsSettings,
@@ -27,6 +30,8 @@ export async function handleSlotFillInboundSms(params: {
   practiceId: string
   patientId: string
   body: string
+  /** Inbound reply number — used to bind the offer via outreach patientId, not demographics. */
+  replyFrom?: string
 }): Promise<SlotFillInboundReplyResult> {
   const settings = await getOutboundAgentsSettings(params.practiceId)
   if (!isAppointmentOptimizationEnabled(settings)) {
@@ -36,10 +41,17 @@ export async function handleSlotFillInboundSms(params: {
     return { handled: false, reason: 'practice_number_no_inbound' }
   }
 
-  const attempt = await findActiveSlotFillOutreach({
-    practiceId: params.practiceId,
-    patientId: params.patientId,
-  })
+  const attempt =
+    (params.replyFrom
+      ? await findActiveSlotFillOutreachByReplyPhone({
+          practiceIds: [params.practiceId],
+          replyFrom: params.replyFrom,
+        })
+      : null) ??
+    (await findActiveSlotFillOutreach({
+      practiceId: params.practiceId,
+      patientId: params.patientId,
+    }))
   if (!attempt?.openSlotEvent || !attempt.appointment) {
     return { handled: false, reason: 'no_active_offer' }
   }

@@ -110,7 +110,7 @@ async function handleInboundMessage(
     return
   }
 
-  const { patient, integrationPracticeIds } = inboundContext
+  const { patient, integrationPracticeIds, resolution } = inboundContext
 
   if (bodyText.toUpperCase() === 'STOP') {
     if (!patient) {
@@ -150,11 +150,13 @@ async function handleInboundMessage(
       practiceId: patient.practiceId,
       patientId: patient.id,
       body: bodyText,
+      replyFrom: from,
     })
     if (slotFillResult.handled) {
       console.info('[SlotFill] inbound SMS handled', {
         practiceId: patient.practiceId,
         patientId: patient.id,
+        resolution,
         action: slotFillResult.action,
         reason: slotFillResult.reason,
       })

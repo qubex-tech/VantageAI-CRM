@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   getPhoneLast10,
   normalizePhoneDigits,
+  patientMatchesReplyPhone,
   phoneNumbersMatchLoosely,
   pickPatientMatchForInbound,
   pickScopedPhoneMatch,
@@ -50,6 +51,16 @@ describe('patient phone match helpers', () => {
       '9def9875-2d98-4f67-8745-d954ec02a9bb',
     ])
     expect(picked?.id).toBe('john-doe')
+  })
+
+  it('matches reply phone against patient record numbers', () => {
+    const patient = {
+      phone: '‪(708) 885-9801‬',
+      primaryPhone: '‪(708) 885-9801‬',
+      secondaryPhone: null,
+    }
+    expect(patientMatchesReplyPhone(patient, '+17088859801')).toBe(true)
+    expect(patientMatchesReplyPhone(patient, '+13125551234')).toBe(false)
   })
 
   it('disambiguates duplicate phone by DOB instead of picking arbitrarily', () => {
