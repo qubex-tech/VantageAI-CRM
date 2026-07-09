@@ -49,17 +49,26 @@ type DraftBlockSelection = {
   endMin: number
 }
 
-function snapMinutes(totalMinutes: number): number {
-  return Math.round(totalMinutes / SNAP_MINUTES) * SNAP_MINUTES
+/** Map pointer into the 15-minute slot that contains it (Google Calendar-style). */
+function snapMinutesFloor(totalMinutes: number): number {
+  return Math.floor(totalMinutes / SNAP_MINUTES) * SNAP_MINUTES
 }
 
-function pointerYToGridMinutes(clientY: number, columnTop: number): number {
-  const y = clientY - columnTop
-  const minutesFromGridStart = (y / PX_PER_HOUR) * 60
-  const absolute = GRID_START_MIN + minutesFromGridStart
+/** Snap end edge up so dragging through a slot includes that slot. */
+function snapMinutesCeil(totalMinutes: number): number {
+  return Math.ceil(totalMinutes / SNAP_MINUTES) * SNAP_MINUTES
+}
+
+function pointerYToRawMinutes(clientY: number, columnTop: number): number {
+  const y = Math.max(0, clientY - columnTop)
+  return GRID_START_MIN + (y / PX_PER_HOUR) * 60
+}
+
+function pointerYToStartMinutes(clientY: number, columnTop: number): number {
+  const absolute = pointerYToRawMinutes(clientY, columnTop)
   return Math.min(
-    GRID_END_MIN - SNAP_MINUTES,
-    Math.max(GRID_START_MIN, snapMinutes(absolute))
+    GRID_END_MIN - DEFAULT_BLOCK_MINUTES,
+    Math.max(GRID_START_MIN, snapMinutesFloor(absolute))
   )
 }
 
@@ -427,18 +436,24 @@ export function AppointmentsCalendarView({
     const current = draftBlockRef.current
     if (anchor == null || !current) return
 
-    const pointerMin = pointerYToGridMinutes(clientY, columnTop)
-    let startMin = Math.min(anchor, pointerMin)
-    let endMin = Math.max(anchor, pointerMin)
+    const raw = pointerYToRawMinutes(clientY, columnTop)
+    let startMin: number
+    let endMin: number
 
-    // Click / short drag always yields at least the default 30-minute slot
-    if (endMin - startMin < DEFAULT_BLOCK_MINUTES) {
-      if (pointerMin >= anchor) {
-        startMin = anchor
-        endMin = Math.min(GRID_END_MIN, anchor + DEFAULT_BLOCK_MINUTES)
-      } else {
-        endMin = anchor
-        startMin = Math.max(GRID_START_MIN, anchor - DEFAULT_BLOCK_MINUTES)
+    if (raw >= anchor) {
+      // Dragging down/right: keep anchor start, extend end to cover pointer slot
+      startMin = anchor
+      endMin = Math.max(
+        anchor + DEFAULT_BLOCK_MINUTES,
+        Math.min(GRID_END_MIN, snapMinutesCeil(raw))
+      )
+    } else {
+      // Dragging up: move start to the slot under the pointer
+      startMin = Math.max(GRID_START_MIN, snapMinutesFloor(raw))
+      endMin = Math.max(startMin + DEFAULT_BLOCK_MINUTES, anchor + SNAP_MINUTES)
+      endMin = Math.min(GRID_END_MIN, endMin)
+      if (endMin - startMin < DEFAULT_BLOCK_MINUTES) {
+        startMin = Math.max(GRID_START_MIN, endMin - DEFAULT_BLOCK_MINUTES)
       }
     }
 
@@ -456,7 +471,7 @@ export function AppointmentsCalendarView({
     if (target.closest('a, button')) return
 
     const rect = e.currentTarget.getBoundingClientRect()
-    const startMin = pointerYToGridMinutes(e.clientY, rect.top)
+    const startMin = pointerYToStartMinutes(e.clientY, rect.top)
     const endMin = Math.min(GRID_END_MIN, startMin + DEFAULT_BLOCK_MINUTES)
     const draft: DraftBlockSelection = {
       day: startOfDay(day),
