@@ -1,9 +1,11 @@
 import { prisma } from '@/lib/db'
 import { OPEN_SLOT_STATUS } from '@/lib/appointment-optimization/types'
+import { slotOverlapsCalendarBlock } from '@/lib/calendar/blockingIntervals'
 
 /**
- * Returns true when a scheduled/confirmed appointment occupies this slot window.
- * Uses live appointment data — not the openSlotEvent.status flag — so a slot marked
+ * Returns true when a scheduled/confirmed appointment or Vantage calendar block
+ * occupies this slot window.
+ * Uses live data — not the openSlotEvent.status flag — so a slot marked
  * `filled` can become available again after that appointment is cancelled.
  */
 export async function isOpenSlotFilled(openSlotEventId: string): Promise<boolean> {
@@ -23,7 +25,14 @@ export async function isOpenSlotFilled(openSlotEventId: string): Promise<boolean
     select: { id: true },
   })
 
-  return Boolean(overlapping)
+  if (overlapping) return true
+
+  return slotOverlapsCalendarBlock({
+    practiceId: slot.practiceId,
+    slotStart: slot.slotStart,
+    slotEnd: slot.slotEnd,
+    providerId: slot.providerId,
+  })
 }
 
 /** True while the slot time is still in the future and no appointment occupies it. */

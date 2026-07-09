@@ -147,6 +147,39 @@ export const appointmentSchema = z.object({
   notes: z.string().optional(),
 })
 
+const weekdayCodeSchema = z.enum(['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'])
+
+const calendarBlockFieldsSchema = z.object({
+  providerId: z.string().min(1).optional().nullable(),
+  kind: z.enum(['block', 'meeting']).default('block'),
+  title: z.string().min(1, 'Title is required').max(200),
+  notes: z.string().max(2000).optional().nullable(),
+  startTime: z.coerce.date(),
+  endTime: z.coerce.date(),
+  timezone: z.string().min(1),
+  recurrenceFrequency: z.enum(['none', 'daily', 'weekly']).default('none'),
+  recurrenceInterval: z.number().int().min(1).max(52).default(1),
+  recurrenceByDay: z.array(weekdayCodeSchema).default([]),
+  recurrenceUntil: z.coerce.date().optional().nullable(),
+  recurrenceCount: z.number().int().min(1).max(400).optional().nullable(),
+})
+
+export const calendarBlockSchema = calendarBlockFieldsSchema.refine(
+  (data) => data.endTime > data.startTime,
+  {
+    message: 'End time must be after start time',
+    path: ['endTime'],
+  }
+)
+
+export const calendarBlockUpdateSchema = calendarBlockFieldsSchema.partial().extend({
+  scope: z.enum(['series', 'occurrence']).optional(),
+  occurrenceDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+})
+
 export const sendgridIntegrationSchema = z.object({
   apiKey: z.string().min(1, 'API key is required'),
   fromEmail: z.string().email('Valid email address is required'),

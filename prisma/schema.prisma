@@ -25,6 +25,7 @@ model Practice {
   patients                   Patient[]
   insurancePolicies          InsurancePolicy[]
   appointments               Appointment[]
+  calendarBlocks             CalendarBlock[]
   openSlotEvents             OpenSlotEvent[]
   openSlotInventory          OpenSlotInventory[]
   slotWaves                  SlotWave[]
@@ -119,6 +120,7 @@ model User {
   createdTasks                     Task[]                     @relation("CreatedTasks")
   formTemplatesCreated             FormTemplate[]             @relation("FormTemplateCreator")
   formRequestsCreated              FormRequest[]              @relation("FormRequestCreator")
+  calendarBlocksCreated            CalendarBlock[]            @relation("CalendarBlockCreator")
   taskComments                     TaskComment[]
   integrationAuditLogs             IntegrationAuditLog[]
   teamMemberships                  TeamMember[]
@@ -396,6 +398,36 @@ model Appointment {
   @@index([calBookingId])
   @@index([practiceId, providerId, startTime])
   @@map("appointments")
+}
+
+/// Vantage-owned non-patient calendar blocks / meetings (overlay; not written to EHR/Cal).
+model CalendarBlock {
+  id                   String    @id @default(uuid())
+  practiceId           String
+  providerId           String? // null = practice-wide
+  kind                 String // 'block' | 'meeting'
+  title                String
+  notes                String?
+  startTime            DateTime // first occurrence start (anchor)
+  endTime              DateTime // first occurrence end (defines duration)
+  timezone             String
+  recurrenceFrequency  String    @default("none") // none | daily | weekly
+  recurrenceInterval   Int       @default(1)
+  recurrenceByDay      String[]  @default([]) // MO TU WE TH FR SA SU
+  recurrenceUntil      DateTime?
+  recurrenceCount      Int?
+  exceptionDates       DateTime[] @default([]) // local calendar dates to skip (UTC midnight of that date)
+  createdById          String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  practice  Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  createdBy User?    @relation("CalendarBlockCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([practiceId, startTime])
+  @@index([practiceId, providerId, startTime])
+  @@index([practiceId, recurrenceUntil])
+  @@map("calendar_blocks")
 }
 
 /// Detected opening on a provider schedule (cancellation, reschedule, etc.)

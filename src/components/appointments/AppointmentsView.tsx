@@ -1,14 +1,18 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { CalendarDays, List, Search, X, Plus, RefreshCw, Calendar } from 'lucide-react'
+import { CalendarDays, List, Search, X, Plus, RefreshCw, Calendar, Ban } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AppointmentsListView } from './AppointmentsListView'
-import { AppointmentsCalendarView } from './AppointmentsCalendarView'
+import {
+  AppointmentsCalendarView,
+  type CalendarBlockOccurrenceView,
+} from './AppointmentsCalendarView'
+import { CalendarBlockForm } from './CalendarBlockForm'
 import { formatEhrSyncStatusLine } from '@/lib/integrations/ehr/syncStatusDisplay'
 
 interface Appointment {
@@ -78,6 +82,50 @@ export function AppointmentsView({
   const [syncStatusLine, setSyncStatusLine] = useState<string | null>(null)
   const [selectedPractitionerRefs, setSelectedPractitionerRefs] = useState<string[]>([])
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null)
+  const [calendarBlocks, setCalendarBlocks] = useState<CalendarBlockOccurrenceView[]>([])
+  const [blockFormOpen, setBlockFormOpen] = useState(false)
+  const [editingBlock, setEditingBlock] = useState<CalendarBlockOccurrenceView | null>(null)
+  const [createBlockStart, setCreateBlockStart] = useState<Date | null>(null)
+  const [createBlockEnd, setCreateBlockEnd] = useState<Date | null>(null)
+  const [visibleRange, setVisibleRange] = useState<{ from: Date; to: Date } | null>(null)
+
+  const loadCalendarBlocks = useCallback(async (from: Date, to: Date) => {
+    try {
+      const params = new URLSearchParams({
+        from: from.toISOString(),
+        to: to.toISOString(),
+      })
+      const res = await fetch(`/api/calendar-blocks?${params}`)
+      if (!res.ok) return
+      const data = await res.json()
+      const blocks = (data.blocks || []).map((b: CalendarBlockOccurrenceView) => ({
+        ...b,
+        startTime: new Date(b.startTime),
+        endTime: new Date(b.endTime),
+      }))
+      setCalendarBlocks(blocks)
+    } catch {
+      // non-fatal for appointments page
+    }
+  }, [])
+
+  const handleVisibleRangeChange = useCallback((from: Date, to: Date) => {
+    setVisibleRange((prev) => {
+      if (
+        prev &&
+        prev.from.getTime() === from.getTime() &&
+        prev.to.getTime() === to.getTime()
+      ) {
+        return prev
+      }
+      return { from, to }
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!visibleRange) return
+    loadCalendarBlocks(visibleRange.from, visibleRange.to)
+  }, [visibleRange, loadCalendarBlocks])
 
   useEffect(() => {
     let cancelled = false
@@ -267,19 +315,37 @@ export function AppointmentsView({
             </Button>
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
             <Button
               size="sm"
               variant="outline"
               onClick={handleManualSync}
               disabled={isSyncing}
-              className="gap-2 w-full sm:w-auto"
+              className="gap-2"
             >
               <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
               {isSyncing ? 'Syncing schedule & insurance…' : 'Sync EHR'}
             </Button>
-            <Link href="/appointments/new" className="w-full sm:w-auto">
-              <Button size="sm" className="gap-2 w-full sm:w-auto">
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-2"
+              onClick={() => {
+                const start = new Date()
+                start.setMinutes(0, 0, 0)
+                if (start.getHours() < 12) start.setHours(12)
+                const end = new Date(start.getTime() + 60 * 60 * 1000)
+                setEditingBlock(null)
+                setCreateBlockStart(start)
+                setCreateBlockEnd(end)
+                setBlockFormOpen(true)
+              }}
+            >
+              <Ban className="h-4 w-4" />
+              Block time
+            </Button>
+            <Link href="/appointments/new">
+              <Button size="sm" className="gap-2">
                 <Plus className="h-4 w-4" />
                 New Appointment
               </Button>
@@ -418,10 +484,38 @@ export function AppointmentsView({
         <AppointmentsCalendarView
           layout={viewMode === 'day' ? 'day' : 'week'}
           appointments={appointments}
+          calendarBlocks={calendarBlocks}
           selectedDate={dateFilter ? parseLocalDateInput(dateFilter) : undefined}
           onDateSelect={(date) => setDateFilter(date ? toLocalDateInputValue(date) : '')}
+          onVisibleRangeChange={handleVisibleRangeChange}
+          onCreateBlock={(start, end) => {
+            setEditingBlock(null)
+            setCreateBlockStart(start)
+            setCreateBlockEnd(end)
+            setBlockFormOpen(true)
+          }}
+          onEditBlock={(block) => {
+            setEditingBlock(block)
+            setCreateBlockStart(null)
+            setCreateBlockEnd(null)
+            setBlockFormOpen(true)
+          }}
         />
       )}
+
+      <CalendarBlockForm
+        open={blockFormOpen}
+        onOpenChange={setBlockFormOpen}
+        practitioners={practitioners}
+        initial={editingBlock}
+        defaultStart={createBlockStart}
+        defaultEnd={createBlockEnd}
+        onSaved={() => {
+          if (visibleRange) {
+            loadCalendarBlocks(visibleRange.from, visibleRange.to)
+          }
+        }}
+      />
     </div>
   )
 }

@@ -50,11 +50,34 @@ interface Appointment {
 
 export type AppointmentsCalendarLayout = 'week' | 'day'
 
+export type CalendarBlockOccurrenceView = {
+  blockId: string
+  kind: 'block' | 'meeting'
+  title: string
+  notes: string | null
+  startTime: Date | string
+  endTime: Date | string
+  timezone: string
+  providerId: string | null
+  isRecurring: boolean
+  occurrenceDate: string
+  series: {
+    recurrenceFrequency: 'none' | 'daily' | 'weekly'
+    recurrenceInterval: number
+    recurrenceByDay: string[]
+    recurrenceUntil: string | null
+  }
+}
+
 interface AppointmentsCalendarViewProps {
   layout: AppointmentsCalendarLayout
   appointments: Appointment[]
+  calendarBlocks?: CalendarBlockOccurrenceView[]
   selectedDate?: Date
   onDateSelect?: (date: Date | null) => void
+  onCreateBlock?: (start: Date, end: Date) => void
+  onEditBlock?: (block: CalendarBlockOccurrenceView) => void
+  onVisibleRangeChange?: (from: Date, to: Date) => void
 }
 
 type TimedApt = {
@@ -246,11 +269,68 @@ function buildAllDayForDay(day: Date, appointments: Appointment[]): Appointment[
   return out
 }
 
+function getBlockStyles(kind: string): { bg: string; border: string; text: string } {
+  if (kind === 'meeting') {
+    return {
+      bg: 'bg-violet-50/95',
+      border: 'border-l-violet-600',
+      text: 'text-violet-950',
+    }
+  }
+  return {
+    bg: 'bg-amber-50/95 bg-[repeating-linear-gradient(135deg,transparent,transparent_4px,rgba(180,83,9,0.08)_4px,rgba(180,83,9,0.08)_8px)]',
+    border: 'border-l-amber-600',
+    text: 'text-amber-950',
+  }
+}
+
+type TimedBlock = {
+  block: CalendarBlockOccurrenceView
+  top: number
+  height: number
+}
+
+function buildBlocksForDay(
+  day: Date,
+  blocks: CalendarBlockOccurrenceView[]
+): TimedBlock[] {
+  const gridStartMin = HOUR_START * 60
+  const gridEndMin = HOUR_END * 60
+  const out: TimedBlock[] = []
+
+  for (const block of blocks) {
+    const start = new Date(block.startTime)
+    if (!isSameDay(start, day)) continue
+    const endRaw = new Date(block.endTime)
+    let startMin = start.getHours() * 60 + start.getMinutes()
+    let endMin = endRaw.getHours() * 60 + endRaw.getMinutes()
+    if (!isSameDay(endRaw, day) && endRaw > start) {
+      endMin = 24 * 60
+    }
+    if (endMin <= startMin) endMin = startMin + 30
+
+    const clippedStart = Math.max(startMin, gridStartMin)
+    const clippedEnd = Math.min(endMin, gridEndMin)
+    if (clippedEnd <= gridStartMin || clippedStart >= gridEndMin) continue
+
+    out.push({
+      block,
+      top: ((clippedStart - gridStartMin) / 60) * PX_PER_HOUR,
+      height: Math.max(((clippedEnd - clippedStart) / 60) * PX_PER_HOUR, 22),
+    })
+  }
+  return out
+}
+
 export function AppointmentsCalendarView({
   layout,
   appointments,
+  calendarBlocks = [],
   selectedDate,
   onDateSelect,
+  onCreateBlock,
+  onEditBlock,
+  onVisibleRangeChange,
 }: AppointmentsCalendarViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [focusDate, setFocusDate] = useState(() => startOfDay(selectedDate || new Date()))
@@ -275,6 +355,16 @@ export function AppointmentsCalendarView({
   const weekEnd = endOfWeek(focusDate, { weekStartsOn: WEEK_STARTS_ON })
   const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd })
   const displayDays = layout === 'day' ? [startOfDay(focusDate)] : weekDays
+
+  useEffect(() => {
+    if (!onVisibleRangeChange) return
+    const from = layout === 'day' ? startOfDay(focusDate) : weekStart
+    const to =
+      layout === 'day'
+        ? addDays(startOfDay(focusDate), 1)
+        : addDays(weekEnd, 1)
+    onVisibleRangeChange(from, to)
+  }, [layout, focusDate, weekStart, weekEnd, onVisibleRangeChange])
 
   const hours = useMemo(() => {
     const list: number[] = []
@@ -519,6 +609,8 @@ export function AppointmentsCalendarView({
                     ['Confirmed', 'bg-emerald-500'],
                     ['Completed', 'bg-gray-400'],
                     ['Cancelled', 'bg-rose-400'],
+                    ['Blocked', 'bg-amber-500'],
+                    ['Meeting', 'bg-violet-500'],
                   ] as const
                 ).map(([label, dot]) => (
                   <div key={label} className="flex items-center gap-2">
@@ -698,11 +790,24 @@ export function AppointmentsCalendarView({
                 >
                   {displayDays.map((day) => {
                     const timed = buildTimedForDay(day, appointments)
+                    const dayBlocks = buildBlocksForDay(day, calendarBlocks)
                     return (
                       <div
                         key={`col-${day.toISOString()}`}
                         className="relative border-l border-gray-100 bg-white"
                         style={{ height: gridHeight }}
+                        onDoubleClick={(e) => {
+                          if (!onCreateBlock) return
+                          const rect = e.currentTarget.getBoundingClientRect()
+                          const y = e.clientY - rect.top
+                          const minutesFromStart = Math.floor((y / PX_PER_HOUR) * 60)
+                          const snapped = Math.floor(minutesFromStart / 30) * 30
+                          const start = new Date(day)
+                          start.setHours(HOUR_START, 0, 0, 0)
+                          start.setMinutes(start.getMinutes() + snapped)
+                          const end = new Date(start.getTime() + 60 * 60 * 1000)
+                          onCreateBlock(start, end)
+                        }}
                       >
                         {/* hour lines */}
                         {hours.map((h) => (
@@ -715,6 +820,39 @@ export function AppointmentsCalendarView({
                             }}
                           />
                         ))}
+
+                        {dayBlocks.map((b, i) => {
+                          const st = getBlockStyles(b.block.kind)
+                          return (
+                            <button
+                              key={`${b.block.blockId}-${b.block.occurrenceDate}-${i}`}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onEditBlock?.(b.block)
+                              }}
+                              className="absolute z-[2] block px-0.5 text-left w-[96%] left-[2%]"
+                              style={{ top: b.top, height: b.height }}
+                            >
+                              <div
+                                className={[
+                                  'h-full w-full overflow-hidden rounded-md border border-gray-200/60 border-l-4 px-1.5 py-1 shadow-sm',
+                                  st.bg,
+                                  st.border,
+                                ].join(' ')}
+                              >
+                                <p className={`text-[11px] font-semibold leading-tight truncate ${st.text}`}>
+                                  {b.block.title}
+                                </p>
+                                <p className={`text-[10px] leading-tight truncate opacity-90 ${st.text}`}>
+                                  {format(new Date(b.block.startTime), 'h:mm a')}
+                                  {' – '}
+                                  {format(new Date(b.block.endTime), 'h:mm a')}
+                                </p>
+                              </div>
+                            </button>
+                          )
+                        })}
 
                         {timed.map((t, i) => {
                           const { apt, top, height, _col, _colCount } = t
