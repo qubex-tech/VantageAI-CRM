@@ -43,6 +43,10 @@ function outreachUsesSms(channel?: string) {
   return channel === 'sms' || channel === 'prefer_sms' || !channel
 }
 
+function outreachUsesCurogramSms(channel?: string) {
+  return channel === 'curogram_sms'
+}
+
 export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsProps) {
   const [settings, setSettings] = useState<OutboundAgentsSettings>(DEFAULT_OUTBOUND_AGENTS)
   const [loading, setLoading] = useState(false)
@@ -140,9 +144,12 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
     [smsTemplates]
   )
   const selectedSmsTemplateName = settings.smsTemplateName?.trim() || ''
+  const selectedCurogramTemplateName = settings.curogramSmsTemplateName?.trim() || ''
+  const selectedCurogramActionId = settings.curogramSmsActionId?.trim() || ''
   const smsTemplateMissing =
     Boolean(selectedSmsTemplateName) && !publishedTemplateNames.has(selectedSmsTemplateName)
   const needsSmsTemplate = outreachUsesSms(settings.outreachChannel)
+  const needsCurogramTemplate = outreachUsesCurogramSms(settings.outreachChannel)
 
   const save = async () => {
     setSaving(true)
@@ -159,6 +166,22 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
       }
       if (needsSmsTemplate && smsTemplateMissing) {
         throw new Error('Selected SMS template is not published. Create or publish it in Marketing.')
+      }
+      if (
+        settings.appointmentOptimizationEnabled &&
+        settings.masterEnabled &&
+        needsCurogramTemplate &&
+        !selectedCurogramTemplateName
+      ) {
+        throw new Error('Provide a Curogram SMS template name')
+      }
+      if (
+        settings.appointmentOptimizationEnabled &&
+        settings.masterEnabled &&
+        needsCurogramTemplate &&
+        !selectedCurogramActionId
+      ) {
+        throw new Error('Provide a Curogram action ID')
       }
 
       const res = await fetch(apiUrl, {
@@ -459,40 +482,43 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="sms">SMS</SelectItem>
+                  <SelectItem value="curogram_sms">Curogram SMS</SelectItem>
                   <SelectItem value="voice">Voice call</SelectItem>
                   <SelectItem value="prefer_sms">Prefer SMS</SelectItem>
                   <SelectItem value="prefer_voice">Prefer voice</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label>SMS reply handling</Label>
-              <Select
-                value={settings.smsReplyHandling || 'telnyx_inbound'}
-                onValueChange={(value) =>
-                  setSettings((s) => ({
-                    ...s,
-                    smsReplyHandling: value as 'telnyx_inbound' | 'practice_number',
-                  }))
-                }
-              >
-                <SelectTrigger className="mt-2 w-full max-w-md">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="telnyx_inbound">
-                    Vantage Telnyx number (auto-book on YES reply)
-                  </SelectItem>
-                  <SelectItem value="practice_number">
-                    Practice-owned number (no inbound replies)
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-gray-500 mt-1">
-                If SMS is sent from the practice&apos;s own number, replies won&apos;t reach Vantage —
-                use the portal link in your template instead of reply-to-book.
-              </p>
-            </div>
+            {needsSmsTemplate && (
+              <div>
+                <Label>SMS reply handling</Label>
+                <Select
+                  value={settings.smsReplyHandling || 'telnyx_inbound'}
+                  onValueChange={(value) =>
+                    setSettings((s) => ({
+                      ...s,
+                      smsReplyHandling: value as 'telnyx_inbound' | 'practice_number',
+                    }))
+                  }
+                >
+                  <SelectTrigger className="mt-2 w-full max-w-md">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="telnyx_inbound">
+                      Vantage Telnyx number (auto-book on YES reply)
+                    </SelectItem>
+                    <SelectItem value="practice_number">
+                      Practice-owned number (no inbound replies)
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500 mt-1">
+                  If SMS is sent from the practice&apos;s own number, replies won&apos;t reach Vantage —
+                  use the portal link in your template instead of reply-to-book.
+                </p>
+              </div>
+            )}
             {needsSmsTemplate && (
               <div>
                 <Label>SMS template (Marketing)</Label>
@@ -546,6 +572,44 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
                   offeredSlot.time, offeredSlot.dateTime. Also: patient.firstName,
                   links.portalAppointments
                 </p>
+              </div>
+            )}
+            {needsCurogramTemplate && (
+              <div className="space-y-4 rounded-lg border border-gray-200 bg-gray-50/50 p-4">
+                <div>
+                  <Label>Curogram SMS template name</Label>
+                  <Input
+                    className="mt-2 w-full max-w-md"
+                    value={settings.curogramSmsTemplateName || ''}
+                    onChange={(e) =>
+                      setSettings((s) => ({
+                        ...s,
+                        curogramSmsTemplateName: e.target.value,
+                      }))
+                    }
+                    placeholder="New Patient Intake Template"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Internal name to identify this Curogram template/workflow in CRM.
+                  </p>
+                </div>
+                <div>
+                  <Label>Curogram action ID</Label>
+                  <Input
+                    className="mt-2 w-full max-w-md"
+                    value={settings.curogramSmsActionId || ''}
+                    onChange={(e) =>
+                      setSettings((s) => ({
+                        ...s,
+                        curogramSmsActionId: e.target.value,
+                      }))
+                    }
+                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Action ID configured in Curogram for this SMS template/workflow.
+                  </p>
+                </div>
               </div>
             )}
           </div>

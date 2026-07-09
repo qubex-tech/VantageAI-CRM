@@ -68,6 +68,8 @@ export async function PUT(req: NextRequest) {
     const needsSmsTemplate =
       validated.appointmentOptimizationEnabled &&
       (outreachChannel === 'sms' || outreachChannel === 'prefer_sms')
+    const needsCurogramTemplate =
+      validated.appointmentOptimizationEnabled && outreachChannel === 'curogram_sms'
     if (needsSmsTemplate) {
       const templateName = validated.smsTemplateName?.trim()
       if (!templateName) {
@@ -88,6 +90,22 @@ export async function PUT(req: NextRequest) {
       if (!template) {
         return NextResponse.json(
           { error: 'SMS template not found or not published in Marketing' },
+          { status: 400 }
+        )
+      }
+    }
+    if (needsCurogramTemplate) {
+      const templateName = validated.curogramSmsTemplateName?.trim()
+      const actionId = validated.curogramSmsActionId?.trim()
+      if (!templateName) {
+        return NextResponse.json(
+          { error: 'Provide a Curogram SMS template name' },
+          { status: 400 }
+        )
+      }
+      if (!actionId) {
+        return NextResponse.json(
+          { error: 'Provide a Curogram action ID for Curogram SMS outreach' },
           { status: 400 }
         )
       }

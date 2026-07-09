@@ -122,10 +122,14 @@ export type OutboundAgentsSettings = {
   masterEnabled: boolean
   insuranceVerificationEnabled: boolean
   appointmentOptimizationEnabled: boolean
-  /** sms | voice | prefer_sms */
+  /** sms | voice | prefer_sms | prefer_voice | curogram_sms */
   outreachChannel?: string
   /** Marketing template name for SMS body */
   smsTemplateName?: string
+  /** Curogram template display name used for admin identification */
+  curogramSmsTemplateName?: string
+  /** Curogram action ID used when outreach channel is curogram_sms */
+  curogramSmsActionId?: string
   /**
    * telnyx_inbound — replies route to Vantage Telnyx webhook (auto book on accept).
    * practice_number — practice sends from their own number; inbound replies are not received.
@@ -143,6 +147,8 @@ export const DEFAULT_OUTBOUND_AGENTS: OutboundAgentsSettings = {
   appointmentOptimizationEnabled: false,
   outreachChannel: 'sms',
   smsTemplateName: 'Earlier Appointment Available',
+  curogramSmsTemplateName: '',
+  curogramSmsActionId: '',
   smsReplyHandling: 'telnyx_inbound',
   triggerScenarios: { ...DEFAULT_TRIGGER_SCENARIOS },
   slotFillRules: [],

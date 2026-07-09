@@ -83,6 +83,14 @@ export function parseOutboundAgentsSettings(value: unknown): OutboundAgentsSetti
       typeof raw.outreachChannel === 'string' ? raw.outreachChannel : DEFAULT_OUTBOUND_AGENTS.outreachChannel,
     smsTemplateName:
       typeof raw.smsTemplateName === 'string' ? raw.smsTemplateName : DEFAULT_OUTBOUND_AGENTS.smsTemplateName,
+    curogramSmsTemplateName:
+      typeof raw.curogramSmsTemplateName === 'string'
+        ? raw.curogramSmsTemplateName
+        : DEFAULT_OUTBOUND_AGENTS.curogramSmsTemplateName,
+    curogramSmsActionId:
+      typeof raw.curogramSmsActionId === 'string'
+        ? raw.curogramSmsActionId
+        : DEFAULT_OUTBOUND_AGENTS.curogramSmsActionId,
     smsReplyHandling:
       raw.smsReplyHandling === 'practice_number' || raw.smsReplyHandling === 'telnyx_inbound'
         ? raw.smsReplyHandling
