@@ -8,6 +8,7 @@ import {
 } from '@/lib/appointment-optimization/settings'
 import type { OpenSlotEventMetadata, OpenTimeSlot } from '@/lib/appointment-optimization/types'
 import { slotOverlapsCalendarBlock } from '@/lib/calendar/blockingIntervals'
+import { getSlotHoursViolationForPractice } from '@/lib/practice-hours/availability'
 import { getPracticeTimeZone } from '@/lib/practice-timezone'
 
 export type EvaluateOpenTimeSlotResult = {
@@ -53,6 +54,17 @@ export async function evaluateOpenTimeSlot(
   ) {
     await markInventorySkipped(slot, 'blocked_by_calendar_block')
     return { action: 'skipped', reason: 'blocked_by_calendar_block' }
+  }
+
+  const hoursViolation = await getSlotHoursViolationForPractice({
+    practiceId: slot.practiceId,
+    slotStart: slot.start,
+    slotEnd: slot.end,
+    timeZone,
+  })
+  if (hoursViolation) {
+    await markInventorySkipped(slot, hoursViolation)
+    return { action: 'skipped', reason: hoursViolation }
   }
 
   if (!isWithinBufferWindow(slot.start, rule.bufferBusinessDays, timeZone, now)) {

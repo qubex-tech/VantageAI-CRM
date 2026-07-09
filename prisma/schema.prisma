@@ -687,6 +687,8 @@ model PracticeSettings {
   healixPreChartTemplate         Json?
   outboundCustomerNotifications  Json?
   outboundAgents                 Json?
+  /// Practice hours of operation + lunch window (used by slot-fill availability)
+  hoursOfOperation               Json?
   createdAt                      DateTime @default(now())
   updatedAt                      DateTime @updatedAt
 

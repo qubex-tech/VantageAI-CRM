@@ -1,10 +1,11 @@
 import { prisma } from '@/lib/db'
 import { OPEN_SLOT_STATUS } from '@/lib/appointment-optimization/types'
 import { slotOverlapsCalendarBlock } from '@/lib/calendar/blockingIntervals'
+import { getSlotHoursViolationForPractice } from '@/lib/practice-hours/availability'
 
 /**
- * Returns true when a scheduled/confirmed appointment or Vantage calendar block
- * occupies this slot window.
+ * Returns true when a scheduled/confirmed appointment, Vantage calendar block,
+ * or practice hours/lunch restriction occupies this slot window.
  * Uses live data — not the openSlotEvent.status flag — so a slot marked
  * `filled` can become available again after that appointment is cancelled.
  */
@@ -27,12 +28,23 @@ export async function isOpenSlotFilled(openSlotEventId: string): Promise<boolean
 
   if (overlapping) return true
 
-  return slotOverlapsCalendarBlock({
+  if (
+    await slotOverlapsCalendarBlock({
+      practiceId: slot.practiceId,
+      slotStart: slot.slotStart,
+      slotEnd: slot.slotEnd,
+      providerId: slot.providerId,
+    })
+  ) {
+    return true
+  }
+
+  const hoursViolation = await getSlotHoursViolationForPractice({
     practiceId: slot.practiceId,
     slotStart: slot.slotStart,
     slotEnd: slot.slotEnd,
-    providerId: slot.providerId,
   })
+  return Boolean(hoursViolation)
 }
 
 /** True while the slot time is still in the future and no appointment occupies it. */

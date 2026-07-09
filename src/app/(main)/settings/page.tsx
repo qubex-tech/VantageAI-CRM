@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { isVantageAdmin, canConfigureAPIs, canManageUsers } from '@/lib/permissions'
 import { CalSettings } from '@/components/settings/CalSettings'
 import { TeamManagement } from '@/components/settings/TeamManagement'
+import { HoursOfOperationSettings } from '@/components/settings/HoursOfOperationSettings'
 import { RetellSettings } from '@/components/settings/RetellSettings'
 import { ResendSettings } from '@/components/settings/SendgridSettings'
 import { TwilioSettings } from '@/components/settings/TwilioSettings'
@@ -85,17 +86,17 @@ export default async function SettingsPage() {
     }
   }
 
-  const hasTeamTab = !!user.practiceId && canManageUsers(userForPermissions, user.practiceId)
+  const hasPracticeTab = !!user.practiceId && canManageUsers(userForPermissions, user.practiceId)
 
   // Determine default tab
   const hasVantageAdminTab = isVantageAdminUser
   const hasPracticeConfigTab = isVantageAdminUser
   const hasApiTab = canConfigureAPI && user.practiceId
-  const hasAnyTab = hasVantageAdminTab || hasPracticeConfigTab || hasApiTab || hasTeamTab
+  const hasAnyTab = hasVantageAdminTab || hasPracticeConfigTab || hasApiTab || hasPracticeTab
   const defaultTab = hasVantageAdminTab
     ? 'vantage-admin'
-    : hasTeamTab
-      ? 'team'
+    : hasPracticeTab
+      ? 'practice'
       : hasPracticeConfigTab
         ? 'practice-config'
         : hasApiTab
@@ -109,8 +110,8 @@ export default async function SettingsPage() {
       {hasAnyTab ? (
         <Tabs defaultValue={defaultTab} className="w-full">
           <TabsList>
-            {hasTeamTab && (
-              <TabsTrigger value="team">Team</TabsTrigger>
+            {hasPracticeTab && (
+              <TabsTrigger value="practice">Practice</TabsTrigger>
             )}
             {hasVantageAdminTab && (
               <TabsTrigger value="vantage-admin">Vantage Admin</TabsTrigger>
@@ -123,9 +124,10 @@ export default async function SettingsPage() {
             )}
           </TabsList>
 
-          {hasTeamTab && (
-            <TabsContent value="team" className="mt-6">
+          {hasPracticeTab && (
+            <TabsContent value="practice" className="mt-6 space-y-6">
               <TeamManagement />
+              <HoursOfOperationSettings practiceId={user.practiceId ?? undefined} />
             </TabsContent>
           )}
 

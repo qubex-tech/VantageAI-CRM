@@ -180,6 +180,46 @@ export const calendarBlockUpdateSchema = calendarBlockFieldsSchema.partial().ext
     .optional(),
 })
 
+const hhMmSchema = z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Use HH:mm format')
+
+const dayHoursSchema = z
+  .object({
+    enabled: z.boolean(),
+    open: hhMmSchema,
+    close: hhMmSchema,
+  })
+  .refine((d) => !d.enabled || d.close > d.open, {
+    message: 'Close time must be after open time',
+    path: ['close'],
+  })
+
+export const hoursOfOperationSettingsSchema = z
+  .object({
+    days: z.object({
+      monday: dayHoursSchema,
+      tuesday: dayHoursSchema,
+      wednesday: dayHoursSchema,
+      thursday: dayHoursSchema,
+      friday: dayHoursSchema,
+      saturday: dayHoursSchema,
+      sunday: dayHoursSchema,
+    }),
+    lunch: z
+      .object({
+        enabled: z.boolean(),
+        start: hhMmSchema,
+        end: hhMmSchema,
+      })
+      .refine((l) => !l.enabled || l.end > l.start, {
+        message: 'Lunch end must be after lunch start',
+        path: ['end'],
+      }),
+  })
+  .refine((settings) => Object.values(settings.days).some((d) => d.enabled), {
+    message: 'Enable at least one day of operation',
+    path: ['days'],
+  })
+
 export const sendgridIntegrationSchema = z.object({
   apiKey: z.string().min(1, 'API key is required'),
   fromEmail: z.string().email('Valid email address is required'),
