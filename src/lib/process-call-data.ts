@@ -508,13 +508,21 @@ async function triggerCurogramAfterRetellProcessing(
       firstNonEmptyString(customData['Action ID']) ||
       firstNonEmptyString(process.env.CUROGRAM_AI_CALLS_TO_ACTION_DEFAULT_ACTION_ID)
 
-    if (!actionId || !callerNumber || !firstNameForEscalation || !lastNameForEscalation || !dobForAiV2) {
+    if (!actionId) {
+      metadataUpdate.curogramAiCallsToActionAttemptedAt = nowIso
+      metadataUpdate.curogramAiCallsToActionSentAt = null
+      metadataUpdate.curogramAiCallsToActionStatus = 0
+      metadataUpdate.curogramAiCallsToActionRequestId = actionRequestId
+      metadataUpdate.curogramAiCallsToActionSkippedReason = 'missing_action_id'
+      metadataUpdate.curogramAiCallsToActionError =
+        'Skipped: missing actionId. Configure default action ID or pass Action ID in call metadata.'
+    } else if (!callerNumber || !firstNameForEscalation || !lastNameForEscalation || !dobForAiV2) {
       metadataUpdate.curogramAiCallsToActionAttemptedAt = nowIso
       metadataUpdate.curogramAiCallsToActionSentAt = null
       metadataUpdate.curogramAiCallsToActionStatus = 0
       metadataUpdate.curogramAiCallsToActionRequestId = actionRequestId
       metadataUpdate.curogramAiCallsToActionError =
-        'Missing one or more required fields: actionId, phoneNumber, firstName, lastName, dob'
+        'Missing one or more required fields: phoneNumber, firstName, lastName, dob'
     } else {
       const actionPayload: CurogramAiCallsToActionPayload = {
         firstName: firstNameForEscalation,
