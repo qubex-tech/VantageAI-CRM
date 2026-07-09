@@ -1,5 +1,10 @@
 import { prisma } from '@/lib/db'
 import { getSmsClient } from '@/lib/sms'
+import {
+  normalizeCurogramAiV2Gender,
+  normalizePhoneToE164,
+  sendCurogramAiCallsToAction,
+} from '@/lib/curogram'
 import { getRetellIntegrationConfig, RetellApiClient } from '@/lib/retell-api'
 import { findEligibleCandidates } from '@/lib/appointment-optimization/candidates'
 import { parseOpenSlotEventMetadata } from '@/lib/appointment-optimization/slotFillUtils'
@@ -21,6 +26,13 @@ import { formatAppointmentForVoice, type VoiceAppointment } from '@/lib/appointm
 
 function providerDisplayFromRef(providerId: string | null) {
   return formatProviderDisplayName(providerId, 'your provider')
+}
+
+function splitName(fullName: string): { firstName: string; lastName: string } {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return { firstName: '', lastName: '' }
+  if (parts.length === 1) return { firstName: parts[0], lastName: parts[0] }
+  return { firstName: parts[0], lastName: parts.slice(1).join(' ') }
 }
 
 /**
@@ -184,6 +196,17 @@ export async function processSlotWave(params: {
           patientId: candidate.patientId,
           currentAppointmentId: candidate.appointmentId ?? null,
         })
+      } else if (channel === 'curogram_sms') {
+        await sendCurogramSmsOutreach({
+          practiceId: params.practiceId,
+          attemptId: attempt.id,
+          openSlotEventId: slot.id,
+          patientId: candidate.patientId,
+          phone: candidate.phone!,
+          patientName: candidate.patientName,
+          actionId: settings.curogramSmsActionId || '',
+          templateName: settings.curogramSmsTemplateName || '',
+        })
       } else {
         await sendSmsOutreach({
           practiceId: params.practiceId,
@@ -248,6 +271,86 @@ async function sendSmsOutreach(params: {
     data: {
       status: 'sent',
       externalMessageId: result.messageId || null,
+      sentAt: new Date(),
+    },
+  })
+}
+
+async function sendCurogramSmsOutreach(params: {
+  practiceId: string
+  attemptId: string
+  openSlotEventId: string
+  patientId: string
+  phone: string
+  patientName: string
+  actionId: string
+  templateName: string
+}) {
+  const patient = await prisma.patient.findUnique({
+    where: { id: params.patientId },
+    select: {
+      firstName: true,
+      lastName: true,
+      name: true,
+      dateOfBirth: true,
+      gender: true,
+      primaryPhone: true,
+      phone: true,
+    },
+  })
+  if (!patient?.dateOfBirth) {
+    throw new Error('Missing patient DOB for Curogram SMS outreach')
+  }
+  const firstName =
+    patient.firstName?.trim() || splitName(patient.name || params.patientName).firstName
+  const lastName = patient.lastName?.trim() || splitName(patient.name || params.patientName).lastName
+  if (!firstName || !lastName) {
+    throw new Error('Missing patient first/last name for Curogram SMS outreach')
+  }
+
+  const phone =
+    normalizePhoneToE164(patient.primaryPhone || patient.phone || params.phone) ||
+    normalizePhoneToE164(params.phone)
+  if (!phone) {
+    throw new Error('Missing valid patient phone for Curogram SMS outreach')
+  }
+
+  const actionId = params.actionId.trim()
+  if (!actionId) {
+    throw new Error('Missing Curogram action ID for Curogram SMS outreach')
+  }
+
+  const normalizedGender = normalizeCurogramAiV2Gender(patient.gender)
+  const requestId = `slotfill-curogram-action-${params.attemptId}`
+  const result = await sendCurogramAiCallsToAction(
+    {
+      firstName,
+      lastName,
+      phoneNumber: phone,
+      dob: patient.dateOfBirth.toISOString(),
+      actionId,
+      ...(normalizedGender ? { gender: normalizedGender } : {}),
+    },
+    {
+      requestId,
+      callId: params.openSlotEventId,
+    }
+  )
+  if (!result.ok) {
+    throw new Error(
+      `Curogram calls-to-action failed (${result.status}): ${result.body.slice(0, 200)}`
+    )
+  }
+
+  await prisma.outreachAttempt.update({
+    where: { id: params.attemptId },
+    data: {
+      status: 'sent',
+      externalMessageId: requestId,
+      messageBody:
+        params.templateName.trim()
+          ? `Curogram template: ${params.templateName.trim()}`
+          : 'Curogram SMS action trigger',
       sentAt: new Date(),
     },
   })
