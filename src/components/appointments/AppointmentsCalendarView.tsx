@@ -1,6 +1,12 @@
 'use client'
 
-import { useState, useMemo, useEffect, useRef } from 'react'
+import {
+  useState,
+  useMemo,
+  useEffect,
+  useRef,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 import Link from 'next/link'
 import {
   format,
@@ -30,6 +36,39 @@ const HOUR_START = 6
 const HOUR_END = 22 // exclusive end hour (show through 9:30pm slot ending 10pm)
 const PX_PER_HOUR = 48
 const ALL_DAY_HEIGHT = 32
+const SNAP_MINUTES = 15
+const DEFAULT_BLOCK_MINUTES = 30
+const GRID_START_MIN = HOUR_START * 60
+const GRID_END_MIN = HOUR_END * 60
+
+type DraftBlockSelection = {
+  day: Date
+  /** Minutes from midnight */
+  startMin: number
+  /** Minutes from midnight */
+  endMin: number
+}
+
+function snapMinutes(totalMinutes: number): number {
+  return Math.round(totalMinutes / SNAP_MINUTES) * SNAP_MINUTES
+}
+
+function pointerYToGridMinutes(clientY: number, columnTop: number): number {
+  const y = clientY - columnTop
+  const minutesFromGridStart = (y / PX_PER_HOUR) * 60
+  const absolute = GRID_START_MIN + minutesFromGridStart
+  return Math.min(
+    GRID_END_MIN - SNAP_MINUTES,
+    Math.max(GRID_START_MIN, snapMinutes(absolute))
+  )
+}
+
+function minutesToDateOnDay(day: Date, minutesFromMidnight: number): Date {
+  const d = new Date(day)
+  d.setHours(0, 0, 0, 0)
+  d.setMinutes(minutesFromMidnight)
+  return d
+}
 
 interface Appointment {
   id: string
@@ -335,6 +374,10 @@ export function AppointmentsCalendarView({
   const scrollRef = useRef<HTMLDivElement>(null)
   const [focusDate, setFocusDate] = useState(() => startOfDay(selectedDate || new Date()))
   const [currentMonth, setCurrentMonth] = useState(() => selectedDate || new Date())
+  const [draftBlock, setDraftBlock] = useState<DraftBlockSelection | null>(null)
+  const draftBlockRef = useRef<DraftBlockSelection | null>(null)
+  const dragAnchorMinRef = useRef<number | null>(null)
+  const isDraggingBlockRef = useRef(false)
 
   useEffect(() => {
     if (selectedDate) {
@@ -365,6 +408,95 @@ export function AppointmentsCalendarView({
         : addDays(weekEnd, 1)
     onVisibleRangeChange(from, to)
   }, [layout, focusDate, weekStart, weekEnd, onVisibleRangeChange])
+
+  const commitDraftBlock = () => {
+    const draft = draftBlockRef.current
+    draftBlockRef.current = null
+    dragAnchorMinRef.current = null
+    isDraggingBlockRef.current = false
+    setDraftBlock(null)
+    if (!draft || !onCreateBlock) return
+    const start = minutesToDateOnDay(draft.day, draft.startMin)
+    const end = minutesToDateOnDay(draft.day, draft.endMin)
+    if (end <= start) return
+    onCreateBlock(start, end)
+  }
+
+  const updateDraftFromPointer = (clientY: number, columnTop: number) => {
+    const anchor = dragAnchorMinRef.current
+    const current = draftBlockRef.current
+    if (anchor == null || !current) return
+
+    const pointerMin = pointerYToGridMinutes(clientY, columnTop)
+    let startMin = Math.min(anchor, pointerMin)
+    let endMin = Math.max(anchor, pointerMin)
+
+    // Click / short drag always yields at least the default 30-minute slot
+    if (endMin - startMin < DEFAULT_BLOCK_MINUTES) {
+      if (pointerMin >= anchor) {
+        startMin = anchor
+        endMin = Math.min(GRID_END_MIN, anchor + DEFAULT_BLOCK_MINUTES)
+      } else {
+        endMin = anchor
+        startMin = Math.max(GRID_START_MIN, anchor - DEFAULT_BLOCK_MINUTES)
+      }
+    }
+
+    const next = { ...current, startMin, endMin }
+    draftBlockRef.current = next
+    setDraftBlock(next)
+  }
+
+  const handleColumnPointerDown = (
+    e: ReactPointerEvent<HTMLDivElement>,
+    day: Date
+  ) => {
+    if (!onCreateBlock || e.button !== 0) return
+    const target = e.target as HTMLElement
+    if (target.closest('a, button')) return
+
+    const rect = e.currentTarget.getBoundingClientRect()
+    const startMin = pointerYToGridMinutes(e.clientY, rect.top)
+    const endMin = Math.min(GRID_END_MIN, startMin + DEFAULT_BLOCK_MINUTES)
+    const draft: DraftBlockSelection = {
+      day: startOfDay(day),
+      startMin,
+      endMin,
+    }
+
+    dragAnchorMinRef.current = startMin
+    draftBlockRef.current = draft
+    isDraggingBlockRef.current = true
+    setDraftBlock(draft)
+
+    e.currentTarget.setPointerCapture(e.pointerId)
+    e.preventDefault()
+  }
+
+  const handleColumnPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!isDraggingBlockRef.current || !draftBlockRef.current) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    updateDraftFromPointer(e.clientY, rect.top)
+  }
+
+  const handleColumnPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!isDraggingBlockRef.current) return
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    }
+    commitDraftBlock()
+  }
+
+  const handleColumnPointerCancel = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!isDraggingBlockRef.current) return
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    }
+    draftBlockRef.current = null
+    dragAnchorMinRef.current = null
+    isDraggingBlockRef.current = false
+    setDraftBlock(null)
+  }
 
   const hours = useMemo(() => {
     const list: number[] = []
@@ -791,23 +923,32 @@ export function AppointmentsCalendarView({
                   {displayDays.map((day) => {
                     const timed = buildTimedForDay(day, appointments)
                     const dayBlocks = buildBlocksForDay(day, calendarBlocks)
+                    const dayStart = startOfDay(day)
+                    const showDraft =
+                      draftBlock &&
+                      isSameDay(draftBlock.day, dayStart)
+                    const draftTop = showDraft
+                      ? ((draftBlock.startMin - GRID_START_MIN) / 60) * PX_PER_HOUR
+                      : 0
+                    const draftHeight = showDraft
+                      ? Math.max(
+                          ((draftBlock.endMin - draftBlock.startMin) / 60) * PX_PER_HOUR,
+                          22
+                        )
+                      : 0
+
                     return (
                       <div
                         key={`col-${day.toISOString()}`}
-                        className="relative border-l border-gray-100 bg-white"
+                        className={[
+                          'relative border-l border-gray-100 bg-white select-none',
+                          onCreateBlock ? 'cursor-crosshair' : '',
+                        ].join(' ')}
                         style={{ height: gridHeight }}
-                        onDoubleClick={(e) => {
-                          if (!onCreateBlock) return
-                          const rect = e.currentTarget.getBoundingClientRect()
-                          const y = e.clientY - rect.top
-                          const minutesFromStart = Math.floor((y / PX_PER_HOUR) * 60)
-                          const snapped = Math.floor(minutesFromStart / 30) * 30
-                          const start = new Date(day)
-                          start.setHours(HOUR_START, 0, 0, 0)
-                          start.setMinutes(start.getMinutes() + snapped)
-                          const end = new Date(start.getTime() + 60 * 60 * 1000)
-                          onCreateBlock(start, end)
-                        }}
+                        onPointerDown={(e) => handleColumnPointerDown(e, day)}
+                        onPointerMove={handleColumnPointerMove}
+                        onPointerUp={handleColumnPointerUp}
+                        onPointerCancel={handleColumnPointerCancel}
                       >
                         {/* hour lines */}
                         {hours.map((h) => (
@@ -821,6 +962,24 @@ export function AppointmentsCalendarView({
                           />
                         ))}
 
+                        {showDraft && (
+                          <div
+                            className="absolute z-[3] left-[2%] w-[96%] px-0.5 pointer-events-none"
+                            style={{ top: draftTop, height: draftHeight }}
+                          >
+                            <div className="h-full w-full overflow-hidden rounded-md border border-amber-400/80 border-l-4 border-l-amber-600 bg-amber-100/90 px-1.5 py-1 shadow-md">
+                              <p className="text-[11px] font-semibold leading-tight truncate text-amber-950">
+                                Blocked
+                              </p>
+                              <p className="text-[10px] leading-tight truncate text-amber-950 opacity-90">
+                                {format(minutesToDateOnDay(dayStart, draftBlock.startMin), 'h:mm a')}
+                                {' – '}
+                                {format(minutesToDateOnDay(dayStart, draftBlock.endMin), 'h:mm a')}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
                         {dayBlocks.map((b, i) => {
                           const st = getBlockStyles(b.block.kind)
                           return (
@@ -831,7 +990,7 @@ export function AppointmentsCalendarView({
                                 e.stopPropagation()
                                 onEditBlock?.(b.block)
                               }}
-                              className="absolute z-[2] block px-0.5 text-left w-[96%] left-[2%]"
+                              className="absolute z-[2] block px-0.5 text-left w-[96%] left-[2%] cursor-pointer"
                               style={{ top: b.top, height: b.height }}
                             >
                               <div
@@ -863,7 +1022,7 @@ export function AppointmentsCalendarView({
                             <Link
                               key={`${apt.id}-${i}`}
                               href={`/appointments/${apt.id}`}
-                              className="absolute z-[1] block px-0.5 group"
+                              className="absolute z-[1] block px-0.5 group cursor-pointer"
                               style={{
                                 top,
                                 height,
