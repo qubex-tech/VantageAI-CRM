@@ -93,3 +93,24 @@ export function getLookAheadEnd(
 ): Date {
   return addBusinessDays(slotStart, lookAheadBusinessDays, timeZone)
 }
+
+/**
+ * Inclusive look-ahead window after an open slot (calendar days).
+ * startDays=7, endDays=14 with slot Jul 10 → engage patients booked Jul 17 through Jul 24.
+ */
+export function getLookAheadWindow(
+  slotStart: Date,
+  lookAheadStartDays: number,
+  lookAheadEndDays: number,
+  timeZone: string
+): { lookAheadStart: Date; lookAheadEnd: Date } {
+  const startDays = Math.max(1, lookAheadStartDays)
+  const endDays = Math.max(startDays, lookAheadEndDays)
+  const { dateStr } = calendarDateParts(slotStart, timeZone)
+  const startDateStr = addCalendarDays(dateStr, startDays, timeZone)
+  const endDateStr = addCalendarDays(dateStr, endDays, timeZone)
+  return {
+    lookAheadStart: dateAtNoonUtc(startDateStr),
+    lookAheadEnd: endOfCalendarDay(dateAtNoonUtc(endDateStr), timeZone),
+  }
+}

@@ -5,7 +5,9 @@ export const OPEN_SLOT_STATUS = {
 } as const
 
 export const WAVE_BATCH_SIZE = 5
-export const WAVE_WAIT_MS = 10 * 60 * 1000
+/** Default minutes between outreach waves when settings omit waveIntervalMinutes. */
+export const DEFAULT_WAVE_INTERVAL_MINUTES = 10
+export const WAVE_WAIT_MS = DEFAULT_WAVE_INTERVAL_MINUTES * 60 * 1000
 
 /** Scenarios that can create an open slot and start outreach. */
 export type OpenSlotTriggerScenario = 'cancellation' | 'noShow' | 'reschedule' | 'availability'
@@ -89,7 +91,20 @@ export type SlotFillRule = {
   id: string
   visitType: string
   bufferBusinessDays: number
-  lookAheadBusinessDays: number
+  /**
+   * First calendar day after the open slot when patients become eligible.
+   * Example: 7 with slot Jul 10 → start engaging patients booked on/after Jul 17.
+   */
+  lookAheadStartBusinessDays: number
+  /**
+   * Last calendar day after the open slot when patients are still eligible.
+   * Example: 14 with slot Jul 10 → stop engaging patients booked after Jul 24.
+   */
+  lookAheadEndBusinessDays: number
+  /**
+   * @deprecated Prefer lookAheadEndBusinessDays. Kept for older saved settings.
+   */
+  lookAheadBusinessDays?: number
   enabled?: boolean
 }
 
@@ -97,15 +112,18 @@ export const MAX_SLOT_FILL_RULES = 20
 
 export const DEFAULT_SLOT_FILL_RULE: Omit<SlotFillRule, 'id' | 'visitType'> = {
   bufferBusinessDays: 3,
-  lookAheadBusinessDays: 14,
+  lookAheadStartBusinessDays: 7,
+  lookAheadEndBusinessDays: 14,
   enabled: true,
 }
 
 export type OpenSlotEventMetadata = {
   slotFillRuleId: string
+  lookAheadStart: string
   lookAheadEnd: string
   bufferBusinessDays: number
-  lookAheadBusinessDays: number
+  lookAheadStartBusinessDays: number
+  lookAheadEndBusinessDays: number
 }
 
 /** How inbound SMS replies to slot-fill offers are handled. */
@@ -137,6 +155,8 @@ export type OutboundAgentsSettings = {
   smsReplyHandling?: SmsReplyHandling
   /** Which events create open slots and start the optimization agent */
   triggerScenarios?: OpenSlotTriggerScenarios
+  /** Minutes to wait between outreach waves (default 10). */
+  waveIntervalMinutes?: number
   /** Per-visit-type buffer / look-ahead rules for proactive and inventory-based slot fill */
   slotFillRules?: SlotFillRule[]
 }
@@ -151,6 +171,7 @@ export const DEFAULT_OUTBOUND_AGENTS: OutboundAgentsSettings = {
   curogramSmsActionId: '',
   smsReplyHandling: 'telnyx_inbound',
   triggerScenarios: { ...DEFAULT_TRIGGER_SCENARIOS },
+  waveIntervalMinutes: DEFAULT_WAVE_INTERVAL_MINUTES,
   slotFillRules: [],
 }
 

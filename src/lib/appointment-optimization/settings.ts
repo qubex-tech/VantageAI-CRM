@@ -2,6 +2,7 @@ import { prisma } from '@/lib/db'
 import {
   DEFAULT_OUTBOUND_AGENTS,
   DEFAULT_TRIGGER_SCENARIOS,
+  DEFAULT_WAVE_INTERVAL_MINUTES,
   MAX_SLOT_FILL_RULES,
   type OpenSlotTriggerScenario,
   type OpenSlotTriggerScenarios,
@@ -25,6 +26,13 @@ function parseTriggerScenarios(value: unknown): OpenSlotTriggerScenarios {
   return parsed
 }
 
+function clampBusinessDays(value: unknown, fallback: number): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.min(90, Math.max(1, Math.round(value)))
+  }
+  return fallback
+}
+
 function parseSlotFillRules(value: unknown): SlotFillRule[] {
   if (!Array.isArray(value)) return []
   const rules: SlotFillRule[] = []
@@ -33,14 +41,22 @@ function parseSlotFillRules(value: unknown): SlotFillRule[] {
     const raw = item as Record<string, unknown>
     const visitType = typeof raw.visitType === 'string' ? raw.visitType.trim() : ''
     if (!visitType) continue
-    const bufferBusinessDays =
-      typeof raw.bufferBusinessDays === 'number' && Number.isFinite(raw.bufferBusinessDays)
-        ? Math.min(90, Math.max(1, Math.round(raw.bufferBusinessDays)))
-        : 3
-    const lookAheadBusinessDays =
-      typeof raw.lookAheadBusinessDays === 'number' && Number.isFinite(raw.lookAheadBusinessDays)
-        ? Math.min(90, Math.max(1, Math.round(raw.lookAheadBusinessDays)))
-        : 14
+    const bufferBusinessDays = clampBusinessDays(raw.bufferBusinessDays, 3)
+
+    // New range fields, with fallback from legacy lookAheadBusinessDays (= end only, start=1).
+    const legacyEnd = clampBusinessDays(raw.lookAheadBusinessDays, 14)
+    let lookAheadStartBusinessDays = clampBusinessDays(
+      raw.lookAheadStartBusinessDays,
+      typeof raw.lookAheadBusinessDays === 'number' ? 1 : 7
+    )
+    let lookAheadEndBusinessDays = clampBusinessDays(
+      raw.lookAheadEndBusinessDays,
+      legacyEnd
+    )
+    if (lookAheadStartBusinessDays > lookAheadEndBusinessDays) {
+      lookAheadStartBusinessDays = lookAheadEndBusinessDays
+    }
+
     const id =
       typeof raw.id === 'string' && raw.id.trim()
         ? raw.id.trim()
@@ -49,11 +65,19 @@ function parseSlotFillRules(value: unknown): SlotFillRule[] {
       id,
       visitType,
       bufferBusinessDays,
-      lookAheadBusinessDays,
+      lookAheadStartBusinessDays,
+      lookAheadEndBusinessDays,
       enabled: raw.enabled !== false,
     })
   }
   return rules
+}
+
+function parseWaveIntervalMinutes(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.min(1440, Math.max(1, Math.round(value)))
+  }
+  return DEFAULT_WAVE_INTERVAL_MINUTES
 }
 
 export function getSlotFillRuleForVisitType(
@@ -96,6 +120,7 @@ export function parseOutboundAgentsSettings(value: unknown): OutboundAgentsSetti
         ? raw.smsReplyHandling
         : DEFAULT_OUTBOUND_AGENTS.smsReplyHandling,
     triggerScenarios: parseTriggerScenarios(raw.triggerScenarios),
+    waveIntervalMinutes: parseWaveIntervalMinutes(raw.waveIntervalMinutes),
     slotFillRules: parseSlotFillRules(raw.slotFillRules),
   }
 }

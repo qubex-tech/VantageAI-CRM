@@ -29,6 +29,7 @@ export function buildOpenTimeSlotFromAppointment(
 }
 
 export function parseOpenSlotEventMetadata(metadata: unknown): {
+  lookAheadStart?: Date
   lookAheadEnd?: Date
   slotFillRuleId?: string
 } {
@@ -36,10 +37,15 @@ export function parseOpenSlotEventMetadata(metadata: unknown): {
   const raw = metadata as Record<string, unknown>
   const lookAheadEnd =
     typeof raw.lookAheadEnd === 'string' ? new Date(raw.lookAheadEnd) : undefined
+  const lookAheadStart =
+    typeof raw.lookAheadStart === 'string' ? new Date(raw.lookAheadStart) : undefined
   const slotFillRuleId =
     typeof raw.slotFillRuleId === 'string' ? raw.slotFillRuleId : undefined
-  if (lookAheadEnd && Number.isNaN(lookAheadEnd.getTime())) {
-    return { slotFillRuleId }
-  }
-  return { lookAheadEnd, slotFillRuleId }
+
+  const validEnd =
+    lookAheadEnd && !Number.isNaN(lookAheadEnd.getTime()) ? lookAheadEnd : undefined
+  const validStart =
+    lookAheadStart && !Number.isNaN(lookAheadStart.getTime()) ? lookAheadStart : undefined
+
+  return { lookAheadStart: validStart, lookAheadEnd: validEnd, slotFillRuleId }
 }

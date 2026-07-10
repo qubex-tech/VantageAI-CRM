@@ -47,6 +47,24 @@ function outreachUsesCurogramSms(channel?: string) {
   return channel === 'curogram_sms'
 }
 
+function normalizeLoadedSlotFillRules(
+  rules: Array<SlotFillRule & { lookAheadBusinessDays?: number }> | undefined
+): SlotFillRule[] {
+  return (rules ?? []).map((rule) => ({
+    ...DEFAULT_SLOT_FILL_RULE,
+    ...rule,
+    lookAheadStartBusinessDays:
+      rule.lookAheadStartBusinessDays ??
+      (rule.lookAheadBusinessDays != null
+        ? 1
+        : DEFAULT_SLOT_FILL_RULE.lookAheadStartBusinessDays),
+    lookAheadEndBusinessDays:
+      rule.lookAheadEndBusinessDays ??
+      rule.lookAheadBusinessDays ??
+      DEFAULT_SLOT_FILL_RULE.lookAheadEndBusinessDays,
+  }))
+}
+
 export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsProps) {
   const [settings, setSettings] = useState<OutboundAgentsSettings>(DEFAULT_OUTBOUND_AGENTS)
   const [loading, setLoading] = useState(false)
@@ -81,7 +99,9 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
           ...DEFAULT_TRIGGER_SCENARIOS,
           ...data.settings?.triggerScenarios,
         },
-        slotFillRules: data.settings?.slotFillRules ?? [],
+        waveIntervalMinutes:
+          data.settings?.waveIntervalMinutes ?? DEFAULT_OUTBOUND_AGENTS.waveIntervalMinutes,
+        slotFillRules: normalizeLoadedSlotFillRules(data.settings?.slotFillRules),
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load')
@@ -198,7 +218,9 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
           ...DEFAULT_TRIGGER_SCENARIOS,
           ...data.settings?.triggerScenarios,
         },
-        slotFillRules: data.settings?.slotFillRules ?? [],
+        waveIntervalMinutes:
+          data.settings?.waveIntervalMinutes ?? DEFAULT_OUTBOUND_AGENTS.waveIntervalMinutes,
+        slotFillRules: normalizeLoadedSlotFillRules(data.settings?.slotFillRules),
       })
       setSuccess('Outbound agent settings saved.')
     } catch (err) {
@@ -367,8 +389,9 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
                 <p className="text-sm text-gray-500 mt-1">
                   Rules apply to any open slot ingested into Slot Fill — from a cancellation,
                   EHR schedule, Cal.com, Open Dental, or manual ingest — regardless of source.
-                  Buffer time limits how soon empty slots are acted on; look ahead finds patients
-                  scheduled after that slot within the window.
+                  Buffer (business days) limits how soon empty slots are acted on.
+                  Look-ahead from/to are calendar days after the open slot (e.g. 7–14
+                  means engage patients booked 7 to 14 days later).
                 </p>
               </div>
 
@@ -383,7 +406,7 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
                 {slotFillRules.map((rule) => (
                   <div
                     key={rule.id}
-                    className="grid gap-3 rounded-lg border border-gray-200 bg-white p-4 md:grid-cols-[1fr_140px_140px_auto_auto] md:items-end"
+                    className="grid gap-3 rounded-lg border border-gray-200 bg-white p-4 md:grid-cols-[1.2fr_110px_110px_110px_auto_auto] md:items-end"
                   >
                     <div>
                       <Label className="text-xs text-gray-500">Visit type</Label>
@@ -404,7 +427,7 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
                       </Select>
                     </div>
                     <div>
-                      <Label className="text-xs text-gray-500">Buffer time (business days)</Label>
+                      <Label className="text-xs text-gray-500">Buffer (biz days)</Label>
                       <Input
                         type="number"
                         min={1}
@@ -419,18 +442,43 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
                       />
                     </div>
                     <div>
-                      <Label className="text-xs text-gray-500">Look ahead (business days)</Label>
+                      <Label className="text-xs text-gray-500">Look ahead from (days)</Label>
                       <Input
                         type="number"
                         min={1}
                         max={90}
                         className="mt-1"
-                        value={rule.lookAheadBusinessDays}
-                        onChange={(e) =>
+                        value={rule.lookAheadStartBusinessDays}
+                        onChange={(e) => {
+                          const start = Number(e.target.value) || 1
                           updateSlotFillRule(rule.id, {
-                            lookAheadBusinessDays: Number(e.target.value) || 1,
+                            lookAheadStartBusinessDays: start,
+                            lookAheadEndBusinessDays: Math.max(
+                              start,
+                              rule.lookAheadEndBusinessDays
+                            ),
                           })
-                        }
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-500">Look ahead to (days)</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={90}
+                        className="mt-1"
+                        value={rule.lookAheadEndBusinessDays}
+                        onChange={(e) => {
+                          const end = Number(e.target.value) || 1
+                          updateSlotFillRule(rule.id, {
+                            lookAheadEndBusinessDays: end,
+                            lookAheadStartBusinessDays: Math.min(
+                              rule.lookAheadStartBusinessDays,
+                              end
+                            ),
+                          })
+                        }}
                       />
                     </div>
                     <div className="flex items-center gap-2 pb-1">
@@ -467,6 +515,29 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
                 <Plus className="h-4 w-4 mr-2" />
                 Add rule
               </Button>
+
+              <div className="pt-2 border-t border-gray-200">
+                <Label className="text-sm font-medium">Wave frequency (minutes)</Label>
+                <p className="text-xs text-gray-500 mt-1 mb-2">
+                  Minutes to wait between outreach waves while the slot is still open.
+                </p>
+                <Input
+                  type="number"
+                  min={1}
+                  max={1440}
+                  className="max-w-[160px]"
+                  value={settings.waveIntervalMinutes ?? 10}
+                  onChange={(e) =>
+                    setSettings((s) => ({
+                      ...s,
+                      waveIntervalMinutes: Math.min(
+                        1440,
+                        Math.max(1, Number(e.target.value) || 10)
+                      ),
+                    }))
+                  }
+                />
+              </div>
             </div>
 
             <div>

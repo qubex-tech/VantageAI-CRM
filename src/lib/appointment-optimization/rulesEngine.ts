@@ -1,4 +1,4 @@
-import { getLookAheadEnd, isWithinBufferWindow } from '@/lib/business-days'
+import { getLookAheadWindow, isWithinBufferWindow } from '@/lib/business-days'
 import { createOpenSlotEvent } from '@/lib/appointment-optimization/openSlotEvents'
 import { markOpenTimeSlotProcessed } from '@/lib/appointment-optimization/openSlotInventory'
 import {
@@ -72,12 +72,19 @@ export async function evaluateOpenTimeSlot(
     return { action: 'skipped', reason: 'outside_buffer' }
   }
 
-  const lookAheadEnd = getLookAheadEnd(slot.start, rule.lookAheadBusinessDays, timeZone)
+  const { lookAheadStart, lookAheadEnd } = getLookAheadWindow(
+    slot.start,
+    rule.lookAheadStartBusinessDays,
+    rule.lookAheadEndBusinessDays,
+    timeZone
+  )
   const metadata: OpenSlotEventMetadata = {
     slotFillRuleId: rule.id,
+    lookAheadStart: lookAheadStart.toISOString(),
     lookAheadEnd: lookAheadEnd.toISOString(),
     bufferBusinessDays: rule.bufferBusinessDays,
-    lookAheadBusinessDays: rule.lookAheadBusinessDays,
+    lookAheadStartBusinessDays: rule.lookAheadStartBusinessDays,
+    lookAheadEndBusinessDays: rule.lookAheadEndBusinessDays,
   }
 
   const result = await createOpenSlotEvent({

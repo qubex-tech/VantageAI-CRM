@@ -1,12 +1,23 @@
 import { inngest } from '../client'
 import { processSlotWave, handleSlotFillCheck } from '@/lib/appointment-optimization/outreach'
-import { WAVE_WAIT_MS } from '@/lib/appointment-optimization/types'
+import { getOutboundAgentsSettings } from '@/lib/appointment-optimization/settings'
+import {
+  DEFAULT_WAVE_INTERVAL_MINUTES,
+  WAVE_WAIT_MS,
+} from '@/lib/appointment-optimization/types'
 
 function shouldStopWaves(result: { status?: string; reason?: string } | undefined) {
   if (!result) return false
   if (result.status === 'no_more_candidates') return true
   if (result.status === 'skipped' && result.reason === 'slot_already_filled') return true
   return false
+}
+
+function waveWaitMs(minutes?: number) {
+  if (typeof minutes === 'number' && Number.isFinite(minutes) && minutes >= 1) {
+    return Math.round(minutes) * 60 * 1000
+  }
+  return WAVE_WAIT_MS
 }
 
 export const handleOpenSlotCreated = inngest.createFunction(
@@ -22,11 +33,18 @@ export const handleOpenSlotCreated = inngest.createFunction(
       practiceId: string
     }
 
+    const settings = await step.run('load-settings', async () => {
+      return getOutboundAgentsSettings(practiceId)
+    })
+    const waitMs = waveWaitMs(
+      settings.waveIntervalMinutes ?? DEFAULT_WAVE_INTERVAL_MINUTES
+    )
+
     await step.run('wave-1-send', async () => {
       return processSlotWave({ openSlotEventId, practiceId, waveNumber: 1 })
     })
 
-    await step.sleep('wait-after-wave-1', WAVE_WAIT_MS)
+    await step.sleep('wait-after-wave-1', waitMs)
 
     const check1 = await step.run('check-after-wave-1', async () => {
       return handleSlotFillCheck({ openSlotEventId, practiceId, waveNumber: 1 })
@@ -42,7 +60,7 @@ export const handleOpenSlotCreated = inngest.createFunction(
       return { ...check1, awaitingReplies: true, lastWave: 2, wave2 }
     }
 
-    await step.sleep('wait-after-wave-2', WAVE_WAIT_MS)
+    await step.sleep('wait-after-wave-2', waitMs)
 
     const check2 = await step.run('check-after-wave-2', async () => {
       return handleSlotFillCheck({ openSlotEventId, practiceId, waveNumber: 2 })

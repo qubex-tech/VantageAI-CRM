@@ -23,6 +23,9 @@ export async function findEligibleCandidates(params: {
   openSlotEventId: string
   waveNumber: number
   limit?: number
+  /** Inclusive: first appointment time eligible for outreach. */
+  lookAheadStart?: Date
+  /** Inclusive: last appointment time eligible for outreach. */
   lookAheadEnd?: Date
   slotFillRuleId?: string
 }): Promise<SlotFillCandidate[]> {
@@ -45,7 +48,9 @@ export async function findEligibleCandidates(params: {
       status: { in: ['scheduled', 'confirmed'] },
       visitType: params.appointmentType,
       startTime: {
-        gt: params.slotStart,
+        ...(params.lookAheadStart
+          ? { gte: params.lookAheadStart }
+          : { gt: params.slotStart }),
         ...(params.lookAheadEnd ? { lte: params.lookAheadEnd } : {}),
       },
       ...(params.providerId ? { providerId: params.providerId } : {}),

@@ -582,13 +582,53 @@ export const openSlotTriggerScenariosSchema = z.object({
   availability: z.boolean().default(false),
 })
 
-export const slotFillRuleSchema = z.object({
-  id: z.string().min(1),
-  visitType: z.string().min(1),
-  bufferBusinessDays: z.number().int().min(1).max(90),
-  lookAheadBusinessDays: z.number().int().min(1).max(90),
-  enabled: z.boolean().optional(),
-})
+export const slotFillRuleSchema = z
+  .object({
+    id: z.string().min(1),
+    visitType: z.string().min(1),
+    bufferBusinessDays: z.number().int().min(1).max(90),
+    lookAheadStartBusinessDays: z.number().int().min(1).max(90).optional(),
+    lookAheadEndBusinessDays: z.number().int().min(1).max(90).optional(),
+    /** @deprecated Prefer lookAheadEndBusinessDays */
+    lookAheadBusinessDays: z.number().int().min(1).max(90).optional(),
+    enabled: z.boolean().optional(),
+  })
+  .superRefine((rule, ctx) => {
+    const end =
+      rule.lookAheadEndBusinessDays ?? rule.lookAheadBusinessDays
+    const start = rule.lookAheadStartBusinessDays ?? (end != null ? 1 : undefined)
+    if (end == null || start == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'lookAheadStartBusinessDays and lookAheadEndBusinessDays are required',
+        path: ['lookAheadEndBusinessDays'],
+      })
+      return
+    }
+    if (start > end) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'lookAheadStartBusinessDays must be <= lookAheadEndBusinessDays',
+        path: ['lookAheadStartBusinessDays'],
+      })
+    }
+  })
+  .transform((rule) => {
+    const lookAheadEndBusinessDays =
+      rule.lookAheadEndBusinessDays ?? rule.lookAheadBusinessDays ?? 14
+    const lookAheadStartBusinessDays = Math.min(
+      rule.lookAheadStartBusinessDays ?? 1,
+      lookAheadEndBusinessDays
+    )
+    return {
+      id: rule.id,
+      visitType: rule.visitType,
+      bufferBusinessDays: rule.bufferBusinessDays,
+      lookAheadStartBusinessDays,
+      lookAheadEndBusinessDays,
+      enabled: rule.enabled,
+    }
+  })
 
 export const outboundAgentsSettingsSchema = z.object({
   masterEnabled: z.boolean().default(false),
@@ -600,6 +640,7 @@ export const outboundAgentsSettingsSchema = z.object({
   curogramSmsActionId: z.string().optional(),
   smsReplyHandling: z.enum(['telnyx_inbound', 'practice_number']).optional(),
   triggerScenarios: openSlotTriggerScenariosSchema.optional(),
+  waveIntervalMinutes: z.number().int().min(1).max(1440).optional(),
   slotFillRules: z.array(slotFillRuleSchema).max(20).optional(),
 })
 

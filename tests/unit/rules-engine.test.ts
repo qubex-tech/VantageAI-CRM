@@ -23,6 +23,14 @@ vi.mock('@/lib/appointment-optimization/openSlotInventory', () => ({
   markOpenTimeSlotProcessed: vi.fn(async () => undefined),
 }))
 
+vi.mock('@/lib/calendar/blockingIntervals', () => ({
+  slotOverlapsCalendarBlock: vi.fn(async () => false),
+}))
+
+vi.mock('@/lib/practice-hours/availability', () => ({
+  getSlotHoursViolationForPractice: vi.fn(async () => null),
+}))
+
 import {
   getOutboundAgentsSettings,
   getSlotFillRuleForVisitType,
@@ -61,7 +69,8 @@ describe('rulesEngine.evaluateOpenTimeSlot', () => {
       id: 'rule-1',
       visitType: 'Follow Up Visit',
       bufferBusinessDays: 30,
-      lookAheadBusinessDays: 14,
+      lookAheadStartBusinessDays: 7,
+      lookAheadEndBusinessDays: 14,
       enabled: true,
     })
     const start = new Date()
@@ -82,7 +91,8 @@ describe('rulesEngine.evaluateOpenTimeSlot', () => {
         appointmentType: 'Follow Up Visit',
         metadata: expect.objectContaining({
           slotFillRuleId: 'rule-1',
-          lookAheadBusinessDays: 14,
+          lookAheadStartBusinessDays: 7,
+          lookAheadEndBusinessDays: 14,
         }),
       })
     )

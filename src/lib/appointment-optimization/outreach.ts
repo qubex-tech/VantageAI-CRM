@@ -120,7 +120,7 @@ export async function processSlotWave(params: {
     },
   })
 
-  const { lookAheadEnd, slotFillRuleId } = parseOpenSlotEventMetadata(slot.metadata)
+  const { lookAheadStart, lookAheadEnd, slotFillRuleId } = parseOpenSlotEventMetadata(slot.metadata)
 
   const candidates = await findEligibleCandidates({
     practiceId: params.practiceId,
@@ -132,6 +132,7 @@ export async function processSlotWave(params: {
     openSlotEventId: slot.id,
     waveNumber: params.waveNumber,
     limit: WAVE_BATCH_SIZE,
+    lookAheadStart,
     lookAheadEnd,
     slotFillRuleId,
   })
