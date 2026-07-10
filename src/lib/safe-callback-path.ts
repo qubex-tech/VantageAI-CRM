@@ -10,3 +10,15 @@ export function isSafeInternalCallbackPath(url: string): boolean {
   if (pathOnly.includes('://')) return false
   return true
 }
+
+/**
+ * Normalize post-login destinations. `/` is a valid path but must not be used as
+ * callbackUrl — middleware sends unauthenticated `/` back to login and loops.
+ */
+export function resolvePostLoginPath(url: string | null | undefined): string {
+  const raw = url && isSafeInternalCallbackPath(url) ? url : '/dashboard'
+  const q = raw.indexOf('?')
+  const pathOnly = q === -1 ? raw : raw.slice(0, q)
+  if (pathOnly === '/' || pathOnly === '') return '/dashboard'
+  return raw
+}

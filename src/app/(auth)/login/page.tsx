@@ -8,16 +8,15 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import Link from 'next/link'
-import { isSafeInternalCallbackPath } from '@/lib/safe-callback-path'
+import { resolvePostLoginPath } from '@/lib/safe-callback-path'
 
 type AuthMethod = 'otp' | 'password'
 
 function LoginForm() {
   const searchParams = useSearchParams()
   
-  // Validate callbackUrl to prevent open redirect vulnerabilities
-  const rawCallbackUrl = searchParams?.get('callbackUrl') || '/dashboard'
-  const callbackUrl = isSafeInternalCallbackPath(rawCallbackUrl) ? rawCallbackUrl : '/dashboard'
+  // Never use `/` as callback — that loops with middleware (login ↔ /).
+  const callbackUrl = resolvePostLoginPath(searchParams?.get('callbackUrl'))
   
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -33,12 +32,24 @@ function LoginForm() {
   }, [searchParams])
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        window.location.href = callbackUrl
+    let cancelled = false
+
+    // If already signed in (e.g. after password reset), leave login immediately.
+    void supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!cancelled && session) {
+        window.location.replace(callbackUrl)
       }
     })
-    return () => subscription.unsubscribe()
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        window.location.replace(callbackUrl)
+      }
+    })
+    return () => {
+      cancelled = true
+      subscription.unsubscribe()
+    }
   }, [callbackUrl])
 
   const ensureSupabaseConfigured = () => {
@@ -116,7 +127,7 @@ function LoginForm() {
         return
       }
 
-      window.location.href = callbackUrl
+      window.location.replace(callbackUrl)
     } catch (err: unknown) {
       console.error('Password login error:', err)
       setError(err instanceof Error ? err.message : 'An unexpected error occurred.')

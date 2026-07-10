@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { isSafeInternalCallbackPath } from '@/lib/safe-callback-path'
+import { resolvePostLoginPath } from '@/lib/safe-callback-path'
 import type { EmailOtpType } from '@supabase/supabase-js'
 
 const OTP_TYPES = new Set<EmailOtpType>([
@@ -74,6 +74,6 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const safeNext = isSafeInternalCallbackPath(next) ? next : '/dashboard'
+  const safeNext = resolvePostLoginPath(next)
   return NextResponse.redirect(new URL(safeNext, req.url))
 }

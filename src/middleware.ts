@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { createServerClient } from '@supabase/ssr'
-import { isSafeInternalCallbackPath } from '@/lib/safe-callback-path'
+import { resolvePostLoginPath } from '@/lib/safe-callback-path'
 import { unwrapSesClickTrackingUrl } from '@/lib/ses-click-tracking'
 
 export async function middleware(req: NextRequest) {
@@ -174,13 +174,17 @@ export async function middleware(req: NextRequest) {
         data: { user },
       } = await supabase.auth.getUser()
 
+      // Authenticated users hitting `/` go straight to the app (avoids login callback loops).
+      if (user && pathname === '/') {
+        return NextResponse.redirect(new URL('/dashboard', req.url))
+      }
+
       // Protect all other routes on CRM domain
       if (!user && !pathname.startsWith('/api/auth')) {
         const loginUrl = new URL('/login', req.url)
-        // Preserve query string (e.g. ?practiceId=) for deep links; still same-origin relative only.
+        // Preserve query string (e.g. ?practiceId=) for deep links; never use `/` as callback.
         const pathWithQuery = `${pathname}${req.nextUrl.search}`
-        const safeCallbackUrl = isSafeInternalCallbackPath(pathWithQuery) ? pathWithQuery : '/dashboard'
-        loginUrl.searchParams.set('callbackUrl', safeCallbackUrl)
+        loginUrl.searchParams.set('callbackUrl', resolvePostLoginPath(pathWithQuery))
         return NextResponse.redirect(loginUrl)
       }
     }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isSafeInternalCallbackPath } from '@/lib/safe-callback-path'
+import { isSafeInternalCallbackPath, resolvePostLoginPath } from '@/lib/safe-callback-path'
 
 describe('Safe Callback Path Utility', () => {
   describe('valid internal paths', () => {
@@ -61,5 +61,21 @@ describe('Safe Callback Path Utility', () => {
       expect(isSafeInternalCallbackPath('dashboard')).toBe(false)
       expect(isSafeInternalCallbackPath('patients/123')).toBe(false)
     })
+  })
+})
+
+describe('resolvePostLoginPath', () => {
+  it('maps root to dashboard to avoid login redirect loops', () => {
+    expect(resolvePostLoginPath('/')).toBe('/dashboard')
+    expect(resolvePostLoginPath('/?x=1')).toBe('/dashboard')
+  })
+
+  it('keeps safe deep links', () => {
+    expect(resolvePostLoginPath('/patients?search=a')).toBe('/patients?search=a')
+  })
+
+  it('falls back for missing or unsafe values', () => {
+    expect(resolvePostLoginPath(null)).toBe('/dashboard')
+    expect(resolvePostLoginPath('https://evil.com')).toBe('/dashboard')
   })
 })
