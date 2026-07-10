@@ -37,11 +37,12 @@ function ForgotPasswordForm() {
       }
 
       const origin = typeof window !== 'undefined' ? window.location.origin : ''
-      // Exchange PKCE code in /auth/callback, then land on /reset-password with a session.
+      // Land on /reset-password so the browser can exchange the PKCE code
+      // (code verifier is stored in cookies by createBrowserClient).
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(
         email.trim().toLowerCase(),
         {
-          redirectTo: `${origin}/auth/callback?next=${encodeURIComponent('/reset-password')}`,
+          redirectTo: `${origin}/reset-password`,
         }
       )
 

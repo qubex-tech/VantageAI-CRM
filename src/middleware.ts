@@ -30,16 +30,11 @@ export async function middleware(req: NextRequest) {
     return NextResponse.rewrite(new URL('/mcp', req.url))
   }
 
-  // Supabase PKCE redirects with ?code= — exchange via /auth/callback
-  // Covers Site URL (/) and legacy recovery redirectTo (/reset-password).
-  if (
-    req.nextUrl.searchParams.has('code') &&
-    (pathname === '/' || pathname === '/reset-password')
-  ) {
-    const next =
-      pathname === '/reset-password'
-        ? '/reset-password'
-        : req.nextUrl.searchParams.get('next') || '/dashboard'
+  // Supabase PKCE redirects to Site URL (/) with ?code= — exchange via /auth/callback.
+  // Password recovery lands on /reset-password?code= and exchanges client-side
+  // (browser holds the PKCE code verifier cookie from resetPasswordForEmail).
+  if (pathname === '/' && req.nextUrl.searchParams.has('code')) {
+    const next = req.nextUrl.searchParams.get('next') || '/dashboard'
     const url = new URL('/auth/callback', req.url)
     url.searchParams.set('code', req.nextUrl.searchParams.get('code')!)
     url.searchParams.set('next', next)

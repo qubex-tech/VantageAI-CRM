@@ -28,17 +28,29 @@ function ResetPasswordForm() {
       setError('')
 
       try {
-        // Legacy implicit-flow links put tokens in the hash; SSR callback uses cookies.
-        const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
-        const accessToken = hashParams.get('access_token') || searchParams?.get('access_token')
-        const refreshToken = hashParams.get('refresh_token') || searchParams?.get('refresh_token')
+        // PKCE recovery: exchange ?code= in the same browser that requested the reset
+        // (code verifier cookie was set by createBrowserClient during resetPasswordForEmail).
+        const code = searchParams?.get('code')
+        if (code) {
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+          if (exchangeError) throw exchangeError
+          // Drop the one-time code from the URL without a full navigation.
+          const clean = new URL(window.location.href)
+          clean.searchParams.delete('code')
+          window.history.replaceState({}, '', clean.pathname + clean.search + clean.hash)
+        } else {
+          // Legacy implicit-flow links put tokens in the hash.
+          const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+          const accessToken = hashParams.get('access_token') || searchParams?.get('access_token')
+          const refreshToken = hashParams.get('refresh_token') || searchParams?.get('refresh_token')
 
-        if (accessToken && refreshToken) {
-          const { error: setSessionError } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          })
-          if (setSessionError) throw setSessionError
+          if (accessToken && refreshToken) {
+            const { error: setSessionError } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            })
+            if (setSessionError) throw setSessionError
+          }
         }
 
         const {
@@ -57,11 +69,18 @@ function ResetPasswordForm() {
       } catch (err: unknown) {
         if (cancelled) return
         setSessionReady(false)
-        setError(
+        const message =
           err instanceof Error
             ? err.message
             : 'Invalid or expired reset link. Please request a new one.'
-        )
+        // Surface a clearer action when the verifier cookie is missing (other browser/device).
+        if (/code verifier/i.test(message)) {
+          setError(
+            'This reset link must be opened in the same browser where you requested it. Request a new link below.'
+          )
+        } else {
+          setError(message)
+        }
       } finally {
         if (!cancelled) setCheckingSession(false)
       }

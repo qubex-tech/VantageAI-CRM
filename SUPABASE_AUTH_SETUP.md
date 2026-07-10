@@ -36,7 +36,7 @@ In your Supabase Dashboard:
    - `https://app.getvantage.tech/reset-password`
    - Add other production/preview URLs when deploying
 
-   Password reset emails must allow `/auth/callback` (PKCE code exchange) — the app then sends the user to `/reset-password` with a session.
+   Password reset emails redirect to `/reset-password`, where the browser exchanges the PKCE `code` (the code verifier cookie is set when the user requests the reset). Magic links still use `/auth/callback`.
 
 4. Go to **Authentication** → **Email Templates**
    - Customize email templates if desired (optional)
