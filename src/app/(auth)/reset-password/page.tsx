@@ -17,18 +17,70 @@ function ResetPasswordForm() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [sessionReady, setSessionReady] = useState(false)
+  const [checkingSession, setCheckingSession] = useState(true)
 
   useEffect(() => {
-    // Check if we have the required hash parameters from Supabase
-    const hashParams = window.location.hash.substring(1)
-    if (!hashParams && !searchParams?.get('access_token')) {
-      setError('Invalid or expired reset link. Please request a new one.')
+    let cancelled = false
+
+    async function ensureRecoverySession() {
+      setCheckingSession(true)
+      setError('')
+
+      try {
+        // Legacy implicit-flow links put tokens in the hash; SSR callback uses cookies.
+        const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+        const accessToken = hashParams.get('access_token') || searchParams?.get('access_token')
+        const refreshToken = hashParams.get('refresh_token') || searchParams?.get('refresh_token')
+
+        if (accessToken && refreshToken) {
+          const { error: setSessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          })
+          if (setSessionError) throw setSessionError
+        }
+
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+
+        if (cancelled) return
+
+        if (!session) {
+          setSessionReady(false)
+          setError('Invalid or expired reset link. Please request a new one.')
+          return
+        }
+
+        setSessionReady(true)
+      } catch (err: unknown) {
+        if (cancelled) return
+        setSessionReady(false)
+        setError(
+          err instanceof Error
+            ? err.message
+            : 'Invalid or expired reset link. Please request a new one.'
+        )
+      } finally {
+        if (!cancelled) setCheckingSession(false)
+      }
+    }
+
+    void ensureRecoverySession()
+    return () => {
+      cancelled = true
     }
   }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+
+    if (!sessionReady) {
+      setError('Invalid or expired reset link. Please request a new one.')
+      return
+    }
 
     if (password !== confirmPassword) {
       setError('Passwords do not match')
@@ -43,9 +95,8 @@ function ResetPasswordForm() {
     setLoading(true)
 
     try {
-      // Update password with Supabase
       const { error: updateError } = await supabase.auth.updateUser({
-        password: password,
+        password,
       })
 
       if (updateError) {
@@ -53,12 +104,15 @@ function ResetPasswordForm() {
       }
 
       setSuccess(true)
-      // Redirect to login after a short delay
       setTimeout(() => {
         router.push('/login?message=Password reset successful. Please sign in.')
       }, 2000)
-    } catch (err: any) {
-      setError(err.message || 'Failed to reset password. The link may have expired.')
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to reset password. The link may have expired.'
+      )
     } finally {
       setLoading(false)
     }
@@ -92,48 +146,67 @@ function ResetPasswordForm() {
           <CardDescription className="text-sm text-gray-500 mt-1">Enter your new password</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="password">New Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                autoComplete="new-password"
-                minLength={8}
-              />
-              <p className="text-xs text-gray-500">Must be at least 8 characters</p>
-            </div>
+          {checkingSession ? (
+            <div className="text-center text-sm text-gray-500 py-6">Verifying reset link...</div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="password">New Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  autoComplete="new-password"
+                  minLength={8}
+                  disabled={!sessionReady}
+                />
+                <p className="text-xs text-gray-500">Must be at least 8 characters</p>
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm New Password</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                autoComplete="new-password"
-                minLength={8}
-              />
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  autoComplete="new-password"
+                  minLength={8}
+                  disabled={!sessionReady}
+                />
+              </div>
 
-            {error && (
-              <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">{error}</div>
-            )}
+              {error && (
+                <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">
+                  {error}
+                  {!sessionReady && (
+                    <div className="mt-2">
+                      <Link href="/forgot-password" className="font-medium underline">
+                        Request a new reset link
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              )}
 
-            <Button type="submit" className="w-full bg-gray-900 hover:bg-gray-800 text-white font-medium" disabled={loading}>
-              {loading ? 'Resetting password...' : 'Reset Password'}
-            </Button>
+              <Button
+                type="submit"
+                className="w-full bg-gray-900 hover:bg-gray-800 text-white font-medium"
+                disabled={loading || !sessionReady}
+              >
+                {loading ? 'Resetting password...' : 'Reset Password'}
+              </Button>
 
-            <div className="text-center text-sm">
-              <Link href="/login" className="text-gray-900 hover:underline font-medium">
-                Back to Login
-              </Link>
-            </div>
-          </form>
+              <div className="text-center text-sm">
+                <Link href="/login" className="text-gray-900 hover:underline font-medium">
+                  Back to Login
+                </Link>
+              </div>
+            </form>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -155,4 +228,3 @@ export default function ResetPasswordPage() {
     </Suspense>
   )
 }
-

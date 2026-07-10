@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase-browser'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,11 +9,17 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import Link from 'next/link'
 
-export default function ForgotPasswordPage() {
+function ForgotPasswordForm() {
+  const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
+
+  useEffect(() => {
+    const urlError = searchParams?.get('error')
+    if (urlError) setError(urlError)
+  }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -30,10 +37,11 @@ export default function ForgotPasswordPage() {
       }
 
       const origin = typeof window !== 'undefined' ? window.location.origin : ''
+      // Exchange PKCE code in /auth/callback, then land on /reset-password with a session.
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(
         email.trim().toLowerCase(),
         {
-          redirectTo: `${origin}/reset-password`,
+          redirectTo: `${origin}/auth/callback?next=${encodeURIComponent('/reset-password')}`,
         }
       )
 
@@ -101,5 +109,23 @@ export default function ForgotPasswordPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function ForgotPasswordPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center p-4 bg-gray-50">
+          <Card className="w-full max-w-md border border-gray-200 shadow-lg">
+            <CardContent className="p-6">
+              <div className="text-center text-gray-500">Loading...</div>
+            </CardContent>
+          </Card>
+        </div>
+      }
+    >
+      <ForgotPasswordForm />
+    </Suspense>
   )
 }

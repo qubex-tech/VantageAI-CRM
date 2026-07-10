@@ -2,16 +2,30 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { isSafeInternalCallbackPath } from '@/lib/safe-callback-path'
+import type { EmailOtpType } from '@supabase/supabase-js'
+
+const OTP_TYPES = new Set<EmailOtpType>([
+  'signup',
+  'invite',
+  'magiclink',
+  'recovery',
+  'email_change',
+  'email',
+])
 
 /**
- * Handles Supabase OTP magic link callback.
+ * Handles Supabase auth callbacks (magic link, recovery, email confirm).
  * Supports both PKCE (code param) and token_hash/type flows.
  */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const code = searchParams.get('code')
   const token_hash = searchParams.get('token_hash')
-  const type = searchParams.get('type') as 'magiclink' | 'email' | null
+  const typeParam = searchParams.get('type')
+  const type =
+    typeParam && OTP_TYPES.has(typeParam as EmailOtpType)
+      ? (typeParam as EmailOtpType)
+      : null
   const next = searchParams.get('next') || '/dashboard'
 
   if (!code && (!token_hash || !type)) {
@@ -42,17 +56,21 @@ export async function GET(req: NextRequest) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (error) {
       console.error('Code exchange error:', error.message)
-      return NextResponse.redirect(
-        new URL(`/login?error=${encodeURIComponent(error.message)}`, req.url)
-      )
+      const failPath =
+        next === '/reset-password' || next.startsWith('/reset-password?')
+          ? `/forgot-password?error=${encodeURIComponent(error.message)}`
+          : `/login?error=${encodeURIComponent(error.message)}`
+      return NextResponse.redirect(new URL(failPath, req.url))
     }
   } else if (token_hash && type) {
     const { error } = await supabase.auth.verifyOtp({ type, token_hash })
     if (error) {
       console.error('OTP verification error:', error.message)
-      return NextResponse.redirect(
-        new URL(`/login?error=${encodeURIComponent(error.message)}`, req.url)
-      )
+      const failPath =
+        type === 'recovery'
+          ? `/forgot-password?error=${encodeURIComponent(error.message)}`
+          : `/login?error=${encodeURIComponent(error.message)}`
+      return NextResponse.redirect(new URL(failPath, req.url))
     }
   }
 

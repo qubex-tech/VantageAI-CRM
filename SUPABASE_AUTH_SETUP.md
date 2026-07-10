@@ -30,8 +30,13 @@ In your Supabase Dashboard:
    - Add your production URL when deploying
 
 3. Add these to **Redirect URLs**:
+   - `http://localhost:3000/auth/callback`
    - `http://localhost:3000/reset-password`
-   - Add production URLs when deploying
+   - `https://app.getvantage.tech/auth/callback`
+   - `https://app.getvantage.tech/reset-password`
+   - Add other production/preview URLs when deploying
+
+   Password reset emails must allow `/auth/callback` (PKCE code exchange) — the app then sends the user to `/reset-password` with a session.
 
 4. Go to **Authentication** → **Email Templates**
    - Customize email templates if desired (optional)

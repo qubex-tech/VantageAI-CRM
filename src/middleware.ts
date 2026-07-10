@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { createServerClient } from '@supabase/ssr'
 import { isSafeInternalCallbackPath } from '@/lib/safe-callback-path'
+import { unwrapSesClickTrackingUrl } from '@/lib/ses-click-tracking'
 
 export async function middleware(req: NextRequest) {
   let res = NextResponse.next({
@@ -13,6 +14,15 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
   const host = req.headers.get('host') || ''
 
+  // AWS SES click-tracking custom domain misconfigured onto the app host.
+  // Unwrap /CL0/{encoded-destination}/1/... before any auth gate (recovery links).
+  if (pathname.startsWith('/CL0/')) {
+    const destination = unwrapSesClickTrackingUrl(req.nextUrl)
+    if (destination) {
+      return NextResponse.redirect(destination)
+    }
+  }
+
   // Some MCP clients post to the configured base URL directly ("/").
   // Route POST / on CRM/local hosts to the MCP endpoint.
   const isCrmLikeHost = host.includes('getvantage.tech') || host.startsWith('localhost')
@@ -20,9 +30,16 @@ export async function middleware(req: NextRequest) {
     return NextResponse.rewrite(new URL('/mcp', req.url))
   }
 
-  // Supabase PKCE redirects to / with ?code= - forward to auth callback
-  if (pathname === '/' && req.nextUrl.searchParams.has('code')) {
-    const next = req.nextUrl.searchParams.get('next') || '/dashboard'
+  // Supabase PKCE redirects with ?code= — exchange via /auth/callback
+  // Covers Site URL (/) and legacy recovery redirectTo (/reset-password).
+  if (
+    req.nextUrl.searchParams.has('code') &&
+    (pathname === '/' || pathname === '/reset-password')
+  ) {
+    const next =
+      pathname === '/reset-password'
+        ? '/reset-password'
+        : req.nextUrl.searchParams.get('next') || '/dashboard'
     const url = new URL('/auth/callback', req.url)
     url.searchParams.set('code', req.nextUrl.searchParams.get('code')!)
     url.searchParams.set('next', next)

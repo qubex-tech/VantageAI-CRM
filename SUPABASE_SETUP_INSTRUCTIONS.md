@@ -32,7 +32,7 @@ In Supabase Dashboard:
 
 1. **Authentication** → **URL Configuration**:
    - **Site URL**: `http://localhost:3000`
-   - **Redirect URLs**: Add `http://localhost:3000/reset-password`
+   - **Redirect URLs**: Add `http://localhost:3000/auth/callback`, `http://localhost:3000/reset-password`, and the same paths for production (`https://app.getvantage.tech/...`)
 
 2. **Authentication** → **Providers**:
    - Make sure **Email** provider is enabled
