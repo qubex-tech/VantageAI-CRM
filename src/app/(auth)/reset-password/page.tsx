@@ -122,10 +122,13 @@ function ResetPasswordForm() {
         throw updateError
       }
 
+      // End the recovery session so login doesn't auto-bounce with stale cookies.
+      await supabase.auth.signOut()
+
       setSuccess(true)
       setTimeout(() => {
-        router.push('/login?message=Password reset successful. Please sign in.')
-      }, 2000)
+        window.location.replace('/login?message=Password reset successful. Please sign in.')
+      }, 1500)
     } catch (err: unknown) {
       setError(
         err instanceof Error

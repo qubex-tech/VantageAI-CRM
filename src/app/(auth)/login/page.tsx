@@ -34,21 +34,30 @@ function LoginForm() {
   useEffect(() => {
     let cancelled = false
 
-    // If already signed in (e.g. after password reset), leave login immediately.
-    void supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!cancelled && session) {
-        window.location.replace(callbackUrl)
-      }
-    })
+    // Clear revoked/stale cookies (common after password reset) so we never
+    // bounce login ↔ dashboard. Only leave login when the server still accepts the user.
+    void (async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      if (cancelled || !session) return
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        window.location.replace(callbackUrl)
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser()
+      if (cancelled) return
+
+      if (error || !user) {
+        await supabase.auth.signOut()
+        return
       }
-    })
+
+      window.location.replace(callbackUrl)
+    })()
+
     return () => {
       cancelled = true
-      subscription.unsubscribe()
     }
   }, [callbackUrl])
 
