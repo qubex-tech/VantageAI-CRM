@@ -560,7 +560,7 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
                 </SelectContent>
               </Select>
             </div>
-            {needsSmsTemplate && (
+            {(needsSmsTemplate || needsCurogramTemplate) && (
               <div>
                 <Label>SMS reply handling</Label>
                 <Select
@@ -580,13 +580,13 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
                       Vantage Telnyx number (auto-book on YES reply)
                     </SelectItem>
                     <SelectItem value="practice_number">
-                      Practice-owned number (no inbound replies)
+                      Staff / Curogram handle replies (no auto-book)
                     </SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-gray-500 mt-1">
-                  If SMS is sent from the practice&apos;s own number, replies won&apos;t reach Vantage —
-                  use the portal link in your template instead of reply-to-book.
+                  Choose staff/Curogram when Mira only sends the offer and your team books the
+                  patient manually. Vantage will not wait for or process a YES reply.
                 </p>
               </div>
             )}

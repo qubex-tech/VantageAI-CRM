@@ -150,7 +150,7 @@ export type OutboundAgentsSettings = {
   curogramSmsActionId?: string
   /**
    * telnyx_inbound — replies route to Vantage Telnyx webhook (auto book on accept).
-   * practice_number — practice sends from their own number; inbound replies are not received.
+   * practice_number — staff/Curogram (or practice number) handle replies; no auto-book.
    */
   smsReplyHandling?: SmsReplyHandling
   /** Which events create open slots and start the optimization agent */
