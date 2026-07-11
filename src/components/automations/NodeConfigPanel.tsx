@@ -16,6 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Trash2, X, Loader2 } from 'lucide-react'
 import { FlowNodeData } from './FlowBuilder'
 import Link from 'next/link'
+import { OPEN_SLOT_SOURCE_LABELS, type OpenSlotSource } from '@/lib/appointment-optimization/types'
 
 interface NodeConfigPanelProps {
   node: Node<FlowNodeData>
@@ -197,9 +198,7 @@ const EVENT_FIELDS: Record<string, Array<{ value: string; label: string; type: '
     ...PATIENT_FIELDS,
   ],
   'crm/open_slot.available': [
-    { value: 'openSlot.source', label: 'Trigger scenario (source)', type: 'string' },
-    { value: 'openSlot.triggerLabel', label: 'Trigger scenario (label)', type: 'string' },
-    { value: 'openSlot.triggerScenario', label: 'Trigger scenario (code)', type: 'string' },
+    { value: 'openSlot.source', label: 'Trigger scenario', type: 'string' },
     { value: 'openSlot.visitType', label: 'Visit type', type: 'string' },
     { value: 'openSlot.providerId', label: 'Provider ID', type: 'string' },
     { value: 'openSlot.slotStart', label: 'Slot start', type: 'date' },
@@ -232,6 +231,10 @@ const ELIGIBILITY_STATUS_OPTIONS = [
   'pending',
   'unknown',
 ]
+
+const OPEN_SLOT_SOURCE_OPTIONS: Array<{ value: OpenSlotSource; label: string }> = (
+  Object.entries(OPEN_SLOT_SOURCE_LABELS) as Array<[OpenSlotSource, string]>
+).map(([value, label]) => ({ value, label }))
 
 interface MarketingTemplate {
   id: string
@@ -675,6 +678,47 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                                 {ELIGIBILITY_STATUS_OPTIONS.map((status) => (
                                   <SelectItem key={status} value={status}>
                                     {status.charAt(0).toUpperCase() + status.slice(1)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : condition.field === 'openSlot.source' ||
+                            condition.field === 'openSlot.triggerScenario' ? (
+                            <Select
+                              value={condition.value || ''}
+                              onValueChange={(value) => {
+                                const newConditions = [...(config.conditions || [])]
+                                newConditions[index] = { ...condition, value }
+                                handleUpdate({ conditions: newConditions })
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select trigger scenario" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {OPEN_SLOT_SOURCE_OPTIONS.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : condition.field === 'openSlot.triggerLabel' ? (
+                            <Select
+                              value={condition.value || ''}
+                              onValueChange={(value) => {
+                                const newConditions = [...(config.conditions || [])]
+                                newConditions[index] = { ...condition, value }
+                                handleUpdate({ conditions: newConditions })
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select trigger scenario" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {OPEN_SLOT_SOURCE_OPTIONS.map((option) => (
+                                  <SelectItem key={option.value} value={option.label}>
+                                    {option.label}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
