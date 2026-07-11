@@ -1573,62 +1573,6 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                 )}
               </div>
 
-              {/* Tags Section */}
-              <div className="min-w-0 border-b border-gray-200 pb-4">
-                <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
-                  <Tag className="h-3.5 w-3.5" />
-                  Tags
-                </div>
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {tags.length > 0 ? (
-                    tags.map((tag) => (
-                      <span
-                        key={tag.id}
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700"
-                      >
-                        {tag.tag}
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveTag(tag.tag)}
-                          disabled={tagsSaving}
-                          className="text-gray-400 hover:text-gray-700"
-                          aria-label={`Remove tag ${tag.tag}`}
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </span>
-                    ))
-                  ) : (
-                    <span className="text-xs text-gray-400">No tags yet</span>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    value={newTag}
-                    onChange={(e) => setNewTag(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        void handleAddTag()
-                      }
-                    }}
-                    placeholder="Add a tag"
-                    className="h-8 text-sm"
-                    disabled={tagsSaving}
-                  />
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void handleAddTag()}
-                    disabled={tagsSaving || !newTag.trim()}
-                  >
-                    Add
-                  </Button>
-                </div>
-                {tagsError && <p className="mt-2 text-xs text-red-600">{tagsError}</p>}
-              </div>
-
               {/* Tasks Section */}
               <div className="min-w-0 border-b border-gray-200 pb-4">
                 <button
@@ -1791,6 +1735,62 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                     </Button>
                   </div>
                 )}
+              </div>
+
+              {/* Tags Section */}
+              <div className="min-w-0 pb-4">
+                <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
+                  <Tag className="h-3.5 w-3.5" />
+                  Tags
+                </div>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {tags.length > 0 ? (
+                    tags.map((tag) => (
+                      <span
+                        key={tag.id}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700"
+                      >
+                        {tag.tag}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveTag(tag.tag)}
+                          disabled={tagsSaving}
+                          className="text-gray-400 hover:text-gray-700"
+                          aria-label={`Remove tag ${tag.tag}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-gray-400">No tags yet</span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    value={newTag}
+                    onChange={(e) => setNewTag(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        void handleAddTag()
+                      }
+                    }}
+                    placeholder="Add a tag"
+                    className="h-8 text-sm"
+                    disabled={tagsSaving}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void handleAddTag()}
+                    disabled={tagsSaving || !newTag.trim()}
+                  >
+                    Add
+                  </Button>
+                </div>
+                {tagsError && <p className="mt-2 text-xs text-red-600">{tagsError}</p>}
               </div>
             </div>
           )}
