@@ -108,6 +108,11 @@ const sendReminderSchema = z.object({
   message: z.string(),
 })
 
+const triggerCurogramTemplateSchema = z.object({
+  patientId: z.string(),
+  actionId: z.string().min(1),
+})
+
 async function resolveAutomationUserId(
   practiceId: string,
   preferredUserId?: string
@@ -1348,6 +1353,109 @@ async function sendReminder(
   }
 }
 
+async function triggerCurogramTemplate(
+  practiceId: string,
+  args: z.infer<typeof triggerCurogramTemplateSchema>,
+  _eventData: Record<string, any>
+): Promise<ActionResult> {
+  const patient = await prisma.patient.findFirst({
+    where: {
+      id: args.patientId,
+      practiceId,
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+      name: true,
+      firstName: true,
+      lastName: true,
+      phone: true,
+      primaryPhone: true,
+      dateOfBirth: true,
+      gender: true,
+    },
+  })
+
+  if (!patient) {
+    return {
+      status: 'failed',
+      error: `Patient ${args.patientId} not found or not accessible`,
+    }
+  }
+
+  const nameParts = (patient.name || '').trim().split(/\s+/).filter(Boolean)
+  const firstName = (patient.firstName || nameParts[0] || '').trim()
+  const lastName = (
+    patient.lastName ||
+    (nameParts.length > 1 ? nameParts[nameParts.length - 1] : '') ||
+    ''
+  ).trim()
+  const { normalizePhoneToE164, normalizeCurogramAiV2Gender, sendCurogramAiCallsToAction } =
+    await import('@/lib/curogram')
+  const phoneNumber =
+    normalizePhoneToE164(patient.primaryPhone || patient.phone) ||
+    patient.primaryPhone ||
+    patient.phone ||
+    ''
+
+  if (!firstName || !lastName || !phoneNumber || !patient.dateOfBirth) {
+    return {
+      status: 'skipped',
+      error:
+        'Missing required patient fields for Curogram (firstName, lastName, phone, dateOfBirth)',
+      result: {
+        action: 'trigger_curogram_template',
+        patientId: patient.id,
+        skipped: true,
+      },
+    }
+  }
+
+  const gender = normalizeCurogramAiV2Gender(patient.gender)
+  const actionResult = await sendCurogramAiCallsToAction({
+    firstName,
+    lastName,
+    phoneNumber,
+    dob: patient.dateOfBirth.toISOString(),
+    actionId: args.actionId.trim(),
+    ...(gender ? { gender } : {}),
+  })
+
+  if (!actionResult.ok) {
+    return {
+      status: 'failed',
+      error: `Curogram calls-to-action failed (${actionResult.status}): ${actionResult.body.slice(0, 300)}`,
+    }
+  }
+
+  try {
+    await logPatientActivity({
+      patientId: patient.id,
+      type: 'other',
+      title: 'Curogram template triggered',
+      description: `Action ID: ${args.actionId.trim()}`,
+      metadata: {
+        actionId: args.actionId.trim(),
+        status: actionResult.status,
+        createdBy: 'automation',
+      },
+    })
+  } catch (error) {
+    console.error('Failed to log Curogram template activity:', error)
+  }
+
+  return {
+    status: 'succeeded',
+    result: {
+      action: 'trigger_curogram_template',
+      patientId: patient.id,
+      actionId: args.actionId.trim(),
+      status: actionResult.status,
+      body: actionResult.body.slice(0, 300),
+    },
+  }
+}
+
 /**
  * Main action runner
  */
@@ -1440,6 +1548,12 @@ export async function runAction(params: RunActionParams): Promise<ActionResult> 
       case 'send_reminder': {
         const validated = sendReminderSchema.parse(actionArgs)
         result = await sendReminder(practiceId, validated, eventData)
+        break
+      }
+
+      case 'trigger_curogram_template': {
+        const validated = triggerCurogramTemplateSchema.parse(actionArgs)
+        result = await triggerCurogramTemplate(practiceId, validated, eventData)
         break
       }
 

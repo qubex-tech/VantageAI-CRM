@@ -1,6 +1,6 @@
 'use client'
 
-import { Zap, GitBranch, PlayCircle, Mail, MessageSquare, FileText, User, Clock, Calendar, Shield, Phone, Tag, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
+import { Zap, GitBranch, PlayCircle, Mail, MessageSquare, FileText, User, Clock, Calendar, Shield, Phone, Tag, CheckCircle, XCircle, AlertCircle, List } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { FlowNodeData } from './FlowBuilder'
@@ -33,6 +33,10 @@ const TRIGGER_OPTIONS = [
   { value: 'crm/message.drafted', label: 'Message Drafted', icon: MessageSquare, category: 'Communication' },
   { value: 'crm/voice_conversation.started', label: 'Voice Call Started', icon: Phone, category: 'Communication' },
   { value: 'crm/voice_conversation.ended', label: 'Voice Call Ended', icon: Phone, category: 'Communication' },
+
+  // Lists
+  { value: 'crm/list.run', label: 'List Run', icon: List, category: 'Lists' },
+  { value: 'crm/list.member_added', label: 'List Member Added', icon: List, category: 'Lists' },
 ]
 
 const ACTION_OPTIONS = [
@@ -40,6 +44,7 @@ const ACTION_OPTIONS = [
   { value: 'send_email', label: 'Send Email', icon: Mail, category: 'Communication' },
   { value: 'send_sms', label: 'Send SMS', icon: MessageSquare, category: 'Communication' },
   { value: 'send_reminder', label: 'Send Reminder', icon: AlertCircle, category: 'Communication' },
+  { value: 'trigger_curogram_template', label: 'Trigger Curogram Template', icon: MessageSquare, category: 'Communication' },
   
   // Patient Management
   { value: 'create_note', label: 'Create Note', icon: FileText, category: 'Patient Management' },

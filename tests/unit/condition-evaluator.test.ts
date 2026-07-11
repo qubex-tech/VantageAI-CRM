@@ -152,5 +152,36 @@ describe('Condition Evaluator', () => {
       expect(evaluateConditions(condition, {})).toBe(false)
     })
   })
+
+  describe('patient_on_list condition', () => {
+    it('matches when patient.listIds includes the list id', () => {
+      const condition = {
+        field: 'patient_on_list',
+        operator: 'equals' as const,
+        value: 'list-1',
+      }
+
+      expect(
+        evaluateConditions(condition, {
+          patient: { listIds: ['list-1', 'list-2'] },
+        })
+      ).toBe(true)
+      expect(
+        evaluateConditions(condition, {
+          patient: { listIds: ['list-2'] },
+        })
+      ).toBe(false)
+    })
+
+    it('returns false when listIds are missing', () => {
+      const condition = {
+        field: 'patient_on_list',
+        operator: 'equals' as const,
+        value: 'list-1',
+      }
+      expect(evaluateConditions(condition, { patient: {} })).toBe(false)
+      expect(evaluateConditions(condition, {})).toBe(false)
+    })
+  })
 })
 

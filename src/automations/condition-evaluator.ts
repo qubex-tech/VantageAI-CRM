@@ -55,6 +55,25 @@ function evaluateFieldCondition(
   condition: FieldCondition,
   data: Record<string, any>
 ): boolean {
+  // Dedicated membership check — expects patient.listIds enriched by the runner
+  if (condition.field === 'patient_on_list') {
+    const listIds = data.patient?.listIds
+    if (!Array.isArray(listIds)) return false
+    if (condition.operator === 'equals' || condition.operator === 'contains') {
+      return listIds.includes(condition.value)
+    }
+    if (condition.operator === 'not_equals' || condition.operator === 'not_contains') {
+      return !listIds.includes(condition.value)
+    }
+    if (condition.operator === 'exists') {
+      return listIds.length > 0
+    }
+    if (condition.operator === 'not_exists' || condition.operator === 'is_empty') {
+      return listIds.length === 0
+    }
+    return false
+  }
+
   const fieldValue = getNestedValue(data, condition.field)
 
   switch (condition.operator) {

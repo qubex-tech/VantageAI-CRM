@@ -14,6 +14,7 @@ const primaryNavItems = [
 ]
 
 const moreNavItems = [
+  { href: '/lists', label: 'Lists' },
   { href: '/tasks', label: 'Tasks', icon: CheckSquare },
   { href: '/forms', label: 'Forms' },
   { href: '/marketing', label: 'Marketing' },

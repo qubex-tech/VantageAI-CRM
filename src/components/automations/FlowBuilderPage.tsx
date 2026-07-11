@@ -38,6 +38,15 @@ function ruleToFlow(rule: AutomationRule): { nodes: Node<FlowNodeData>[]; edges:
   const nodes: Node<FlowNodeData>[] = []
   const edges: Edge[] = []
 
+  const conditions = rule.conditionsJson
+  const conditionList = Array.isArray(conditions?.conditions) ? conditions.conditions : []
+  const listIdCondition = conditionList.find(
+    (c: any) => c?.field === 'list.id' && c?.operator === 'equals' && typeof c?.value === 'string'
+  )
+  const remainingConditions = conditionList.filter(
+    (c: any) => !(c?.field === 'list.id' && c?.operator === 'equals')
+  )
+
   // Create trigger node
   const triggerNode: Node<FlowNodeData> = {
     id: 'trigger-0',
@@ -46,7 +55,10 @@ function ruleToFlow(rule: AutomationRule): { nodes: Node<FlowNodeData>[]; edges:
     data: {
       label: rule.name || 'Trigger',
       type: 'trigger',
-      config: { eventName: rule.triggerEvent },
+      config: {
+        eventName: rule.triggerEvent,
+        ...(listIdCondition?.value ? { listId: listIdCondition.value } : {}),
+      },
     },
   }
   nodes.push(triggerNode)
@@ -54,8 +66,8 @@ function ruleToFlow(rule: AutomationRule): { nodes: Node<FlowNodeData>[]; edges:
   let lastNodeId = 'trigger-0'
   let yOffset = 200
 
-  // Create condition node if conditions exist
-  if (rule.conditionsJson && rule.conditionsJson.conditions?.length > 0) {
+  // Create condition node if conditions exist (excluding injected list.id filter)
+  if (remainingConditions.length > 0) {
     const conditionNode: Node<FlowNodeData> = {
       id: 'condition-0',
       type: 'condition',
@@ -63,7 +75,10 @@ function ruleToFlow(rule: AutomationRule): { nodes: Node<FlowNodeData>[]; edges:
       data: {
         label: 'Condition',
         type: 'condition',
-        config: rule.conditionsJson,
+        config: {
+          operator: conditions?.operator || 'and',
+          conditions: remainingConditions,
+        },
       },
     }
     nodes.push(conditionNode)
@@ -119,12 +134,30 @@ function flowToRule(
 
   // Get trigger event
   const triggerEvent = triggerNode?.data.config?.eventName || 'crm/appointment.created'
+  const listId = triggerNode?.data.config?.listId
 
   // Build conditions (combine all condition nodes)
   let conditionsJson: any = { operator: 'and', conditions: [] }
   if (conditionNodes.length > 0) {
     const firstCondition = conditionNodes[0]
     conditionsJson = firstCondition.data.config || { operator: 'and', conditions: [] }
+  }
+
+  // Persist selected list as an implicit list.id equals condition for list triggers
+  if (
+    (triggerEvent === 'crm/list.run' || triggerEvent === 'crm/list.member_added') &&
+    typeof listId === 'string' &&
+    listId.trim()
+  ) {
+    const existing = Array.isArray(conditionsJson.conditions) ? conditionsJson.conditions : []
+    const withoutListId = existing.filter((c: any) => c?.field !== 'list.id')
+    conditionsJson = {
+      operator: 'and',
+      conditions: [
+        { field: 'list.id', operator: 'equals', value: listId.trim() },
+        ...withoutListId,
+      ],
+    }
   }
 
   // Build actions from action nodes
@@ -183,6 +216,12 @@ export function FlowBuilderPage({ practiceId, userId, initialRules = [], initial
       errors.push('Add a trigger before saving.')
     } else if (isMissingValue(triggerNode.data.config?.eventName)) {
       errors.push('Select a trigger event.')
+    } else if (
+      (triggerNode.data.config?.eventName === 'crm/list.run' ||
+        triggerNode.data.config?.eventName === 'crm/list.member_added') &&
+      isMissingValue(triggerNode.data.config?.listId)
+    ) {
+      errors.push('Select a patient list for the list trigger.')
     }
 
     const actionNodes = workflow.nodes.filter((n) => n.type === 'action')
@@ -256,6 +295,11 @@ export function FlowBuilderPage({ practiceId, userId, initialRules = [], initial
         case 'create_insurance_policy':
           if (isMissingValue(args.payerNameRaw) || isMissingValue(args.memberId)) {
             errors.push(`Add payer name and member ID for ${actionLabel}.`)
+          }
+          break
+        case 'trigger_curogram_template':
+          if (isMissingValue(args.actionId)) {
+            errors.push(`Add a Curogram Action ID for ${actionLabel}.`)
           }
           break
         default:

@@ -12,6 +12,7 @@ function formatScreenTitle(pathname: string): string {
     dashboard: 'Dashboard',
     analytics: 'Analytics',
     patients: 'Patients',
+    lists: 'Lists',
     appointments: 'Appointments',
     'appointment-optimization': 'Slot Fill',
     tasks: 'Tasks',

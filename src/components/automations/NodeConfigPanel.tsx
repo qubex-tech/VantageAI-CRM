@@ -186,6 +186,16 @@ const EVENT_FIELDS: Record<string, Array<{ value: string; label: string; type: '
     { value: 'formRequest.templateId', label: 'Form Template ID', type: 'string' },
     ...PATIENT_FIELDS,
   ],
+  'crm/list.run': [
+    { value: 'list.id', label: 'List ID', type: 'string' },
+    { value: 'list.name', label: 'List Name', type: 'string' },
+    ...PATIENT_FIELDS,
+  ],
+  'crm/list.member_added': [
+    { value: 'list.id', label: 'List ID', type: 'string' },
+    { value: 'list.name', label: 'List Name', type: 'string' },
+    ...PATIENT_FIELDS,
+  ],
 }
 
 // Status options for appointment status field
@@ -229,6 +239,8 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
   const [config, setConfig] = useState(node.data.config || {})
   const [templates, setTemplates] = useState<MarketingTemplate[]>([])
   const [loadingTemplates, setLoadingTemplates] = useState(false)
+  const [patientLists, setPatientLists] = useState<Array<{ id: string; name: string; memberCount: number }>>([])
+  const [loadingLists, setLoadingLists] = useState(false)
 
   useEffect(() => {
     setConfig(node.data.config || {})
@@ -243,6 +255,18 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
       setTemplates([])
     }
   }, [config.actionType])
+
+  useEffect(() => {
+    const needsLists =
+      node.type === 'trigger' &&
+      (config.eventName === 'crm/list.run' || config.eventName === 'crm/list.member_added')
+    const conditionNeedsLists =
+      node.type === 'condition' &&
+      (config.conditions || []).some((c: any) => c.field === 'patient_on_list')
+    if (needsLists || conditionNeedsLists || node.type === 'condition') {
+      void fetchPatientLists()
+    }
+  }, [node.type, config.eventName, config.conditions])
 
   // Helper to check if selected template is drag-drop
   const selectedTemplate = config.args?.templateId 
@@ -260,6 +284,24 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
   const handleDelete = () => {
     if (confirm('Are you sure you want to delete this node?')) {
       onDelete(node.id)
+    }
+  }
+
+  const fetchPatientLists = async () => {
+    setLoadingLists(true)
+    try {
+      const response = await fetch('/api/lists')
+      if (response.ok) {
+        const data = await response.json()
+        setPatientLists(data.lists || [])
+      } else {
+        setPatientLists([])
+      }
+    } catch (error) {
+      console.error('Error fetching lists:', error)
+      setPatientLists([])
+    } finally {
+      setLoadingLists(false)
     }
   }
 
@@ -336,7 +378,11 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
   // Always include patient fields since they're relevant for most automation scenarios
   // Also include event-specific fields when a trigger is set
   const eventSpecificFields = triggerEventName ? (EVENT_FIELDS[triggerEventName] || []) : []
-  const availableFields = [...PATIENT_FIELDS, ...eventSpecificFields]
+  const availableFields = [
+    ...PATIENT_FIELDS,
+    { value: 'patient_on_list', label: 'Patient is on list', type: 'string' as const },
+    ...eventSpecificFields,
+  ]
   
   // Remove duplicates (in case patient fields are already in event-specific fields)
   const uniqueFields = availableFields.filter((field, index, self) => 
@@ -362,7 +408,15 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
             <Label>Event</Label>
             <Select
               value={config.eventName || ''}
-              onValueChange={(value) => handleUpdate({ eventName: value })}
+              onValueChange={(value) =>
+                handleUpdate({
+                  eventName: value,
+                  listId:
+                    value === 'crm/list.run' || value === 'crm/list.member_added'
+                      ? config.listId || ''
+                      : undefined,
+                })
+              }
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select trigger event" />
@@ -385,8 +439,51 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                 <SelectItem value="crm/voice_conversation.started">Voice Call Started</SelectItem>
                 <SelectItem value="crm/voice_conversation.ended">Voice Call Ended</SelectItem>
                 <SelectItem value="crm/form_request.created">Form Request Created</SelectItem>
+                <SelectItem value="crm/list.run">List Run</SelectItem>
+                <SelectItem value="crm/list.member_added">List Member Added</SelectItem>
               </SelectContent>
             </Select>
+
+            {(config.eventName === 'crm/list.run' || config.eventName === 'crm/list.member_added') && (
+              <div className="space-y-2 pt-2">
+                <Label>Patient List</Label>
+                {loadingLists ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-500 py-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Loading lists...</span>
+                  </div>
+                ) : (
+                  <Select
+                    value={config.listId || ''}
+                    onValueChange={(value) => handleUpdate({ listId: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a list" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {patientLists.map((list) => (
+                        <SelectItem key={list.id} value={list.id}>
+                          {list.name} ({list.memberCount})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                {patientLists.length === 0 && !loadingLists && (
+                  <p className="text-xs text-gray-500">
+                    No lists found.{' '}
+                    <Link href="/lists" className="text-blue-600 hover:underline" target="_blank">
+                      Create a list
+                    </Link>
+                  </p>
+                )}
+                {config.eventName === 'crm/list.run' && (
+                  <p className="text-xs text-gray-500">
+                    Run this automation from the list detail page using &quot;Run automations&quot;.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -421,7 +518,12 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                           value={condition.field || ''}
                           onValueChange={(value) => {
                             const newConditions = [...(config.conditions || [])]
-                            newConditions[index] = { ...condition, field: value, value: '' }
+                            newConditions[index] = {
+                              ...condition,
+                              field: value,
+                              value: '',
+                              ...(value === 'patient_on_list' ? { operator: 'equals' } : {}),
+                            }
                             handleUpdate({ conditions: newConditions })
                           }}
                         >
@@ -479,7 +581,31 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                       {condition.operator !== 'exists' && condition.operator !== 'not_exists' && condition.operator !== 'is_empty' && (
                         <div>
                           <Label className="text-xs">Value</Label>
-                          {condition.field === 'appointment.status' ? (
+                          {condition.field === 'patient_on_list' ? (
+                            <Select
+                              value={condition.value || ''}
+                              onValueChange={(value) => {
+                                const newConditions = [...(config.conditions || [])]
+                                newConditions[index] = {
+                                  ...condition,
+                                  operator: 'equals',
+                                  value,
+                                }
+                                handleUpdate({ conditions: newConditions })
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select a list" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {patientLists.map((list) => (
+                                  <SelectItem key={list.id} value={list.id}>
+                                    {list.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : condition.field === 'appointment.status' ? (
                             <Select
                               value={condition.value || ''}
                               onValueChange={(value) => {
@@ -613,6 +739,7 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                   <SelectItem value="send_email">Send Email</SelectItem>
                   <SelectItem value="send_sms">Send SMS</SelectItem>
                   <SelectItem value="send_reminder">Send Reminder</SelectItem>
+                  <SelectItem value="trigger_curogram_template">Trigger Curogram Template</SelectItem>
                   <SelectItem value="create_note">Create Note</SelectItem>
                   <SelectItem value="create_task">Create Task</SelectItem>
                   <SelectItem value="update_patient_fields">Update Patient Fields</SelectItem>
@@ -1161,6 +1288,24 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                   }}
                 />
                 <p className="text-xs text-gray-500">Maximum: 86400 (24 hours)</p>
+              </div>
+            )}
+
+            {config.actionType === 'trigger_curogram_template' && (
+              <div className="space-y-2">
+                <Label>Curogram Action ID</Label>
+                <Input
+                  placeholder="Paste the Curogram action / template ID"
+                  value={config.args?.actionId || ''}
+                  onChange={(e) => {
+                    const currentArgs = config.args || {}
+                    handleUpdate({ args: { ...currentArgs, actionId: e.target.value } })
+                  }}
+                />
+                <p className="text-xs text-gray-500">
+                  This ID selects the Curogram template/workflow. Patient must have first name, last
+                  name, phone, and date of birth.
+                </p>
               </div>
             )}
           </div>

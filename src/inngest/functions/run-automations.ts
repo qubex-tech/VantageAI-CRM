@@ -50,7 +50,8 @@ function substituteVariables(args: any, eventData: Record<string, any>): any {
 
 function buildAutomationContext(
   eventData: Record<string, any>,
-  practice?: { name?: string | null; phone?: string | null; address?: string | null }
+  practice?: { name?: string | null; phone?: string | null; address?: string | null },
+  patientListIds: string[] = []
 ) {
   const patient = eventData.patient || {}
   const appointment = eventData.appointment || {}
@@ -81,6 +82,7 @@ function buildAutomationContext(
       firstName: patient.firstName || inferredFirstName,
       lastName: patient.lastName || inferredLastName,
       preferredName: patient.preferredName || patient.firstName || inferredFirstName,
+      listIds: patientListIds,
     },
     appointment: {
       ...appointment,
@@ -181,12 +183,35 @@ export const runAutomationsForEvent = inngest.createFunction(
       })
     })
 
+    const patientListIds = await step.run('load-patient-list-ids', async () => {
+      const patientId =
+        payload.data.patient?.id ||
+        payload.data.appointment?.patientId ||
+        payload.data.patientId ||
+        (payload.entityType === 'patient' ? payload.entityId : null)
+
+      if (!patientId) return [] as string[]
+
+      const memberships = await prisma.patientListMember.findMany({
+        where: {
+          practiceId,
+          patientId,
+        },
+        select: { listId: true },
+      })
+      return memberships.map((m) => m.listId)
+    })
+
     // Step 2: Evaluate conditions for each rule
     const evaluatedRules = await step.run(
       'evaluate-conditions',
       async () => {
         const results = []
-        const automationContext = buildAutomationContext(payload.data, practice || undefined)
+        const automationContext = buildAutomationContext(
+          payload.data,
+          practice || undefined,
+          patientListIds
+        )
         for (const rule of matchingRules) {
           try {
             const matches = evaluateConditions(
@@ -249,11 +274,15 @@ export const runAutomationsForEvent = inngest.createFunction(
             }
 
             // Substitute variables in action args (e.g., {appointment.patientId} -> actual value)
-            const automationContext = buildAutomationContext(payload.data, practice || undefined)
+            const automationContext = buildAutomationContext(
+              payload.data,
+              practice || undefined,
+              patientListIds
+            )
             let processedArgs = substituteVariables(rawArgs, automationContext)
 
             // Auto-fill patientId from event data if missing and action requires it
-            const actionsRequiringPatientId = ['create_note', 'send_email', 'send_sms', 'send_reminder', 'update_patient_fields', 'tag_patient', 'create_insurance_policy']
+            const actionsRequiringPatientId = ['create_note', 'send_email', 'send_sms', 'send_reminder', 'update_patient_fields', 'tag_patient', 'create_insurance_policy', 'trigger_curogram_template']
             if (actionsRequiringPatientId.includes(action.type) && !processedArgs.patientId) {
               // Try to extract patientId from common event data paths
               const patientId =

@@ -76,6 +76,9 @@ model Practice {
   analyticsEvents            AnalyticsEvent[]
   campaigns                  Campaign[]
   campaignEnrollments        CampaignEnrollment[]
+  patientLists               PatientList[]
+  patientListMembers         PatientListMember[]
+  patientListImports         PatientListImport[]
   guardianRelationships      GuardianRelationship[]
   tasks                      Task[]
   taskComments               TaskComment[]
@@ -212,6 +215,7 @@ model Patient {
   feedbacks                  Feedback[]
   referralAttributions       ReferralAttribution[]
   campaignEnrollments        CampaignEnrollment[]
+  listMemberships            PatientListMember[]
   preVisitCharts             PreVisitChart[]
 
   @@index([practiceId])
@@ -1821,6 +1825,66 @@ model ReferralAttribution {
   @@index([practiceId, patientId])
   @@index([referralLinkId])
   @@map("referral_attributions")
+}
+
+model PatientList {
+  id              String   @id @default(uuid())
+  practiceId      String
+  name            String
+  description     String?
+  createdByUserId String?
+  memberCount     Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  practice Practice            @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  members  PatientListMember[]
+  imports  PatientListImport[]
+
+  @@index([practiceId])
+  @@index([practiceId, name])
+  @@map("patient_lists")
+}
+
+model PatientListMember {
+  id        String   @id @default(uuid())
+  practiceId String
+  listId    String
+  patientId String
+  source    String   @default("manual") // 'csv' | 'manual'
+  matchedBy String? // 'email' | 'phone' | 'created'
+  createdAt DateTime @default(now())
+
+  practice Practice    @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  list     PatientList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  patient  Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([listId, patientId])
+  @@index([practiceId, patientId])
+  @@index([listId])
+  @@map("patient_list_members")
+}
+
+model PatientListImport {
+  id            String   @id @default(uuid())
+  practiceId    String
+  listId        String
+  fileName      String?
+  status        String   @default("completed") // 'processing' | 'completed' | 'failed'
+  totalRows     Int      @default(0)
+  matchedCount  Int      @default(0)
+  createdCount  Int      @default(0)
+  skippedCount  Int      @default(0)
+  errorSummary  Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  practice Practice    @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  list     PatientList @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId, listId])
+  @@index([listId, createdAt])
+  @@map("patient_list_imports")
 }
 
 model Campaign {
