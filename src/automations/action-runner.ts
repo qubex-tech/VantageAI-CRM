@@ -87,6 +87,8 @@ const waitUntilSendWindowSchema = z.object({
   startMinute: z.number().int().min(0).max(59).default(0),
   endHour: z.number().int().min(0).max(23),
   endMinute: z.number().int().min(0).max(59).default(0),
+  /** 0=Sun … 6=Sat. Empty/omitted = every day. */
+  daysOfWeek: z.array(z.number().int().min(0).max(6)).optional(),
 })
 
 const sendSlotFillOutreachSchema = z.object({
@@ -1041,6 +1043,7 @@ async function waitUntilSendWindow(
     startMinute: args.startMinute,
     endHour: args.endHour,
     endMinute: args.endMinute,
+    daysOfWeek: args.daysOfWeek,
     timeZone,
   })
   const ms = msUntilSendWindow({
@@ -1048,6 +1051,7 @@ async function waitUntilSendWindow(
     startMinute: args.startMinute,
     endHour: args.endHour,
     endMinute: args.endMinute,
+    daysOfWeek: args.daysOfWeek,
     timeZone,
   })
   return {
@@ -1058,6 +1062,7 @@ async function waitUntilSendWindow(
       startMinute: args.startMinute,
       endHour: args.endHour,
       endMinute: args.endMinute,
+      daysOfWeek: args.daysOfWeek ?? null,
       timeZone,
       withinWindow,
       waitMs: ms,

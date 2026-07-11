@@ -17,6 +17,7 @@ import { Trash2, X, Loader2 } from 'lucide-react'
 import { FlowNodeData } from './FlowBuilder'
 import Link from 'next/link'
 import { OPEN_SLOT_SOURCE_LABELS, type OpenSlotSource } from '@/lib/appointment-optimization/types'
+import { WEEKDAY_OPTIONS } from '@/lib/appointment-optimization/waitUntilLocalTime'
 
 interface NodeConfigPanelProps {
   node: Node<FlowNodeData>
@@ -807,7 +808,7 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                   <SelectItem value="create_insurance_policy">Create Insurance Policy</SelectItem>
                   <SelectItem value="delay_seconds">Delay</SelectItem>
                   <SelectItem value="wait_until_local_time">Wait Until Local Time</SelectItem>
-                  <SelectItem value="wait_until_send_window">Wait Until Send Hours</SelectItem>
+                  <SelectItem value="wait_until_send_window">Wait Until Send Hours & Days</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1406,9 +1407,9 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                 <div>
                   <Label>Communication send hours (practice local time)</Label>
                   <p className="text-xs text-gray-500 mt-1 mb-2">
-                    Continues immediately if now is inside this window. Outside it (e.g. overnight
-                    ECW sync), waits until the window opens next. Place this before SMS / Curogram
-                    / Slot Fill outreach actions.
+                    Continues immediately if now is inside this window on an allowed day.
+                    Outside it (overnight, weekend, etc.), waits until the next allowed
+                    open. Place this before SMS / Curogram / Slot Fill outreach actions.
                   </p>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -1504,9 +1505,49 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                       </div>
                     </div>
                   </div>
-                  <p className="text-xs text-gray-500 mt-2">
-                    Example: 9:00–17:00 means messages only leave during business hours.
+                </div>
+                <div>
+                  <Label className="text-xs">Days Mira can reach out</Label>
+                  <p className="text-xs text-gray-500 mt-1 mb-2">
+                    Leave all unchecked to allow every day. Typical clinic: Mon–Fri.
                   </p>
+                  <div className="flex flex-wrap gap-2">
+                    {WEEKDAY_OPTIONS.map((day) => {
+                      const selected: number[] = Array.isArray(config.args?.daysOfWeek)
+                        ? config.args.daysOfWeek
+                        : []
+                      const checked = selected.includes(day.value)
+                      return (
+                        <label
+                          key={day.value}
+                          className="inline-flex items-center gap-1.5 rounded border px-2 py-1 text-sm cursor-pointer hover:bg-gray-50"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              const currentArgs = config.args || {}
+                              const current: number[] = Array.isArray(currentArgs.daysOfWeek)
+                                ? [...currentArgs.daysOfWeek]
+                                : []
+                              const next = e.target.checked
+                                ? Array.from(new Set([...current, day.value])).sort(
+                                    (a, b) => a - b
+                                  )
+                                : current.filter((d) => d !== day.value)
+                              handleUpdate({
+                                args: {
+                                  ...currentArgs,
+                                  daysOfWeek: next,
+                                },
+                              })
+                            }}
+                          />
+                          <span>{day.short}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
                 </div>
               </div>
             )}

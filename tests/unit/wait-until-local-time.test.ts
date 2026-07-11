@@ -84,7 +84,7 @@ describe('send window', () => {
   })
 
   it('waits until next morning when after end', () => {
-    // 6:00 PM CDT
+    // 6:00 PM CDT Saturday Jul 11 2026
     const now = new Date('2026-07-11T23:00:00.000Z')
     expect(
       isWithinSendWindow({
@@ -103,5 +103,55 @@ describe('send window', () => {
     })
     expect(ms).toBeGreaterThan(14 * 60 * 60 * 1000)
     expect(ms).toBeLessThanOrEqual(24 * 60 * 60 * 1000)
+  })
+
+  it('skips weekends when only Mon–Fri allowed', () => {
+    // Saturday Jul 11 2026 10:00 AM CDT — inside hours but weekend
+    const saturday = new Date('2026-07-11T15:00:00.000Z')
+    expect(
+      isWithinSendWindow({
+        startHour: 9,
+        endHour: 17,
+        daysOfWeek: [1, 2, 3, 4, 5],
+        timeZone: tz,
+        now: saturday,
+      })
+    ).toBe(false)
+
+    const ms = msUntilSendWindow({
+      startHour: 9,
+      endHour: 17,
+      daysOfWeek: [1, 2, 3, 4, 5],
+      timeZone: tz,
+      now: saturday,
+      graceMs: 0,
+    })
+    // Next open: Monday Jul 13 9:00 AM CDT
+    expect(ms).toBeGreaterThan(40 * 60 * 60 * 1000)
+    expect(ms).toBeLessThan(50 * 60 * 60 * 1000)
+  })
+
+  it('allows Mon–Fri during business hours', () => {
+    // Friday Jul 10 2026 10:00 AM CDT
+    const friday = new Date('2026-07-10T15:00:00.000Z')
+    expect(
+      isWithinSendWindow({
+        startHour: 9,
+        endHour: 17,
+        daysOfWeek: [1, 2, 3, 4, 5],
+        timeZone: tz,
+        now: friday,
+      })
+    ).toBe(true)
+    expect(
+      msUntilSendWindow({
+        startHour: 9,
+        endHour: 17,
+        daysOfWeek: [1, 2, 3, 4, 5],
+        timeZone: tz,
+        now: friday,
+        graceMs: 0,
+      })
+    ).toBe(0)
   })
 })

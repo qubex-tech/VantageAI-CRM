@@ -65,7 +65,7 @@ const ACTION_OPTIONS = [
   // Control Flow
   { value: 'delay_seconds', label: 'Delay', icon: Clock, category: 'Control Flow' },
   { value: 'wait_until_local_time', label: 'Wait Until Local Time', icon: Clock, category: 'Control Flow' },
-  { value: 'wait_until_send_window', label: 'Wait Until Send Hours', icon: Clock, category: 'Control Flow' },
+  { value: 'wait_until_send_window', label: 'Wait Until Send Hours & Days', icon: Clock, category: 'Control Flow' },
 ]
 
 export function NodeSidebar({ onAddNode }: NodeSidebarProps) {

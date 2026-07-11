@@ -458,6 +458,11 @@ export const runAutomationsForEvent = inngest.createFunction(
                 typeof processedArgs.endMinute === 'number'
                   ? processedArgs.endMinute
                   : Number(processedArgs.endMinute ?? 0)
+              const daysOfWeek = Array.isArray(processedArgs.daysOfWeek)
+                ? processedArgs.daysOfWeek
+                    .map((d: unknown) => Number(d))
+                    .filter((d: number) => Number.isFinite(d) && d >= 0 && d <= 6)
+                : undefined
               if (
                 !Number.isNaN(startHour) &&
                 startHour >= 0 &&
@@ -472,6 +477,7 @@ export const runAutomationsForEvent = inngest.createFunction(
                   startMinute: Number.isNaN(startMinute) ? 0 : startMinute,
                   endHour,
                   endMinute: Number.isNaN(endMinute) ? 0 : endMinute,
+                  daysOfWeek,
                   timeZone,
                 })
                 if (waitMs > 0) {
