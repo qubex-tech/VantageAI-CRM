@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db'
-import { resolvePatientByContact } from '@/lib/patient-identity'
+import { normalizeDobToIso, resolvePatientByContact } from '@/lib/patient-identity'
 import { normalizePhoneToE164 } from '@/lib/curogram'
 import { emitEvent } from '@/lib/outbox'
 import { LIST_CSV_HEADERS } from '@/lib/lists/constants'
@@ -11,9 +11,11 @@ export type ListCsvRowResult = {
   name: string
   email: string | null
   phone: string | null
+  dateOfBirth: string | null
   status: 'matched' | 'created' | 'skipped' | 'error'
-  matchedBy?: 'email' | 'phone' | 'created'
+  matchedBy?: 'email' | 'phone' | 'name' | 'created'
   patientId?: string
+  tagged?: boolean
   error?: string
 }
 
@@ -31,7 +33,7 @@ function normalizeHeader(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
-const HEADER_ALIASES: Record<string, 'name' | 'email' | 'phone'> = {
+const HEADER_ALIASES: Record<string, 'name' | 'email' | 'phone' | 'dob'> = {
   'patient name': 'name',
   name: 'name',
   'full name': 'name',
@@ -40,6 +42,10 @@ const HEADER_ALIASES: Record<string, 'name' | 'email' | 'phone'> = {
   'phone number': 'phone',
   phone: 'phone',
   mobile: 'phone',
+  'date of birth': 'dob',
+  dob: 'dob',
+  birthday: 'dob',
+  birthdate: 'dob',
 }
 
 export function splitPatientName(fullName: string): { firstName: string; lastName: string; name: string } {
@@ -79,7 +85,7 @@ function parseCsvLine(line: string): string[] {
 }
 
 export function parseListCsv(csvText: string): {
-  rows: Array<{ name: string; email: string; phone: string }>
+  rows: Array<{ name: string; email: string; phone: string; dateOfBirth: string }>
   errors: string[]
 } {
   const lines = csvText
@@ -93,7 +99,7 @@ export function parseListCsv(csvText: string): {
   }
 
   const headerCells = parseCsvLine(lines[0]).map(normalizeHeader)
-  const columnMap: Partial<Record<'name' | 'email' | 'phone', number>> = {}
+  const columnMap: Partial<Record<'name' | 'email' | 'phone' | 'dob', number>> = {}
   headerCells.forEach((header, index) => {
     const mapped = HEADER_ALIASES[header]
     if (mapped && columnMap[mapped] === undefined) {
@@ -108,14 +114,15 @@ export function parseListCsv(csvText: string): {
   }
   if (errors.length > 0) return { rows: [], errors }
 
-  const rows: Array<{ name: string; email: string; phone: string }> = []
+  const rows: Array<{ name: string; email: string; phone: string; dateOfBirth: string }> = []
   for (let i = 1; i < lines.length; i++) {
     const cells = parseCsvLine(lines[i])
     const name = columnMap.name !== undefined ? cells[columnMap.name] || '' : ''
     const email = columnMap.email !== undefined ? cells[columnMap.email] || '' : ''
     const phone = columnMap.phone !== undefined ? cells[columnMap.phone] || '' : ''
-    if (!name && !email && !phone) continue
-    rows.push({ name, email, phone })
+    const dateOfBirth = columnMap.dob !== undefined ? cells[columnMap.dob] || '' : ''
+    if (!name && !email && !phone && !dateOfBirth) continue
+    rows.push({ name, email, phone, dateOfBirth })
   }
 
   return { rows, errors: [] }
@@ -141,6 +148,34 @@ function patientPayloadForEvent(patient: {
     primaryPhone: patient.primaryPhone ?? null,
     dateOfBirth: patient.dateOfBirth?.toISOString() ?? null,
   }
+}
+
+/** Tag the patient with the list name so membership is visible on the profile. */
+export async function ensurePatientListTag(patientId: string, listName: string) {
+  const tag = listName.trim()
+  if (!tag) return
+  await prisma.patientTag.upsert({
+    where: {
+      patientId_tag: {
+        patientId,
+        tag,
+      },
+    },
+    update: {},
+    create: {
+      patientId,
+      tag,
+    },
+  })
+}
+
+function matchChannel(
+  matchReason: string | undefined
+): 'email' | 'phone' | 'name' {
+  if (!matchReason) return 'phone'
+  if (matchReason.startsWith('email')) return 'email'
+  if (matchReason.startsWith('name')) return 'name'
+  return 'phone'
 }
 
 export async function importListCsv(params: {
@@ -186,6 +221,8 @@ export async function importListCsv(params: {
     const email = row.email.trim() || null
     const phoneRaw = row.phone.trim() || null
     const phone = phoneRaw ? normalizePhoneToE164(phoneRaw) || phoneRaw : null
+    const dobIso = normalizeDobToIso(row.dateOfBirth.trim() || null)
+    const dateOfBirth = dobIso ? new Date(`${dobIso}T00:00:00.000Z`) : null
 
     if (!name) {
       skippedCount++
@@ -194,6 +231,7 @@ export async function importListCsv(params: {
         name: row.name,
         email,
         phone,
+        dateOfBirth: dobIso,
         status: 'skipped',
         error: 'Missing patient name',
       })
@@ -207,6 +245,7 @@ export async function importListCsv(params: {
         name,
         email,
         phone,
+        dateOfBirth: dobIso,
         status: 'skipped',
         error: 'Missing email and phone',
       })
@@ -219,6 +258,7 @@ export async function importListCsv(params: {
         name,
         email,
         phone,
+        dateOfBirth: dobIso,
       })
 
       if (resolved.ambiguous) {
@@ -228,21 +268,40 @@ export async function importListCsv(params: {
           name,
           email,
           phone,
+          dateOfBirth: dobIso,
           status: 'skipped',
-          error: 'Ambiguous patient match',
+          error: dobIso
+            ? 'Ambiguous patient match (multiple patients share contact info and DOB did not uniquely identify one)'
+            : 'Ambiguous patient match (add Date of Birth to disambiguate)',
         })
         continue
       }
 
       let patient = resolved.patient
-      let matchedBy: 'email' | 'phone' | 'created' | undefined
+      let matchedBy: 'email' | 'phone' | 'name' | 'created' | undefined
       let status: 'matched' | 'created' = 'matched'
 
       if (patient) {
-        matchedBy =
-          resolved.matchReason === 'email' || resolved.matchReason === 'email_dob'
-            ? 'email'
-            : 'phone'
+        matchedBy = matchChannel(resolved.matchReason)
+        // Backfill DOB on matched patient when CSV provides one and CRM is missing it
+        if (dateOfBirth && !patient.dateOfBirth) {
+          patient = await prisma.patient.update({
+            where: { id: patient.id },
+            data: { dateOfBirth },
+            select: {
+              id: true,
+              name: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              phone: true,
+              primaryPhone: true,
+              dateOfBirth: true,
+              secondaryPhone: true,
+              externalEhrId: true,
+            },
+          })
+        }
       } else {
         patient = await prisma.patient.create({
           data: {
@@ -253,6 +312,7 @@ export async function importListCsv(params: {
             email,
             phone: phone || '',
             primaryPhone: phone,
+            dateOfBirth,
             preferredContactMethod: 'sms',
             consentSource: 'import',
           },
@@ -273,6 +333,9 @@ export async function importListCsv(params: {
         status = 'created'
       }
 
+      // Always tag with the list name when we resolve a patient (including already-on-list)
+      await ensurePatientListTag(patient.id, list.name)
+
       const existingMember = await prisma.patientListMember.findUnique({
         where: {
           listId_patientId: {
@@ -289,10 +352,12 @@ export async function importListCsv(params: {
           name,
           email,
           phone,
+          dateOfBirth: dobIso,
           status: 'skipped',
           patientId: patient.id,
           matchedBy,
-          error: 'Already on list',
+          tagged: true,
+          error: 'Already on list (list tag ensured)',
         })
         continue
       }
@@ -328,9 +393,11 @@ export async function importListCsv(params: {
         name,
         email,
         phone,
+        dateOfBirth: dobIso,
         status,
         matchedBy,
         patientId: patient.id,
+        tagged: true,
       })
     } catch (error) {
       errorCount++
@@ -339,6 +406,7 @@ export async function importListCsv(params: {
         name,
         email,
         phone,
+        dateOfBirth: dobIso,
         status: 'error',
         error: error instanceof Error ? error.message : 'Unknown import error',
       })

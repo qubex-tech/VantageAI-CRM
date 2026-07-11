@@ -43,6 +43,8 @@ import {
   Pencil,
   PhoneCall,
   FolderOpen,
+  X,
+  Tag,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { InsuranceTab } from './InsuranceTab'
@@ -51,6 +53,7 @@ import { format, formatDistanceToNow } from 'date-fns'
 import { UserDateTime } from '@/components/ui/UserDateTime'
 import { formatDateOnly, formatDateOnlyForInput, calculateAgeFromDateOnly } from '@/lib/date'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -269,8 +272,64 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
   const [patientNotes, setPatientNotes] = useState<PatientNote[]>([])
   const [notesLoading, setNotesLoading] = useState(false)
   const [showMobileDetails, setShowMobileDetails] = useState(false)
+  const [tags, setTags] = useState(patient.tags || [])
+  const [newTag, setNewTag] = useState('')
+  const [tagsSaving, setTagsSaving] = useState(false)
+  const [tagsError, setTagsError] = useState('')
   const healixOpen = useHealixOpen()
   const { setIsPreVisitFocus } = useSidebar()
+
+  useEffect(() => {
+    setTags(patient.tags || [])
+  }, [patient.tags])
+
+  const saveTags = async (nextTagValues: string[]) => {
+    const unique = Array.from(
+      new Set(nextTagValues.map((t) => t.trim()).filter(Boolean))
+    )
+    setTagsSaving(true)
+    setTagsError('')
+    try {
+      const res = await fetch(`/api/patients/${patient.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tags: unique }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to update tags')
+      }
+      const savedTags = (data.patient?.tags || []).map((t: { id: string; tag: string }) => ({
+        id: t.id,
+        tag: t.tag,
+      }))
+      setTags(
+        savedTags.length > 0
+          ? savedTags
+          : unique.map((tag) => ({ id: `local-${tag}`, tag }))
+      )
+      router.refresh()
+    } catch (err) {
+      setTagsError(err instanceof Error ? err.message : 'Failed to update tags')
+    } finally {
+      setTagsSaving(false)
+    }
+  }
+
+  const handleAddTag = async () => {
+    const value = newTag.trim()
+    if (!value) return
+    if (tags.some((t) => t.tag.toLowerCase() === value.toLowerCase())) {
+      setNewTag('')
+      return
+    }
+    setNewTag('')
+    await saveTags([...tags.map((t) => t.tag), value])
+  }
+
+  const handleRemoveTag = async (tagValue: string) => {
+    await saveTags(tags.filter((t) => t.tag !== tagValue).map((t) => t.tag))
+  }
   
   // Collapsible sections state
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
@@ -466,13 +525,27 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
       <div className="flex-1 flex flex-col overflow-hidden min-w-0 max-w-full">
         {/* Header Bar */}
         <div className="border-b border-gray-200 px-4 md:px-6 py-3 flex items-center justify-between bg-white min-w-0">
-          <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-shrink">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0">
-                <User className="h-4 w-4 text-gray-600" />
+            <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-shrink">
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0">
+                  <User className="h-4 w-4 text-gray-600" />
+                </div>
+                <h1 className="text-base md:text-lg font-semibold text-gray-900 truncate">{patient.name}</h1>
+                <Star className="h-4 w-4 text-gray-400 flex-shrink-0 hidden md:block" />
               </div>
-              <h1 className="text-base md:text-lg font-semibold text-gray-900 truncate">{patient.name}</h1>
-              <Star className="h-4 w-4 text-gray-400 flex-shrink-0 hidden md:block" />
+              {tags.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1.5 pl-10">
+                  {tags.map((tag) => (
+                    <span
+                      key={tag.id}
+                      className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-gray-100 text-gray-700"
+                    >
+                      {tag.tag}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-1 md:gap-2 flex-shrink-0 ml-2 md:ml-4">
@@ -1501,23 +1574,60 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
               </div>
 
               {/* Tags Section */}
-              {patient.tags.length > 0 && (
-                <div className="min-w-0 border-b border-gray-200 pb-4">
-                  <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
-                    Tags
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {patient.tags.map((tag) => (
+              <div className="min-w-0 border-b border-gray-200 pb-4">
+                <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
+                  <Tag className="h-3.5 w-3.5" />
+                  Tags
+                </div>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {tags.length > 0 ? (
+                    tags.map((tag) => (
                       <span
                         key={tag.id}
-                        className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700"
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700"
                       >
                         {tag.tag}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveTag(tag.tag)}
+                          disabled={tagsSaving}
+                          className="text-gray-400 hover:text-gray-700"
+                          aria-label={`Remove tag ${tag.tag}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
                       </span>
-                    ))}
-                  </div>
+                    ))
+                  ) : (
+                    <span className="text-xs text-gray-400">No tags yet</span>
+                  )}
                 </div>
-              )}
+                <div className="flex gap-2">
+                  <Input
+                    value={newTag}
+                    onChange={(e) => setNewTag(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        void handleAddTag()
+                      }
+                    }}
+                    placeholder="Add a tag"
+                    className="h-8 text-sm"
+                    disabled={tagsSaving}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void handleAddTag()}
+                    disabled={tagsSaving || !newTag.trim()}
+                  >
+                    Add
+                  </Button>
+                </div>
+                {tagsError && <p className="mt-2 text-xs text-red-600">{tagsError}</p>}
+              </div>
 
               {/* Tasks Section */}
               <div className="min-w-0 border-b border-gray-200 pb-4">

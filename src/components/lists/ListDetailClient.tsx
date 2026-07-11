@@ -68,7 +68,7 @@ export function ListDetailClient({
   const [lastImport, setLastImport] = useState<ImportSummary | null>(null)
 
   const downloadTemplate = () => {
-    const csv = `${LIST_CSV_HEADERS.join(',')}\nJane Doe,jane@example.com,+15551234567\n`
+    const csv = `${LIST_CSV_HEADERS.join(',')}\nJane Doe,jane@example.com,+15551234567,1990-01-15\n`
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -228,9 +228,9 @@ export function ListDetailClient({
         <CardHeader>
           <CardTitle className="text-base">CSV upload</CardTitle>
           <CardDescription>
-            Columns: Patient Name, Email Address, Phone Number. Existing patients are matched by
-            email then phone; unmatched rows create new CRM patients. Patients created from CSV may
-            be missing date of birth — Curogram template actions require DOB.
+            Columns: Patient Name, Email Address, Phone Number, Date of Birth. Existing patients are
+            matched by email then phone, using DOB to disambiguate duplicates. Unmatched rows create
+            new CRM patients. Each imported patient is tagged with this list name on their profile.
           </CardDescription>
         </CardHeader>
         {lastImport && (

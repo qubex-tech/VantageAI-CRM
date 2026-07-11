@@ -59,6 +59,7 @@ interface Patient {
   selfPay?: boolean | null
   // Legacy
   notes: string | null
+  tags?: Array<{ id: string; tag: string }>
 }
 
 interface EditPatientFormProps {
@@ -144,6 +145,7 @@ export function EditPatientForm({ patient, onCancel, onSuccess }: EditPatientFor
     
     // Legacy
     notes: patient.notes || '',
+    tags: (patient.tags || []).map((t) => t.tag).join(', '),
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -282,6 +284,19 @@ export function EditPatientForm({ patient, onCancel, onSuccess }: EditPatientFor
     // Legacy - only include if changed
     if (formData.notes !== (patient.notes || '')) {
       updateData.notes = toNullIfEmpty(formData.notes)
+    }
+
+    const nextTags = formData.tags
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean)
+    const currentTags = (patient.tags || []).map((t) => t.tag)
+    const tagsChanged =
+      nextTags.length !== currentTags.length ||
+      nextTags.some((tag) => !currentTags.includes(tag)) ||
+      currentTags.some((tag) => !nextTags.includes(tag))
+    if (tagsChanged) {
+      updateData.tags = nextTags
     }
 
     try {
@@ -774,6 +789,20 @@ export function EditPatientForm({ patient, onCancel, onSuccess }: EditPatientFor
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Tags Section */}
+            <div className="space-y-2">
+              <Label htmlFor="tags">Tags</Label>
+              <Input
+                id="tags"
+                value={formData.tags}
+                onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
+                placeholder="Comma-separated tags (e.g. Cancel Patients, VIP)"
+              />
+              <p className="text-xs text-gray-500">
+                List imports automatically add the list name as a tag.
+              </p>
             </div>
 
             {/* Legacy Notes Section */}
