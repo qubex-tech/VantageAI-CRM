@@ -301,6 +301,14 @@ export function FlowBuilderPage({ practiceId, userId, initialRules = [], initial
           if (isMissingValue(args.actionId)) {
             errors.push(`Add a Curogram Action ID for ${actionLabel}.`)
           }
+          if (
+            args.preventDuplicateActions !== true &&
+            args.cooldownHours !== undefined &&
+            args.cooldownHours !== '' &&
+            (!Number.isFinite(Number(args.cooldownHours)) || Number(args.cooldownHours) <= 0)
+          ) {
+            errors.push(`Set a valid cooldown period in hours (> 0) for ${actionLabel}.`)
+          }
           break
         default:
           break

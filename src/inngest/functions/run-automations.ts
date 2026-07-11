@@ -3,6 +3,86 @@ import { prisma } from '@/lib/db'
 import { evaluateConditions } from '@/automations/condition-evaluator'
 import { runAction } from '@/automations/action-runner'
 
+const DEFAULT_OUTREACH_COOLDOWN_HOURS = 24
+const DEDUPABLE_NOTIFICATION_ACTIONS = new Set([
+  'send_sms',
+  'send_email',
+  'send_reminder',
+  'trigger_curogram_template',
+])
+
+function resolveCooldownHours(actionArgs: Record<string, unknown>): number {
+  const raw = actionArgs.cooldownHours ?? actionArgs.dedupeWindowHours
+  const parsed = Number(raw)
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return Math.min(parsed, 24 * 30)
+  }
+  return DEFAULT_OUTREACH_COOLDOWN_HOURS
+}
+
+function parseBoolean(value: unknown): boolean {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    return normalized === 'true' || normalized === '1' || normalized === 'yes'
+  }
+  if (typeof value === 'number') return value === 1
+  return false
+}
+
+function normalizeActionId(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
+async function findPriorSuccessfulAction(params: {
+  practiceId: string
+  ruleId: string
+  actionType: string
+  patientId: string
+  withinHours?: number
+  actionId?: string
+}) {
+  const since =
+    typeof params.withinHours === 'number'
+      ? new Date(Date.now() - params.withinHours * 60 * 60 * 1000)
+      : null
+  return prisma.automationActionLog.findFirst({
+    where: {
+      practiceId: params.practiceId,
+      actionType: params.actionType,
+      status: 'succeeded',
+      ...(since ? { createdAt: { gte: since } } : {}),
+      run: {
+        ruleId: params.ruleId,
+      },
+      actionArgs: {
+        path: ['patientId'],
+        equals: params.patientId,
+      },
+      ...(params.actionId
+        ? {
+            AND: [
+              {
+                actionArgs: {
+                  path: ['actionId'],
+                  equals: params.actionId,
+                },
+              },
+            ],
+          }
+        : {}),
+    },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      createdAt: true,
+      runId: true,
+    },
+  })
+}
+
 /**
  * Substitute variables in action args (e.g., {appointment.patientId} or {{patient.firstName}})
  */
@@ -325,6 +405,67 @@ export const runAutomationsForEvent = inngest.createFunction(
                   `delay-${run.id}-${index}`,
                   `${delaySeconds}s`
                 )
+              }
+            }
+
+            // Avoid bombarding the same patient with repeat outreach when a list is re-run.
+            if (DEDUPABLE_NOTIFICATION_ACTIONS.has(action.type)) {
+              const patientId =
+                typeof processedArgs.patientId === 'string' ? processedArgs.patientId.trim() : ''
+              if (patientId) {
+                const isCurogramTemplateAction = action.type === 'trigger_curogram_template'
+                const preventDuplicatesForever =
+                  isCurogramTemplateAction && parseBoolean(processedArgs.preventDuplicateActions)
+                const cooldownHours = resolveCooldownHours(processedArgs)
+                const normalizedActionId = normalizeActionId(processedArgs.actionId)
+
+                const recent = await findPriorSuccessfulAction({
+                  practiceId,
+                  ruleId: rule.id,
+                  actionType: action.type,
+                  patientId,
+                  ...(preventDuplicatesForever ? {} : { withinHours: cooldownHours }),
+                  ...(isCurogramTemplateAction && normalizedActionId
+                    ? { actionId: normalizedActionId }
+                    : {}),
+                })
+
+                if (recent) {
+                  const reasonSuffix = preventDuplicatesForever
+                    ? `already succeeded before (run ${recent.runId}).`
+                    : `already succeeded within ${cooldownHours}h (run ${recent.runId}).`
+                  const actionIdSuffix =
+                    isCurogramTemplateAction && normalizedActionId
+                      ? ` for actionId ${normalizedActionId}`
+                      : ''
+                  const skipReason = `Skipped duplicate outreach: ${action.type}${actionIdSuffix} for patient ${patientId} ${reasonSuffix}`
+
+                  await prisma.automationActionLog.create({
+                    data: {
+                      runId: run.id,
+                      practiceId,
+                      actionType: action.type,
+                      actionArgs: processedArgs,
+                      actionResult: {
+                        skippedByCooldown: !preventDuplicatesForever,
+                        skippedByDuplicateFlag: preventDuplicatesForever,
+                        ...(preventDuplicatesForever ? {} : { cooldownHours }),
+                        ...(normalizedActionId ? { actionId: normalizedActionId } : {}),
+                        priorRunId: recent.runId,
+                        priorActionLogId: recent.id,
+                        priorSentAt: recent.createdAt.toISOString(),
+                      },
+                      status: 'skipped',
+                      error: skipReason,
+                    },
+                  })
+                  actionResults.push({
+                    actionType: action.type,
+                    status: 'skipped',
+                    error: skipReason,
+                  })
+                  continue
+                }
               }
             }
 

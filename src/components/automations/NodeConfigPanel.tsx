@@ -1306,6 +1306,49 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                   This ID selects the Curogram template/workflow. Patient must have first name, last
                   name, phone, and date of birth.
                 </p>
+                <div className="flex items-center gap-2 pt-2">
+                  <input
+                    type="checkbox"
+                    id={`curogram-prevent-duplicates-${node.id}`}
+                    checked={config.args?.preventDuplicateActions === true}
+                    onChange={(e) => {
+                      const currentArgs = config.args || {}
+                      handleUpdate({
+                        args: {
+                          ...currentArgs,
+                          preventDuplicateActions: e.target.checked,
+                        },
+                      })
+                    }}
+                  />
+                  <Label htmlFor={`curogram-prevent-duplicates-${node.id}`}>
+                    Prevent duplicate actions
+                  </Label>
+                </div>
+                <div>
+                  <Label>Cooldown period (hours)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    step={1}
+                    disabled={config.args?.preventDuplicateActions === true}
+                    placeholder="24"
+                    value={config.args?.cooldownHours ?? ''}
+                    onChange={(e) => {
+                      const currentArgs = config.args || {}
+                      const raw = e.target.value
+                      handleUpdate({
+                        args: {
+                          ...currentArgs,
+                          cooldownHours: raw === '' ? '' : Number(raw),
+                        },
+                      })
+                    }}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Used only when duplicate prevention is off.
+                  </p>
+                </div>
               </div>
             )}
           </div>
