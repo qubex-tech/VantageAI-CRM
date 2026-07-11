@@ -807,6 +807,7 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                   <SelectItem value="create_insurance_policy">Create Insurance Policy</SelectItem>
                   <SelectItem value="delay_seconds">Delay</SelectItem>
                   <SelectItem value="wait_until_local_time">Wait Until Local Time</SelectItem>
+                  <SelectItem value="wait_until_send_window">Wait Until Send Hours</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1396,6 +1397,116 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                       }}
                     />
                   </div>
+                </div>
+              </div>
+            )}
+
+            {config.actionType === 'wait_until_send_window' && (
+              <div className="space-y-3">
+                <div>
+                  <Label>Communication send hours (practice local time)</Label>
+                  <p className="text-xs text-gray-500 mt-1 mb-2">
+                    Continues immediately if now is inside this window. Outside it (e.g. overnight
+                    ECW sync), waits until the window opens next. Place this before SMS / Curogram
+                    / Slot Fill outreach actions.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs">From</Label>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Input
+                          type="number"
+                          min={0}
+                          max={23}
+                          className="w-20"
+                          placeholder="9"
+                          value={config.args?.startHour ?? ''}
+                          onChange={(e) => {
+                            const currentArgs = config.args || {}
+                            handleUpdate({
+                              args: {
+                                ...currentArgs,
+                                startHour: Math.min(
+                                  23,
+                                  Math.max(0, parseInt(e.target.value, 10) || 0)
+                                ),
+                              },
+                            })
+                          }}
+                        />
+                        <span className="text-gray-500">:</span>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={59}
+                          className="w-20"
+                          placeholder="0"
+                          value={config.args?.startMinute ?? 0}
+                          onChange={(e) => {
+                            const currentArgs = config.args || {}
+                            handleUpdate({
+                              args: {
+                                ...currentArgs,
+                                startMinute: Math.min(
+                                  59,
+                                  Math.max(0, parseInt(e.target.value, 10) || 0)
+                                ),
+                              },
+                            })
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs">To</Label>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Input
+                          type="number"
+                          min={0}
+                          max={23}
+                          className="w-20"
+                          placeholder="17"
+                          value={config.args?.endHour ?? ''}
+                          onChange={(e) => {
+                            const currentArgs = config.args || {}
+                            handleUpdate({
+                              args: {
+                                ...currentArgs,
+                                endHour: Math.min(
+                                  23,
+                                  Math.max(0, parseInt(e.target.value, 10) || 0)
+                                ),
+                              },
+                            })
+                          }}
+                        />
+                        <span className="text-gray-500">:</span>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={59}
+                          className="w-20"
+                          placeholder="0"
+                          value={config.args?.endMinute ?? 0}
+                          onChange={(e) => {
+                            const currentArgs = config.args || {}
+                            handleUpdate({
+                              args: {
+                                ...currentArgs,
+                                endMinute: Math.min(
+                                  59,
+                                  Math.max(0, parseInt(e.target.value, 10) || 0)
+                                ),
+                              },
+                            })
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Example: 9:00–17:00 means messages only leave during business hours.
+                  </p>
                 </div>
               </div>
             )}

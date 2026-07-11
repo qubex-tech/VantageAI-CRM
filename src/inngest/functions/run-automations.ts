@@ -437,6 +437,52 @@ export const runAutomationsForEvent = inngest.createFunction(
               }
             }
 
+            if (action.type === 'wait_until_send_window') {
+              const { getPracticeTimeZone } = await import('@/lib/practice-timezone')
+              const { msUntilSendWindow } = await import(
+                '@/lib/appointment-optimization/waitUntilLocalTime'
+              )
+              const startHour =
+                typeof processedArgs.startHour === 'number'
+                  ? processedArgs.startHour
+                  : Number(processedArgs.startHour)
+              const startMinute =
+                typeof processedArgs.startMinute === 'number'
+                  ? processedArgs.startMinute
+                  : Number(processedArgs.startMinute ?? 0)
+              const endHour =
+                typeof processedArgs.endHour === 'number'
+                  ? processedArgs.endHour
+                  : Number(processedArgs.endHour)
+              const endMinute =
+                typeof processedArgs.endMinute === 'number'
+                  ? processedArgs.endMinute
+                  : Number(processedArgs.endMinute ?? 0)
+              if (
+                !Number.isNaN(startHour) &&
+                startHour >= 0 &&
+                startHour <= 23 &&
+                !Number.isNaN(endHour) &&
+                endHour >= 0 &&
+                endHour <= 23
+              ) {
+                const timeZone = await getPracticeTimeZone(practiceId)
+                const waitMs = msUntilSendWindow({
+                  startHour,
+                  startMinute: Number.isNaN(startMinute) ? 0 : startMinute,
+                  endHour,
+                  endMinute: Number.isNaN(endMinute) ? 0 : endMinute,
+                  timeZone,
+                })
+                if (waitMs > 0) {
+                  await step.sleep(
+                    `wait-send-window-${run.id}-${index}`,
+                    `${Math.ceil(waitMs / 1000)}s`
+                  )
+                }
+              }
+            }
+
             // Avoid bombarding the same patient with repeat outreach when a list is re-run.
             if (DEDUPABLE_NOTIFICATION_ACTIONS.has(action.type)) {
               const patientId =

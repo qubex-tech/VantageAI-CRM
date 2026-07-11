@@ -82,6 +82,13 @@ const waitUntilLocalTimeSchema = z.object({
   minute: z.number().int().min(0).max(59).default(0),
 })
 
+const waitUntilSendWindowSchema = z.object({
+  startHour: z.number().int().min(0).max(23),
+  startMinute: z.number().int().min(0).max(59).default(0),
+  endHour: z.number().int().min(0).max(23),
+  endMinute: z.number().int().min(0).max(59).default(0),
+})
+
 const sendSlotFillOutreachSchema = z.object({
   openSlotEventId: z.string().optional(),
   waveNumber: z.number().int().min(1).max(10).default(1),
@@ -1019,6 +1026,47 @@ async function waitUntilLocalTime(
   }
 }
 
+async function waitUntilSendWindow(
+  practiceId: string,
+  args: z.infer<typeof waitUntilSendWindowSchema>,
+  _eventData: Record<string, any>
+): Promise<ActionResult> {
+  const { getPracticeTimeZone } = await import('@/lib/practice-timezone')
+  const { isWithinSendWindow, msUntilSendWindow } = await import(
+    '@/lib/appointment-optimization/waitUntilLocalTime'
+  )
+  const timeZone = await getPracticeTimeZone(practiceId)
+  const withinWindow = isWithinSendWindow({
+    startHour: args.startHour,
+    startMinute: args.startMinute,
+    endHour: args.endHour,
+    endMinute: args.endMinute,
+    timeZone,
+  })
+  const ms = msUntilSendWindow({
+    startHour: args.startHour,
+    startMinute: args.startMinute,
+    endHour: args.endHour,
+    endMinute: args.endMinute,
+    timeZone,
+  })
+  return {
+    status: 'succeeded',
+    result: {
+      action: 'wait_until_send_window',
+      startHour: args.startHour,
+      startMinute: args.startMinute,
+      endHour: args.endHour,
+      endMinute: args.endMinute,
+      timeZone,
+      withinWindow,
+      waitMs: ms,
+      waitSeconds: Math.ceil(ms / 1000),
+      note: 'Actual wait is performed via step.sleep in Inngest',
+    },
+  }
+}
+
 /**
  * Find eligible later-appointment patients and send Slot Fill outreach (SMS / Curogram).
  */
@@ -1642,6 +1690,12 @@ export async function runAction(params: RunActionParams): Promise<ActionResult> 
       case 'wait_until_local_time': {
         const validated = waitUntilLocalTimeSchema.parse(actionArgs)
         result = await waitUntilLocalTime(practiceId, validated, eventData)
+        break
+      }
+
+      case 'wait_until_send_window': {
+        const validated = waitUntilSendWindowSchema.parse(actionArgs)
+        result = await waitUntilSendWindow(practiceId, validated, eventData)
         break
       }
 

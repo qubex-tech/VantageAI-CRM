@@ -280,6 +280,21 @@ export function FlowBuilderPage({ practiceId, userId, initialRules = [], initial
             errors.push(`Set a valid local time (hour 0–23) for ${actionLabel}.`)
           }
           break
+        case 'wait_until_send_window': {
+          const startOk =
+            typeof args.startHour === 'number' && args.startHour >= 0 && args.startHour <= 23
+          const endOk =
+            typeof args.endHour === 'number' && args.endHour >= 0 && args.endHour <= 23
+          if (!startOk || !endOk) {
+            errors.push(`Set valid From/To hours (0–23) for ${actionLabel}.`)
+          } else if (
+            args.startHour === args.endHour &&
+            (args.startMinute ?? 0) === (args.endMinute ?? 0)
+          ) {
+            errors.push(`From and To times must differ for ${actionLabel}.`)
+          }
+          break
+        }
         case 'send_slot_fill_outreach': {
           const channel = args.channel || 'curogram_sms'
           if (channel === 'curogram_sms' && isMissingValue(args.curogramActionId)) {

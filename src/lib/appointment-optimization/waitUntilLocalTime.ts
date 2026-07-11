@@ -115,3 +115,78 @@ export function msUntilLocalTime(params: {
   const ms = Math.max(0, target.getTime() - now.getTime())
   return Math.min(ms, 24 * 60 * 60 * 1000)
 }
+
+function clampHour(value: number) {
+  return Math.min(23, Math.max(0, Math.round(value)))
+}
+
+function clampMinute(value: number) {
+  return Math.min(59, Math.max(0, Math.round(value)))
+}
+
+function toMinutes(hour: number, minute: number) {
+  return clampHour(hour) * 60 + clampMinute(minute)
+}
+
+/**
+ * True when local wall time is inside [start, end).
+ * Supports overnight windows (e.g. 22:00–06:00).
+ * A zero-width window (start === end) is treated as never open.
+ */
+export function isWithinSendWindow(params: {
+  startHour: number
+  startMinute?: number
+  endHour: number
+  endMinute?: number
+  timeZone: string
+  now?: Date
+}): boolean {
+  const start = toMinutes(params.startHour, params.startMinute ?? 0)
+  const end = toMinutes(params.endHour, params.endMinute ?? 0)
+  if (start === end) return false
+
+  const current = zonedParts(params.now ?? new Date(), params.timeZone)
+  const nowMinutes = current.hour * 60 + current.minute
+
+  if (start < end) {
+    return nowMinutes >= start && nowMinutes < end
+  }
+  // Overnight: open from start through midnight, then midnight until end
+  return nowMinutes >= start || nowMinutes < end
+}
+
+/**
+ * Milliseconds to wait until the next send-window open time.
+ * Returns 0 when already inside the window.
+ * Caps at 24h for Inngest sleep bounds.
+ */
+export function msUntilSendWindow(params: {
+  startHour: number
+  startMinute?: number
+  endHour: number
+  endMinute?: number
+  timeZone: string
+  now?: Date
+  graceMs?: number
+}): number {
+  if (
+    isWithinSendWindow({
+      startHour: params.startHour,
+      startMinute: params.startMinute,
+      endHour: params.endHour,
+      endMinute: params.endMinute,
+      timeZone: params.timeZone,
+      now: params.now,
+    })
+  ) {
+    return 0
+  }
+
+  return msUntilLocalTime({
+    hour: params.startHour,
+    minute: params.startMinute ?? 0,
+    timeZone: params.timeZone,
+    now: params.now,
+    graceMs: params.graceMs,
+  })
+}
