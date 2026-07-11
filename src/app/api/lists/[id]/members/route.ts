@@ -11,10 +11,11 @@ export async function GET(
     if (!user.practiceId) {
       return NextResponse.json({ error: 'Practice ID is required' }, { status: 400 })
     }
+    const practiceId = user.practiceId
 
     const { id } = await params
     const list = await prisma.patientList.findFirst({
-      where: { id, practiceId: user.practiceId },
+      where: { id, practiceId },
       select: { id: true, name: true },
     })
     if (!list) {
@@ -27,7 +28,7 @@ export async function GET(
 
     const [members, total] = await Promise.all([
       prisma.patientListMember.findMany({
-        where: { listId: id, practiceId: user.practiceId },
+        where: { listId: id, practiceId },
         include: {
           patient: {
             select: {
@@ -47,7 +48,7 @@ export async function GET(
         skip,
       }),
       prisma.patientListMember.count({
-        where: { listId: id, practiceId: user.practiceId },
+        where: { listId: id, practiceId },
       }),
     ])
 
@@ -69,11 +70,12 @@ export async function DELETE(
     if (!user.practiceId) {
       return NextResponse.json({ error: 'Practice ID is required' }, { status: 400 })
     }
+    const practiceId = user.practiceId
 
     const { id } = await params
     const list = await prisma.patientList.findFirst({
-      where: { id, practiceId: user.practiceId },
-      select: { id: true },
+      where: { id, practiceId },
+      select: { id: true, name: true },
     })
     if (!list) {
       return NextResponse.json({ error: 'List not found' }, { status: 404 })
@@ -83,7 +85,7 @@ export async function DELETE(
       const membersBeforeClear = await tx.patientListMember.findMany({
         where: {
           listId: id,
-          practiceId: user.practiceId,
+          practiceId,
         },
         select: { patientId: true },
         distinct: ['patientId'],
@@ -93,14 +95,14 @@ export async function DELETE(
       const deleted = await tx.patientListMember.deleteMany({
         where: {
           listId: id,
-          practiceId: user.practiceId,
+          practiceId,
         },
       })
 
       const remaining = await tx.patientListMember.count({
         where: {
           listId: id,
-          practiceId: user.practiceId,
+          practiceId,
         },
       })
 
@@ -113,7 +115,7 @@ export async function DELETE(
       if (affectedPatientIds.length > 0) {
         const patientsStillOnSameNamedList = await tx.patientListMember.findMany({
           where: {
-            practiceId: user.practiceId,
+            practiceId,
             patientId: { in: affectedPatientIds },
             list: { name: list.name },
           },
