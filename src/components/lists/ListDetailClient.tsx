@@ -63,6 +63,7 @@ export function ListDetailClient({
   const [uploading, setUploading] = useState(false)
   const [running, setRunning] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [clearing, setClearing] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [lastImport, setLastImport] = useState<ImportSummary | null>(null)
@@ -153,6 +154,35 @@ export function ListDetailClient({
     }
   }
 
+  const handleClearList = async () => {
+    if (
+      !confirm(
+        `Clear list "${list.name}"?\n\nThis will remove all patients from this list, but it will NOT delete patient records from CRM.\n\nThis action cannot be undone.`
+      )
+    ) {
+      return
+    }
+
+    setClearing(true)
+    setError('')
+    setMessage('')
+    try {
+      const res = await fetch(`/api/lists/${list.id}/members`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to clear list')
+
+      setMembers([])
+      setTotal(0)
+      setMemberCount(0)
+      setMessage(`Cleared list. Removed ${data.removedCount || 0} patients from this list.`)
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to clear list')
+    } finally {
+      setClearing(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -205,6 +235,19 @@ export function ListDetailClient({
               <Play className="mr-2 h-4 w-4" />
             )}
             Run automations
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleClearList}
+            disabled={clearing || memberCount === 0}
+          >
+            {clearing ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="mr-2 h-4 w-4" />
+            )}
+            Clear List
           </Button>
           <Button variant="outline" size="sm" onClick={handleDelete} disabled={deleting}>
             <Trash2 className="mr-2 h-4 w-4 text-red-600" />

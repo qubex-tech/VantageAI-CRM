@@ -59,3 +59,41 @@ export async function GET(
     )
   }
 }
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireAuth(req)
+    if (!user.practiceId) {
+      return NextResponse.json({ error: 'Practice ID is required' }, { status: 400 })
+    }
+
+    const { id } = await params
+    const list = await prisma.patientList.findFirst({
+      where: { id, practiceId: user.practiceId },
+      select: { id: true },
+    })
+    if (!list) {
+      return NextResponse.json({ error: 'List not found' }, { status: 404 })
+    }
+
+    const deleted = await prisma.patientListMember.deleteMany({
+      where: {
+        listId: id,
+        practiceId: user.practiceId,
+      },
+    })
+
+    return NextResponse.json({
+      success: true,
+      removedCount: deleted.count,
+    })
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to clear list members' },
+      { status: 500 }
+    )
+  }
+}
