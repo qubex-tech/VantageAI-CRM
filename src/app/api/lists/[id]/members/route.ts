@@ -79,16 +79,36 @@ export async function DELETE(
       return NextResponse.json({ error: 'List not found' }, { status: 404 })
     }
 
-    const deleted = await prisma.patientListMember.deleteMany({
-      where: {
-        listId: id,
-        practiceId: user.practiceId,
-      },
+    const { removedCount, remainingCount } = await prisma.$transaction(async (tx) => {
+      const deleted = await tx.patientListMember.deleteMany({
+        where: {
+          listId: id,
+          practiceId: user.practiceId,
+        },
+      })
+
+      const remaining = await tx.patientListMember.count({
+        where: {
+          listId: id,
+          practiceId: user.practiceId,
+        },
+      })
+
+      await tx.patientList.update({
+        where: { id },
+        data: { memberCount: remaining },
+      })
+
+      return {
+        removedCount: deleted.count,
+        remainingCount: remaining,
+      }
     })
 
     return NextResponse.json({
       success: true,
-      removedCount: deleted.count,
+      removedCount,
+      remainingCount,
     })
   } catch (error) {
     return NextResponse.json(
