@@ -14,6 +14,21 @@ const automationRuleSchema = z.object({
   })),
 })
 
+const DUPLICATE_RULE_WINDOW_MS = 2 * 60 * 1000
+
+function normalizeRuleName(name: string): string {
+  return name.trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || value === undefined) return String(value)
+  if (typeof value !== 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(',')}]`
+  const obj = value as Record<string, unknown>
+  const keys = Object.keys(obj).sort()
+  return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(obj[key])}`).join(',')}}`
+}
+
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req)
@@ -135,6 +150,49 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json()
     const validated = automationRuleSchema.parse(body)
+
+    const recentRules = await prisma.automationRule.findMany({
+      where: {
+        practiceId: user.practiceId,
+        triggerEvent: validated.triggerEvent,
+        createdByUserId: user.id,
+        createdAt: {
+          gte: new Date(Date.now() - DUPLICATE_RULE_WINDOW_MS),
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        enabled: true,
+        triggerEvent: true,
+        conditionsJson: true,
+        actionsJson: true,
+        createdByUserId: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    })
+
+    const normalizedName = normalizeRuleName(validated.name)
+    const targetConditions = stableStringify(validated.conditionsJson)
+    const targetActions = stableStringify(validated.actionsJson)
+    const duplicate = recentRules.find(
+      (rule) =>
+        normalizeRuleName(rule.name) === normalizedName &&
+        stableStringify(rule.conditionsJson) === targetConditions &&
+        stableStringify(rule.actionsJson) === targetActions
+    )
+
+    if (duplicate) {
+      return NextResponse.json(
+        {
+          rule: duplicate,
+          deduplicated: true,
+        },
+        { status: 200 }
+      )
+    }
 
     const rule = await prisma.automationRule.create({
       data: {
