@@ -269,6 +269,31 @@ export function FlowBuilderPage({ practiceId, userId, initialRules = [], initial
             errors.push(`Set a delay in seconds (> 0) for ${actionLabel}.`)
           }
           break
+        case 'wait_until_local_time':
+          if (
+            typeof args.hour !== 'number' ||
+            args.hour < 0 ||
+            args.hour > 23 ||
+            (args.minute !== undefined &&
+              (typeof args.minute !== 'number' || args.minute < 0 || args.minute > 59))
+          ) {
+            errors.push(`Set a valid local time (hour 0–23) for ${actionLabel}.`)
+          }
+          break
+        case 'send_slot_fill_outreach': {
+          const channel = args.channel || 'curogram_sms'
+          if (channel === 'curogram_sms' && isMissingValue(args.curogramActionId)) {
+            errors.push(`Add a Curogram Action ID for ${actionLabel}.`)
+          }
+          if (
+            channel === 'sms' &&
+            isMissingValue(args.smsTemplateId) &&
+            isMissingValue(args.smsTemplateName)
+          ) {
+            errors.push(`Pick an SMS marketing template for ${actionLabel}.`)
+          }
+          break
+        }
         case 'update_patient_fields': {
           const fields = args.fields || {}
           const hasFields = Object.values(fields).some((value) => !isMissingValue(value))

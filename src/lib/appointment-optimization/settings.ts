@@ -7,6 +7,7 @@ import {
   type OpenSlotTriggerScenario,
   type OpenSlotTriggerScenarios,
   type OutboundAgentsSettings,
+  type SlotFillOutreachMode,
   type SlotFillRule,
 } from '@/lib/appointment-optimization/types'
 
@@ -80,6 +81,10 @@ function parseWaveIntervalMinutes(value: unknown): number {
   return DEFAULT_WAVE_INTERVAL_MINUTES
 }
 
+function parseSlotFillOutreachMode(value: unknown): SlotFillOutreachMode {
+  return value === 'automation' ? 'automation' : 'immediate'
+}
+
 export function getSlotFillRuleForVisitType(
   settings: OutboundAgentsSettings,
   visitType: string
@@ -121,6 +126,7 @@ export function parseOutboundAgentsSettings(value: unknown): OutboundAgentsSetti
         : DEFAULT_OUTBOUND_AGENTS.smsReplyHandling,
     triggerScenarios: parseTriggerScenarios(raw.triggerScenarios),
     waveIntervalMinutes: parseWaveIntervalMinutes(raw.waveIntervalMinutes),
+    slotFillOutreachMode: parseSlotFillOutreachMode(raw.slotFillOutreachMode),
     slotFillRules: parseSlotFillRules(raw.slotFillRules),
   }
 }
@@ -142,6 +148,10 @@ export async function getOutboundAgentsSettings(practiceId: string): Promise<Out
 
 export function isAppointmentOptimizationEnabled(settings: OutboundAgentsSettings) {
   return settings.masterEnabled && settings.appointmentOptimizationEnabled
+}
+
+export function usesAutomationSlotFillOutreach(settings: OutboundAgentsSettings) {
+  return settings.slotFillOutreachMode === 'automation'
 }
 
 export async function saveOutboundAgentsSettings(

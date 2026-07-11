@@ -36,6 +36,15 @@ export const handleOpenSlotCreated = inngest.createFunction(
     const settings = await step.run('load-settings', async () => {
       return getOutboundAgentsSettings(practiceId)
     })
+
+    if (settings.slotFillOutreachMode === 'automation') {
+      return {
+        skipped: true,
+        reason: 'automation_outreach_mode',
+        note: 'Outreach is handled by workflow automations (crm/open_slot.available).',
+      }
+    }
+
     const waitMs = waveWaitMs(
       settings.waveIntervalMinutes ?? DEFAULT_WAVE_INTERVAL_MINUTES
     )

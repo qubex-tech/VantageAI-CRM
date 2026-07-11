@@ -196,6 +196,17 @@ const EVENT_FIELDS: Record<string, Array<{ value: string; label: string; type: '
     { value: 'list.name', label: 'List Name', type: 'string' },
     ...PATIENT_FIELDS,
   ],
+  'crm/open_slot.available': [
+    { value: 'openSlot.source', label: 'Trigger scenario (source)', type: 'string' },
+    { value: 'openSlot.triggerLabel', label: 'Trigger scenario (label)', type: 'string' },
+    { value: 'openSlot.triggerScenario', label: 'Trigger scenario (code)', type: 'string' },
+    { value: 'openSlot.visitType', label: 'Visit type', type: 'string' },
+    { value: 'openSlot.providerId', label: 'Provider ID', type: 'string' },
+    { value: 'openSlot.slotStart', label: 'Slot start', type: 'date' },
+    { value: 'openSlot.slotEnd', label: 'Slot end', type: 'date' },
+    { value: 'openSlot.durationMinutes', label: 'Duration (minutes)', type: 'number' },
+    { value: 'openSlot.id', label: 'Open slot event ID', type: 'string' },
+  ],
 }
 
 // Status options for appointment status field
@@ -251,6 +262,8 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
     const actionType = config.actionType
     if (actionType === 'send_email' || actionType === 'send_sms') {
       fetchTemplates(actionType === 'send_email' ? 'email' : 'sms')
+    } else if (actionType === 'send_slot_fill_outreach') {
+      fetchTemplates('sms')
     } else {
       setTemplates([])
     }
@@ -441,6 +454,7 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                 <SelectItem value="crm/form_request.created">Form Request Created</SelectItem>
                 <SelectItem value="crm/list.run">List Run</SelectItem>
                 <SelectItem value="crm/list.member_added">List Member Added</SelectItem>
+                <SelectItem value="crm/open_slot.available">Slot Available</SelectItem>
               </SelectContent>
             </Select>
 
@@ -740,6 +754,7 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                   <SelectItem value="send_sms">Send SMS</SelectItem>
                   <SelectItem value="send_reminder">Send Reminder</SelectItem>
                   <SelectItem value="trigger_curogram_template">Trigger Curogram Template</SelectItem>
+                  <SelectItem value="send_slot_fill_outreach">Send Slot Fill Outreach</SelectItem>
                   <SelectItem value="create_note">Create Note</SelectItem>
                   <SelectItem value="create_task">Create Task</SelectItem>
                   <SelectItem value="update_patient_fields">Update Patient Fields</SelectItem>
@@ -747,6 +762,7 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                   <SelectItem value="update_appointment_status">Update Appointment Status</SelectItem>
                   <SelectItem value="create_insurance_policy">Create Insurance Policy</SelectItem>
                   <SelectItem value="delay_seconds">Delay</SelectItem>
+                  <SelectItem value="wait_until_local_time">Wait Until Local Time</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1288,6 +1304,178 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                   }}
                 />
                 <p className="text-xs text-gray-500">Maximum: 86400 (24 hours)</p>
+              </div>
+            )}
+
+            {config.actionType === 'wait_until_local_time' && (
+              <div className="space-y-3">
+                <div>
+                  <Label>Send at (practice local time)</Label>
+                  <p className="text-xs text-gray-500 mt-1 mb-2">
+                    Waits until this hour:minute in the practice timezone before continuing.
+                    Use after Slot Available so midnight ECW sync does not text patients overnight.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={23}
+                      className="w-20"
+                      placeholder="9"
+                      value={config.args?.hour ?? ''}
+                      onChange={(e) => {
+                        const currentArgs = config.args || {}
+                        handleUpdate({
+                          args: {
+                            ...currentArgs,
+                            hour: Math.min(23, Math.max(0, parseInt(e.target.value, 10) || 0)),
+                          },
+                        })
+                      }}
+                    />
+                    <span className="text-gray-500">:</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={59}
+                      className="w-20"
+                      placeholder="0"
+                      value={config.args?.minute ?? 0}
+                      onChange={(e) => {
+                        const currentArgs = config.args || {}
+                        handleUpdate({
+                          args: {
+                            ...currentArgs,
+                            minute: Math.min(59, Math.max(0, parseInt(e.target.value, 10) || 0)),
+                          },
+                        })
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {config.actionType === 'send_slot_fill_outreach' && (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-500">
+                  Contacts eligible patients who have a later appointment (same visit type).
+                  Uses Slot Fill candidate rules. Channel/template here override Outbound Agent
+                  defaults for this workflow.
+                </p>
+                <div>
+                  <Label>Channel</Label>
+                  <Select
+                    value={config.args?.channel || 'curogram_sms'}
+                    onValueChange={(value) => {
+                      const currentArgs = config.args || {}
+                      handleUpdate({ args: { ...currentArgs, channel: value } })
+                    }}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="curogram_sms">Curogram SMS</SelectItem>
+                      <SelectItem value="sms">SMS (marketing template)</SelectItem>
+                      <SelectItem value="voice">Voice</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {(config.args?.channel === 'curogram_sms' || !config.args?.channel) && (
+                  <>
+                    <div>
+                      <Label>Curogram Action ID</Label>
+                      <Input
+                        className="mt-1"
+                        placeholder="Curogram template / action ID"
+                        value={config.args?.curogramActionId || ''}
+                        onChange={(e) => {
+                          const currentArgs = config.args || {}
+                          handleUpdate({
+                            args: { ...currentArgs, curogramActionId: e.target.value },
+                          })
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <Label>Curogram template name (optional label)</Label>
+                      <Input
+                        className="mt-1"
+                        placeholder="Earlier Appointment Available - Mira"
+                        value={config.args?.curogramTemplateName || ''}
+                        onChange={(e) => {
+                          const currentArgs = config.args || {}
+                          handleUpdate({
+                            args: { ...currentArgs, curogramTemplateName: e.target.value },
+                          })
+                        }}
+                      />
+                    </div>
+                  </>
+                )}
+                {config.args?.channel === 'sms' && (
+                  <div>
+                    <Label>SMS Marketing Template</Label>
+                    {loadingTemplates ? (
+                      <div className="flex items-center gap-2 text-sm text-gray-500 py-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Loading templates...</span>
+                      </div>
+                    ) : (
+                      <Select
+                        value={config.args?.smsTemplateId || '__none__'}
+                        onValueChange={(value) => {
+                          const currentArgs = config.args || {}
+                          const selected = templates.find((t) => t.id === value)
+                          handleUpdate({
+                            args: {
+                              ...currentArgs,
+                              smsTemplateId: value === '__none__' ? undefined : value,
+                              smsTemplateName: selected?.name,
+                            },
+                          })
+                        }}
+                      >
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="Select SMS template" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Use Outbound Agent default</SelectItem>
+                          {templates
+                            .filter((t) => t.channel === 'sms')
+                            .map((template) => (
+                              <SelectItem key={template.id} value={template.id}>
+                                {template.name}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+                )}
+                <div>
+                  <Label>Wave number</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={10}
+                    className="mt-1 max-w-[120px]"
+                    value={config.args?.waveNumber ?? 1}
+                    onChange={(e) => {
+                      const currentArgs = config.args || {}
+                      handleUpdate({
+                        args: {
+                          ...currentArgs,
+                          waveNumber: Math.min(10, Math.max(1, parseInt(e.target.value, 10) || 1)),
+                        },
+                      })
+                    }}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Use 1 for the first batch. Chain Delay + another Send for later waves.
+                  </p>
+                </div>
               </div>
             )}
 

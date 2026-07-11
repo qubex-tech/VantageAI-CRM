@@ -641,6 +641,7 @@ export const outboundAgentsSettingsSchema = z.object({
   smsReplyHandling: z.enum(['telnyx_inbound', 'practice_number']).optional(),
   triggerScenarios: openSlotTriggerScenariosSchema.optional(),
   waveIntervalMinutes: z.number().int().min(1).max(1440).optional(),
+  slotFillOutreachMode: z.enum(['immediate', 'automation']).optional(),
   slotFillRules: z.array(slotFillRuleSchema).max(20).optional(),
 })
 

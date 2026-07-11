@@ -101,6 +101,8 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
         },
         waveIntervalMinutes:
           data.settings?.waveIntervalMinutes ?? DEFAULT_OUTBOUND_AGENTS.waveIntervalMinutes,
+        slotFillOutreachMode:
+          data.settings?.slotFillOutreachMode ?? DEFAULT_OUTBOUND_AGENTS.slotFillOutreachMode,
         slotFillRules: normalizeLoadedSlotFillRules(data.settings?.slotFillRules),
       })
     } catch (err) {
@@ -220,6 +222,8 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
         },
         waveIntervalMinutes:
           data.settings?.waveIntervalMinutes ?? DEFAULT_OUTBOUND_AGENTS.waveIntervalMinutes,
+        slotFillOutreachMode:
+          data.settings?.slotFillOutreachMode ?? DEFAULT_OUTBOUND_AGENTS.slotFillOutreachMode,
         slotFillRules: normalizeLoadedSlotFillRules(data.settings?.slotFillRules),
       })
       setSuccess('Outbound agent settings saved.')
@@ -516,27 +520,58 @@ export function OutboundAgentsSettings({ practiceId }: OutboundAgentsSettingsPro
                 Add rule
               </Button>
 
-              <div className="pt-2 border-t border-gray-200">
-                <Label className="text-sm font-medium">Wave frequency (minutes)</Label>
-                <p className="text-xs text-gray-500 mt-1 mb-2">
-                  Minutes to wait between outreach waves while the slot is still open.
-                </p>
-                <Input
-                  type="number"
-                  min={1}
-                  max={1440}
-                  className="max-w-[160px]"
-                  value={settings.waveIntervalMinutes ?? 10}
-                  onChange={(e) =>
-                    setSettings((s) => ({
-                      ...s,
-                      waveIntervalMinutes: Math.min(
-                        1440,
-                        Math.max(1, Number(e.target.value) || 10)
-                      ),
-                    }))
-                  }
-                />
+              <div className="pt-2 border-t border-gray-200 space-y-4">
+                <div>
+                  <Label className="text-sm font-medium">Wave frequency (minutes)</Label>
+                  <p className="text-xs text-gray-500 mt-1 mb-2">
+                    Minutes to wait between outreach waves while the slot is still open
+                    (built-in mode only).
+                  </p>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={1440}
+                    className="max-w-[160px]"
+                    value={settings.waveIntervalMinutes ?? 10}
+                    onChange={(e) =>
+                      setSettings((s) => ({
+                        ...s,
+                        waveIntervalMinutes: Math.min(
+                          1440,
+                          Math.max(1, Number(e.target.value) || 10)
+                        ),
+                      }))
+                    }
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Outreach timing</Label>
+                  <p className="text-xs text-gray-500 mt-1 mb-2">
+                    Use workflow automations to avoid midnight texts from ECW sync. Build a
+                    Slot Available workflow with Wait Until Local Time → Send Slot Fill Outreach.
+                  </p>
+                  <Select
+                    value={settings.slotFillOutreachMode || 'immediate'}
+                    onValueChange={(value) =>
+                      setSettings((s) => ({
+                        ...s,
+                        slotFillOutreachMode: value as 'immediate' | 'automation',
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="max-w-md">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="immediate">
+                        Immediate (built-in waves when slot opens)
+                      </SelectItem>
+                      <SelectItem value="automation">
+                        Workflow automation (Slot Available trigger)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
 

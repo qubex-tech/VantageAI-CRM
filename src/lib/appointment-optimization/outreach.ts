@@ -23,6 +23,7 @@ import {
 } from '@/lib/appointment-optimization/slotFilled'
 import { WAVE_BATCH_SIZE } from '@/lib/appointment-optimization/types'
 import { formatAppointmentForVoice, type VoiceAppointment } from '@/lib/appointments/voice-context'
+import { notifySlotFillOutreachSent } from '@/lib/appointment-optimization/slotFillPushNotification'
 
 function providerDisplayFromRef(providerId: string | null) {
   return formatProviderDisplayName(providerId, 'your provider')
@@ -82,10 +83,33 @@ export async function processSlotWave(params: {
   openSlotEventId: string
   practiceId: string
   waveNumber: number
+  /** Optional overrides from workflow automation send_slot_fill_outreach action */
+  overrides?: {
+    outreachChannel?: string
+    smsTemplateName?: string
+    curogramSmsActionId?: string
+    curogramSmsTemplateName?: string
+  }
 }) {
-  const settings = await getOutboundAgentsSettings(params.practiceId)
-  if (!isAppointmentOptimizationEnabled(settings)) {
+  const baseSettings = await getOutboundAgentsSettings(params.practiceId)
+  if (!isAppointmentOptimizationEnabled(baseSettings)) {
     return { status: 'skipped', reason: 'agent_disabled' }
+  }
+
+  const settings = {
+    ...baseSettings,
+    ...(params.overrides?.outreachChannel
+      ? { outreachChannel: params.overrides.outreachChannel }
+      : {}),
+    ...(params.overrides?.smsTemplateName
+      ? { smsTemplateName: params.overrides.smsTemplateName }
+      : {}),
+    ...(params.overrides?.curogramSmsActionId
+      ? { curogramSmsActionId: params.overrides.curogramSmsActionId }
+      : {}),
+    ...(params.overrides?.curogramSmsTemplateName
+      ? { curogramSmsTemplateName: params.overrides.curogramSmsTemplateName }
+      : {}),
   }
 
   const slot = await prisma.openSlotEvent.findFirst({
@@ -208,12 +232,34 @@ export async function processSlotWave(params: {
           actionId: settings.curogramSmsActionId || '',
           templateName: settings.curogramSmsTemplateName || '',
         })
+        void notifySlotFillOutreachSent({
+          practiceId: params.practiceId,
+          openSlotEventId: slot.id,
+          outreachAttemptId: attempt.id,
+          patientName: candidate.patientName,
+          slotStart: slot.slotStart,
+          providerId: slot.providerId,
+          waveNumber: params.waveNumber,
+          messagePreview: settings.curogramSmsTemplateName
+            ? `Curogram: ${settings.curogramSmsTemplateName}`
+            : messageBody,
+        })
       } else {
         await sendSmsOutreach({
           practiceId: params.practiceId,
           attemptId: attempt.id,
           phone: candidate.phone!,
           body: messageBody,
+        })
+        void notifySlotFillOutreachSent({
+          practiceId: params.practiceId,
+          openSlotEventId: slot.id,
+          outreachAttemptId: attempt.id,
+          patientName: candidate.patientName,
+          slotStart: slot.slotStart,
+          providerId: slot.providerId,
+          waveNumber: params.waveNumber,
+          messagePreview: messageBody,
         })
       }
       sentCount += 1

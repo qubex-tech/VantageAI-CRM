@@ -37,6 +37,9 @@ const TRIGGER_OPTIONS = [
   // Lists
   { value: 'crm/list.run', label: 'List Run', icon: List, category: 'Lists' },
   { value: 'crm/list.member_added', label: 'List Member Added', icon: List, category: 'Lists' },
+
+  // Slot Fill
+  { value: 'crm/open_slot.available', label: 'Slot Available', icon: Calendar, category: 'Slot Fill' },
 ]
 
 const ACTION_OPTIONS = [
@@ -45,6 +48,7 @@ const ACTION_OPTIONS = [
   { value: 'send_sms', label: 'Send SMS', icon: MessageSquare, category: 'Communication' },
   { value: 'send_reminder', label: 'Send Reminder', icon: AlertCircle, category: 'Communication' },
   { value: 'trigger_curogram_template', label: 'Trigger Curogram Template', icon: MessageSquare, category: 'Communication' },
+  { value: 'send_slot_fill_outreach', label: 'Send Slot Fill Outreach', icon: Calendar, category: 'Slot Fill' },
   
   // Patient Management
   { value: 'create_note', label: 'Create Note', icon: FileText, category: 'Patient Management' },
@@ -60,6 +64,7 @@ const ACTION_OPTIONS = [
   
   // Control Flow
   { value: 'delay_seconds', label: 'Delay', icon: Clock, category: 'Control Flow' },
+  { value: 'wait_until_local_time', label: 'Wait Until Local Time', icon: Clock, category: 'Control Flow' },
 ]
 
 export function NodeSidebar({ onAddNode }: NodeSidebarProps) {

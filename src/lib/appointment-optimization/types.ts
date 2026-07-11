@@ -61,6 +61,20 @@ export const SCENARIO_TO_SOURCE: Record<OpenSlotTriggerScenario, OpenSlotSource>
   availability: 'availability',
 }
 
+/** Human-readable labels for automation conditions on Slot Available. */
+export const OPEN_SLOT_SOURCE_LABELS: Record<OpenSlotSource, string> = {
+  cancellation: 'Patient canceled',
+  no_show: 'Patient no show',
+  reschedule: 'Reschedule frees up a time slot',
+  availability: 'Open slot available',
+}
+
+/**
+ * immediate — built-in waves start as soon as the open slot is created (can be midnight sync).
+ * automation — emit crm/open_slot.available and let workflow automations control timing + channel.
+ */
+export type SlotFillOutreachMode = 'immediate' | 'automation'
+
 /** Normalized open time slot — input to the rules engine. Source is opaque metadata only. */
 export type OpenTimeSlotOriginSystem =
   | 'crm'
@@ -157,6 +171,11 @@ export type OutboundAgentsSettings = {
   triggerScenarios?: OpenSlotTriggerScenarios
   /** Minutes to wait between outreach waves (default 10). */
   waveIntervalMinutes?: number
+  /**
+   * immediate — built-in Inngest waves send right away.
+   * automation — workflows handle wait-until + Curogram/SMS via Slot Available trigger.
+   */
+  slotFillOutreachMode?: SlotFillOutreachMode
   /** Per-visit-type buffer / look-ahead rules for proactive and inventory-based slot fill */
   slotFillRules?: SlotFillRule[]
 }
@@ -172,6 +191,7 @@ export const DEFAULT_OUTBOUND_AGENTS: OutboundAgentsSettings = {
   smsReplyHandling: 'telnyx_inbound',
   triggerScenarios: { ...DEFAULT_TRIGGER_SCENARIOS },
   waveIntervalMinutes: DEFAULT_WAVE_INTERVAL_MINUTES,
+  slotFillOutreachMode: 'immediate',
   slotFillRules: [],
 }
 

@@ -408,6 +408,35 @@ export const runAutomationsForEvent = inngest.createFunction(
               }
             }
 
+            if (action.type === 'wait_until_local_time') {
+              const { getPracticeTimeZone } = await import('@/lib/practice-timezone')
+              const { msUntilLocalTime } = await import(
+                '@/lib/appointment-optimization/waitUntilLocalTime'
+              )
+              const hour =
+                typeof processedArgs.hour === 'number'
+                  ? processedArgs.hour
+                  : Number(processedArgs.hour)
+              const minute =
+                typeof processedArgs.minute === 'number'
+                  ? processedArgs.minute
+                  : Number(processedArgs.minute ?? 0)
+              if (!Number.isNaN(hour) && hour >= 0 && hour <= 23) {
+                const timeZone = await getPracticeTimeZone(practiceId)
+                const waitMs = msUntilLocalTime({
+                  hour,
+                  minute: Number.isNaN(minute) ? 0 : minute,
+                  timeZone,
+                })
+                if (waitMs > 0) {
+                  await step.sleep(
+                    `wait-until-${run.id}-${index}`,
+                    `${Math.ceil(waitMs / 1000)}s`
+                  )
+                }
+              }
+            }
+
             // Avoid bombarding the same patient with repeat outreach when a list is re-run.
             if (DEDUPABLE_NOTIFICATION_ACTIONS.has(action.type)) {
               const patientId =

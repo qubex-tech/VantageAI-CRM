@@ -1,8 +1,10 @@
 import { prisma } from '@/lib/db'
 import { inngest } from '@/inngest/client'
+import { emitOpenSlotAvailableEvent } from '@/lib/appointment-optimization/emitOpenSlotAvailable'
 import {
   getOutboundAgentsSettings,
   isAppointmentOptimizationEnabled,
+  usesAutomationSlotFillOutreach,
 } from '@/lib/appointment-optimization/settings'
 import type { OpenSlotCreatedPayload, OpenSlotEventMetadata } from '@/lib/appointment-optimization/types'
 import { OPEN_SLOT_STATUS } from '@/lib/appointment-optimization/types'
@@ -28,6 +30,56 @@ function buildIdempotencyKey(input: CreateOpenSlotInput) {
   return `${provider}:${start}:${input.appointmentType}:${input.source}`
 }
 
+async function slotAlreadyOccupied(input: CreateOpenSlotInput): Promise<boolean> {
+  const overlapping = await prisma.appointment.findFirst({
+    where: {
+      practiceId: input.practiceId,
+      status: { in: ['scheduled', 'confirmed'] },
+      ...(input.providerId ? { providerId: input.providerId } : {}),
+      startTime: { lt: input.slotEnd },
+      endTime: { gt: input.slotStart },
+    },
+    select: { id: true },
+  })
+  return Boolean(overlapping)
+}
+
+async function publishOpenSlotCreated(
+  payload: OpenSlotCreatedPayload,
+  eventId: string,
+  mode: 'create' | 'reopen'
+) {
+  await inngest.send({
+    name: 'crm/open-slot.created',
+    data: payload,
+    id:
+      mode === 'reopen'
+        ? `open-slot-reopen-${eventId}-${Date.now()}`
+        : `open-slot-${eventId}`,
+  })
+}
+
+async function publishSlotAvailable(params: {
+  practiceId: string
+  openSlotEventId: string
+  source: string
+  visitType: string
+  providerId: string | null
+  slotStart: Date
+  slotEnd: Date
+  durationMinutes: number
+  sourceAppointmentId?: string | null
+}) {
+  try {
+    await emitOpenSlotAvailableEvent(params)
+  } catch (error) {
+    console.error('[AppointmentOptimization] failed to emit open_slot.available', {
+      openSlotEventId: params.openSlotEventId,
+      error: error instanceof Error ? error.message : error,
+    })
+  }
+}
+
 export async function createOpenSlotEvent(input: CreateOpenSlotInput) {
   const settings = await getOutboundAgentsSettings(input.practiceId)
   if (!isAppointmentOptimizationEnabled(settings)) {
@@ -38,11 +90,16 @@ export async function createOpenSlotEvent(input: CreateOpenSlotInput) {
     return { created: false as const, reason: 'slot_in_past' }
   }
 
+  if (await slotAlreadyOccupied(input)) {
+    return { created: false as const, reason: 'already_occupied' }
+  }
+
   const durationMinutes = Math.max(
     1,
     Math.round((input.slotEnd.getTime() - input.slotStart.getTime()) / (60 * 1000))
   )
   const idempotencyKey = buildIdempotencyKey(input)
+  const automationMode = usesAutomationSlotFillOutreach(settings)
 
   const existing = await prisma.openSlotEvent.findUnique({
     where: {
@@ -79,11 +136,21 @@ export async function createOpenSlotEvent(input: CreateOpenSlotInput) {
         durationMinutes: existing.durationMinutes,
       }
 
-      await inngest.send({
-        name: 'crm/open-slot.created',
-        data: payload,
-        id: `open-slot-reopen-${existing.id}-${Date.now()}`,
+      await publishSlotAvailable({
+        practiceId: existing.practiceId,
+        openSlotEventId: existing.id,
+        source: existing.source,
+        visitType: existing.appointmentType,
+        providerId: existing.providerId,
+        slotStart: existing.slotStart,
+        slotEnd: existing.slotEnd,
+        durationMinutes: existing.durationMinutes,
+        sourceAppointmentId: input.sourceAppointmentId ?? existing.sourceAppointmentId,
       })
+
+      if (!automationMode) {
+        await publishOpenSlotCreated(payload, existing.id, 'reopen')
+      }
 
       return { created: true as const, openSlotEventId: existing.id, reopened: true as const }
     }
@@ -118,11 +185,21 @@ export async function createOpenSlotEvent(input: CreateOpenSlotInput) {
     durationMinutes: event.durationMinutes,
   }
 
-  await inngest.send({
-    name: 'crm/open-slot.created',
-    data: payload,
-    id: `open-slot-${event.id}`,
+  await publishSlotAvailable({
+    practiceId: event.practiceId,
+    openSlotEventId: event.id,
+    source: event.source,
+    visitType: event.appointmentType,
+    providerId: event.providerId,
+    slotStart: event.slotStart,
+    slotEnd: event.slotEnd,
+    durationMinutes: event.durationMinutes,
+    sourceAppointmentId: event.sourceAppointmentId,
   })
+
+  if (!automationMode) {
+    await publishOpenSlotCreated(payload, event.id, 'create')
+  }
 
   return { created: true as const, openSlotEventId: event.id, event }
 }

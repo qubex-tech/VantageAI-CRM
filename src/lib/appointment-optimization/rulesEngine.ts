@@ -8,6 +8,7 @@ import {
 } from '@/lib/appointment-optimization/settings'
 import type { OpenSlotEventMetadata, OpenTimeSlot } from '@/lib/appointment-optimization/types'
 import { slotOverlapsCalendarBlock } from '@/lib/calendar/blockingIntervals'
+import { prisma } from '@/lib/db'
 import { getSlotHoursViolationForPractice } from '@/lib/practice-hours/availability'
 import { getPracticeTimeZone } from '@/lib/practice-timezone'
 
@@ -65,6 +66,21 @@ export async function evaluateOpenTimeSlot(
   if (hoursViolation) {
     await markInventorySkipped(slot, hoursViolation)
     return { action: 'skipped', reason: hoursViolation }
+  }
+
+  const alreadyOccupied = await prisma.appointment.findFirst({
+    where: {
+      practiceId: slot.practiceId,
+      status: { in: ['scheduled', 'confirmed'] },
+      ...(slot.providerId ? { providerId: slot.providerId } : {}),
+      startTime: { lt: slot.end },
+      endTime: { gt: slot.start },
+    },
+    select: { id: true },
+  })
+  if (alreadyOccupied) {
+    await markInventorySkipped(slot, 'already_occupied')
+    return { action: 'skipped', reason: 'already_occupied' }
   }
 
   if (!isWithinBufferWindow(slot.start, rule.bufferBusinessDays, timeZone, now)) {

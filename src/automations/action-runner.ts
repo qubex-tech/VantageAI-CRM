@@ -77,6 +77,24 @@ const delaySecondsSchema = z.object({
   seconds: z.number().int().min(0).max(86400), // Max 24 hours
 })
 
+const waitUntilLocalTimeSchema = z.object({
+  hour: z.number().int().min(0).max(23),
+  minute: z.number().int().min(0).max(59).default(0),
+})
+
+const sendSlotFillOutreachSchema = z.object({
+  openSlotEventId: z.string().optional(),
+  waveNumber: z.number().int().min(1).max(10).default(1),
+  channel: z
+    .enum(['sms', 'curogram_sms', 'voice', 'prefer_sms', 'prefer_voice'])
+    .optional(),
+  /** Marketing SMS template id (resolved to name for slot-fill body) */
+  smsTemplateId: z.string().optional(),
+  smsTemplateName: z.string().optional(),
+  curogramActionId: z.string().optional(),
+  curogramTemplateName: z.string().optional(),
+})
+
 const tagPatientSchema = z.object({
   patientId: z.string(),
   tag: z.string().min(1),
@@ -970,6 +988,100 @@ async function delaySeconds(
 }
 
 /**
+ * Wait until a local wall-clock time (practice timezone). Actual sleep is in Inngest.
+ */
+async function waitUntilLocalTime(
+  practiceId: string,
+  args: z.infer<typeof waitUntilLocalTimeSchema>,
+  _eventData: Record<string, any>
+): Promise<ActionResult> {
+  const { getPracticeTimeZone } = await import('@/lib/practice-timezone')
+  const { msUntilLocalTime } = await import(
+    '@/lib/appointment-optimization/waitUntilLocalTime'
+  )
+  const timeZone = await getPracticeTimeZone(practiceId)
+  const ms = msUntilLocalTime({
+    hour: args.hour,
+    minute: args.minute,
+    timeZone,
+  })
+  return {
+    status: 'succeeded',
+    result: {
+      action: 'wait_until_local_time',
+      hour: args.hour,
+      minute: args.minute,
+      timeZone,
+      waitMs: ms,
+      waitSeconds: Math.ceil(ms / 1000),
+      note: 'Actual wait is performed via step.sleep in Inngest',
+    },
+  }
+}
+
+/**
+ * Find eligible later-appointment patients and send Slot Fill outreach (SMS / Curogram).
+ */
+async function sendSlotFillOutreach(
+  practiceId: string,
+  args: z.infer<typeof sendSlotFillOutreachSchema>,
+  eventData: Record<string, any>
+): Promise<ActionResult> {
+  const openSlotEventId =
+    (typeof args.openSlotEventId === 'string' && args.openSlotEventId.trim()) ||
+    eventData.openSlot?.id ||
+    eventData.openSlotEventId ||
+    eventData.entityId
+
+  if (!openSlotEventId || typeof openSlotEventId !== 'string') {
+    return {
+      status: 'failed',
+      error: 'Missing openSlotEventId for send_slot_fill_outreach',
+    }
+  }
+
+  let smsTemplateName = args.smsTemplateName?.trim() || undefined
+  if (!smsTemplateName && args.smsTemplateId?.trim()) {
+    const template = await prisma.marketingTemplate.findFirst({
+      where: {
+        id: args.smsTemplateId.trim(),
+        tenantId: practiceId,
+        channel: 'sms',
+      },
+      select: { name: true },
+    })
+    smsTemplateName = template?.name
+  }
+
+  const { processSlotWave } = await import('@/lib/appointment-optimization/outreach')
+  const waveResult = await processSlotWave({
+    practiceId,
+    openSlotEventId,
+    waveNumber: args.waveNumber ?? 1,
+    overrides: {
+      ...(args.channel ? { outreachChannel: args.channel } : {}),
+      ...(smsTemplateName ? { smsTemplateName } : {}),
+      ...(args.curogramActionId?.trim()
+        ? { curogramSmsActionId: args.curogramActionId.trim() }
+        : {}),
+      ...(args.curogramTemplateName?.trim()
+        ? { curogramSmsTemplateName: args.curogramTemplateName.trim() }
+        : {}),
+    },
+  })
+
+  return {
+    status: 'succeeded',
+    result: {
+      action: 'send_slot_fill_outreach',
+      openSlotEventId,
+      waveNumber: args.waveNumber ?? 1,
+      waveResult,
+    },
+  }
+}
+
+/**
  * Tag a patient
  */
 async function tagPatient(
@@ -1524,6 +1636,18 @@ export async function runAction(params: RunActionParams): Promise<ActionResult> 
       case 'delay_seconds': {
         const validated = delaySecondsSchema.parse(actionArgs)
         result = await delaySeconds(practiceId, validated, eventData)
+        break
+      }
+
+      case 'wait_until_local_time': {
+        const validated = waitUntilLocalTimeSchema.parse(actionArgs)
+        result = await waitUntilLocalTime(practiceId, validated, eventData)
+        break
+      }
+
+      case 'send_slot_fill_outreach': {
+        const validated = sendSlotFillOutreachSchema.parse(actionArgs)
+        result = await sendSlotFillOutreach(practiceId, validated, eventData)
         break
       }
 
