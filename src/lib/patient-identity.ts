@@ -62,7 +62,10 @@ export type PatientIdentityFacts = {
     open_dental_chart: OpenDentalChartFacts | null
   }>
   can_create_separate_with_same_phone: true
-  /** True when an existing phone match was found but caller demographics differ — agent must confirm merge vs new chart. */
+  /**
+   * Retained for tool schemas. Create-vs-reuse for shared phones is decided server-side
+   * (different first+last → auto-create). May still be true for OD/CRM verify cases.
+   */
   requires_agent_decision: boolean
   recommendation: 'use_existing' | 'create_new' | 'disambiguate' | 'verify_before_booking'
   warnings: string[]
@@ -142,13 +145,22 @@ export function resolveDemographics(input: DemographicsInput): {
   }
 }
 
-function namesLooselyMatch(a: ParsedName | null, b: ParsedName | null): boolean {
-  if (!a || !b) return false
-  const af = a.firstName.toLowerCase()
-  const al = a.lastName.toLowerCase()
-  const bf = b.firstName.toLowerCase()
-  const bl = b.lastName.toLowerCase()
-  return af === bf && al === bl
+/** True when first + last name match (case-insensitive). DOB is ignored. */
+export function patientNamesMatch(
+  patient: PatientIdentityRow,
+  caller: DemographicsInput
+): boolean {
+  const c = resolveDemographics(caller)
+  if (!c.firstName || !c.lastName) return false
+
+  const pFirst = patient.firstName?.trim() || parsePatientName(patient.name)?.firstName
+  const pLast = patient.lastName?.trim() || parsePatientName(patient.name)?.lastName
+  if (!pFirst || !pLast) return false
+
+  return (
+    pFirst.toLowerCase() === c.firstName.toLowerCase() &&
+    pLast.toLowerCase() === c.lastName.toLowerCase()
+  )
 }
 
 /** True when first name, last name, and full DOB (year included) all match. */
@@ -159,16 +171,10 @@ export function demographicsMatch(
   const c = resolveDemographics(caller)
   if (!c.firstName || !c.lastName || !c.dateOfBirth) return false
 
-  const pFirst = patient.firstName?.trim() || parsePatientName(patient.name)?.firstName
-  const pLast = patient.lastName?.trim() || parsePatientName(patient.name)?.lastName
   const pDob = normalizeDobToIso(patient.dateOfBirth)
-  if (!pFirst || !pLast || !pDob) return false
+  if (!pDob || pDob !== c.dateOfBirth) return false
 
-  return (
-    pFirst.toLowerCase() === c.firstName.toLowerCase() &&
-    pLast.toLowerCase() === c.lastName.toLowerCase() &&
-    pDob === c.dateOfBirth
-  )
+  return patientNamesMatch(patient, caller)
 }
 
 /** Compare stored patient DOB to a caller-supplied date (ISO or parseable). */
@@ -304,9 +310,13 @@ export function buildPatientIdentityFacts(params: {
       .join('; ')
     if (collisionSummary) {
       warnings.push(
-        `Existing patient(s) on this phone: ${collisionSummary}. Caller reported ${caller.fullName ?? 'unknown'} (DOB ${caller.dateOfBirth ?? 'unknown'}). Confirm with the caller if this is the same person (use existing patient_id) or a different family member (call again with force_create=true to register separately).`
+        `Existing patient(s) on this phone: ${collisionSummary}. Caller reported ${caller.fullName ?? 'unknown'} (DOB ${caller.dateOfBirth ?? 'unknown'}).`
       )
     }
+  } else if (params.isNew && params.phoneCollisions.length > 0) {
+    warnings.push(
+      `Created a separate patient chart because the caller name/DOB differed from existing patient(s) on this phone.`
+    )
   }
 
   if (odMismatch && params.openDentalChart) {

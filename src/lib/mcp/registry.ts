@@ -7,7 +7,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'resolve_patient_for_scheduling',
     description:
-      'Resolve or create a patient for scheduling. Always returns ground-truth facts: caller demographics, CRM chart, linked Open Dental chart (PatNum, name, DOB), phone collisions, identity_match, and recommendation (use_existing | create_new | disambiguate | verify_before_booking). Phone numbers are NOT unique — family members may share one. Use force_create=true to register a separate patient on the same phone when name+DOB differ.',
+      'Resolve or create a patient for scheduling. Always returns ground-truth facts: caller demographics, CRM chart, linked Open Dental chart (PatNum, name, DOB), phone collisions, identity_match, and recommendation. Phone numbers are NOT unique — family members may share one. When the caller first+last name differs from the chart on that phone, a new patient is created automatically (force_create is optional/legacy).',
     input_schema: {
       type: 'object',
       properties: {

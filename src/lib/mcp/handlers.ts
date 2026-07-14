@@ -682,19 +682,45 @@ export async function handleResolvePatientForScheduling(
   }
 
   const lookup = await lookupPatientForScheduling(practiceId, callerInput)
+
+  // Auto-create when no demographics match — including shared-phone name mismatches.
+  // Do not leave create-vs-reuse decisions to the voice agent.
+  const shouldAutoCreate =
+    !lookup.patientId &&
+    Boolean(input.phone) &&
+    Boolean(callerInput.name || callerInput.firstName || callerInput.lastName)
+
+  if (shouldAutoCreate) {
+    const created = await findOrCreatePatientByPhone(practiceId, input.phone!, callerInput)
+    const output = {
+      patient_id: created.patientId,
+      is_new: created.isNew,
+      requires_agent_decision: created.requires_agent_decision,
+      facts: created.facts,
+      message: created.isNew
+        ? 'Created a separate patient chart (caller name/DOB did not match existing charts on this phone, or no chart existed).'
+        : undefined,
+    }
+    await writeMcpAuditLog({
+      ...ctx,
+      patientId: created.patientId,
+      policyId: null,
+      toolName: 'resolve_patient_for_scheduling',
+      fieldsReturned: collectFieldPaths(output),
+    })
+    return { output, patientId: created.patientId }
+  }
+
   const output: Record<string, unknown> = {
     patient_id: lookup.patientId,
     is_new: false,
-    requires_agent_decision: lookup.facts.requires_agent_decision,
+    requires_agent_decision: false,
     facts: lookup.facts,
   }
 
-  if (lookup.facts.requires_agent_decision) {
+  if (!lookup.patientId) {
     output.message =
-      'Existing patient(s) found on this phone with different identity. Read facts.phone_collisions and facts.open_dental_chart, confirm with the caller, then either use the existing patient_id (same person) or call again with force_create=true (different person, same phone).'
-  } else if (!lookup.patientId) {
-    output.message =
-      'No matching patient found. Use force_create=true to register a separate patient on this phone number (same phone is allowed for family members).'
+      'No matching patient found. Provide phone and name to create a patient chart.'
   }
 
   await writeMcpAuditLog({

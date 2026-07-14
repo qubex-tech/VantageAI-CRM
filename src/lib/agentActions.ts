@@ -42,6 +42,7 @@ import {
   enrichPhoneCollisionsWithOdCharts,
   fetchOpenDentalChartFacts,
   openDentalChartMatchesCaller,
+  patientNamesMatch,
   phoneMatchKey,
   resolveDemographics,
   type PatientIdentityFacts,
@@ -124,10 +125,13 @@ async function ensureOpenDentalPatientLinkedForScheduling(
 }
 
 export interface FindOrCreatePatientResult {
-  /** Null when requires_agent_decision — existing phone match found but caller identity differs. */
   patientId: string | null
   isNew: boolean
-  /** True when caller must confirm same person vs new family member before proceeding. */
+  /**
+   * Legacy flag retained for tool schemas. Patient create-vs-reuse is decided server-side
+   * (different first+last name on a shared phone → auto-create). Remaining true only when
+   * identity facts still need human verification (e.g. OD chart mismatch on a selected chart).
+   */
   requires_agent_decision: boolean
   patient: {
     id: string
@@ -193,13 +197,12 @@ export async function findOrCreatePatientByPhone(
 
   let patient: (typeof allPatients)[number] | null = null
   let isNew = false
-  const callerHasFullIdentity = Boolean(
-    caller.firstName && caller.lastName && caller.dateOfBirth
-  )
+  const callerHasName = Boolean(caller.firstName && caller.lastName)
+  const callerHasFullIdentity = Boolean(callerHasName && caller.dateOfBirth)
 
   if (!details?.forceCreate) {
     // Prefer an exact demographics match (name + full DOB) anywhere in the practice.
-    if (caller.firstName && caller.lastName && caller.dateOfBirth) {
+    if (callerHasFullIdentity) {
       patient =
         allPatients.find((p) =>
           demographicsMatch(p, {
@@ -219,31 +222,17 @@ export async function findOrCreatePatientByPhone(
     }
   }
 
-  // Single phone match and caller did not provide conflicting identity — reuse existing chart.
-  if (!patient && !details?.forceCreate && phoneCollisions.length === 1 && !callerHasFullIdentity) {
-    patient = phoneCollisions[0]
-  }
-
-  // Phone match but caller-provided name+DOB conflicts with every collision → return facts; let agent decide.
-  if (!patient && !details?.forceCreate && phoneCollisions.length > 0 && callerHasFullIdentity) {
-    const enriched = await enrichPhoneCollisionsWithOdCharts(practiceId, phoneCollisions)
-    const primaryOd = enriched[0]?.open_dental_chart ?? null
-    const facts = buildPatientIdentityFacts({
-      caller: details ?? {},
-      selectedPatient: null,
-      phoneCollisions,
-      enrichedPhoneCollisions: enriched,
-      openDentalChart: primaryOd,
-      isNew: false,
-      requiresAgentDecision: true,
-    })
-    return {
-      patientId: null,
-      isNew: false,
-      requires_agent_decision: true,
-      patient: null,
-      facts,
+  // Single phone match with no conflicting name — reuse when caller did not give a different first+last.
+  if (!patient && !details?.forceCreate && phoneCollisions.length === 1) {
+    const only = phoneCollisions[0]
+    if (!callerHasName || patientNamesMatch(only, details ?? {})) {
+      // Same (or unspecified) name: reuse unless full identity was provided and DOB conflicts —
+      // that case falls through to create a separate chart below.
+      if (!callerHasFullIdentity || demographicsMatch(only, details ?? {})) {
+        patient = only
+      }
     }
+    // Different first+last name on a shared phone → leave null and create a new patient.
   }
 
   if (!patient) {
@@ -252,6 +241,11 @@ export async function findOrCreatePatientByPhone(
     }
 
     const dobIso = caller.dateOfBirth
+    const createdDueToNameMismatch =
+      phoneCollisions.length > 0 &&
+      callerHasName &&
+      phoneCollisions.every((p) => !patientNamesMatch(p, details ?? {}))
+
     patient = await prisma.patient.create({
       data: {
         practiceId,
@@ -275,7 +269,9 @@ export async function findOrCreatePatientByPhone(
       patientId: patient.id,
       type: 'note',
       title: 'Patient created via voice call',
-      description: 'Patient was created during a phone conversation',
+      description: createdDueToNameMismatch
+        ? 'Patient was created during a phone conversation because the caller name differed from the existing chart on this phone'
+        : 'Patient was created during a phone conversation',
     })
   } else if (details) {
     const odChart = await fetchOpenDentalChartFacts(practiceId, patient.externalEhrId)
