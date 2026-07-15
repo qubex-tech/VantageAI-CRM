@@ -123,7 +123,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'get_upcoming_appointments',
     description:
-      "Get a patient's upcoming (scheduled/confirmed) appointments, ordered soonest-first. Each appointment includes a ready-to-read summary with the date and time in the patient's local timezone, plus next_appointment for convenience. Resolve the patient with patient_id, or with first_name + last_name + dob during a live call.",
+      "Get a patient's upcoming (scheduled/confirmed) appointments, ordered soonest-first. On Open Dental practices this live-pulls the patient's OD appointments before responding so the agent uses current schedule data, not a stale CRM mirror. Each appointment includes a ready-to-read summary with the date and time in the patient's local timezone, plus next_appointment for convenience. Resolve the patient with patient_id, or with first_name + last_name + dob during a live call.",
     input_schema: {
       type: 'object',
       properties: {

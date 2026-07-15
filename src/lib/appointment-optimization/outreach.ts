@@ -23,6 +23,7 @@ import {
 } from '@/lib/appointment-optimization/slotFilled'
 import { WAVE_BATCH_SIZE } from '@/lib/appointment-optimization/types'
 import { formatAppointmentForVoice, type VoiceAppointment } from '@/lib/appointments/voice-context'
+import { refreshPatientAppointmentsFromOpenDentalForVoice } from '@/lib/appointments/live-opendental-refresh'
 import { notifySlotFillOutreachSent } from '@/lib/appointment-optimization/slotFillPushNotification'
 
 function providerDisplayFromRef(providerId: string | null) {
@@ -39,12 +40,21 @@ function splitName(fullName: string): { firstName: string; lastName: string } {
 /**
  * Resolve the patient's current appointment (the one an earlier slot would
  * replace) into a voice-agent-friendly summary. Best-effort: never throws.
+ * When patientId is known, live-refreshes from Open Dental first.
  */
 async function resolveCurrentAppointmentContext(params: {
   appointmentId?: string | null
   patientId?: string
+  practiceId?: string
 }): Promise<VoiceAppointment | null> {
   try {
+    if (params.patientId && params.practiceId) {
+      await refreshPatientAppointmentsFromOpenDentalForVoice({
+        practiceId: params.practiceId,
+        patientId: params.patientId,
+      })
+    }
+
     const where = params.appointmentId
       ? { id: params.appointmentId }
       : params.patientId
@@ -427,6 +437,7 @@ async function sendVoiceOutreach(params: {
   const currentAppointment = await resolveCurrentAppointmentContext({
     appointmentId: params.currentAppointmentId,
     patientId: params.patientId,
+    practiceId: params.practiceId,
   })
 
   const client = new RetellApiClient(config.apiKey)

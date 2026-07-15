@@ -3,6 +3,7 @@ import { computeReadiness } from './readiness'
 import { writeMcpAuditLog, collectFieldPaths } from './audit'
 import { buildVerificationAgentFields, formatPatientDob } from './verification-fields'
 import { formatAppointmentForVoice } from '@/lib/appointments/voice-context'
+import { refreshPatientAppointmentsFromOpenDentalForVoice } from '@/lib/appointments/live-opendental-refresh'
 import {
   fetchOpenDentalChartFacts,
   normalizeDobToIso,
@@ -582,6 +583,15 @@ export async function handleGetUpcomingAppointments(
     }
   }
 
+  // Live OD pull during the call so the agent does not speak from a stale CRM mirror.
+  const practiceId = ctx.practiceId ?? patient.practiceId
+  const refresh = practiceId
+    ? await refreshPatientAppointmentsFromOpenDentalForVoice({
+        practiceId,
+        patientId: patient.id,
+      })
+    : { attempted: false, summary: null, error: null }
+
   const rows = await db.getUpcomingAppointmentsByPatientId(patientId, ctx.practiceId, input.limit ?? 5)
   const appointments = rows.map(formatAppointmentForVoice)
 
@@ -591,6 +601,19 @@ export async function handleGetUpcomingAppointments(
     has_upcoming: appointments.length > 0,
     next_appointment: appointments[0] ?? null,
     appointments,
+    refreshed_from_opendental: Boolean(refresh.summary && refresh.summary.fetched > 0),
+    opendental_refresh: refresh.summary
+      ? {
+          fetched: refresh.summary.fetched,
+          created: refresh.summary.created,
+          updated: refresh.summary.updated,
+          skipped: refresh.summary.skipped,
+          errors: refresh.summary.errors,
+        }
+      : null,
+  }
+  if (refresh.error) {
+    output.opendental_refresh_error = refresh.error
   }
   if (appointments.length === 0) {
     output.message = 'No upcoming appointments found for this patient'
