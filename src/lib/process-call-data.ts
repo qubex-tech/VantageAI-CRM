@@ -1529,6 +1529,7 @@ export async function processRetellCallData(
   // (practiceId, retellCallId) unique key also makes concurrent webhook + backfill runs
   // for the same call safe (they converge on one row instead of racing to create two).
   let voiceConversationId: string | null = null
+  let markerPatientId: string | null = null
   if (call.call_id) {
     const callerPhone =
       (extractedData.user_phone_number ? String(extractedData.user_phone_number).replace(/\D/g, '') : '') || 'unknown'
@@ -1542,18 +1543,68 @@ export async function processRetellCallData(
         endedAt: call.end_timestamp ? new Date(call.end_timestamp) : undefined,
       },
       update: {},
-      select: { id: true },
+      select: { id: true, patientId: true },
     })
     voiceConversationId = marker.id
+    markerPatientId = marker.patientId
   }
 
-  // Create or update patient
-  const { patientId, isNew } = await processCallDataForPatient(
-    practiceId,
-    extractedData,
-    userId,
-    call.call_id
-  )
+  // Create or update patient. If this call has already been linked to a patient,
+  // always reuse that patient to keep repeated/concurrent processing idempotent.
+  let patientId: string | null = null
+  let isNew = false
+  if (markerPatientId) {
+    patientId = markerPatientId
+    console.log('[processRetellCallData] Reusing patient from existing conversation marker', {
+      callId: call.call_id,
+      conversationId: voiceConversationId,
+      patientId,
+    })
+  } else {
+    const processedPatient = await processCallDataForPatient(
+      practiceId,
+      extractedData,
+      userId,
+      call.call_id
+    )
+    patientId = processedPatient.patientId
+    isNew = processedPatient.isNew
+
+    // Claim the conversation->patient link only if still empty. If another worker
+    // won this race, reuse that existing patient and archive this newly-created row.
+    if (voiceConversationId && patientId) {
+      const claim = await prisma.voiceConversation.updateMany({
+        where: { id: voiceConversationId, patientId: null },
+        data: { patientId },
+      })
+      if (claim.count === 0) {
+        const existing = await prisma.voiceConversation.findUnique({
+          where: { id: voiceConversationId },
+          select: { patientId: true },
+        })
+        const existingPatientId = existing?.patientId || null
+        if (isNew && existingPatientId && existingPatientId !== patientId) {
+          const dedupeArchivedAt = new Date()
+          await prisma.patient.update({
+            where: { id: patientId },
+            data: {
+              deletedAt: dedupeArchivedAt,
+              notes: {
+                set: `[Auto-archived duplicate from Retell call ${call.call_id || 'unknown'} at ${dedupeArchivedAt.toISOString()}]`,
+              },
+            },
+          })
+          console.warn('[processRetellCallData] Archived race-created duplicate patient', {
+            callId: call.call_id,
+            duplicatePatientId: patientId,
+            canonicalPatientId: existingPatientId,
+          })
+        }
+        patientId = existingPatientId || patientId
+        isNew = false
+      }
+    }
+  }
   
   console.log('[processRetellCallData] Patient processing result:', { patientId, isNew })
 
@@ -1575,7 +1626,7 @@ export async function processRetellCallData(
     conversationForEscalation = await prisma.voiceConversation.update({
       where: { id: voiceConversationId },
       data: {
-        patientId: patientId || latestForMerge?.patientId || undefined,
+        patientId: latestForMerge?.patientId || patientId || undefined,
         transcript: call.transcript || latestForMerge?.transcript,
         extractedIntent: extractedData.call_reason || latestForMerge?.extractedIntent,
         outcome: extractedData.call_successful ? 'appointment_booked' : latestForMerge?.outcome || 'information_only',
