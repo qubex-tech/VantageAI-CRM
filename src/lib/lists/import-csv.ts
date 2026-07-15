@@ -49,13 +49,29 @@ const HEADER_ALIASES: Record<string, 'name' | 'email' | 'phone' | 'dob'> = {
 }
 
 export function splitPatientName(fullName: string): { firstName: string; lastName: string; name: string } {
-  const name = fullName.trim().replace(/\s+/g, ' ')
-  if (!name) return { firstName: '', lastName: '', name: '' }
-  const parts = name.split(' ')
-  if (parts.length === 1) return { firstName: parts[0], lastName: '', name }
+  const normalized = fullName.trim().replace(/\s+/g, ' ')
+  if (!normalized) return { firstName: '', lastName: '', name: '' }
+
+  // Support CSV exports that format names as "Last,First Middle".
+  if (normalized.includes(',')) {
+    const [lastRaw, ...firstRawParts] = normalized.split(',')
+    const lastName = (lastRaw || '').trim()
+    const firstName = firstRawParts.join(',').trim()
+    const name = [firstName, lastName].filter(Boolean).join(' ').trim()
+    if (firstName || lastName) {
+      return {
+        firstName: firstName || lastName,
+        lastName: firstName ? lastName : '',
+        name: name || normalized,
+      }
+    }
+  }
+
+  const parts = normalized.split(' ')
+  if (parts.length === 1) return { firstName: parts[0], lastName: '', name: normalized }
   const lastName = parts[parts.length - 1]
   const firstName = parts.slice(0, -1).join(' ')
-  return { firstName, lastName, name }
+  return { firstName, lastName, name: normalized }
 }
 
 function parseCsvLine(line: string): string[] {

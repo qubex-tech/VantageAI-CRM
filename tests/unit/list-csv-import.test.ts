@@ -26,6 +26,14 @@ describe('list CSV helpers', () => {
         name: 'Madonna',
       })
     })
+
+    it('normalizes comma-delimited names from CSV exports', () => {
+      expect(splitPatientName('Corona,Genoveva')).toEqual({
+        firstName: 'Genoveva',
+        lastName: 'Corona',
+        name: 'Genoveva Corona',
+      })
+    })
   })
 
   describe('parseListCsv', () => {
