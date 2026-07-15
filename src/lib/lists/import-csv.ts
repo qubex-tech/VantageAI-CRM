@@ -128,8 +128,18 @@ export function parseListCsv(csvText: string): {
   if (errors.length > 0) return { rows: [], errors }
 
   const rows: Array<{ name: string; email: string; phone: string; dateOfBirth: string }> = []
+  const expectedColumns = headerCells.length
   for (let i = 1; i < lines.length; i++) {
-    const cells = parseCsvLine(lines[i])
+    let cells = parseCsvLine(lines[i])
+
+    // Some exports provide name as Last,First without quoting, which adds an
+    // extra comma-split column and shifts email/phone/dob indexes right.
+    if (columnMap.name === 0 && cells.length > expectedColumns) {
+      const overflow = cells.length - expectedColumns
+      const nameCell = cells.slice(0, overflow + 1).join(',')
+      cells = [nameCell, ...cells.slice(overflow + 1)]
+    }
+
     const name = columnMap.name !== undefined ? cells[columnMap.name] || '' : ''
     const email = columnMap.email !== undefined ? cells[columnMap.email] || '' : ''
     const phone = columnMap.phone !== undefined ? cells[columnMap.phone] || '' : ''

@@ -86,6 +86,21 @@ describe('list CSV helpers', () => {
       expect(parsed.rows[0].dateOfBirth).toBe('')
     })
 
+    it('re-aligns unquoted comma-delimited names so phone/email stay mapped', () => {
+      const csv = [
+        'Patient Name,Email Address,Phone Number,Date of Birth',
+        'Corona,Genoveva,,7131234567,1960-01-01',
+      ].join('\n')
+      const parsed = parseListCsv(csv)
+      expect(parsed.errors).toEqual([])
+      expect(parsed.rows[0]).toEqual({
+        name: 'Corona,Genoveva',
+        email: '',
+        phone: '7131234567',
+        dateOfBirth: '1960-01-01',
+      })
+    })
+
     it('requires patient name column', () => {
       const csv = ['Email Address,Phone Number', 'a@b.com,555'].join('\n')
       const parsed = parseListCsv(csv)
