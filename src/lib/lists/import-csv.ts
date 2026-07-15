@@ -109,9 +109,6 @@ export function parseListCsv(csvText: string): {
 
   const errors: string[] = []
   if (columnMap.name === undefined) errors.push('Missing required column: Patient Name')
-  if (columnMap.email === undefined && columnMap.phone === undefined) {
-    errors.push('CSV must include Email Address and/or Phone Number')
-  }
   if (errors.length > 0) return { rows: [], errors }
 
   const rows: Array<{ name: string; email: string; phone: string; dateOfBirth: string }> = []
@@ -238,20 +235,6 @@ export async function importListCsv(params: {
       continue
     }
 
-    if (!email && !phone) {
-      skippedCount++
-      rowResults.push({
-        row: rowNumber,
-        name,
-        email,
-        phone,
-        dateOfBirth: dobIso,
-        status: 'skipped',
-        error: 'Missing email and phone',
-      })
-      continue
-    }
-
     try {
       const resolved = await resolvePatientByContact({
         practiceId: params.practiceId,
@@ -261,23 +244,7 @@ export async function importListCsv(params: {
         dateOfBirth: dobIso,
       })
 
-      if (resolved.ambiguous) {
-        skippedCount++
-        rowResults.push({
-          row: rowNumber,
-          name,
-          email,
-          phone,
-          dateOfBirth: dobIso,
-          status: 'skipped',
-          error: dobIso
-            ? 'Ambiguous patient match (multiple patients share contact info and DOB did not uniquely identify one)'
-            : 'Ambiguous patient match (add Date of Birth to disambiguate)',
-        })
-        continue
-      }
-
-      let patient = resolved.patient
+      let patient = resolved.ambiguous ? null : resolved.patient
       let matchedBy: 'email' | 'phone' | 'name' | 'created' | undefined
       let status: 'matched' | 'created' = 'matched'
 
@@ -303,6 +270,7 @@ export async function importListCsv(params: {
           })
         }
       } else {
+        const fallbackPhone = phone || '000-000-0000'
         patient = await prisma.patient.create({
           data: {
             practiceId: params.practiceId,
@@ -310,10 +278,10 @@ export async function importListCsv(params: {
             firstName: firstName || null,
             lastName: lastName || null,
             email,
-            phone: phone || '',
+            phone: fallbackPhone,
             primaryPhone: phone,
             dateOfBirth,
-            preferredContactMethod: 'sms',
+            preferredContactMethod: phone ? 'sms' : 'phone',
             consentSource: 'import',
           },
           select: {
