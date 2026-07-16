@@ -512,6 +512,7 @@ async function bookAppointmentViaOpenDental(params: {
     dateTimeStart,
     lengthMinutes: scheduling.defaultLengthMinutes ?? null,
     note,
+    isNewPatient,
   })
 
   return {

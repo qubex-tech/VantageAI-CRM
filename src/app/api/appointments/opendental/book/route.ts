@@ -22,6 +22,7 @@ const bookSchema = z.object({
   lengthMinutes: z.number().int().positive().max(600).nullish(),
   note: z.string().max(2000).nullish(),
   visitType: z.string().max(200).nullish(),
+  isNewPatient: z.boolean().optional(),
 })
 
 export async function POST(req: NextRequest) {
@@ -63,6 +64,18 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    let isNewPatient = input.isNewPatient === true
+    if (input.isNewPatient === undefined) {
+      const patient = await prisma.patient.findFirst({
+        where: { id: input.patientId, practiceId, deletedAt: null },
+        select: { createdAt: true },
+      })
+      // Recently created CRM charts are treated as new-patient bookings.
+      isNewPatient = Boolean(
+        patient?.createdAt && Date.now() - patient.createdAt.getTime() < 6 * 60 * 60 * 1000
+      )
+    }
+
     const result = await bookOpenDentalAppointment({
       practiceId,
       patientId: input.patientId,
@@ -72,6 +85,7 @@ export async function POST(req: NextRequest) {
       lengthMinutes,
       note: input.note ?? undefined,
       visitType: input.visitType ?? undefined,
+      isNewPatient,
       actorUserId: user.id,
     })
 

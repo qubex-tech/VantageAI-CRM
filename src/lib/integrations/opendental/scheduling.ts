@@ -272,9 +272,21 @@ export async function bookOpenDentalAppointment(params: {
   lengthMinutes?: number | null
   note?: string | null
   visitType?: string | null
+  /** When true, sets Open Dental's appointment IsNewPatient checkbox. */
+  isNewPatient?: boolean
   actorUserId?: string
 }): Promise<OpenDentalBookingResult> {
-  const { practiceId, patientId, provNum, opNum, dateTimeStart, note, visitType, actorUserId } = params
+  const {
+    practiceId,
+    patientId,
+    provNum,
+    opNum,
+    dateTimeStart,
+    note,
+    visitType,
+    isNewPatient,
+    actorUserId,
+  } = params
   const lengthMinutes = params.lengthMinutes && params.lengthMinutes > 0
     ? params.lengthMinutes
     : DEFAULT_SLOT_LENGTH_MINUTES
@@ -303,6 +315,7 @@ export async function bookOpenDentalAppointment(params: {
   }
   if (provNum) body.ProvNum = provNum
   if (note) body.Note = note
+  if (isNewPatient) body.IsNewPatient = 'true'
 
   const created = await services.appointments.create(body)
   const aptNum = resolveCreatedId(created, 'AptNum')
@@ -352,7 +365,15 @@ export async function bookOpenDentalAppointment(params: {
     action: 'appointment.booked',
     entity: 'Appointment',
     entityId: String(aptNum),
-    metadata: { appointmentId: appointment.id, dateTimeStart, opNum, provNum, lengthMinutes, timeZone },
+    metadata: {
+      appointmentId: appointment.id,
+      dateTimeStart,
+      opNum,
+      provNum,
+      lengthMinutes,
+      timeZone,
+      isNewPatient: Boolean(isNewPatient),
+    },
   })
 
   return { appointmentId: appointment.id, aptNum, startTime: start, endTime: end }

@@ -101,7 +101,7 @@ export async function writeBackAppointmentToOpenDental(params: {
 
   const appt = await prisma.appointment.findFirst({
     where: { id: appointmentId, practiceId },
-    include: { patient: { select: { externalEhrId: true } } },
+    include: { patient: { select: { externalEhrId: true, createdAt: true } } },
   })
   if (!appt) return { status: 'skipped', reason: 'appointment_not_found' }
 
@@ -120,6 +120,10 @@ export async function writeBackAppointmentToOpenDental(params: {
   const aptStatus = mapStatusToApt(appt.status)
   const provNum = resolveProvNum(appt.providerId)
   const note = appt.notes || appt.reason || undefined
+  const isNewPatient = Boolean(
+    appt.patient?.createdAt &&
+      Date.now() - appt.patient.createdAt.getTime() < 6 * 60 * 60 * 1000
+  )
 
   try {
     if (existingAptNum) {
@@ -129,6 +133,7 @@ export async function writeBackAppointmentToOpenDental(params: {
       }
       if (provNum) body.ProvNum = provNum
       if (note) body.Note = note
+      if (isNewPatient) body.IsNewPatient = 'true'
       await services.appointments.update(existingAptNum, body)
 
       await logOpenDentalAudit({
@@ -137,7 +142,7 @@ export async function writeBackAppointmentToOpenDental(params: {
         action: 'appointment.writeback_updated',
         entity: 'Appointment',
         entityId: String(existingAptNum),
-        metadata: { appointmentId, aptDateTime, aptStatus, timeZone },
+        metadata: { appointmentId, aptDateTime, aptStatus, timeZone, isNewPatient },
       })
       return { status: 'success', operation: 'update', aptNum: existingAptNum }
     }
@@ -159,6 +164,7 @@ export async function writeBackAppointmentToOpenDental(params: {
     }
     if (provNum) body.ProvNum = provNum
     if (note) body.Note = note
+    if (isNewPatient) body.IsNewPatient = 'true'
 
     const created = await services.appointments.create(body)
     const aptNum = resolveCreatedId(created, 'AptNum')

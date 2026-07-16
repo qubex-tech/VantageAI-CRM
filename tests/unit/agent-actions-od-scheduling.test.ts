@@ -209,7 +209,10 @@ describe('agentActions Open Dental scheduling', () => {
     })
 
     it('links patient to Open Dental before booking when externalEhrId is missing', async () => {
-      vi.mocked(prisma.patient.findFirst).mockResolvedValue(patientRow as never)
+      vi.mocked(prisma.patient.findFirst).mockResolvedValue({
+        ...patientRow,
+        createdAt: new Date(),
+      } as never)
 
       vi.mocked(createOpenDentalPatientFromCrm).mockResolvedValue({
         status: 'success',
@@ -219,6 +222,7 @@ describe('agentActions Open Dental scheduling', () => {
       vi.mocked(prisma.patient.findUnique).mockResolvedValue({
         ...patientRow,
         externalEhrId: 'opendental:2275',
+        createdAt: new Date(),
       } as never)
       vi.mocked(bookOpenDentalAppointment).mockResolvedValue({
         appointmentId: 'appt-1',
@@ -243,6 +247,7 @@ describe('agentActions Open Dental scheduling', () => {
           practiceId,
           patientId: 'patient-1',
           opNum: 2,
+          isNewPatient: true,
         })
       )
       expect(result.calBookingId).toBe('opendental:apt:100')

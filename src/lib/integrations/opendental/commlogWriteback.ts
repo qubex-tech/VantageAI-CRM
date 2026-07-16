@@ -106,10 +106,10 @@ function resolvePaymentTypeFromExtracted(extractedData: ExtractedCallData): 'ins
 }
 
 /**
- * After a new-patient call, append Retell Payment Type onto OD appointment Notes
- * created during the call window (best-effort; never throws).
+ * After a new-patient call, stamp Open Dental appointment fields that Retell only
+ * finalizes at call end: IsNewPatient checkbox + Payment Type note (best-effort).
  */
-async function enrichNewPatientAppointmentNotesWithPaymentType(params: {
+async function enrichNewPatientAppointmentsFromCall(params: {
   practiceId: string
   patientId: string
   call: RetellCall
@@ -118,9 +118,8 @@ async function enrichNewPatientAppointmentNotesWithPaymentType(params: {
 }): Promise<void> {
   try {
     if (!isRetellNewPatientCall(params.extractedData)) return
-    const payment = resolvePaymentTypeFromExtracted(params.extractedData)
-    if (!payment) return
 
+    const payment = resolvePaymentTypeFromExtracted(params.extractedData)
     const callStartMs = params.call.start_timestamp
       ? Number(params.call.start_timestamp)
       : params.conversationStartedAt?.getTime()
@@ -149,24 +148,32 @@ async function enrichNewPatientAppointmentNotesWithPaymentType(params: {
 
     const services = await getOpenDentalServices(params.practiceId)
     for (const apt of appointments) {
-      const nextNote = buildOpenDentalAppointmentNote({
-        reason: apt.notes || apt.reason,
-        paymentType: payment,
-        isNewPatient: true,
-      })
-      if (!nextNote || nextNote === (apt.notes || apt.reason || '')) continue
+      const nextNote = payment
+        ? buildOpenDentalAppointmentNote({
+            reason: apt.notes || apt.reason,
+            paymentType: payment,
+            isNewPatient: true,
+          })
+        : null
+      const noteChanged = Boolean(
+        nextNote && nextNote !== (apt.notes || apt.reason || '')
+      )
 
       const aptNum = parseOpenDentalAptNumFromBookingId(apt.calBookingId)
       if (aptNum) {
-        await services.appointments.update(aptNum, { Note: nextNote })
+        const body: Record<string, unknown> = { IsNewPatient: 'true' }
+        if (noteChanged && nextNote) body.Note = nextNote
+        await services.appointments.update(aptNum, body)
       }
-      await prisma.appointment.update({
-        where: { id: apt.id },
-        data: { notes: nextNote },
-      })
+      if (noteChanged && nextNote) {
+        await prisma.appointment.update({
+          where: { id: apt.id },
+          data: { notes: nextNote },
+        })
+      }
     }
   } catch (error) {
-    console.error('[OpenDental] Failed to enrich appointment notes with payment type', {
+    console.error('[OpenDental] Failed to enrich new-patient appointments from call', {
       practiceId: params.practiceId,
       patientId: params.patientId,
       callId: params.call.call_id,
@@ -319,9 +326,9 @@ export async function writeBackCallToOpenDental(params: {
       commDateTime,
     })
 
-    // For new patients, also stamp Retell Payment Type onto OD appointment notes
+    // For new patients, stamp IsNewPatient + Payment Type onto OD appointments
     // booked during this call (analysis is only available after the call ends).
-    await enrichNewPatientAppointmentNotesWithPaymentType({
+    await enrichNewPatientAppointmentsFromCall({
       practiceId,
       patientId,
       call,
