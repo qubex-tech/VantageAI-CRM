@@ -33,6 +33,21 @@ export type OpenDentalOpenSlot = {
   lengthMinutes: number
 }
 
+/** Chairside blockout window from Open Dental `schedules` (SchedType=Blockout). */
+export type OpenDentalBlockout = {
+  /** Inclusive clinic-local start "yyyy-MM-dd HH:mm:ss". */
+  start: string
+  /** Exclusive-or-end clinic-local stop "yyyy-MM-dd HH:mm:ss". */
+  end: string
+  /**
+   * Operatories this blockout applies to.
+   * Empty means treat as blocking every operatory (conservative).
+   */
+  opNums: number[]
+  note: string | null
+  blockoutType: number | null
+}
+
 function str(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const t = value.trim()
@@ -46,6 +61,117 @@ function num(value: unknown): number | null {
 
 function isHidden(value: unknown): boolean {
   return String(value).toLowerCase() === 'true'
+}
+
+function parseOpNums(value: unknown): number[] {
+  if (Array.isArray(value)) {
+    return value.map((v) => num(v)).filter((n): n is number => n !== null && n > 0)
+  }
+  const raw = str(value)
+  if (!raw) return []
+  return raw
+    .split(/[,\s]+/)
+    .map((part) => num(part))
+    .filter((n): n is number => n !== null && n > 0)
+}
+
+/** Inclusive yyyy-MM-dd dates from dateStart through dateEnd. */
+export function eachDateInRange(dateStart: string, dateEnd: string): string[] {
+  const start = parseNaive(`${dateStart} 00:00:00`)
+  const end = parseNaive(`${dateEnd} 00:00:00`)
+  if (!start || !end) return []
+  const dates: string[] = []
+  let cursor = start
+  // Cap runaway ranges (voice queries are typically days/weeks, not years).
+  for (let i = 0; i < 366; i++) {
+    dates.push(`${cursor.y}-${pad(cursor.mo)}-${pad(cursor.d)}`)
+    if (diffMinutesNaive(cursor, end) <= 0) break
+    cursor = addMinutesNaive(cursor, 24 * 60)
+  }
+  return dates
+}
+
+function combineSchedDateAndTime(schedDate: unknown, time: unknown): NaiveParts | null {
+  const date = str(schedDate)?.slice(0, 10)
+  const t = str(time)
+  if (!date || !t) return null
+  // OD returns StartTime/StopTime as "HH:mm:ss" (sometimes with fractional seconds).
+  const timePart = t.match(/^(\d{2}):(\d{2})(?::(\d{2}))?/)
+  if (!timePart) return null
+  return parseNaive(`${date} ${timePart[1]}:${timePart[2]}:${timePart[3] ?? '00'}`)
+}
+
+function naiveToUtcMs(p: NaiveParts): number {
+  return Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi, p.s)
+}
+
+/**
+ * True when the slot window [start, start+length) overlaps the blockout [start, end)
+ * on a matching operatory (or the blockout applies to all ops).
+ */
+export function openDentalSlotOverlapsBlockout(
+  slot: Pick<OpenDentalOpenSlot, 'start' | 'opNum' | 'lengthMinutes'>,
+  blockout: Pick<OpenDentalBlockout, 'start' | 'end' | 'opNums'>
+): boolean {
+  if (blockout.opNums.length > 0 && !blockout.opNums.includes(slot.opNum)) return false
+
+  const slotStart = parseNaive(slot.start)
+  const blockStart = parseNaive(blockout.start)
+  const blockEnd = parseNaive(blockout.end)
+  if (!slotStart || !blockStart || !blockEnd) return false
+
+  const slotStartMs = naiveToUtcMs(slotStart)
+  const slotEndMs = naiveToUtcMs(addMinutesNaive(slotStart, slot.lengthMinutes))
+  const blockStartMs = naiveToUtcMs(blockStart)
+  const blockEndMs = naiveToUtcMs(blockEnd)
+  return slotStartMs < blockEndMs && blockStartMs < slotEndMs
+}
+
+export function filterOpenDentalSlotsAgainstBlockouts(
+  slots: OpenDentalOpenSlot[],
+  blockouts: OpenDentalBlockout[]
+): OpenDentalOpenSlot[] {
+  if (blockouts.length === 0) return slots
+  return slots.filter(
+    (slot) => !blockouts.some((b) => openDentalSlotOverlapsBlockout(slot, b))
+  )
+}
+
+/**
+ * Pull chairside blockouts from Open Dental schedules for an inclusive date range.
+ * `appointments/Slots` does not honor these, so callers must subtract them locally.
+ */
+export async function listOpenDentalBlockouts(params: {
+  practiceId: string
+  dateStart: string
+  dateEnd?: string
+}): Promise<OpenDentalBlockout[]> {
+  const { practiceId, dateStart } = params
+  const dateEnd = params.dateEnd ?? dateStart
+  const services = await getOpenDentalServices(practiceId)
+  const dates = eachDateInRange(dateStart, dateEnd)
+  const blockouts: OpenDentalBlockout[] = []
+
+  for (const date of dates) {
+    const raw = (await services.schedules.list({ date })) as Array<Record<string, unknown>>
+    if (!Array.isArray(raw)) continue
+    for (const row of raw) {
+      if (String(row.SchedType ?? '').trim() !== 'Blockout') continue
+      const start = combineSchedDateAndTime(row.SchedDate ?? date, row.StartTime)
+      const end = combineSchedDateAndTime(row.SchedDate ?? date, row.StopTime)
+      if (!start || !end) continue
+      if (diffMinutesNaive(start, end) <= 0) continue
+      blockouts.push({
+        start: formatNaive(start),
+        end: formatNaive(end),
+        opNums: parseOpNums(row.operatories ?? row.Ops ?? row.OpNums),
+        note: str(row.Note),
+        blockoutType: num(row.BlockoutType),
+      })
+    }
+  }
+
+  return blockouts
 }
 
 export async function listOpenDentalProviders(practiceId: string): Promise<OpenDentalProvider[]> {
@@ -187,7 +313,24 @@ export async function getOpenDentalOpenSlots(params: {
   }
 
   slots.sort((a, b) => a.start.localeCompare(b.start))
-  return slots
+
+  // appointments/Slots ignores chairside blockouts — subtract them from schedules.
+  try {
+    const blockouts = await listOpenDentalBlockouts({
+      practiceId,
+      dateStart,
+      dateEnd: dateEnd ?? dateStart,
+    })
+    return filterOpenDentalSlotsAgainstBlockouts(slots, blockouts)
+  } catch (error) {
+    console.error('[OpenDental] Failed to load blockouts; returning unfiltered slots', {
+      practiceId,
+      dateStart,
+      dateEnd: dateEnd ?? dateStart,
+      error: error instanceof Error ? error.message : error,
+    })
+    return slots
+  }
 }
 
 /**

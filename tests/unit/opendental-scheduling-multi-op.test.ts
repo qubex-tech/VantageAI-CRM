@@ -49,6 +49,7 @@ describe('getOpenDentalOpenSlotsForOperatories', () => {
 
     vi.mocked(getOpenDentalServices).mockResolvedValue({
       appointments: { getSlots },
+      schedules: { list: vi.fn().mockResolvedValue([]) },
     } as never)
 
     const merged = await getOpenDentalOpenSlotsForOperatories({
@@ -77,6 +78,7 @@ describe('getOpenDentalOpenSlotsForOperatories', () => {
 
     vi.mocked(getOpenDentalServices).mockResolvedValue({
       appointments: { getSlots },
+      schedules: { list: vi.fn().mockResolvedValue([]) },
     } as never)
 
     const merged = await getOpenDentalOpenSlotsForOperatories({
@@ -96,6 +98,7 @@ describe('getOpenDentalOpenSlotsForOperatories', () => {
     const getSlots = vi.fn().mockResolvedValue([])
     vi.mocked(getOpenDentalServices).mockResolvedValue({
       appointments: { getSlots },
+      schedules: { list: vi.fn().mockResolvedValue([]) },
     } as never)
 
     await getOpenDentalOpenSlotsForOperatories({
