@@ -12,6 +12,7 @@ describe('Retell payment type for Open Dental notes', () => {
   it('normalizes Retell Payment Type to insurance or self pay', () => {
     expect(normalizeRetellPaymentType('insurance')).toBe('insurance')
     expect(normalizeRetellPaymentType('Insurance')).toBe('insurance')
+    expect(normalizeRetellPaymentType('Dental insurance')).toBe('insurance')
     expect(normalizeRetellPaymentType('self pay')).toBe('self pay')
     expect(normalizeRetellPaymentType('self-pay')).toBe('self pay')
     expect(normalizeRetellPaymentType('Self Pay')).toBe('self pay')
@@ -55,6 +56,14 @@ describe('Retell payment type for Open Dental notes', () => {
         isNewPatient: true,
       })
     ).toBe('checkup\nPayment type: self pay')
+
+    expect(
+      buildOpenDentalAppointmentNote({
+        reason: 'checkup\nPayment type: self pay',
+        paymentType: 'Dental insurance',
+        isNewPatient: true,
+      })
+    ).toBe('checkup\nPayment type: insurance')
   })
 
   it('includes Payment type in commlog notes for new patients only', () => {

@@ -93,7 +93,9 @@ export function buildOpenDentalAppointmentNote(params: {
   if (!payment) return reason || null
 
   const paymentLine = `Payment type: ${payment}`
-  if (/payment\s*type\s*:/i.test(reason)) return reason || paymentLine
+  if (/payment\s*type\s*:/i.test(reason)) {
+    return reason.replace(/payment\s*type\s*:[^\n]*/i, paymentLine).trim()
+  }
   if (!reason) return paymentLine
   return `${reason}\n${paymentLine}`
 }
@@ -125,7 +127,9 @@ async function enrichNewPatientAppointmentsFromCall(params: {
       : params.conversationStartedAt?.getTime()
     if (!callStartMs || !Number.isFinite(callStartMs)) return
 
-    const windowStart = new Date(callStartMs - 5 * 60_000)
+    // Tight window so a prior booking on the same chart (minutes earlier) is not
+    // re-touched — a 404 on that AptNum used to abort before this call's apt was stamped.
+    const windowStart = new Date(callStartMs - 2 * 60_000)
     const windowEnd = new Date(
       (params.call.end_timestamp ? Number(params.call.end_timestamp) : Date.now()) + 5 * 60_000
     )
@@ -143,32 +147,45 @@ async function enrichNewPatientAppointmentsFromCall(params: {
         reason: true,
         notes: true,
       },
+      orderBy: { createdAt: 'asc' },
     })
     if (appointments.length === 0) return
 
     const services = await getOpenDentalServices(params.practiceId)
     for (const apt of appointments) {
-      const nextNote = payment
-        ? buildOpenDentalAppointmentNote({
-            reason: apt.notes || apt.reason,
-            paymentType: payment,
-            isNewPatient: true,
-          })
-        : null
-      const noteChanged = Boolean(
-        nextNote && nextNote !== (apt.notes || apt.reason || '')
-      )
+      try {
+        const currentNote = apt.notes || apt.reason || ''
+        const nextNote = payment
+          ? buildOpenDentalAppointmentNote({
+              reason: currentNote,
+              paymentType: payment,
+              isNewPatient: true,
+            })
+          : null
+        const noteChanged = Boolean(nextNote && nextNote !== currentNote)
 
-      const aptNum = parseOpenDentalAptNumFromBookingId(apt.calBookingId)
-      if (aptNum) {
+        // Persist CRM first so Payment type survives even if the OD apt was deleted.
+        if (noteChanged && nextNote) {
+          await prisma.appointment.update({
+            where: { id: apt.id },
+            data: { notes: nextNote, reason: nextNote },
+          })
+        }
+
+        const aptNum = parseOpenDentalAptNumFromBookingId(apt.calBookingId)
+        if (!aptNum) continue
+
         const body: Record<string, unknown> = { IsNewPatient: 'true' }
         if (noteChanged && nextNote) body.Note = nextNote
         await services.appointments.update(aptNum, body)
-      }
-      if (noteChanged && nextNote) {
-        await prisma.appointment.update({
-          where: { id: apt.id },
-          data: { notes: nextNote },
+      } catch (error) {
+        console.error('[OpenDental] Failed to enrich one new-patient appointment from call', {
+          practiceId: params.practiceId,
+          patientId: params.patientId,
+          callId: params.call.call_id,
+          appointmentId: apt.id,
+          calBookingId: apt.calBookingId,
+          error: error instanceof Error ? error.message : error,
         })
       }
     }
