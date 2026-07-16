@@ -154,8 +154,8 @@ The system includes webhook endpoints for RetellAI voice agents:
 1. **Webhook Endpoint**: `/api/retell/webhook`
 2. **Supported Actions**:
    - `find_or_create_patient`: Find or create patient by phone number
-   - `get_available_slots`: Get available appointment slots
-   - `book_appointment`: Book an appointment via Cal.com
+   - `get_available_slots`: Get available appointment slots (`time` = UTC for booking, `time_local` = speakable practice-local time)
+   - `book_appointment`: Book an appointment (pass `startTime` from slot `time`, not `time_local`)
    - `cancel_appointment`: Cancel an appointment
 
 **Testing RetellAI Webhook**:

@@ -13,6 +13,7 @@ import {
   type HoursOfOperationSettings,
   type WeekdayKey,
 } from '@/lib/practice-hours/types'
+import { NORTH_AMERICA_TIMEZONE_OPTIONS } from '@/lib/timezone'
 
 interface HoursOfOperationSettingsProps {
   practiceId?: string
@@ -97,8 +98,8 @@ export function HoursOfOperationSettings({ practiceId }: HoursOfOperationSetting
       <CardHeader>
         <CardTitle>Hours of operation</CardTitle>
         <CardDescription>
-          Set when the practice is open and the daily lunch window. Slot Fill will only offer open
-          appointment times that fall within these hours and outside lunch.
+          Set the practice timezone, open hours, and lunch window. Open/close times are in this
+          timezone. Voice booking and Slot Fill use it so callers hear local times—not UTC.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -106,6 +107,30 @@ export function HoursOfOperationSettings({ practiceId }: HoursOfOperationSetting
           <p className="text-sm text-gray-500">Loading…</p>
         ) : (
           <>
+            <div className="space-y-1 max-w-md">
+              <Label className="text-sm font-medium text-gray-900">Practice timezone</Label>
+              <select
+                className="w-full rounded border border-gray-200 p-2 text-sm"
+                value={settings.timezone}
+                onChange={(e) => {
+                  setSettings((prev) => ({ ...prev, timezone: e.target.value }))
+                  setSuccess('')
+                }}
+              >
+                {!NORTH_AMERICA_TIMEZONE_OPTIONS.some((z) => z.value === settings.timezone) && (
+                  <option value={settings.timezone}>{settings.timezone}</option>
+                )}
+                {NORTH_AMERICA_TIMEZONE_OPTIONS.map((zone) => (
+                  <option key={zone.value} value={zone.value}>
+                    {zone.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500">
+                Used for hours below, voice appointment offers, and Open Dental scheduling.
+              </p>
+            </div>
+
             <div className="space-y-3">
               {WEEKDAY_KEYS.map((key) => {
                 const day = settings.days[key]

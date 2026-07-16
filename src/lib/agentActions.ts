@@ -27,6 +27,7 @@ import {
   usesEcwForWrite,
 } from '@/lib/integrations/clinical-system/types'
 import { getPracticeTimeZone } from '@/lib/practice-timezone'
+import { formatInstantForVoiceLocal } from '@/lib/appointments/voice-context'
 import {
   getOpenDentalOpenSlotsForOperatories,
   bookOpenDentalAppointment,
@@ -143,8 +144,13 @@ export interface FindOrCreatePatientResult {
 }
 
 export interface AvailableSlot {
+  /** UTC ISO instant — use this value when calling book_appointment. */
   time: string
   attendeeCount: number
+  /** Speakable local time for the practice timezone (e.g. "Monday, July 20 at 2:30 PM"). */
+  time_local: string
+  /** IANA timezone used for time_local (from Hours of Operation → Brand → default). */
+  timezone: string
 }
 
 export interface BookAppointmentResult {
@@ -390,8 +396,27 @@ export async function lookupPatientForScheduling(
   return { patientId: selected?.id ?? null, facts }
 }
 
+function withVoiceLocalTimes(
+  slots: Array<{ time: string; attendeeCount: number }>,
+  practiceTimeZone: string
+): AvailableSlot[] {
+  return slots.map((slot) => {
+    const instant = new Date(slot.time)
+    const local = Number.isNaN(instant.getTime())
+      ? { time_local: slot.time, timezone: practiceTimeZone }
+      : formatInstantForVoiceLocal(instant, practiceTimeZone)
+    return {
+      time: slot.time,
+      attendeeCount: slot.attendeeCount,
+      time_local: local.time_local,
+      timezone: local.timezone,
+    }
+  })
+}
+
 /**
- * Get available appointment slots
+ * Get available appointment slots.
+ * Each slot includes UTC `time` (for booking) and practice-local `time_local` (for speaking).
  */
 export async function getAvailableSlots(
   practiceId: string,
@@ -400,6 +425,8 @@ export async function getAvailableSlots(
   dateTo: string,
   timezone: string = 'America/New_York'
 ): Promise<AvailableSlot[]> {
+  const practiceTimeZone = await getPracticeTimeZone(practiceId)
+
   // When availability is read from Open Dental, return OD open slots instead of Cal.com.
   const scheduling = await getSchedulingSettings(practiceId)
   if (usesOpenDentalForRead(scheduling)) {
@@ -412,9 +439,12 @@ export async function getAvailableSlots(
         dateEnd: toDateOnly(dateTo),
         lengthMinutes: resolveReadLengthMinutes(scheduling),
       })
-      return slots
-        .filter((s) => s.startUtc)
-        .map((s) => ({ time: s.startUtc as string, attendeeCount: 0 }))
+      return withVoiceLocalTimes(
+        slots
+          .filter((s) => s.startUtc)
+          .map((s) => ({ time: s.startUtc as string, attendeeCount: 0 })),
+        practiceTimeZone
+      )
     } catch (error) {
       console.error('Error fetching Open Dental slots:', error)
       throw new Error('Failed to fetch available appointment slots')
@@ -428,12 +458,15 @@ export async function getAvailableSlots(
         scheduling,
         dateStart: toDateOnly(dateFrom),
         dateEnd: toDateOnly(dateTo),
-        timeZone: timezone,
+        timeZone: practiceTimeZone || timezone,
       })
-      return slots.map((slot) => ({
-        time: slot.startUtc,
-        attendeeCount: 0,
-      }))
+      return withVoiceLocalTimes(
+        slots.map((slot) => ({
+          time: slot.startUtc,
+          attendeeCount: 0,
+        })),
+        practiceTimeZone
+      )
     } catch (error) {
       console.error('Error fetching eCW slots:', error)
       throw new Error('Failed to fetch available appointment slots from eClinicalWorks')
@@ -441,13 +474,21 @@ export async function getAvailableSlots(
   }
 
   const calClient = await getCalClient(practiceId)
-  
+
   try {
-    const slots = await calClient.getAvailableSlots(eventTypeId, dateFrom, dateTo, timezone)
-    return slots.map(slot => ({
-      time: slot.time,
-      attendeeCount: slot.attendeeCount || 0,
-    }))
+    const slots = await calClient.getAvailableSlots(
+      eventTypeId,
+      dateFrom,
+      dateTo,
+      practiceTimeZone || timezone
+    )
+    return withVoiceLocalTimes(
+      slots.map((slot) => ({
+        time: slot.time,
+        attendeeCount: slot.attendeeCount || 0,
+      })),
+      practiceTimeZone
+    )
   } catch (error) {
     console.error('Error fetching available slots:', error)
     throw new Error('Failed to fetch available appointment slots')

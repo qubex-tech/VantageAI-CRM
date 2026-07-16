@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db'
+import { DEFAULT_PRACTICE_TIMEZONE, normalizeTimeZone } from '@/lib/timezone'
 import {
   DEFAULT_DAY_CLOSED,
   DEFAULT_DAY_OPEN,
@@ -41,6 +42,12 @@ function parseLunch(value: unknown): LunchHours {
   }
 }
 
+/** Explicit timezone stored on hoursOfOperation JSON, if any. */
+export function extractHoursOfOperationTimezone(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  return normalizeTimeZone((value as Record<string, unknown>).timezone as string | undefined)
+}
+
 export function parseHoursOfOperationSettings(value: unknown): HoursOfOperationSettings {
   if (!value || typeof value !== 'object') {
     return JSON.parse(JSON.stringify(DEFAULT_HOURS_OF_OPERATION)) as HoursOfOperationSettings
@@ -57,6 +64,9 @@ export function parseHoursOfOperationSettings(value: unknown): HoursOfOperationS
   }
 
   return {
+    timezone:
+      normalizeTimeZone(typeof raw.timezone === 'string' ? raw.timezone : null) ??
+      DEFAULT_PRACTICE_TIMEZONE,
     days,
     lunch: parseLunch(raw.lunch),
   }

@@ -3,9 +3,12 @@ import { requireAuth } from '@/lib/middleware'
 import { isVantageAdmin, canManagePractice } from '@/lib/permissions'
 import { hoursOfOperationSettingsSchema } from '@/lib/validations'
 import {
+  extractHoursOfOperationTimezone,
   getHoursOfOperationSettings,
   saveHoursOfOperationSettings,
 } from '@/lib/practice-hours/settings'
+import { getPracticeTimeZone } from '@/lib/practice-timezone'
+import { prisma } from '@/lib/db'
 
 export async function GET(req: NextRequest) {
   try {
@@ -30,6 +33,15 @@ export async function GET(req: NextRequest) {
     }
 
     const settings = await getHoursOfOperationSettings(practiceId)
+    // Until Hours of Operation has an explicit timezone saved, show the resolved
+    // practice zone (Brand Profile → default) so the UI matches booking/voice.
+    const stored = await prisma.practiceSettings.findUnique({
+      where: { practiceId },
+      select: { hoursOfOperation: true },
+    })
+    if (!extractHoursOfOperationTimezone(stored?.hoursOfOperation)) {
+      settings.timezone = await getPracticeTimeZone(practiceId)
+    }
     return NextResponse.json({ settings })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to load settings'

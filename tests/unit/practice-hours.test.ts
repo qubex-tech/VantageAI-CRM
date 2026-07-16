@@ -9,20 +9,23 @@ const TZ = 'America/Chicago'
 describe('parseHoursOfOperationSettings', () => {
   it('returns weekday defaults when unset', () => {
     const settings = parseHoursOfOperationSettings(null)
+    expect(settings.timezone).toBe('America/Chicago')
     expect(settings.days.monday.enabled).toBe(true)
     expect(settings.days.saturday.enabled).toBe(false)
     expect(settings.lunch.enabled).toBe(true)
     expect(settings.lunch.start).toBe('12:00')
   })
 
-  it('preserves explicit closed weekdays', () => {
+  it('preserves explicit closed weekdays and timezone', () => {
     const settings = parseHoursOfOperationSettings({
+      timezone: 'America/New_York',
       days: {
         ...DEFAULT_HOURS_OF_OPERATION.days,
         wednesday: { enabled: false, open: '08:00', close: '17:00' },
       },
       lunch: { enabled: false, start: '12:00', end: '13:00' },
     })
+    expect(settings.timezone).toBe('America/New_York')
     expect(settings.days.wednesday.enabled).toBe(false)
     expect(settings.lunch.enabled).toBe(false)
   })

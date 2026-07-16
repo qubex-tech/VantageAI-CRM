@@ -393,6 +393,7 @@ export async function handleToolCall(
       )
 
     case 'get_available_slots':
+      // Each slot: speak `time_local` to the caller; pass `time` (UTC ISO) to book_appointment.
       return await getAvailableSlots(
         practiceId,
         parameters.eventTypeId,
@@ -402,6 +403,7 @@ export async function handleToolCall(
       )
 
     case 'book_appointment':
+      // `startTime` must be the UTC ISO from get_available_slots.time (not time_local).
       return await bookAppointment(
         practiceId,
         parameters.patientId,

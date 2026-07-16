@@ -291,7 +291,11 @@ describe('agentActions Open Dental scheduling', () => {
           opNums: [1, 3],
         })
       )
-      expect(slots).toEqual([{ time: '2026-07-03T19:00:00.000Z', attendeeCount: 0 }])
+      expect(slots).toHaveLength(1)
+      expect(slots[0].time).toBe('2026-07-03T19:00:00.000Z')
+      expect(slots[0].attendeeCount).toBe(0)
+      expect(slots[0].timezone).toBe('America/Chicago')
+      expect(slots[0].time_local).toMatch(/Friday, July 3 at 2:00/)
     })
   })
 })

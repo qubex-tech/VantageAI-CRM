@@ -4,6 +4,16 @@ const CACHE_TTL_MS = 1000 * 60 * 60 * 24
 /** Fallback when practice brand timezone is unset (Lonestar / central US default). */
 export const DEFAULT_PRACTICE_TIMEZONE = 'America/Chicago'
 
+/** Common US practice timezones for Settings selects. */
+export const NORTH_AMERICA_TIMEZONE_OPTIONS: Array<{ label: string; value: string }> = [
+  { label: 'Pacific (America/Los_Angeles)', value: 'America/Los_Angeles' },
+  { label: 'Mountain (America/Denver)', value: 'America/Denver' },
+  { label: 'Central (America/Chicago)', value: 'America/Chicago' },
+  { label: 'Eastern (America/New_York)', value: 'America/New_York' },
+  { label: 'Alaska (America/Anchorage)', value: 'America/Anchorage' },
+  { label: 'Hawaii (Pacific/Honolulu)', value: 'Pacific/Honolulu' },
+]
+
 export type UserFacingDateTimeOptions = {
   /** Omit on the client to use the browser timezone; set on the server (e.g. practice TZ). */
   timeZone?: string

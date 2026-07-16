@@ -44,45 +44,55 @@ function providerLabel(providerId: string | null): string | undefined {
   return trimmed
 }
 
+/** Speakable local datetime for voice agents, e.g. "Monday, July 20 at 2:30 PM". */
+export function formatInstantForVoiceLocal(
+  instant: Date,
+  timeZone: string
+): { time_local: string; timezone: string } {
+  const zone = timeZone?.trim() || DEFAULT_TIME_ZONE
+  let dateStr: string
+  let timeStr: string
+  try {
+    dateStr = new Intl.DateTimeFormat('en-US', {
+      timeZone: zone,
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+    }).format(instant)
+    timeStr = new Intl.DateTimeFormat('en-US', {
+      timeZone: zone,
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(instant)
+  } catch {
+    dateStr = new Intl.DateTimeFormat('en-US', {
+      timeZone: DEFAULT_TIME_ZONE,
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+    }).format(instant)
+    timeStr = new Intl.DateTimeFormat('en-US', {
+      timeZone: DEFAULT_TIME_ZONE,
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(instant)
+    return { time_local: `${dateStr} at ${timeStr}`, timezone: DEFAULT_TIME_ZONE }
+  }
+  return { time_local: `${dateStr} at ${timeStr}`, timezone: zone }
+}
+
 /**
  * Format a single appointment row into a voice-agent-friendly shape with a
  * natural-language summary the agent can read aloud verbatim.
  */
 export function formatAppointmentForVoice(appt: VoiceAppointmentInput): VoiceAppointment {
-  const timeZone = appt.timezone?.trim() || DEFAULT_TIME_ZONE
-
-  let dateStr: string
-  let timeStr: string
-  try {
-    dateStr = new Intl.DateTimeFormat('en-US', {
-      timeZone,
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-    }).format(appt.startTime)
-    timeStr = new Intl.DateTimeFormat('en-US', {
-      timeZone,
-      hour: 'numeric',
-      minute: '2-digit',
-    }).format(appt.startTime)
-  } catch {
-    // Fallback if the stored timezone is somehow invalid.
-    dateStr = new Intl.DateTimeFormat('en-US', {
-      timeZone: DEFAULT_TIME_ZONE,
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-    }).format(appt.startTime)
-    timeStr = new Intl.DateTimeFormat('en-US', {
-      timeZone: DEFAULT_TIME_ZONE,
-      hour: 'numeric',
-      minute: '2-digit',
-    }).format(appt.startTime)
-  }
+  const { time_local: localWhen, timezone: timeZone } = formatInstantForVoiceLocal(
+    appt.startTime,
+    appt.timezone?.trim() || DEFAULT_TIME_ZONE
+  )
 
   const visit = appt.visitType?.trim() || 'appointment'
   const provider = providerLabel(appt.providerId)
-  const localWhen = `${dateStr} at ${timeStr}`
   const summary = provider
     ? `${visit} with ${provider} on ${localWhen}`
     : `${visit} on ${localWhen}`

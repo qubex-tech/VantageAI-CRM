@@ -195,6 +195,20 @@ const dayHoursSchema = z
 
 export const hoursOfOperationSettingsSchema = z
   .object({
+    timezone: z
+      .string()
+      .min(1, 'Timezone is required')
+      .refine(
+        (tz) => {
+          try {
+            new Intl.DateTimeFormat('en-US', { timeZone: tz }).format(new Date())
+            return true
+          } catch {
+            return false
+          }
+        },
+        { message: 'Invalid IANA timezone' }
+      ),
     days: z.object({
       monday: dayHoursSchema,
       tuesday: dayHoursSchema,

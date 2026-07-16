@@ -27,6 +27,8 @@ export type LunchHours = {
 }
 
 export type HoursOfOperationSettings = {
+  /** IANA timezone for open/close/lunch wall-clock times (e.g. America/Chicago). */
+  timezone: string
   days: Record<WeekdayKey, DayHours>
   lunch: LunchHours
 }
@@ -50,6 +52,7 @@ export const DEFAULT_LUNCH: LunchHours = {
 }
 
 export const DEFAULT_HOURS_OF_OPERATION: HoursOfOperationSettings = {
+  timezone: 'America/Chicago',
   days: {
     monday: { ...DEFAULT_DAY_OPEN },
     tuesday: { ...DEFAULT_DAY_OPEN },
