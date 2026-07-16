@@ -49,6 +49,8 @@ export interface ExtractedCallData {
   patient_name?: string
   patient_dob?: string
   patient_type?: string
+  /** Retell custom analysis "Payment Type" — typically "insurance" or "self pay". */
+  payment_type?: string
   selected_time?: string
   selected_date?: string
   preferred_dentist?: string
@@ -737,6 +739,11 @@ function enrichFromCustomAnalysis(
     const type = getCustomValue(customData, ['Patient Type'])
     extracted.patient_type = type || (normalized.patient_type as string | undefined)
   }
+  if (!extracted.payment_type) {
+    const payment = getCustomValue(customData, ['Payment Type', 'payment_type', 'PaymentType'])
+    extracted.payment_type =
+      payment || (normalized.payment_type as string | undefined)
+  }
   if (!extracted.patient_name) {
     const first = getCustomValue(customData, ['Patient First Name'])
     const last = getCustomValue(customData, ['Patient Last Name'])
@@ -849,6 +856,10 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
         const type = getCustomValue(customData, ['Patient Type'])
         if (type) extracted.patient_type = type
       }
+      if (!extracted.payment_type) {
+        const payment = getCustomValue(customData, ['Payment Type', 'payment_type', 'PaymentType'])
+        if (payment) extracted.payment_type = payment
+      }
       if (!extracted.patient_name) {
         const first = getCustomValue(customData, ['Patient First Name'])
         const last = getCustomValue(customData, ['Patient Last Name'])
@@ -864,6 +875,9 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
       // Normalize Retell keys like "Patient First Name" or "Call Reason"
       if (!extracted.patient_type && normalizedCustomData.patient_type) {
         extracted.patient_type = normalizedCustomData.patient_type as string
+      }
+      if (!extracted.payment_type && normalizedCustomData.payment_type) {
+        extracted.payment_type = normalizedCustomData.payment_type as string
       }
       if (!extracted.patient_dob && normalizedCustomData.patient_dob) {
         extracted.patient_dob = normalizedCustomData.patient_dob as string
@@ -1487,6 +1501,11 @@ export async function processRetellCallData(
     }
     if (!extractedData.patient_type && customData['Patient Type']) {
       extractedData.patient_type = String(customData['Patient Type']).trim()
+    }
+    if (!extractedData.payment_type) {
+      const payment =
+        customData['Payment Type'] || customData['payment_type'] || customData['PaymentType']
+      if (payment) extractedData.payment_type = String(payment).trim()
     }
     if (!extractedData.call_reason && customData['Call Reason']) {
       extractedData.call_reason = String(customData['Call Reason']).trim()

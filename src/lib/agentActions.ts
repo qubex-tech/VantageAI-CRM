@@ -466,9 +466,10 @@ async function bookAppointmentViaOpenDental(params: {
   patientId: string
   startTime: string
   reason?: string
+  paymentType?: string
   scheduling: SchedulingSettings
 }): Promise<BookAppointmentResult> {
-  const { practiceId, patientId, startTime, reason, scheduling } = params
+  const { practiceId, patientId, startTime, reason, paymentType, scheduling } = params
 
   const opNum = resolveBookOperatoryNum(scheduling)
   if (!opNum) {
@@ -485,6 +486,24 @@ async function bookAppointmentViaOpenDental(params: {
   const timeZone = await getPracticeTimeZone(practiceId)
   const dateTimeStart = formatOpenDentalLocalDateTime(startInstant, timeZone)
 
+  const patient = await prisma.patient.findFirst({
+    where: { id: patientId, practiceId, deletedAt: null },
+    select: { createdAt: true },
+  })
+  // Treat as new-patient booking when the CRM chart was just created on this call
+  // (within the last 6 hours) so we can stamp Retell Payment Type onto the OD note.
+  const isNewPatient = Boolean(
+    patient?.createdAt && Date.now() - patient.createdAt.getTime() < 6 * 60 * 60 * 1000
+  )
+  const { buildOpenDentalAppointmentNote } = await import(
+    '@/lib/integrations/opendental/commlogWriteback'
+  )
+  const note = buildOpenDentalAppointmentNote({
+    reason,
+    paymentType,
+    isNewPatient,
+  })
+
   const result = await bookOpenDentalAppointment({
     practiceId,
     patientId,
@@ -492,7 +511,7 @@ async function bookAppointmentViaOpenDental(params: {
     opNum,
     dateTimeStart,
     lengthMinutes: scheduling.defaultLengthMinutes ?? null,
-    note: reason ?? null,
+    note,
   })
 
   return {
@@ -510,7 +529,8 @@ export async function bookAppointment(
   eventTypeId: string,
   startTime: string, // ISO string
   timezone: string = 'America/New_York',
-  reason?: string
+  reason?: string,
+  paymentType?: string
 ): Promise<BookAppointmentResult> {
   // Get patient
   const patient = await prisma.patient.findFirst({
@@ -557,6 +577,7 @@ export async function bookAppointment(
       patientId: linkedPatient.id,
       startTime,
       reason,
+      paymentType,
       scheduling,
     })
   }

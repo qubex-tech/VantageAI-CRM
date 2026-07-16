@@ -6,6 +6,7 @@ import { logOpenDentalAudit } from './audit'
 import { resolveCreatedId, unwrapCreatedRecord } from './apiResponse'
 import { OPEN_DENTAL_EXTERNAL_PREFIX } from './patientSync'
 import { formatPatientNoteForEhr, isPatientNoteType } from '@/lib/patient-note-types'
+import { parseOpenDentalAptNumFromBookingId } from './appointmentSync'
 import type { ExtractedCallData } from '@/lib/process-call-data'
 import type { RetellCall } from '@/lib/retell-api'
 
@@ -57,6 +58,123 @@ export function formatOpenDentalLocalDateTime(instant: Date, timeZone: string): 
   return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`
 }
 
+/** Normalize Retell "Payment Type" to a stable label for Open Dental notes. */
+export function normalizeRetellPaymentType(value: unknown): 'insurance' | 'self pay' | null {
+  const raw = String(value ?? '').trim().toLowerCase()
+  if (!raw) return null
+  if (/(self[-\s]?pay|cash|out[\s-]?of[\s-]?pocket)/i.test(raw)) return 'self pay'
+  if (/insurance|insured/.test(raw)) return 'insurance'
+  return null
+}
+
+/** True when Retell classified the caller as a new patient. */
+export function isRetellNewPatientCall(extractedData: ExtractedCallData): boolean {
+  if (extractedData.new_patient_add === true) return true
+  const type = String(extractedData.patient_type ?? '').trim().toLowerCase()
+  if (type === 'new patient' || type === 'new') return true
+  const custom = (extractedData.retell_custom_data || {}) as Record<string, unknown>
+  const customType = String(custom['Patient Type'] ?? custom['patient_type'] ?? '').trim().toLowerCase()
+  return customType === 'new patient' || customType === 'new'
+}
+
+/**
+ * Build the Open Dental appointment Note for a booking.
+ * For new patients, appends Retell Payment Type when available (`insurance` | `self pay`).
+ */
+export function buildOpenDentalAppointmentNote(params: {
+  reason?: string | null
+  paymentType?: string | null
+  isNewPatient?: boolean
+}): string | null {
+  const reason = params.reason?.trim() || ''
+  const payment =
+    params.isNewPatient === true ? normalizeRetellPaymentType(params.paymentType) : null
+
+  if (!payment) return reason || null
+
+  const paymentLine = `Payment type: ${payment}`
+  if (/payment\s*type\s*:/i.test(reason)) return reason || paymentLine
+  if (!reason) return paymentLine
+  return `${reason}\n${paymentLine}`
+}
+
+function resolvePaymentTypeFromExtracted(extractedData: ExtractedCallData): 'insurance' | 'self pay' | null {
+  return normalizeRetellPaymentType(
+    extractedData.payment_type ??
+      (extractedData.retell_custom_data as Record<string, unknown> | undefined)?.['Payment Type']
+  )
+}
+
+/**
+ * After a new-patient call, append Retell Payment Type onto OD appointment Notes
+ * created during the call window (best-effort; never throws).
+ */
+async function enrichNewPatientAppointmentNotesWithPaymentType(params: {
+  practiceId: string
+  patientId: string
+  call: RetellCall
+  extractedData: ExtractedCallData
+  conversationStartedAt: Date | null
+}): Promise<void> {
+  try {
+    if (!isRetellNewPatientCall(params.extractedData)) return
+    const payment = resolvePaymentTypeFromExtracted(params.extractedData)
+    if (!payment) return
+
+    const callStartMs = params.call.start_timestamp
+      ? Number(params.call.start_timestamp)
+      : params.conversationStartedAt?.getTime()
+    if (!callStartMs || !Number.isFinite(callStartMs)) return
+
+    const windowStart = new Date(callStartMs - 5 * 60_000)
+    const windowEnd = new Date(
+      (params.call.end_timestamp ? Number(params.call.end_timestamp) : Date.now()) + 5 * 60_000
+    )
+
+    const appointments = await prisma.appointment.findMany({
+      where: {
+        practiceId: params.practiceId,
+        patientId: params.patientId,
+        calBookingId: { startsWith: 'opendental:apt:' },
+        createdAt: { gte: windowStart, lte: windowEnd },
+      },
+      select: {
+        id: true,
+        calBookingId: true,
+        reason: true,
+        notes: true,
+      },
+    })
+    if (appointments.length === 0) return
+
+    const services = await getOpenDentalServices(params.practiceId)
+    for (const apt of appointments) {
+      const nextNote = buildOpenDentalAppointmentNote({
+        reason: apt.notes || apt.reason,
+        paymentType: payment,
+        isNewPatient: true,
+      })
+      if (!nextNote || nextNote === (apt.notes || apt.reason || '')) continue
+
+      const aptNum = parseOpenDentalAptNumFromBookingId(apt.calBookingId)
+      if (aptNum) {
+        await services.appointments.update(aptNum, { Note: nextNote })
+      }
+      await prisma.appointment.update({
+        where: { id: apt.id },
+        data: { notes: nextNote },
+      })
+    }
+  } catch (error) {
+    console.error('[OpenDental] Failed to enrich appointment notes with payment type', {
+      practiceId: params.practiceId,
+      patientId: params.patientId,
+      callId: params.call.call_id,
+      error: error instanceof Error ? error.message : error,
+    })
+  }
+}
+
 /** Compose the commlog note body from the call analysis/extracted data. */
 export function buildCommlogNote(call: RetellCall, extractedData: ExtractedCallData): string {
   const lines: string[] = []
@@ -64,6 +182,10 @@ export function buildCommlogNote(call: RetellCall, extractedData: ExtractedCallD
   const summary = extractedData.call_summary || call.call_analysis?.call_summary
   const detailed = extractedData.detailed_call_summary
   if (extractedData.call_reason) lines.push(`Reason: ${extractedData.call_reason}`)
+  if (isRetellNewPatientCall(extractedData)) {
+    const payment = resolvePaymentTypeFromExtracted(extractedData)
+    if (payment) lines.push(`Payment type: ${payment}`)
+  }
   if (summary) lines.push(`Summary: ${summary}`)
   if (detailed && detailed !== summary) lines.push(`Details: ${detailed}`)
   if (extractedData.selected_date || extractedData.selected_time) {
@@ -195,6 +317,16 @@ export async function writeBackCallToOpenDental(params: {
       patNum,
       note,
       commDateTime,
+    })
+
+    // For new patients, also stamp Retell Payment Type onto OD appointment notes
+    // booked during this call (analysis is only available after the call ends).
+    await enrichNewPatientAppointmentNotesWithPaymentType({
+      practiceId,
+      patientId,
+      call,
+      extractedData,
+      conversationStartedAt: conversation?.startedAt ?? null,
     })
 
     if (conversation) {

@@ -408,7 +408,8 @@ export async function handleToolCall(
         parameters.eventTypeId,
         parameters.startTime,
         parameters.timezone || 'America/New_York',
-        parameters.reason
+        parameters.reason,
+        parameters.paymentType || parameters.payment_type
       )
 
     case 'cancel_appointment':
