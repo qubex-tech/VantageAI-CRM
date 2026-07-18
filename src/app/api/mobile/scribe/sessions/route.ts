@@ -116,6 +116,15 @@ export async function POST(req: NextRequest) {
       },
     })
 
+    // Prefetch chart context during the visit so Stop only waits on ASR + SOAP.
+    const { prefetchAriaContext } = await import('@/lib/aria/process')
+    void prefetchAriaContext({
+      sessionId: session.id,
+      practiceId: user.practiceId,
+      patientId: body.patientId,
+      appointmentId: body.appointmentId ?? null,
+    })
+
     return NextResponse.json({ session: serializeScribeSession(session) }, { status: 201 })
   } catch (err: unknown) {
     if (err instanceof Error && err.name === 'ZodError') {

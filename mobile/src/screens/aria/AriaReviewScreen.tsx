@@ -14,7 +14,7 @@ import {
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
 import { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useAriaSession, useInvalidateAria } from '@/hooks/useAria'
-import { discardAriaSession, patchAriaNote, signAriaSession, stopAriaSession, uploadAriaChunk } from '@/services/aria'
+import { discardAriaSession, finalizeAriaSession, patchAriaNote, signAriaSession } from '@/services/aria'
 import {
   ensureMicPermission,
   startAmbientRecording,
@@ -140,15 +140,14 @@ export function AriaReviewScreen() {
           onPress: async () => {
             try {
               const { uri, durationMs } = await stopAmbientRecording()
-              await uploadAriaChunk({
+              await finalizeAriaSession({
                 sessionId,
                 uri,
                 kind: 'dictation',
                 durationMs,
               })
-              await stopAriaSession(sessionId)
               await refetch()
-              Alert.alert('Aria', 'Regenerating note with your dictation…')
+              Alert.alert('Aria', 'Note updated with your dictation.')
             } catch (err) {
               Alert.alert('Aria', getApiErrorMessage(err, 'Dictation failed'))
             } finally {

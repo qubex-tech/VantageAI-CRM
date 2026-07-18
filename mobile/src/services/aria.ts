@@ -33,13 +33,12 @@ export async function createAriaSession(payload: {
   return apiPost(ENDPOINTS.ariaSessions, payload)
 }
 
-export async function uploadAriaChunk(params: {
-  sessionId: string
+function appendAudioForm(params: {
   uri: string
   kind: 'ambient' | 'dictation'
   durationMs?: number
   mimeType?: string
-}): Promise<void> {
+}): FormData {
   const form = new FormData()
   form.append('file', {
     uri: params.uri,
@@ -50,12 +49,41 @@ export async function uploadAriaChunk(params: {
   if (params.durationMs != null) {
     form.append('durationMs', String(params.durationMs))
   }
+  return form
+}
 
+export async function uploadAriaChunk(params: {
+  sessionId: string
+  uri: string
+  kind: 'ambient' | 'dictation'
+  durationMs?: number
+  mimeType?: string
+}): Promise<void> {
   const client = getApiClient()
-  await client.post(ENDPOINTS.ariaSessionChunks(params.sessionId), form, {
+  await client.post(ENDPOINTS.ariaSessionChunks(params.sessionId), appendAudioForm(params), {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 120000,
   })
+}
+
+/** Single-request fast path: upload audio + ASR + SOAP. */
+export async function finalizeAriaSession(params: {
+  sessionId: string
+  uri: string
+  kind: 'ambient' | 'dictation'
+  durationMs?: number
+  mimeType?: string
+}): Promise<{ session: AriaSession }> {
+  const client = getApiClient()
+  const res = await client.post<{ session: AriaSession }>(
+    ENDPOINTS.ariaSessionFinalize(params.sessionId),
+    appendAudioForm(params),
+    {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 180000,
+    }
+  )
+  return res.data
 }
 
 export async function stopAriaSession(sessionId: string): Promise<{ session: AriaSession }> {

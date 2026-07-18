@@ -753,6 +753,8 @@ model ScribeAudioChunk {
   sha256     String?
   /// Raw audio bytes (MVP storage; migrate to object storage later)
   audioData  Bytes?
+  /// Cached Whisper text so retries / progressive uploads skip re-ASR
+  transcript String?
   uploadedAt DateTime @default(now())
 
   session ScribeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)

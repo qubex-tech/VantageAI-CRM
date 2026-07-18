@@ -1,41 +1,203 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { isAriaScribeEnabled } from '@/lib/aria/enabled'
-import { loadAriaPatientContext } from '@/lib/aria/context'
+import { loadAriaPatientContext, type AriaPatientContext } from '@/lib/aria/context'
 import { generateAriaSoapNote, transcribeAriaAudio } from '@/lib/aria/generate'
 import { notifyUsers } from '@/lib/push-notifications'
 
+type ChunkRow = {
+  seq: number
+  kind: string
+  mimeType: string
+  audioData: Buffer | Uint8Array | null
+  transcript: string | null
+}
+
+export type AriaFreshAudio = {
+  buffer: Buffer
+  mimeType: string
+  kind: 'ambient' | 'dictation'
+  durationMs?: number | null
+}
+
 /**
- * Core Aria pipeline (ASR → SOAP). Used by Inngest and by the sync/process API fallback.
+ * Prefetch chart context at session start so Stop only waits on ASR + SOAP.
+ */
+export async function prefetchAriaContext(params: {
+  sessionId: string
+  practiceId: string
+  patientId: string
+  appointmentId?: string | null
+}): Promise<void> {
+  try {
+    const context = await loadAriaPatientContext({
+      practiceId: params.practiceId,
+      patientId: params.patientId,
+      appointmentId: params.appointmentId,
+    })
+    const session = await prisma.scribeSession.findFirst({
+      where: { id: params.sessionId, practiceId: params.practiceId },
+      select: { rawModelMeta: true },
+    })
+    const existing =
+      session?.rawModelMeta && typeof session.rawModelMeta === 'object'
+        ? (session.rawModelMeta as Record<string, unknown>)
+        : {}
+    await prisma.scribeSession.update({
+      where: { id: params.sessionId },
+      data: {
+        rawModelMeta: {
+          ...existing,
+          contextPrefetch: context,
+          contextPrefetchAt: new Date().toISOString(),
+        } as unknown as Prisma.InputJsonValue,
+      },
+    })
+  } catch (err) {
+    console.warn('[aria] context prefetch failed', err)
+  }
+}
+
+function contextFromPrefetch(raw: unknown): AriaPatientContext | null {
+  if (!raw || typeof raw !== 'object') return null
+  const meta = raw as Record<string, unknown>
+  const prefetch = meta.contextPrefetch
+  if (!prefetch || typeof prefetch !== 'object') return null
+  const p = prefetch as Partial<AriaPatientContext>
+  if (typeof p.patientName !== 'string') return null
+  return {
+    patientName: p.patientName,
+    visitType: p.visitType ?? null,
+    reason: p.reason ?? null,
+    snippets: Array.isArray(p.snippets) ? (p.snippets as AriaPatientContext['snippets']) : [],
+  }
+}
+
+async function transcribeChunk(params: {
+  sessionId: string
+  seq: number
+  kind: string
+  mimeType: string
+  buffer: Buffer
+}): Promise<{ seq: number; kind: string; transcript: string; meta: Record<string, unknown> }> {
+  const { transcript, meta } = await transcribeAriaAudio({
+    audio: params.buffer,
+    mimeType: params.mimeType,
+    filename: `aria-${params.sessionId}-${params.seq}`,
+  })
+  return {
+    seq: params.seq,
+    kind: params.kind,
+    transcript: transcript.trim(),
+    meta,
+  }
+}
+
+/**
+ * Fast Aria pipeline:
+ * - Whisper all pending chunks in parallel
+ * - Load patient context in parallel with ASR (or reuse session prefetch)
+ * - Then a single SOAP generation call
  */
 export async function runAriaSessionPipeline(params: {
   sessionId: string
   practiceId: string
   notify?: boolean
+  /** When provided, persist + transcribe this audio without an extra DB round-trip for ASR */
+  freshAudio?: AriaFreshAudio
 }): Promise<{ sessionId: string; status: string; skipped?: boolean; reason?: string }> {
   const { sessionId, practiceId } = params
   const notify = params.notify !== false
+  const pipelineStarted = Date.now()
 
   if (!(await isAriaScribeEnabled(practiceId))) {
     return { sessionId, status: 'skipped', skipped: true, reason: 'ARIA_DISABLED' }
   }
 
-  await prisma.scribeSession.updateMany({
-    where: {
-      id: sessionId,
-      practiceId,
-      status: { in: ['recording', 'uploading', 'failed', 'ready_for_review', 'transcribing', 'generating'] },
-    },
+  const session = await prisma.scribeSession.findFirst({
+    where: { id: sessionId, practiceId },
+  })
+  if (!session) throw new Error('Session not found')
+
+  await prisma.scribeSession.update({
+    where: { id: sessionId },
     data: { status: 'transcribing', error: null },
   })
 
-  const chunks = await prisma.scribeAudioChunk.findMany({
+  // Persist fresh audio + load existing chunks concurrently
+  let freshSeq: number | null = null
+  const persistFreshPromise = (async () => {
+    if (!params.freshAudio) return null
+    const last = await prisma.scribeAudioChunk.findFirst({
+      where: { sessionId },
+      orderBy: { seq: 'desc' },
+      select: { seq: true },
+    })
+    const seq = (last?.seq ?? -1) + 1
+    freshSeq = seq
+    await prisma.scribeAudioChunk.create({
+      data: {
+        sessionId,
+        seq,
+        kind: params.freshAudio.kind,
+        mimeType: params.freshAudio.mimeType,
+        durationMs: params.freshAudio.durationMs ?? null,
+        audioData: params.freshAudio.buffer,
+        transcript: null,
+      },
+    })
+    return seq
+  })()
+
+  const existingChunksPromise = prisma.scribeAudioChunk.findMany({
     where: { sessionId },
     orderBy: { seq: 'asc' },
-    select: { audioData: true, mimeType: true, kind: true, seq: true },
+    select: {
+      seq: true,
+      kind: true,
+      mimeType: true,
+      audioData: true,
+      transcript: true,
+    },
   })
 
-  if (!chunks.length) {
+  const contextPromise = (async (): Promise<AriaPatientContext> => {
+    const cached = contextFromPrefetch(session.rawModelMeta)
+    if (cached) return cached
+    return loadAriaPatientContext({
+      practiceId,
+      patientId: session.patientId,
+      appointmentId: session.appointmentId,
+    })
+  })()
+
+  const [, existingChunks, context] = await Promise.all([
+    persistFreshPromise,
+    existingChunksPromise,
+    contextPromise,
+  ])
+
+  const chunks: ChunkRow[] = existingChunks.map((c) => ({
+    seq: c.seq,
+    kind: c.kind,
+    mimeType: c.mimeType,
+    audioData: c.audioData,
+    transcript: c.transcript,
+  }))
+
+  // If fresh audio was just written, ensure it's in the list (race-safe)
+  if (params.freshAudio && freshSeq != null && !chunks.some((c) => c.seq === freshSeq)) {
+    chunks.push({
+      seq: freshSeq,
+      kind: params.freshAudio.kind,
+      mimeType: params.freshAudio.mimeType,
+      audioData: params.freshAudio.buffer,
+      transcript: null,
+    })
+    chunks.sort((a, b) => a.seq - b.seq)
+  }
+
+  if (!chunks.length && !params.freshAudio) {
     await prisma.scribeSession.update({
       where: { id: sessionId },
       data: { status: 'failed', error: 'No audio chunks uploaded' },
@@ -43,23 +205,56 @@ export async function runAriaSessionPipeline(params: {
     throw new Error('No audio chunks uploaded')
   }
 
-  const parts: string[] = []
-  const asrMeta: Record<string, unknown>[] = []
-
-  for (const chunk of chunks) {
-    if (!chunk.audioData || chunk.audioData.length === 0) continue
-    const buffer = Buffer.from(chunk.audioData)
-    const { transcript, meta } = await transcribeAriaAudio({
-      audio: buffer,
-      mimeType: chunk.mimeType,
-      filename: `aria-${sessionId}-${chunk.seq}`,
-    })
-    asrMeta.push(meta)
-    if (transcript) {
-      const label = chunk.kind === 'dictation' ? '[Dictation]' : '[Visit]'
-      parts.push(`${label}\n${transcript}`)
+  // Transcribe pending chunks in parallel; reuse cached chunk transcripts.
+  const asrJobs = chunks.map(async (chunk) => {
+    if (chunk.transcript?.trim()) {
+      return {
+        seq: chunk.seq,
+        kind: chunk.kind,
+        transcript: chunk.transcript.trim(),
+        meta: { cached: true },
+      }
     }
-  }
+
+    // Prefer in-memory fresh buffer over re-reading bytea
+    let buffer: Buffer | null = null
+    if (
+      params.freshAudio &&
+      freshSeq != null &&
+      chunk.seq === freshSeq
+    ) {
+      buffer = params.freshAudio.buffer
+    } else if (chunk.audioData && chunk.audioData.length > 0) {
+      buffer = Buffer.from(chunk.audioData)
+    }
+    if (!buffer) {
+      return { seq: chunk.seq, kind: chunk.kind, transcript: '', meta: { empty: true } }
+    }
+
+    const result = await transcribeChunk({
+      sessionId,
+      seq: chunk.seq,
+      kind: chunk.kind,
+      mimeType: chunk.mimeType,
+      buffer,
+    })
+
+    // Cache transcript on chunk for retries / progressive uploads
+    await prisma.scribeAudioChunk.updateMany({
+      where: { sessionId, seq: chunk.seq },
+      data: { transcript: result.transcript || null },
+    })
+
+    return result
+  })
+
+  // Also transcribe fresh audio if it isn't in chunks yet (shouldn't happen, but safe)
+  const asrResults = await Promise.all(asrJobs)
+  asrResults.sort((a, b) => a.seq - b.seq)
+
+  const parts = asrResults
+    .filter((r) => r.transcript)
+    .map((r) => `${r.kind === 'dictation' ? '[Dictation]' : '[Visit]'}\n${r.transcript}`)
 
   const transcript = parts.join('\n\n').trim()
   if (!transcript) {
@@ -70,24 +265,24 @@ export async function runAriaSessionPipeline(params: {
     throw new Error('Transcription produced empty text')
   }
 
+  const asrMeta = asrResults.map((r) => ({ seq: r.seq, ...r.meta }))
+  const asrDoneAt = Date.now()
+
   await prisma.scribeSession.update({
     where: { id: sessionId },
     data: {
       transcript,
-      rawModelMeta: { asr: asrMeta } as Prisma.InputJsonValue,
       status: 'generating',
+      rawModelMeta: {
+        ...(typeof session.rawModelMeta === 'object' && session.rawModelMeta
+          ? (session.rawModelMeta as Record<string, unknown>)
+          : {}),
+        asr: asrMeta,
+        timings: {
+          asrMs: asrDoneAt - pipelineStarted,
+        },
+      } as Prisma.InputJsonValue,
     },
-  })
-
-  const session = await prisma.scribeSession.findFirst({
-    where: { id: sessionId, practiceId },
-  })
-  if (!session) throw new Error('Session not found')
-
-  const context = await loadAriaPatientContext({
-    practiceId,
-    patientId: session.patientId,
-    appointmentId: session.appointmentId,
   })
 
   const { soap, meta } = await generateAriaSoapNote({
@@ -108,22 +303,32 @@ export async function runAriaSessionPipeline(params: {
     data: {
       soapJson: soap as unknown as Prisma.InputJsonValue,
       status: 'ready_for_review',
-      rawModelMeta: { ...existingMeta, asr: asrMeta, generation: meta } as Prisma.InputJsonValue,
+      rawModelMeta: {
+        ...existingMeta,
+        asr: asrMeta,
+        generation: meta,
+        timings: {
+          asrMs: asrDoneAt - pipelineStarted,
+          totalMs: Date.now() - pipelineStarted,
+        },
+      } as Prisma.InputJsonValue,
       error: null,
     },
   })
 
+  // Drop heavy audio after success (keep transcripts)
   await prisma.scribeAudioChunk.updateMany({
     where: { sessionId },
     data: { audioData: null },
   })
 
   if (notify) {
-    await notifyUsers([session.providerUserId], {
+    // Don't block the clinician on push delivery
+    void notifyUsers([session.providerUserId], {
       title: 'Aria: note ready',
       body: 'Your draft visit note is ready for review.',
       data: { type: 'aria_note_ready', sessionId },
-    })
+    }).catch(() => null)
   }
 
   return { sessionId, status: 'ready_for_review' }

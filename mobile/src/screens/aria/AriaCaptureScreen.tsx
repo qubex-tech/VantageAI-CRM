@@ -20,7 +20,7 @@ import {
   stopAmbientRecording,
 } from '@/lib/ariaRecorder'
 import { activateKeepAwakeSafe, deactivateKeepAwakeSafe } from '@/lib/keepAwake'
-import { processAriaSession, stopAriaSession, uploadAriaChunk } from '@/services/aria'
+import { finalizeAriaSession } from '@/services/aria'
 import { getApiErrorMessage } from '@/services/apiClient'
 import { colors, spacing, fontSize, fontWeight, radius } from '@/constants/theme'
 import type { AriaStackParamList } from '@/navigation/types'
@@ -111,25 +111,19 @@ export function AriaCaptureScreen() {
       setPhase('uploading')
       if (tickRef.current) clearInterval(tickRef.current)
       const { uri, durationMs } = await stopAmbientRecording()
-      await uploadAriaChunk({
+      setPhase('processing')
+      // One round-trip: upload + parallel Whisper/context + SOAP
+      const { session } = await finalizeAriaSession({
         sessionId,
         uri,
         kind: 'ambient',
         durationMs,
       })
-      setPhase('processing')
-      const { session } = await stopAriaSession(sessionId)
       if (session.status === 'ready_for_review' || session.status === 'failed') {
-        navigation.replace('AriaReview', { sessionId })
-        return
-      }
-      // If still queued somehow, force sync process once
-      const retried = await processAriaSession(sessionId)
-      if (retried.session.status === 'ready_for_review' || retried.session.status === 'failed') {
         navigation.replace('AriaReview', { sessionId })
       }
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Upload failed'))
+      setError(getApiErrorMessage(err, 'Processing failed'))
       setPhase('idle')
       Alert.alert('Aria', getApiErrorMessage(err, 'Could not process recording'))
     }

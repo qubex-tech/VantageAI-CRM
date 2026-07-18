@@ -1,16 +1,18 @@
 import { prisma } from '@/lib/db'
 import type { AriaContextSnippet } from '@/lib/aria/generate'
 
-export async function loadAriaPatientContext(params: {
-  practiceId: string
-  patientId: string
-  appointmentId?: string | null
-}): Promise<{
+export type AriaPatientContext = {
   patientName: string
   visitType: string | null
   reason: string | null
   snippets: AriaContextSnippet[]
-}> {
+}
+
+export async function loadAriaPatientContext(params: {
+  practiceId: string
+  patientId: string
+  appointmentId?: string | null
+}): Promise<AriaPatientContext> {
   const patient = await prisma.patient.findFirst({
     where: { id: params.patientId, practiceId: params.practiceId, deletedAt: null },
     select: {
