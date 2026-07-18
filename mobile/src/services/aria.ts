@@ -52,18 +52,35 @@ function appendAudioForm(params: {
   return form
 }
 
+export type AriaChunkUploadResult = {
+  chunk: {
+    id: string
+    seq: number
+    kind: string
+    transcript?: string
+    transcriptChars?: number
+    asrCached?: boolean
+  }
+  transcript?: string
+}
+
 export async function uploadAriaChunk(params: {
   sessionId: string
   uri: string
   kind: 'ambient' | 'dictation'
   durationMs?: number
   mimeType?: string
-}): Promise<void> {
+}): Promise<AriaChunkUploadResult> {
   const client = getApiClient()
-  await client.post(ENDPOINTS.ariaSessionChunks(params.sessionId), appendAudioForm(params), {
-    headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 120000,
-  })
+  const res = await client.post<AriaChunkUploadResult>(
+    ENDPOINTS.ariaSessionChunks(params.sessionId),
+    appendAudioForm(params),
+    {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
+    }
+  )
+  return res.data
 }
 
 /** Single-request fast path: upload audio + ASR + SOAP. */

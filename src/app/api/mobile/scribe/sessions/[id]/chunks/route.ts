@@ -144,9 +144,11 @@ export async function POST(req: NextRequest, context: RouteContext) {
       {
         chunk: {
           ...chunk,
+          transcript,
           transcriptChars: transcript.length,
           asrCached: Boolean(transcript),
         },
+        transcript,
         asr: asrMeta,
       },
       { status: 201 }

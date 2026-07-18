@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Alert,
   AppState,
+  ScrollView,
 } from 'react-native'
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
 import { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -28,6 +29,11 @@ import type { AriaStackParamList } from '@/navigation/types'
 type Nav = NativeStackNavigationProp<AriaStackParamList, 'AriaCapture'>
 type Route = RouteProp<AriaStackParamList, 'AriaCapture'>
 
+type TranscriptSegment = {
+  seq: number
+  text: string
+}
+
 function formatElapsed(ms: number) {
   const totalSec = Math.floor(ms / 1000)
   const m = Math.floor(totalSec / 60)
@@ -44,9 +50,11 @@ export function AriaCaptureScreen() {
   const [elapsed, setElapsed] = useState(0)
   const [segmentsSynced, setSegmentsSynced] = useState(0)
   const [segmentsFailed, setSegmentsFailed] = useState(0)
+  const [liveSegments, setLiveSegments] = useState<TranscriptSegment[]>([])
   const [error, setError] = useState<string | null>(null)
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const uploadChain = useRef(Promise.resolve())
+  const transcriptScrollRef = useRef<ScrollView>(null)
 
   const { data } = useAriaSession(sessionId, {
     poll: phase === 'processing' || phase === 'uploading',
@@ -79,15 +87,30 @@ export function AriaCaptureScreen() {
     }
   }, [remoteStatus, navigation, sessionId])
 
+  useEffect(() => {
+    if (liveSegments.length === 0) return
+    requestAnimationFrame(() => {
+      transcriptScrollRef.current?.scrollToEnd({ animated: true })
+    })
+  }, [liveSegments])
+
   const enqueueSegmentUpload = (uri: string, durationMs: number) => {
     uploadChain.current = uploadChain.current
       .then(async () => {
-        await uploadAriaChunk({
+        const result = await uploadAriaChunk({
           sessionId,
           uri,
           kind: 'ambient',
           durationMs,
         })
+        const text = (result.transcript || result.chunk?.transcript || '').trim()
+        const seq = result.chunk?.seq ?? Date.now()
+        if (text) {
+          setLiveSegments((prev) => {
+            if (prev.some((p) => p.seq === seq)) return prev
+            return [...prev, { seq, text }]
+          })
+        }
         setSegmentsSynced((n) => n + 1)
       })
       .catch(() => {
@@ -100,6 +123,7 @@ export function AriaCaptureScreen() {
       setError(null)
       setSegmentsSynced(0)
       setSegmentsFailed(0)
+      setLiveSegments([])
       await startRollingAmbient((segment) => {
         enqueueSegmentUpload(segment.uri, segment.durationMs)
       })
@@ -135,8 +159,6 @@ export function AriaCaptureScreen() {
       if (tickRef.current) clearInterval(tickRef.current)
 
       const last = await stopRollingAmbient()
-
-      // Finish any in-flight segment uploads before finalizing the last slice
       await uploadChain.current.catch(() => null)
 
       setPhase('processing')
@@ -158,42 +180,64 @@ export function AriaCaptureScreen() {
 
   const statusLabel =
     phase === 'recording'
-      ? segmentsSynced > 0
-        ? `Aria is listening… · ${segmentsSynced} segment${segmentsSynced === 1 ? '' : 's'} transcribed`
-        : 'Aria is listening…'
+      ? 'Aria is listening…'
       : phase === 'paused'
         ? 'Paused'
         : phase === 'uploading'
           ? 'Uploading final audio…'
           : phase === 'processing'
-            ? remoteStatus === 'transcribing'
-              ? 'Finishing transcription…'
-              : remoteStatus === 'generating'
-                ? 'Aria drafting note…'
-                : 'Drafting note…'
+            ? remoteStatus === 'generating'
+              ? 'Aria drafting note…'
+              : 'Finishing note…'
             : 'Ready'
+
+  const liveTranscript = liveSegments.map((s) => s.text).join('\n\n')
 
   return (
     <View style={styles.container}>
-      <Text style={styles.patient}>{patientName}</Text>
-      {visitType ? <Text style={styles.visitType}>{visitType}</Text> : null}
+      <View style={styles.header}>
+        <Text style={styles.patient} numberOfLines={1}>{patientName}</Text>
+        {visitType ? <Text style={styles.visitType}>{visitType}</Text> : null}
+        <View style={styles.timerRow}>
+          <View style={[styles.dot, phase === 'recording' && styles.dotLive]} />
+          <Text style={styles.timer}>{formatElapsed(elapsed)}</Text>
+          <Text style={styles.statusInline}>{statusLabel}</Text>
+        </View>
+      </View>
 
-      <View style={styles.orbWrap}>
-        <View style={[styles.orb, phase === 'recording' && styles.orbLive]} />
-        <Text style={styles.timer}>{formatElapsed(elapsed)}</Text>
-        <Text style={styles.status}>{statusLabel}</Text>
-        {(segmentsSynced > 0 || segmentsFailed > 0) && phase !== 'idle' ? (
-          <Text style={styles.syncMeta}>
-            Live ASR {segmentsSynced} ok
-            {segmentsFailed > 0 ? ` · ${segmentsFailed} retrying` : ''}
+      <View style={styles.transcriptCard}>
+        <View style={styles.transcriptHeader}>
+          <Text style={styles.transcriptTitle}>Live transcript</Text>
+          <Text style={styles.transcriptMeta}>
+            {segmentsSynced > 0
+              ? `${segmentsSynced} segment${segmentsSynced === 1 ? '' : 's'}`
+              : 'Waiting for first segment…'}
+            {segmentsFailed > 0 ? ` · ${segmentsFailed} failed` : ''}
           </Text>
-        ) : null}
+        </View>
+        <ScrollView
+          ref={transcriptScrollRef}
+          style={styles.transcriptScroll}
+          contentContainerStyle={styles.transcriptContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          {liveTranscript ? (
+            <Text style={styles.transcriptText}>{liveTranscript}</Text>
+          ) : (
+            <Text style={styles.transcriptPlaceholder}>
+              Aria transcribes every ~35 seconds while you talk. Text will appear here as each segment finishes.
+            </Text>
+          )}
+        </ScrollView>
       </View>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       {phase === 'uploading' || phase === 'processing' ? (
-        <ActivityIndicator size="large" color={colors.accent} style={{ marginTop: spacing.xl }} />
+        <View style={styles.processingBar}>
+          <ActivityIndicator color={colors.accent} />
+          <Text style={styles.processingText}>{statusLabel}</Text>
+        </View>
       ) : (
         <View style={styles.controls}>
           {phase === 'recording' ? (
@@ -226,62 +270,115 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.bg,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
-    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+  },
+  header: {
+    gap: 4,
+    marginBottom: spacing.md,
   },
   patient: {
-    fontSize: fontSize.xxl,
+    fontSize: fontSize.xl,
     fontWeight: fontWeight.bold,
     color: colors.text,
-    textAlign: 'center',
   },
   visitType: {
-    marginTop: spacing.xs,
     fontSize: fontSize.sm,
     color: colors.textSecondary,
   },
-  orbWrap: {
-    marginTop: spacing.xxxl * 2,
+  timerRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: spacing.sm,
+    marginTop: spacing.xs,
   },
-  orb: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: colors.accentSurface,
+  dot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.borderStrong,
   },
-  orbLive: {
-    backgroundColor: colors.accent,
+  dotLive: {
+    backgroundColor: colors.error,
   },
   timer: {
-    fontSize: fontSize.xxxl,
+    fontSize: fontSize.lg,
     fontWeight: fontWeight.semibold,
     color: colors.text,
     fontVariant: ['tabular-nums'],
   },
-  status: {
-    fontSize: fontSize.base,
+  statusInline: {
+    flex: 1,
+    fontSize: fontSize.sm,
     color: colors.textSecondary,
-    textAlign: 'center',
-    paddingHorizontal: spacing.lg,
   },
-  syncMeta: {
+  transcriptCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    backgroundColor: colors.bgSubtle,
+    overflow: 'hidden',
+    minHeight: 220,
+  },
+  transcriptHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.bg,
+  },
+  transcriptTitle: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold,
+    color: colors.text,
+  },
+  transcriptMeta: {
     fontSize: fontSize.xs,
     color: colors.accent,
     fontWeight: fontWeight.medium,
   },
+  transcriptScroll: {
+    flex: 1,
+  },
+  transcriptContent: {
+    padding: spacing.md,
+    paddingBottom: spacing.xl,
+  },
+  transcriptText: {
+    fontSize: fontSize.base,
+    lineHeight: 22,
+    color: colors.text,
+  },
+  transcriptPlaceholder: {
+    fontSize: fontSize.sm,
+    lineHeight: 20,
+    color: colors.textMuted,
+  },
   error: {
-    marginTop: spacing.lg,
+    marginTop: spacing.sm,
     color: colors.error,
     textAlign: 'center',
   },
-  controls: {
-    marginTop: 'auto',
-    marginBottom: spacing.xxxl,
-    width: '100%',
+  processingBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: spacing.md,
+    paddingVertical: spacing.lg,
+  },
+  processingText: {
+    fontSize: fontSize.base,
+    color: colors.textSecondary,
+  },
+  controls: {
+    marginTop: spacing.md,
+    marginBottom: spacing.xl,
+    width: '100%',
+    gap: spacing.sm,
   },
   secondary: {
     borderWidth: 1,
