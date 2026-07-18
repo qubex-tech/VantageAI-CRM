@@ -25,11 +25,13 @@ export function AriaSignedScreen() {
 
   const ehrLabel =
     session.ehrWritebackStatus === 'success'
-      ? 'Draft note created in EHR'
+      ? session.ehrWritebackError?.startsWith('opendental_appointment_note:')
+        ? 'Saved to Open Dental Appointment Note'
+        : 'Draft note created in EHR'
       : session.ehrWritebackStatus === 'failed'
-        ? `EHR writeback failed: ${session.ehrWritebackError || 'unknown error'}`
+        ? `Writeback failed: ${session.ehrWritebackError || 'unknown error'}`
         : session.ehrWritebackStatus === 'skipped'
-          ? 'Saved in Vantage (EHR sync skipped)'
+          ? 'Saved in Vantage (EMR sync skipped)'
           : 'Saved in Vantage'
 
   return (

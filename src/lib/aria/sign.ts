@@ -1,6 +1,8 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { formatSoapAsText, parseSoapJson } from '@/lib/aria/types'
 import { syncPatientNoteToEhr } from '@/lib/integrations/ehr/patientNoteSync'
+import { syncAriaNoteToOpenDentalAppointment } from '@/lib/aria/opendentalAppointmentNote'
 
 export async function signAriaSession(params: {
   sessionId: string
@@ -70,6 +72,46 @@ export async function signAriaSession(params: {
     ehrWritebackError = err instanceof Error ? err.message : 'EHR writeback failed'
   }
 
+  // Open Dental: append Aria SOAP into the linked appointment's Note field.
+  let openDentalWriteback: Record<string, unknown> = { status: 'skipped' }
+  try {
+    const odSync = await syncAriaNoteToOpenDentalAppointment({
+      practiceId: params.practiceId,
+      patientId: session.patientId,
+      appointmentId: session.appointmentId,
+      sessionId: session.id,
+      soap,
+      actorUserId: params.userId,
+    })
+    openDentalWriteback = { ...odSync }
+    // If eCW was skipped but OD succeeded, surface OD as the primary writeback success.
+    if (odSync.status === 'success' && ehrWritebackStatus === 'skipped') {
+      ehrWritebackStatus = 'success'
+      ehrWritebackError = `opendental_appointment_note:${odSync.aptNum}`
+    } else if (odSync.status === 'error' && ehrWritebackStatus !== 'success') {
+      ehrWritebackStatus = 'failed'
+      ehrWritebackError = `opendental: ${odSync.reason}`
+    } else if (odSync.status === 'skipped' && ehrWritebackStatus === 'skipped') {
+      ehrWritebackError = [ehrWritebackError, `opendental: ${odSync.reason}`]
+        .filter(Boolean)
+        .join('; ')
+    }
+  } catch (err) {
+    openDentalWriteback = {
+      status: 'error',
+      reason: err instanceof Error ? err.message : 'Open Dental writeback failed',
+    }
+    if (ehrWritebackStatus !== 'success') {
+      ehrWritebackStatus = 'failed'
+      ehrWritebackError = `opendental: ${openDentalWriteback.reason}`
+    }
+  }
+
+  const existingMeta =
+    session.rawModelMeta && typeof session.rawModelMeta === 'object'
+      ? (session.rawModelMeta as Record<string, unknown>)
+      : {}
+
   return prisma.scribeSession.update({
     where: { id: session.id },
     data: {
@@ -78,6 +120,10 @@ export async function signAriaSession(params: {
       ehrDocumentReferenceId,
       ehrWritebackStatus,
       ehrWritebackError,
+      rawModelMeta: {
+        ...existingMeta,
+        openDentalAppointmentNote: openDentalWriteback,
+      } as Prisma.InputJsonValue,
     },
     include: {
       patient: {
