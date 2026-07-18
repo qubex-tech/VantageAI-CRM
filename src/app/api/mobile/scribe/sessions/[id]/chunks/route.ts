@@ -1,16 +1,23 @@
 import { createHash } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
 import { ariaDisabledResponse, isAriaScribeEnabled } from '@/lib/aria/enabled'
+import { transcribeAriaAudio } from '@/lib/aria/generate'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+export const maxDuration = 120
 
 type RouteContext = { params: Promise<{ id: string }> }
 
 const MAX_BYTES = 25 * 1024 * 1024
 
+/**
+ * POST chunk — store audio and **eagerly Whisper** so ASR finishes during the visit.
+ * Returns when transcript is cached (audio bytes cleared to keep DB light).
+ */
 export async function POST(req: NextRequest, context: RouteContext) {
   try {
     const user = await requireAuth(req)
@@ -24,7 +31,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
     const { id } = await context.params
     const session = await prisma.scribeSession.findFirst({
       where: { id, practiceId: user.practiceId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, rawModelMeta: true },
     })
     if (!session) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
@@ -52,6 +59,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
 
     const buffer = Buffer.from(await file.arrayBuffer())
     const sha256 = createHash('sha256').update(buffer).digest('hex')
+    const mimeType = file.type || 'audio/m4a'
 
     const last = await prisma.scribeAudioChunk.findFirst({
       where: { sessionId: id },
@@ -65,7 +73,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
         sessionId: id,
         seq,
         kind,
-        mimeType: file.type || 'audio/m4a',
+        mimeType,
         durationMs: Number.isFinite(durationMs) ? durationMs : null,
         sha256,
         audioData: buffer,
@@ -73,15 +81,76 @@ export async function POST(req: NextRequest, context: RouteContext) {
       select: { id: true, seq: true, kind: true, durationMs: true, uploadedAt: true },
     })
 
+    // Keep session in recording while ambient segments stream in
+    const nextStatus =
+      session.status === 'recording' || session.status === 'uploading'
+        ? 'recording'
+        : 'uploading'
+
     await prisma.scribeSession.update({
       where: { id },
       data: {
-        status: session.status === 'ready_for_review' ? 'uploading' : 'uploading',
+        status: nextStatus,
         mode: kind === 'dictation' ? 'hybrid' : undefined,
       },
     })
 
-    return NextResponse.json({ chunk }, { status: 201 })
+    let transcript = ''
+    let asrMeta: Record<string, unknown> = {}
+    try {
+      const result = await transcribeAriaAudio({
+        audio: buffer,
+        mimeType,
+        filename: `aria-${id}-${seq}`,
+      })
+      transcript = result.transcript
+      asrMeta = result.meta
+
+      await prisma.scribeAudioChunk.update({
+        where: { id: chunk.id },
+        data: {
+          transcript: transcript || null,
+          // Bytes no longer needed once transcript is cached
+          audioData: null,
+        },
+      })
+
+      const existingMeta =
+        session.rawModelMeta && typeof session.rawModelMeta === 'object'
+          ? (session.rawModelMeta as Record<string, unknown>)
+          : {}
+      const progressive = Array.isArray(existingMeta.progressiveAsr)
+        ? [...(existingMeta.progressiveAsr as unknown[])]
+        : []
+      progressive.push({ seq, chars: transcript.length, ...asrMeta })
+
+      await prisma.scribeSession.update({
+        where: { id },
+        data: {
+          rawModelMeta: {
+            ...existingMeta,
+            progressiveAsr: progressive,
+          } as unknown as Prisma.InputJsonValue,
+        },
+      })
+    } catch (asrErr) {
+      console.error('[mobile/scribe/chunks] eager ASR failed; keeping audio for finalize', asrErr)
+      asrMeta = {
+        error: asrErr instanceof Error ? asrErr.message : 'asr_failed',
+      }
+    }
+
+    return NextResponse.json(
+      {
+        chunk: {
+          ...chunk,
+          transcriptChars: transcript.length,
+          asrCached: Boolean(transcript),
+        },
+        asr: asrMeta,
+      },
+      { status: 201 }
+    )
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal server error'
     if (message === 'Unauthorized') {

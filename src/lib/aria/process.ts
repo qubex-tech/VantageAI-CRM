@@ -205,7 +205,9 @@ export async function runAriaSessionPipeline(params: {
     throw new Error('No audio chunks uploaded')
   }
 
-  // Transcribe pending chunks in parallel; reuse cached chunk transcripts.
+  // Fast path: reuse eagerly cached segment transcripts; ASR only what's missing
+  // (typically just the final slice after rolling uploads).
+  const cachedCount = chunks.filter((c) => c.transcript?.trim()).length
   const asrJobs = chunks.map(async (chunk) => {
     if (chunk.transcript?.trim()) {
       return {
@@ -216,13 +218,8 @@ export async function runAriaSessionPipeline(params: {
       }
     }
 
-    // Prefer in-memory fresh buffer over re-reading bytea
     let buffer: Buffer | null = null
-    if (
-      params.freshAudio &&
-      freshSeq != null &&
-      chunk.seq === freshSeq
-    ) {
+    if (params.freshAudio && freshSeq != null && chunk.seq === freshSeq) {
       buffer = params.freshAudio.buffer
     } else if (chunk.audioData && chunk.audioData.length > 0) {
       buffer = Buffer.from(chunk.audioData)
@@ -239,7 +236,6 @@ export async function runAriaSessionPipeline(params: {
       buffer,
     })
 
-    // Cache transcript on chunk for retries / progressive uploads
     await prisma.scribeAudioChunk.updateMany({
       where: { sessionId, seq: chunk.seq },
       data: { transcript: result.transcript || null },
@@ -248,7 +244,6 @@ export async function runAriaSessionPipeline(params: {
     return result
   })
 
-  // Also transcribe fresh audio if it isn't in chunks yet (shouldn't happen, but safe)
   const asrResults = await Promise.all(asrJobs)
   asrResults.sort((a, b) => a.seq - b.seq)
 
@@ -267,6 +262,7 @@ export async function runAriaSessionPipeline(params: {
 
   const asrMeta = asrResults.map((r) => ({ seq: r.seq, ...r.meta }))
   const asrDoneAt = Date.now()
+  const pendingAsr = chunks.length - cachedCount
 
   await prisma.scribeSession.update({
     where: { id: sessionId },
@@ -280,6 +276,8 @@ export async function runAriaSessionPipeline(params: {
         asr: asrMeta,
         timings: {
           asrMs: asrDoneAt - pipelineStarted,
+          cachedSegments: cachedCount,
+          pendingAsrSegments: Math.max(0, pendingAsr),
         },
       } as Prisma.InputJsonValue,
     },

@@ -16,11 +16,11 @@ import {
   getElapsedMs,
   pauseAmbientRecording,
   resumeAmbientRecording,
-  startAmbientRecording,
-  stopAmbientRecording,
+  startRollingAmbient,
+  stopRollingAmbient,
 } from '@/lib/ariaRecorder'
 import { activateKeepAwakeSafe, deactivateKeepAwakeSafe } from '@/lib/keepAwake'
-import { finalizeAriaSession } from '@/services/aria'
+import { finalizeAriaSession, uploadAriaChunk } from '@/services/aria'
 import { getApiErrorMessage } from '@/services/apiClient'
 import { colors, spacing, fontSize, fontWeight, radius } from '@/constants/theme'
 import type { AriaStackParamList } from '@/navigation/types'
@@ -42,8 +42,11 @@ export function AriaCaptureScreen() {
 
   const [phase, setPhase] = useState<'idle' | 'recording' | 'paused' | 'uploading' | 'processing'>('idle')
   const [elapsed, setElapsed] = useState(0)
+  const [segmentsSynced, setSegmentsSynced] = useState(0)
+  const [segmentsFailed, setSegmentsFailed] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const uploadChain = useRef(Promise.resolve())
 
   const { data } = useAriaSession(sessionId, {
     poll: phase === 'processing' || phase === 'uploading',
@@ -76,10 +79,30 @@ export function AriaCaptureScreen() {
     }
   }, [remoteStatus, navigation, sessionId])
 
+  const enqueueSegmentUpload = (uri: string, durationMs: number) => {
+    uploadChain.current = uploadChain.current
+      .then(async () => {
+        await uploadAriaChunk({
+          sessionId,
+          uri,
+          kind: 'ambient',
+          durationMs,
+        })
+        setSegmentsSynced((n) => n + 1)
+      })
+      .catch(() => {
+        setSegmentsFailed((n) => n + 1)
+      })
+  }
+
   const begin = async () => {
     try {
       setError(null)
-      await startAmbientRecording()
+      setSegmentsSynced(0)
+      setSegmentsFailed(0)
+      await startRollingAmbient((segment) => {
+        enqueueSegmentUpload(segment.uri, segment.durationMs)
+      })
       setPhase('recording')
       tickRef.current = setInterval(() => setElapsed(getElapsedMs()), 500)
     } catch (err) {
@@ -110,14 +133,18 @@ export function AriaCaptureScreen() {
     try {
       setPhase('uploading')
       if (tickRef.current) clearInterval(tickRef.current)
-      const { uri, durationMs } = await stopAmbientRecording()
+
+      const last = await stopRollingAmbient()
+
+      // Finish any in-flight segment uploads before finalizing the last slice
+      await uploadChain.current.catch(() => null)
+
       setPhase('processing')
-      // One round-trip: upload + parallel Whisper/context + SOAP
       const { session } = await finalizeAriaSession({
         sessionId,
-        uri,
+        uri: last.uri,
         kind: 'ambient',
-        durationMs,
+        durationMs: last.durationMs,
       })
       if (session.status === 'ready_for_review' || session.status === 'failed') {
         navigation.replace('AriaReview', { sessionId })
@@ -131,17 +158,19 @@ export function AriaCaptureScreen() {
 
   const statusLabel =
     phase === 'recording'
-      ? 'Aria is listening…'
+      ? segmentsSynced > 0
+        ? `Aria is listening… · ${segmentsSynced} segment${segmentsSynced === 1 ? '' : 's'} transcribed`
+        : 'Aria is listening…'
       : phase === 'paused'
         ? 'Paused'
         : phase === 'uploading'
-          ? 'Uploading audio…'
+          ? 'Uploading final audio…'
           : phase === 'processing'
             ? remoteStatus === 'transcribing'
-              ? 'Transcribing…'
+              ? 'Finishing transcription…'
               : remoteStatus === 'generating'
                 ? 'Aria drafting note…'
-                : 'Processing…'
+                : 'Drafting note…'
             : 'Ready'
 
   return (
@@ -153,6 +182,12 @@ export function AriaCaptureScreen() {
         <View style={[styles.orb, phase === 'recording' && styles.orbLive]} />
         <Text style={styles.timer}>{formatElapsed(elapsed)}</Text>
         <Text style={styles.status}>{statusLabel}</Text>
+        {(segmentsSynced > 0 || segmentsFailed > 0) && phase !== 'idle' ? (
+          <Text style={styles.syncMeta}>
+            Live ASR {segmentsSynced} ok
+            {segmentsFailed > 0 ? ` · ${segmentsFailed} retrying` : ''}
+          </Text>
+        ) : null}
       </View>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -229,6 +264,13 @@ const styles = StyleSheet.create({
   status: {
     fontSize: fontSize.base,
     color: colors.textSecondary,
+    textAlign: 'center',
+    paddingHorizontal: spacing.lg,
+  },
+  syncMeta: {
+    fontSize: fontSize.xs,
+    color: colors.accent,
+    fontWeight: fontWeight.medium,
   },
   error: {
     marginTop: spacing.lg,

@@ -89,6 +89,22 @@ export async function generateAriaSoapNote(params: {
   }
 }
 
+async function transcribeWithModel(params: {
+  openai: OpenAI
+  file: Awaited<ReturnType<typeof toFile>>
+  model: string
+}): Promise<string> {
+  const result = await params.openai.audio.transcriptions.create({
+    file: params.file,
+    model: params.model,
+  })
+  return result.text?.trim() ?? ''
+}
+
+/**
+ * Prefer gpt-4o-mini-transcribe (faster); fall back to whisper-1.
+ * Override with OPENAI_WHISPER_MODEL.
+ */
 export async function transcribeAriaAudio(params: {
   audio: Buffer
   mimeType: string
@@ -112,16 +128,32 @@ export async function transcribeAriaAudio(params: {
     type: params.mimeType || `audio/${ext}`,
   })
 
-  const result = await openai.audio.transcriptions.create({
-    file,
-    model: process.env.OPENAI_WHISPER_MODEL || 'whisper-1',
-  })
+  const preferred = process.env.OPENAI_WHISPER_MODEL || 'gpt-4o-mini-transcribe'
+  const fallback = 'whisper-1'
+
+  let modelUsed = preferred
+  let transcript = ''
+  try {
+    transcript = await transcribeWithModel({ openai, file, model: preferred })
+  } catch (err) {
+    if (preferred !== fallback) {
+      console.warn(`[aria] ASR model ${preferred} failed; falling back to ${fallback}`, err)
+      modelUsed = fallback
+      // toFile streams may be consumed; rebuild file for retry
+      const retryFile = await toFile(params.audio, params.filename ?? `aria.${ext}`, {
+        type: params.mimeType || `audio/${ext}`,
+      })
+      transcript = await transcribeWithModel({ openai, file: retryFile, model: fallback })
+    } else {
+      throw err
+    }
+  }
 
   return {
-    transcript: result.text?.trim() ?? '',
+    transcript,
     meta: {
       agent: 'aria',
-      asrModel: process.env.OPENAI_WHISPER_MODEL || 'whisper-1',
+      asrModel: modelUsed,
       latencyMs: Date.now() - started,
     },
   }
