@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
 import { ariaDisabledResponse, isAriaScribeEnabled } from '@/lib/aria/enabled'
-import { ARIA_STREAM_TRANSCRIPT_MIN_CHARS } from '@/lib/aria/deepgram'
 import { runAriaSessionPipeline } from '@/lib/aria/process'
 import { serializeScribeSession } from '@/lib/aria/serialize'
 
@@ -16,8 +15,7 @@ const MAX_BYTES = 25 * 1024 * 1024
 
 /**
  * POST /api/mobile/scribe/sessions/:id/finalize
- * Accept optional final audio + run ASR/context + SOAP.
- * When a Deepgram stream transcript is already persisted, audio may be omitted.
+ * Single fast path: accept audio + run parallel ASR/context + SOAP in one request.
  */
 export async function POST(req: NextRequest, context: RouteContext) {
   try {
@@ -32,7 +30,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
     const { id } = await context.params
     const existing = await prisma.scribeSession.findFirst({
       where: { id, practiceId: user.practiceId },
-      select: { id: true, status: true, transcript: true },
+      select: { id: true, status: true },
     })
     if (!existing) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
@@ -41,59 +39,24 @@ export async function POST(req: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Session is closed' }, { status: 400 })
     }
 
-    const contentType = req.headers.get('content-type') || ''
-    let kind: 'ambient' | 'dictation' = 'ambient'
-    let durationMs: number | null = null
-    let freshAudio:
-      | {
-          buffer: Buffer
-          mimeType: string
-          kind: 'ambient' | 'dictation'
-          durationMs: number | null
-        }
-      | undefined
+    const form = await req.formData()
+    const file = form.get('file')
+    const kindRaw = String(form.get('kind') ?? 'ambient')
+    const kind = kindRaw === 'dictation' ? 'dictation' : 'ambient'
+    const durationMsRaw = form.get('durationMs')
+    const durationMs =
+      durationMsRaw != null && String(durationMsRaw).length
+        ? parseInt(String(durationMsRaw), 10)
+        : null
 
-    if (contentType.includes('multipart/form-data')) {
-      const form = await req.formData()
-      const file = form.get('file')
-      const kindRaw = String(form.get('kind') ?? 'ambient')
-      kind = kindRaw === 'dictation' ? 'dictation' : 'ambient'
-      const durationMsRaw = form.get('durationMs')
-      durationMs =
-        durationMsRaw != null && String(durationMsRaw).length
-          ? parseInt(String(durationMsRaw), 10)
-          : null
-
-      if (file instanceof File) {
-        if (file.size > MAX_BYTES) {
-          return NextResponse.json({ error: 'Audio file too large (max 25MB)' }, { status: 400 })
-        }
-        freshAudio = {
-          buffer: Buffer.from(await file.arrayBuffer()),
-          mimeType: file.type || 'audio/m4a',
-          kind,
-          durationMs: Number.isFinite(durationMs) ? durationMs : null,
-        }
-      }
-    } else if (contentType.includes('application/json')) {
-      const body = (await req.json().catch(() => null)) as {
-        kind?: string
-        durationMs?: number
-      } | null
-      if (body?.kind === 'dictation') kind = 'dictation'
-      if (typeof body?.durationMs === 'number' && Number.isFinite(body.durationMs)) {
-        durationMs = body.durationMs
-      }
+    if (!(file instanceof File)) {
+      return NextResponse.json({ error: 'file is required' }, { status: 400 })
+    }
+    if (file.size > MAX_BYTES) {
+      return NextResponse.json({ error: 'Audio file too large (max 25MB)' }, { status: 400 })
     }
 
-    const hasStream =
-      (existing.transcript || '').trim().length >= ARIA_STREAM_TRANSCRIPT_MIN_CHARS
-    if (!freshAudio && !hasStream) {
-      return NextResponse.json(
-        { error: 'file is required when no live transcript is available' },
-        { status: 400 }
-      )
-    }
+    const buffer = Buffer.from(await file.arrayBuffer())
 
     await prisma.scribeSession.update({
       where: { id },
@@ -110,7 +73,12 @@ export async function POST(req: NextRequest, context: RouteContext) {
         sessionId: id,
         practiceId: user.practiceId,
         notify: true,
-        freshAudio,
+        freshAudio: {
+          buffer,
+          mimeType: file.type || 'audio/m4a',
+          kind,
+          durationMs: Number.isFinite(durationMs) ? durationMs : null,
+        },
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Processing failed'
@@ -138,7 +106,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
 
     return NextResponse.json({
       session: session ? serializeScribeSession(session) : null,
-      processing: hasStream && !freshAudio ? 'stream_finalize' : 'fast_finalize',
+      processing: 'fast_finalize',
     })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal server error'

@@ -64,12 +64,6 @@
           "microphonePermission": "Aria needs microphone access to record visit audio for draft clinical notes."
         }
       ],
-      [
-        "react-native-deepgram",
-        {
-          "microphonePermission": "Aria needs microphone access to record visit audio for draft clinical notes."
-        }
-      ],
       "expo-updates"
     ],
     "extra": {
