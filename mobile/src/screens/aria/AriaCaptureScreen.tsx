@@ -8,7 +8,6 @@ import {
   Alert,
   AppState,
 } from 'react-native'
-import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
 import { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useAriaSession } from '@/hooks/useAria'
@@ -20,6 +19,7 @@ import {
   startAmbientRecording,
   stopAmbientRecording,
 } from '@/lib/ariaRecorder'
+import { activateKeepAwakeSafe, deactivateKeepAwakeSafe } from '@/lib/keepAwake'
 import { stopAriaSession, uploadAriaChunk } from '@/services/aria'
 import { getApiErrorMessage } from '@/services/apiClient'
 import { colors, spacing, fontSize, fontWeight, radius } from '@/constants/theme'
@@ -51,10 +51,10 @@ export function AriaCaptureScreen() {
   const remoteStatus = data?.session.status
 
   useEffect(() => {
-    void activateKeepAwakeAsync('aria-capture')
+    void activateKeepAwakeSafe('aria-capture')
     void begin()
     return () => {
-      deactivateKeepAwake('aria-capture')
+      deactivateKeepAwakeSafe('aria-capture')
       if (tickRef.current) clearInterval(tickRef.current)
       void discardActiveRecording()
     }
