@@ -3,6 +3,7 @@ import {
   listPracticesWithActiveSlotFillRules,
   runSlotFillRulesForPractice,
 } from '@/lib/appointment-optimization/runSlotFillRules'
+import { reconcileStaleOpenSlotsForPractice } from '@/lib/appointment-optimization/reconcileOpenSlots'
 
 const SCHEDULE_CRON = '0 6 * * *'
 const CHICAGO_TIMEZONE = 'America/Chicago'
@@ -22,7 +23,9 @@ export const slotFillRulesEvalDaily = inngest.createFunction(
     const summaries = []
     for (const practiceId of practiceIds) {
       const summary = await step.run(`evaluate-${practiceId}`, async () => {
-        return runSlotFillRulesForPractice(practiceId)
+        const reconciled = await reconcileStaleOpenSlotsForPractice(practiceId)
+        const evaluated = await runSlotFillRulesForPractice(practiceId)
+        return { ...evaluated, reconciled }
       })
       summaries.push(summary)
     }

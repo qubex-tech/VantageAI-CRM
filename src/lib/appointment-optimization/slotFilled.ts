@@ -59,7 +59,10 @@ export async function isSlotOpenForReplies(openSlotEventId: string): Promise<boo
 }
 
 /**
- * Align slot status with reality: filled when occupied, exhausted only after slot time passes unfilled.
+ * Align slot status with reality:
+ * - occupied → filled
+ * - past and unfilled → exhausted (never reopen into Active)
+ * - future filled/exhausted that is free again → open
  */
 export async function syncOpenSlotLifecycle(openSlotEventId: string): Promise<void> {
   const slot = await prisma.openSlotEvent.findUnique({
@@ -67,18 +70,21 @@ export async function syncOpenSlotLifecycle(openSlotEventId: string): Promise<vo
   })
   if (!slot) return
 
-  if (await isOpenSlotFilled(openSlotEventId)) {
+  const occupied = await isOpenSlotFilled(openSlotEventId)
+  const isPast = slot.slotStart <= new Date()
+
+  if (occupied) {
     if (slot.status !== OPEN_SLOT_STATUS.FILLED) {
       await markOpenSlotFilled(openSlotEventId)
     }
     return
   }
 
-  if (
-    slot.slotStart <= new Date() &&
-    (slot.status === OPEN_SLOT_STATUS.OPEN || slot.status === OPEN_SLOT_STATUS.EXHAUSTED)
-  ) {
-    await markOpenSlotExhausted(openSlotEventId)
+  // Past unfilled slots stay out of Active — including former filled that later cancelled.
+  if (isPast) {
+    if (slot.status !== OPEN_SLOT_STATUS.EXHAUSTED) {
+      await markOpenSlotExhausted(openSlotEventId)
+    }
     return
   }
 

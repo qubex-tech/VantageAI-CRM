@@ -3,13 +3,12 @@ import { requireAuth } from '@/lib/middleware'
 import { prisma } from '@/lib/db'
 import {
   isOpenSlotFilled,
-  markOpenSlotFilled,
+  syncOpenSlotLifecycle,
 } from '@/lib/appointment-optimization/slotFilled'
-import { OPEN_SLOT_STATUS } from '@/lib/appointment-optimization/types'
 
 /**
  * GET /api/appointment-optimization/slots/[id]/status
- * Re-check whether the slot has been filled (portal-driven booking).
+ * Re-check occupancy + past-time exhaustion (Active → filled/exhausted).
  */
 export async function GET(
   req: NextRequest,
@@ -24,24 +23,14 @@ export async function GET(
 
     const slot = await prisma.openSlotEvent.findFirst({
       where: { id, practiceId: user.practiceId },
+      select: { id: true },
     })
     if (!slot) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
 
+    await syncOpenSlotLifecycle(id)
     const occupied = await isOpenSlotFilled(id)
-    if (occupied && slot.status === OPEN_SLOT_STATUS.OPEN) {
-      await markOpenSlotFilled(id)
-    } else if (
-      !occupied &&
-      (slot.status === OPEN_SLOT_STATUS.FILLED ||
-        slot.status === OPEN_SLOT_STATUS.EXHAUSTED)
-    ) {
-      await prisma.openSlotEvent.update({
-        where: { id },
-        data: { status: OPEN_SLOT_STATUS.OPEN, filledAt: null },
-      })
-    }
 
     const updated = await prisma.openSlotEvent.findUnique({
       where: { id },
@@ -54,6 +43,7 @@ export async function GET(
     return NextResponse.json({
       openSlotEventId: id,
       filled: occupied,
+      status: updated?.status,
       slot: updated,
     })
   } catch (error) {
