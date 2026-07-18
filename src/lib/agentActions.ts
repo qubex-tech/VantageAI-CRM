@@ -12,15 +12,19 @@ import { cancelAppointmentInCal } from '@/lib/integrations/cal/appointmentWriteb
 import { createAuditLog, createTimelineEntry } from './audit'
 import { redactPHI } from './phi'
 import { getSchedulingSettings } from '@/lib/integrations/clinical-system/server'
-import {
-  resolveReadLengthMinutes,
-  resolveReadOperatoryNums,
-  resolveReadProvNum,
-  resolveBookOperatoryNum,
-} from '@/lib/integrations/clinical-system/types'
 import type { SchedulingSettings } from '@/lib/integrations/clinical-system/types'
 import {
   canBookAppointments,
+  resolveBookConfigForVisitType,
+  resolveBookOperatoryNum,
+  resolveOdBookConfigs,
+  resolveOdReadConfigs,
+  resolveReadConfigsForVisitType,
+  resolveReadLengthMinutes,
+  resolveReadOperatoryNums,
+  resolveReadProvNum,
+  resolveVisitTypeFromNaturalLanguage,
+  resolveWriteOperatoryForBooking,
   usesOpenDentalForRead,
   usesOpenDentalForWrite,
   usesEcwForRead,
@@ -29,7 +33,7 @@ import {
 import { getPracticeTimeZone } from '@/lib/practice-timezone'
 import { formatInstantForVoiceLocal } from '@/lib/appointments/voice-context'
 import {
-  getOpenDentalOpenSlotsForOperatories,
+  getOpenDentalOpenSlotsForReadConfigs,
   bookOpenDentalAppointment,
 } from '@/lib/integrations/opendental/scheduling'
 import { getEcwScheduleFromSettings } from '@/lib/integrations/ehr/scheduling'
@@ -151,6 +155,12 @@ export interface AvailableSlot {
   time_local: string
   /** IANA timezone used for time_local (from Hours of Operation → Brand → default). */
   timezone: string
+  /** Open Dental provider for this slot (when availability is read from OD). */
+  provNum?: number
+  /** Open Dental operatory for this slot (pass back to book_appointment when present). */
+  opNum?: number
+  /** Canonical EHR visit type used to fetch this slot (when resolved from NL / config). */
+  visitType?: string
 }
 
 export interface BookAppointmentResult {
@@ -397,7 +407,13 @@ export async function lookupPatientForScheduling(
 }
 
 function withVoiceLocalTimes(
-  slots: Array<{ time: string; attendeeCount: number }>,
+  slots: Array<{
+    time: string
+    attendeeCount: number
+    provNum?: number
+    opNum?: number
+    visitType?: string
+  }>,
   practiceTimeZone: string
 ): AvailableSlot[] {
   return slots.map((slot) => {
@@ -410,20 +426,40 @@ function withVoiceLocalTimes(
       attendeeCount: slot.attendeeCount,
       time_local: local.time_local,
       timezone: local.timezone,
+      provNum: slot.provNum,
+      opNum: slot.opNum,
+      visitType: slot.visitType,
     }
   })
+}
+
+function resolveOdVisitTypeFromAgentInput(
+  scheduling: SchedulingSettings,
+  appointmentType?: string | null,
+  eventTypeId?: string | null
+): string | null {
+  const candidates = [appointmentType, eventTypeId].filter(
+    (value): value is string => typeof value === 'string' && value.trim().length > 0
+  )
+  for (const candidate of candidates) {
+    const resolved = resolveVisitTypeFromNaturalLanguage(scheduling, candidate)
+    if (resolved) return resolved
+  }
+  return null
 }
 
 /**
  * Get available appointment slots.
  * Each slot includes UTC `time` (for booking) and practice-local `time_local` (for speaking).
+ * For Open Dental practices, pass `appointmentType` as natural language or an EHR visit type.
  */
 export async function getAvailableSlots(
   practiceId: string,
   eventTypeId: string,
   dateFrom: string,
   dateTo: string,
-  timezone: string = 'America/New_York'
+  timezone: string = 'America/New_York',
+  appointmentType?: string
 ): Promise<AvailableSlot[]> {
   const practiceTimeZone = await getPracticeTimeZone(practiceId)
 
@@ -431,22 +467,48 @@ export async function getAvailableSlots(
   const scheduling = await getSchedulingSettings(practiceId)
   if (usesOpenDentalForRead(scheduling)) {
     try {
-      const slots = await getOpenDentalOpenSlotsForOperatories({
+      const visitType = resolveOdVisitTypeFromAgentInput(scheduling, appointmentType, eventTypeId)
+      const readConfigs = resolveReadConfigsForVisitType(scheduling, visitType)
+      const configs =
+        readConfigs.length > 0
+          ? readConfigs
+          : resolveOdReadConfigs(scheduling).length > 0
+            ? resolveOdReadConfigs(scheduling)
+            : [
+                {
+                  provNum: resolveReadProvNum(scheduling) ?? 0,
+                  operatoryNums: resolveReadOperatoryNums(scheduling),
+                  lengthMinutes: resolveReadLengthMinutes(scheduling) ?? 30,
+                },
+              ].filter((c) => c.provNum > 0 && c.operatoryNums.length > 0)
+
+      if (configs.length === 0) {
+        throw new Error(
+          'Open Dental availability is enabled but no reading time-slot providers/operatories are configured.'
+        )
+      }
+
+      const slots = await getOpenDentalOpenSlotsForReadConfigs({
         practiceId,
-        provNum: resolveReadProvNum(scheduling),
-        opNums: resolveReadOperatoryNums(scheduling),
+        configs,
         dateStart: toDateOnly(dateFrom),
         dateEnd: toDateOnly(dateTo),
-        lengthMinutes: resolveReadLengthMinutes(scheduling),
       })
       return withVoiceLocalTimes(
         slots
           .filter((s) => s.startUtc)
-          .map((s) => ({ time: s.startUtc as string, attendeeCount: 0 })),
+          .map((s) => ({
+            time: s.startUtc as string,
+            attendeeCount: 0,
+            provNum: s.provNum,
+            opNum: s.opNum,
+            visitType: visitType ?? undefined,
+          })),
         practiceTimeZone
       )
     } catch (error) {
       console.error('Error fetching Open Dental slots:', error)
+      if (error instanceof Error && error.message.includes('configured')) throw error
       throw new Error('Failed to fetch available appointment slots')
     }
   }
@@ -509,14 +571,51 @@ async function bookAppointmentViaOpenDental(params: {
   reason?: string
   paymentType?: string
   scheduling: SchedulingSettings
+  appointmentType?: string | null
+  eventTypeId?: string | null
+  preferredOpNum?: number | null
 }): Promise<BookAppointmentResult> {
-  const { practiceId, patientId, startTime, reason, paymentType, scheduling } = params
+  const {
+    practiceId,
+    patientId,
+    startTime,
+    reason,
+    paymentType,
+    scheduling,
+    appointmentType,
+    eventTypeId,
+    preferredOpNum,
+  } = params
 
-  const opNum = resolveBookOperatoryNum(scheduling)
+  const visitType = resolveOdVisitTypeFromAgentInput(scheduling, appointmentType, eventTypeId)
+  const bookConfig = visitType
+    ? resolveBookConfigForVisitType(scheduling, visitType)
+    : null
+
+  const provNum = bookConfig?.provNum ?? scheduling.defaultProvNum ?? null
+  const lengthMinutes = bookConfig?.lengthMinutes ?? scheduling.defaultLengthMinutes ?? null
+  const opNum = bookConfig
+    ? resolveWriteOperatoryForBooking(bookConfig, preferredOpNum)
+    : resolveBookOperatoryNum(scheduling)
+
   if (!opNum) {
     throw new Error(
-      'Open Dental scheduling is enabled but no default operatory is configured. Set a default operatory in Scheduling settings.'
+      'Open Dental scheduling is enabled but no booking operatory is configured. Set booking time slots in Scheduling settings.'
     )
+  }
+
+  // Only enforce NL/visit-type routing when multi-provider booking rows are configured.
+  if (resolveOdBookConfigs(scheduling).length > 0) {
+    if (!visitType) {
+      throw new Error(
+        'Could not map the requested appointment type to an EHR visit type. Ask the patient to clarify the visit type.'
+      )
+    }
+    if (!bookConfig) {
+      throw new Error(
+        `Visit type "${visitType}" is not assigned to any booking time-slot configuration.`
+      )
+    }
   }
 
   const startInstant = new Date(startTime)
@@ -548,11 +647,12 @@ async function bookAppointmentViaOpenDental(params: {
   const result = await bookOpenDentalAppointment({
     practiceId,
     patientId,
-    provNum: scheduling.defaultProvNum ?? null,
+    provNum,
     opNum,
     dateTimeStart,
-    lengthMinutes: scheduling.defaultLengthMinutes ?? null,
+    lengthMinutes,
     note,
+    visitType: visitType ?? undefined,
     isNewPatient,
   })
 
@@ -572,7 +672,9 @@ export async function bookAppointment(
   startTime: string, // ISO string
   timezone: string = 'America/New_York',
   reason?: string,
-  paymentType?: string
+  paymentType?: string,
+  appointmentType?: string,
+  preferredOpNum?: number | null
 ): Promise<BookAppointmentResult> {
   // Get patient
   const patient = await prisma.patient.findFirst({
@@ -621,6 +723,9 @@ export async function bookAppointment(
       reason,
       paymentType,
       scheduling,
+      appointmentType,
+      eventTypeId,
+      preferredOpNum,
     })
   }
 

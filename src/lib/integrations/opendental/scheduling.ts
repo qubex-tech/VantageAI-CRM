@@ -210,6 +210,36 @@ export async function listOpenDentalOperatories(practiceId: string): Promise<Ope
     .filter((o): o is OpenDentalOperatory => o !== null)
 }
 
+export type OpenDentalAppointmentType = {
+  appointmentTypeNum: number
+  name: string
+  isHidden: boolean
+}
+
+export async function listOpenDentalAppointmentTypes(
+  practiceId: string
+): Promise<OpenDentalAppointmentType[]> {
+  const services = await getOpenDentalServices(practiceId)
+  const raw = (await services.appointmentTypes.list()) as Array<Record<string, unknown>>
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((row) => {
+      const appointmentTypeNum = num(row.AppointmentTypeNum)
+      if (!appointmentTypeNum) return null
+      const name =
+        str(row.AppointmentTypeName) ??
+        str(row.Name) ??
+        str(row.AppointmentType) ??
+        `Type ${appointmentTypeNum}`
+      return {
+        appointmentTypeNum,
+        name,
+        isHidden: isHidden(row.IsHidden),
+      }
+    })
+    .filter((row): row is OpenDentalAppointmentType => row !== null)
+}
+
 type NaiveParts = { y: number; mo: number; d: number; h: number; mi: number; s: number }
 
 function parseNaive(value: unknown): NaiveParts | null {
@@ -335,8 +365,9 @@ export async function getOpenDentalOpenSlots(params: {
 
 /**
  * Fetch open slots across multiple operatories.
- * When more than one operatory is configured, only times open on **every** operatory
- * are returned (intersection). Single-operatory reads return that operatory's slots.
+ * Returns the **union** of free starts across configured operatories. When the same
+ * start is free on multiple chairs, the earliest configured operatory is kept so the
+ * slot's `opNum` can be preferred at booking time.
  */
 export async function getOpenDentalOpenSlotsForOperatories(params: {
   practiceId: string
@@ -362,30 +393,52 @@ export async function getOpenDentalOpenSlotsForOperatories(params: {
     slotsByOp.push(await getOpenDentalOpenSlots({ ...rest, opNum }))
   }
 
-  const startsPerOp = slotsByOp.map((slots) => new Set(slots.map((s) => s.start)))
-  const sharedStarts = [...startsPerOp[0]].filter((start) =>
-    startsPerOp.every((set) => set.has(start))
-  )
-
-  const slotByStartAndOp = new Map<string, OpenDentalOpenSlot>()
-  for (const slots of slotsByOp) {
-    for (const slot of slots) {
-      slotByStartAndOp.set(`${slot.start}|${slot.opNum}`, slot)
+  const pickedByStart = new Map<string, OpenDentalOpenSlot>()
+  for (let i = 0; i < uniqueOps.length; i++) {
+    for (const slot of slotsByOp[i]) {
+      if (!pickedByStart.has(slot.start)) {
+        pickedByStart.set(slot.start, slot)
+      }
     }
   }
 
-  const merged: OpenDentalOpenSlot[] = []
-  for (const start of sharedStarts) {
-    // Prefer later operatories in config (typically the booking operatory).
-    let picked: OpenDentalOpenSlot | undefined
-    for (let i = uniqueOps.length - 1; i >= 0; i--) {
-      picked = slotByStartAndOp.get(`${start}|${uniqueOps[i]}`)
-      if (picked) break
-    }
-    if (picked) merged.push(picked)
-  }
-
+  const merged = [...pickedByStart.values()]
   merged.sort((a, b) => a.start.localeCompare(b.start))
+  return merged
+}
+
+/**
+ * Fetch open slots for multiple provider/operatory/length configs and merge (union by start+prov).
+ */
+export async function getOpenDentalOpenSlotsForReadConfigs(params: {
+  practiceId: string
+  configs: Array<{ provNum: number; operatoryNums: number[]; lengthMinutes: number }>
+  dateStart: string
+  dateEnd?: string
+}): Promise<OpenDentalOpenSlot[]> {
+  const { practiceId, configs, dateStart, dateEnd } = params
+  if (configs.length === 0) return []
+
+  const all: OpenDentalOpenSlot[] = []
+  for (const config of configs) {
+    const slots = await getOpenDentalOpenSlotsForOperatories({
+      practiceId,
+      provNum: config.provNum,
+      opNums: config.operatoryNums,
+      dateStart,
+      dateEnd,
+      lengthMinutes: config.lengthMinutes,
+    })
+    all.push(...slots)
+  }
+
+  const byKey = new Map<string, OpenDentalOpenSlot>()
+  for (const slot of all) {
+    const key = `${slot.start}|${slot.provNum}|${slot.opNum}`
+    if (!byKey.has(key)) byKey.set(key, slot)
+  }
+  const merged = [...byKey.values()]
+  merged.sort((a, b) => a.start.localeCompare(b.start) || a.provNum - b.provNum)
   return merged
 }
 

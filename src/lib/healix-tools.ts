@@ -1533,7 +1533,8 @@ export async function getAppointmentSlots(
         '',
         params.dateFrom,
         params.dateTo,
-        timezone
+        timezone,
+        params.visitTypeName
       )
       return {
         success: true,
@@ -1664,7 +1665,9 @@ export async function bookAppointment(
       eventTypeId,
       params.startTime,
       timezone,
-      params.reason
+      params.reason,
+      undefined,
+      params.visitTypeName
     )
 
     await createAuditLog({

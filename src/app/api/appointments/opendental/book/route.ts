@@ -5,8 +5,14 @@ import { requireAuth } from '@/lib/middleware'
 import { createAuditLog } from '@/lib/audit'
 import { emitEvent } from '@/lib/outbox'
 import { getSchedulingSettings } from '@/lib/integrations/clinical-system/server'
-import { usesOpenDentalForWrite } from '@/lib/integrations/clinical-system/types'
-import { resolveBookOperatoryNum, resolveBookOperatoryNums } from '@/lib/integrations/clinical-system/types'
+import {
+  resolveBookConfigForVisitType,
+  resolveBookOperatoryNum,
+  resolveBookOperatoryNums,
+  resolveVisitTypeFromNaturalLanguage,
+  resolveWriteOperatoryForBooking,
+  usesOpenDentalForWrite,
+} from '@/lib/integrations/clinical-system/types'
 import {
   bookOpenDentalAppointment,
   DEFAULT_SLOT_LENGTH_MINUTES,
@@ -47,19 +53,30 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const bookOperatoryNums = resolveBookOperatoryNums(scheduling)
+    const resolvedVisitType = input.visitType
+      ? resolveVisitTypeFromNaturalLanguage(scheduling, input.visitType) || input.visitType.trim()
+      : null
+    const bookConfig = resolvedVisitType
+      ? resolveBookConfigForVisitType(scheduling, resolvedVisitType)
+      : null
+
+    const bookOperatoryNums = bookConfig?.operatoryNums ?? resolveBookOperatoryNums(scheduling)
     const requestedOpNum = input.opNum ?? undefined
-    const opNum =
-      requestedOpNum && bookOperatoryNums.includes(requestedOpNum)
+    const opNum = bookConfig
+      ? resolveWriteOperatoryForBooking(bookConfig, requestedOpNum) ?? undefined
+      : requestedOpNum && bookOperatoryNums.includes(requestedOpNum)
         ? requestedOpNum
         : resolveBookOperatoryNum(scheduling) ?? undefined
-    const provNum = input.provNum || scheduling.defaultProvNum || undefined
+    const provNum = input.provNum || bookConfig?.provNum || scheduling.defaultProvNum || undefined
     const lengthMinutes =
-      input.lengthMinutes || scheduling.defaultLengthMinutes || DEFAULT_SLOT_LENGTH_MINUTES
+      input.lengthMinutes ||
+      bookConfig?.lengthMinutes ||
+      scheduling.defaultLengthMinutes ||
+      DEFAULT_SLOT_LENGTH_MINUTES
 
     if (!opNum) {
       return NextResponse.json(
-        { error: 'No operatory selected and no default operatory configured for this practice.' },
+        { error: 'No operatory selected and no booking operatory configured for this practice.' },
         { status: 400 }
       )
     }
@@ -84,7 +101,7 @@ export async function POST(req: NextRequest) {
       dateTimeStart: input.dateTimeStart.replace('T', ' '),
       lengthMinutes,
       note: input.note ?? undefined,
-      visitType: input.visitType ?? undefined,
+      visitType: resolvedVisitType ?? input.visitType ?? undefined,
       isNewPatient,
       actorUserId: user.id,
     })

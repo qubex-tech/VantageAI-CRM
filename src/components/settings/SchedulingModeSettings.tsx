@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -10,8 +11,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Loader2, CalendarClock, X } from 'lucide-react'
-import type { SchedulingSource } from '@/lib/integrations/clinical-system/types'
+import { Loader2, CalendarClock, X, Plus } from 'lucide-react'
+import type {
+  OdBookSlotConfig,
+  OdReadSlotConfig,
+  SchedulingSource,
+  VisitTypeMapping,
+} from '@/lib/integrations/clinical-system/types'
+import { mirrorOdConfigsToLegacyDefaults } from '@/lib/integrations/clinical-system/types'
 
 interface SchedulingModeSettingsProps {
   practiceId: string
@@ -43,6 +50,14 @@ const ADD_PRACTITIONER = 'add-practitioner'
 
 function practitionerLabel(practitioners: EcwPractitionerOption[], reference: string): string {
   return practitioners.find((p) => p.reference === reference)?.name ?? reference
+}
+
+function operatoryLabel(operatories: OperatoryOption[], operatoryNum: number): string {
+  return operatories.find((o) => o.operatoryNum === operatoryNum)?.name ?? `OP-${operatoryNum}`
+}
+
+function providerLabel(providers: ProviderOption[], provNum: number): string {
+  return providers.find((p) => p.provNum === provNum)?.name ?? `Provider ${provNum}`
 }
 
 function EcwPractitionerFilterEditor({
@@ -117,48 +132,23 @@ function EcwPractitionerFilterEditor({
   )
 }
 
-function operatoryLabel(operatories: OperatoryOption[], operatoryNum: number): string {
-  return operatories.find((o) => o.operatoryNum === operatoryNum)?.name ?? `OP-${operatoryNum}`
-}
-
-function AdditionalOperatoriesEditor({
-  label,
-  description,
-  primaryOperatoryNum,
-  additionalOperatoryNums,
+function MultiOperatoryPicker({
+  selected,
   operatories,
-  onChangeAdditional,
+  onChange,
 }: {
-  label: string
-  description: string
-  primaryOperatoryNum: string
-  additionalOperatoryNums: number[]
+  selected: number[]
   operatories: OperatoryOption[]
-  onChangeAdditional: (nums: number[]) => void
+  onChange: (nums: number[]) => void
 }) {
-  const primaryNum = primaryOperatoryNum !== NONE ? Number(primaryOperatoryNum) : null
-  const reserved = new Set<number>([
-    ...(primaryNum && Number.isFinite(primaryNum) ? [primaryNum] : []),
-    ...additionalOperatoryNums,
-  ])
+  const reserved = new Set(selected)
   const available = operatories.filter((o) => !reserved.has(o.operatoryNum))
 
-  const handleAdd = (value: string) => {
-    if (value === ADD_OPERATORY) return
-    const num = Number(value)
-    if (!Number.isInteger(num) || num <= 0 || reserved.has(num)) return
-    onChangeAdditional([...additionalOperatoryNums, num])
-  }
-
   return (
-    <div className="space-y-2 sm:col-span-3">
-      <div>
-        <p className="text-sm font-medium text-gray-700">{label}</p>
-        <p className="text-xs text-gray-500 mt-0.5">{description}</p>
-      </div>
-      {additionalOperatoryNums.length > 0 ? (
+    <div className="space-y-2">
+      {selected.length > 0 ? (
         <ul className="flex flex-wrap gap-2">
-          {additionalOperatoryNums.map((num) => (
+          {selected.map((num) => (
             <li
               key={num}
               className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-sm text-gray-800"
@@ -166,9 +156,7 @@ function AdditionalOperatoriesEditor({
               {operatoryLabel(operatories, num)}
               <button
                 type="button"
-                onClick={() =>
-                  onChangeAdditional(additionalOperatoryNums.filter((n) => n !== num))
-                }
+                onClick={() => onChange(selected.filter((n) => n !== num))}
                 className="rounded p-0.5 text-gray-400 hover:text-gray-700"
                 aria-label={`Remove ${operatoryLabel(operatories, num)}`}
               >
@@ -178,12 +166,20 @@ function AdditionalOperatoriesEditor({
           ))}
         </ul>
       ) : (
-        <p className="text-xs text-gray-500">No additional operatories configured.</p>
+        <p className="text-xs text-gray-500">No operatories selected.</p>
       )}
       {available.length > 0 && (
-        <Select value={ADD_OPERATORY} onValueChange={handleAdd}>
-          <SelectTrigger className="max-w-xs">
-            <SelectValue placeholder="Add operatory" />
+        <Select
+          value={ADD_OPERATORY}
+          onValueChange={(value) => {
+            if (value === ADD_OPERATORY) return
+            const num = Number(value)
+            if (!Number.isInteger(num) || num <= 0 || reserved.has(num)) return
+            onChange([...selected, num])
+          }}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Add operatory…" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={ADD_OPERATORY} disabled>
@@ -201,6 +197,184 @@ function AdditionalOperatoriesEditor({
   )
 }
 
+function SearchableVisitTypePicker({
+  selected,
+  allVisitTypes,
+  reservedByOthers,
+  onChange,
+}: {
+  selected: VisitTypeMapping[]
+  allVisitTypes: string[]
+  reservedByOthers: Set<string>
+  onChange: (next: VisitTypeMapping[]) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [aliasDrafts, setAliasDrafts] = useState<Record<string, string>>({})
+
+  const selectedKeys = useMemo(
+    () => new Set(selected.map((s) => s.visitType.trim().toLowerCase())),
+    [selected]
+  )
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return allVisitTypes
+      .filter((vt) => {
+        const key = vt.trim().toLowerCase()
+        if (selectedKeys.has(key) || reservedByOthers.has(key)) return false
+        if (!q) return true
+        return vt.toLowerCase().includes(q)
+      })
+      .slice(0, 12)
+  }, [allVisitTypes, query, reservedByOthers, selectedKeys])
+
+  const addVisitType = (visitType: string) => {
+    if (!visitType.trim()) return
+    const key = visitType.trim().toLowerCase()
+    if (selectedKeys.has(key) || reservedByOthers.has(key)) return
+    onChange([...selected, { visitType: visitType.trim(), aliases: [] }])
+    setQuery('')
+  }
+
+  const removeVisitType = (visitType: string) => {
+    onChange(selected.filter((s) => s.visitType !== visitType))
+  }
+
+  const addAlias = (visitType: string) => {
+    const draft = (aliasDrafts[visitType] || '').trim()
+    if (!draft) return
+    onChange(
+      selected.map((s) =>
+        s.visitType === visitType &&
+        !s.aliases.some((a) => a.trim().toLowerCase() === draft.toLowerCase())
+          ? { ...s, aliases: [...s.aliases, draft] }
+          : s
+      )
+    )
+    setAliasDrafts((prev) => ({ ...prev, [visitType]: '' }))
+  }
+
+  const removeAlias = (visitType: string, alias: string) => {
+    onChange(
+      selected.map((s) =>
+        s.visitType === visitType
+          ? { ...s, aliases: s.aliases.filter((a) => a !== alias) }
+          : s
+      )
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {selected.length > 0 && (
+        <ul className="space-y-3">
+          {selected.map((mapping) => (
+            <li
+              key={mapping.visitType}
+              className="rounded-md border border-gray-200 bg-white p-3 space-y-2"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm font-medium text-gray-900">{mapping.visitType}</p>
+                <button
+                  type="button"
+                  onClick={() => removeVisitType(mapping.visitType)}
+                  className="rounded p-0.5 text-gray-400 hover:text-gray-700"
+                  aria-label={`Remove ${mapping.visitType}`}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              {mapping.aliases.length > 0 && (
+                <ul className="flex flex-wrap gap-1.5">
+                  {mapping.aliases.map((alias) => (
+                    <li
+                      key={alias}
+                      className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs text-gray-700"
+                    >
+                      {alias}
+                      <button
+                        type="button"
+                        onClick={() => removeAlias(mapping.visitType, alias)}
+                        className="text-gray-400 hover:text-gray-700"
+                        aria-label={`Remove alias ${alias}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="flex gap-2">
+                <Input
+                  value={aliasDrafts[mapping.visitType] || ''}
+                  onChange={(e) =>
+                    setAliasDrafts((prev) => ({ ...prev, [mapping.visitType]: e.target.value }))
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      addAlias(mapping.visitType)
+                    }
+                  }}
+                  placeholder="Add natural-language alias…"
+                  className="h-8 text-xs"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => addAlias(mapping.visitType)}
+                >
+                  Alias
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="space-y-1">
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search visit types…"
+        />
+        {query.trim() && filtered.length > 0 && (
+          <ul className="max-h-40 overflow-auto rounded-md border border-gray-200 bg-white shadow-sm">
+            {filtered.map((vt) => (
+              <li key={vt}>
+                <button
+                  type="button"
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
+                  onClick={() => addVisitType(vt)}
+                >
+                  {vt}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {query.trim() && filtered.length === 0 && (
+          <p className="text-xs text-gray-500 px-1">No matching visit types.</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function emptyReadDraft(): { provNum: string; operatoryNums: number[]; lengthMinutes: string } {
+  return { provNum: NONE, operatoryNums: [], lengthMinutes: '30' }
+}
+
+function emptyBookDraft(): {
+  provNum: string
+  operatoryNums: number[]
+  lengthMinutes: string
+  visitTypes: VisitTypeMapping[]
+} {
+  return { provNum: NONE, operatoryNums: [], lengthMinutes: '30', visitTypes: [] }
+}
+
 export function SchedulingModeSettings({
   practiceId,
   openDentalAvailable,
@@ -208,18 +382,17 @@ export function SchedulingModeSettings({
 }: SchedulingModeSettingsProps) {
   const [readSource, setReadSource] = useState<SchedulingSource>('cal')
   const [writeSource, setWriteSource] = useState<SchedulingSource>('cal')
-  const [defaultReadProvNum, setDefaultReadProvNum] = useState<string>(NONE)
-  const [defaultReadOperatoryNum, setDefaultReadOperatoryNum] = useState<string>(NONE)
-  const [additionalReadOperatoryNums, setAdditionalReadOperatoryNums] = useState<number[]>([])
-  const [defaultReadLengthMinutes, setDefaultReadLengthMinutes] = useState<string>(NONE)
+  const [readConfigs, setReadConfigs] = useState<OdReadSlotConfig[]>([])
+  const [bookConfigs, setBookConfigs] = useState<OdBookSlotConfig[]>([])
+  const [readDraft, setReadDraft] = useState(emptyReadDraft)
+  const [bookDraft, setBookDraft] = useState(emptyBookDraft)
   const [defaultReadPractitionerRefs, setDefaultReadPractitionerRefs] = useState<string[]>([])
   const [defaultWritePractitionerRef, setDefaultWritePractitionerRef] = useState<string>(NONE)
-  const [defaultProvNum, setDefaultProvNum] = useState<string>(NONE)
-  const [defaultOperatoryNum, setDefaultOperatoryNum] = useState<string>(NONE)
-  const [additionalBookOperatoryNums, setAdditionalBookOperatoryNums] = useState<number[]>([])
+  const [defaultReadLengthMinutes, setDefaultReadLengthMinutes] = useState<string>(NONE)
   const [defaultLengthMinutes, setDefaultLengthMinutes] = useState<number>(30)
   const [providers, setProviders] = useState<ProviderOption[]>([])
   const [operatories, setOperatories] = useState<OperatoryOption[]>([])
+  const [visitTypes, setVisitTypes] = useState<string[]>([])
   const [ecwPractitioners, setEcwPractitioners] = useState<EcwPractitionerOption[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingLists, setLoadingLists] = useState(false)
@@ -246,20 +419,8 @@ export function SchedulingModeSettings({
         if (sched) {
           setReadSource(sched.readSource ?? (sched.mode === 'open_dental' ? 'open_dental' : 'cal'))
           setWriteSource(sched.writeSource ?? (sched.mode === 'open_dental' ? 'open_dental' : 'cal'))
-          setDefaultReadProvNum(sched.defaultReadProvNum ? String(sched.defaultReadProvNum) : NONE)
-          setDefaultReadOperatoryNum(
-            sched.defaultReadOperatoryNum ? String(sched.defaultReadOperatoryNum) : NONE
-          )
-          setAdditionalReadOperatoryNums(
-            Array.isArray(sched.defaultReadOperatoryNums) ? sched.defaultReadOperatoryNums : []
-          )
           setDefaultReadLengthMinutes(
             sched.defaultReadLengthMinutes ? String(sched.defaultReadLengthMinutes) : NONE
-          )
-          setDefaultProvNum(sched.defaultProvNum ? String(sched.defaultProvNum) : NONE)
-          setDefaultOperatoryNum(sched.defaultOperatoryNum ? String(sched.defaultOperatoryNum) : NONE)
-          setAdditionalBookOperatoryNums(
-            Array.isArray(sched.defaultOperatoryNums) ? sched.defaultOperatoryNums : []
           )
           setDefaultLengthMinutes(sched.defaultLengthMinutes ?? 30)
           setDefaultReadPractitionerRefs(
@@ -270,6 +431,63 @@ export function SchedulingModeSettings({
                 : []
           )
           setDefaultWritePractitionerRef(sched.defaultWritePractitionerRef || NONE)
+
+          if (Array.isArray(sched.odReadSlotConfigs) && sched.odReadSlotConfigs.length > 0) {
+            setReadConfigs(sched.odReadSlotConfigs)
+          } else {
+            const prov = sched.defaultReadProvNum || sched.defaultProvNum
+            const ops = [
+              ...(sched.defaultReadOperatoryNum ? [sched.defaultReadOperatoryNum] : []),
+              ...(Array.isArray(sched.defaultReadOperatoryNums) ? sched.defaultReadOperatoryNums : []),
+            ]
+            const uniqueOps = [...new Set(ops.filter((n: number) => Number.isInteger(n) && n > 0))]
+            if (prov && uniqueOps.length > 0) {
+              setReadConfigs([
+                {
+                  provNum: prov,
+                  operatoryNums: uniqueOps,
+                  lengthMinutes: sched.defaultReadLengthMinutes || sched.defaultLengthMinutes || 30,
+                },
+              ])
+            } else {
+              setReadConfigs([])
+            }
+          }
+
+          if (Array.isArray(sched.odBookSlotConfigs) && sched.odBookSlotConfigs.length > 0) {
+            setBookConfigs(
+              sched.odBookSlotConfigs.map((row: OdBookSlotConfig) => ({
+                ...row,
+                visitTypes: (row.visitTypes || []).map((vt) =>
+                  typeof vt === 'string'
+                    ? { visitType: vt, aliases: [] }
+                    : {
+                        visitType: vt.visitType,
+                        aliases: Array.isArray(vt.aliases) ? vt.aliases : [],
+                      }
+                ),
+              }))
+            )
+          } else {
+            const prov = sched.defaultProvNum
+            const ops = [
+              ...(sched.defaultOperatoryNum ? [sched.defaultOperatoryNum] : []),
+              ...(Array.isArray(sched.defaultOperatoryNums) ? sched.defaultOperatoryNums : []),
+            ]
+            const uniqueOps = [...new Set(ops.filter((n: number) => Number.isInteger(n) && n > 0))]
+            if (prov && uniqueOps.length > 0) {
+              setBookConfigs([
+                {
+                  provNum: prov,
+                  operatoryNums: uniqueOps,
+                  lengthMinutes: sched.defaultLengthMinutes || 30,
+                  visitTypes: [],
+                },
+              ])
+            } else {
+              setBookConfigs([])
+            }
+          }
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load scheduling settings')
@@ -297,14 +515,25 @@ export function SchedulingModeSettings({
   const loadLists = useCallback(async () => {
     setLoadingLists(true)
     try {
-      const [pRes, oRes] = await Promise.all([
+      const [pRes, oRes, vRes] = await Promise.all([
         fetch(withPractice('/api/integrations/opendental/providers')),
         fetch(withPractice('/api/integrations/opendental/operatories')),
+        fetch(withPractice('/api/appointments/visit-types')),
       ])
       const pData = await pRes.json()
       const oData = await oRes.json()
-      if (pRes.ok) setProviders((pData.providers || []).filter((p: ProviderOption & { isHidden?: boolean }) => !p.isHidden))
-      if (oRes.ok) setOperatories((oData.operatories || []).filter((o: OperatoryOption & { isHidden?: boolean }) => !o.isHidden))
+      const vData = await vRes.json()
+      if (pRes.ok)
+        setProviders(
+          (pData.providers || []).filter((p: ProviderOption & { isHidden?: boolean }) => !p.isHidden)
+        )
+      if (oRes.ok)
+        setOperatories(
+          (oData.operatories || []).filter(
+            (o: OperatoryOption & { isHidden?: boolean }) => !o.isHidden
+          )
+        )
+      if (vRes.ok) setVisitTypes(Array.isArray(vData.visitTypes) ? vData.visitTypes : [])
     } catch {
       // Non-fatal — admin can still pick sources without defaults.
     } finally {
@@ -326,26 +555,32 @@ export function SchedulingModeSettings({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [needsEcwPractitioners, ecwAvailable])
 
+  const reservedVisitTypesForRow = useCallback(
+    (rowIndex: number) => {
+      const reserved = new Set<string>()
+      bookConfigs.forEach((row, index) => {
+        if (index === rowIndex) return
+        for (const vt of row.visitTypes) {
+          reserved.add(vt.visitType.trim().toLowerCase())
+        }
+      })
+      return reserved
+    },
+    [bookConfigs]
+  )
+
   const handleSave = async () => {
     setSaving(true)
     setError('')
     setSuccess('')
     try {
-      const scheduling = {
+      const schedulingBase = {
         readSource,
         writeSource,
         ...(readSource === 'open_dental' || writeSource === 'open_dental'
           ? {
-              defaultReadProvNum: defaultReadProvNum !== NONE ? Number(defaultReadProvNum) : null,
-              defaultReadOperatoryNum:
-                defaultReadOperatoryNum !== NONE ? Number(defaultReadOperatoryNum) : null,
-              defaultReadOperatoryNums: additionalReadOperatoryNums,
-              defaultReadLengthMinutes:
-                defaultReadLengthMinutes !== NONE ? Number(defaultReadLengthMinutes) : null,
-              defaultProvNum: defaultProvNum !== NONE ? Number(defaultProvNum) : null,
-              defaultOperatoryNum: defaultOperatoryNum !== NONE ? Number(defaultOperatoryNum) : null,
-              defaultOperatoryNums: additionalBookOperatoryNums,
-              defaultLengthMinutes,
+              odReadSlotConfigs: readConfigs,
+              odBookSlotConfigs: bookConfigs,
             }
           : {}),
         ...(readSource === 'ecw' || writeSource === 'ecw'
@@ -360,6 +595,12 @@ export function SchedulingModeSettings({
             }
           : {}),
       }
+
+      const scheduling =
+        readSource === 'open_dental' || writeSource === 'open_dental'
+          ? mirrorOdConfigsToLegacyDefaults(schedulingBase)
+          : schedulingBase
+
       const res = await fetch('/api/settings/clinical-system', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -373,6 +614,53 @@ export function SchedulingModeSettings({
     } finally {
       setSaving(false)
     }
+  }
+
+  const addReadConfig = () => {
+    const provNum = Number(readDraft.provNum)
+    const lengthMinutes = Number(readDraft.lengthMinutes)
+    if (!Number.isInteger(provNum) || provNum <= 0) {
+      setError('Select a provider for the reading time slot row.')
+      return
+    }
+    if (readDraft.operatoryNums.length === 0) {
+      setError('Select at least one operatory for the reading time slot row.')
+      return
+    }
+    setError('')
+    setReadConfigs([
+      ...readConfigs,
+      { provNum, operatoryNums: readDraft.operatoryNums, lengthMinutes },
+    ])
+    setReadDraft(emptyReadDraft())
+  }
+
+  const addBookConfig = () => {
+    const provNum = Number(bookDraft.provNum)
+    const lengthMinutes = Number(bookDraft.lengthMinutes)
+    if (!Number.isInteger(provNum) || provNum <= 0) {
+      setError('Select a provider for the booking time slot row.')
+      return
+    }
+    if (bookDraft.operatoryNums.length === 0) {
+      setError('Select at least one operatory for the booking time slot row.')
+      return
+    }
+    if (bookDraft.visitTypes.length === 0) {
+      setError('Select at least one visit type for the booking time slot row.')
+      return
+    }
+    setError('')
+    setBookConfigs([
+      ...bookConfigs,
+      {
+        provNum,
+        operatoryNums: bookDraft.operatoryNums,
+        lengthMinutes,
+        visitTypes: bookDraft.visitTypes,
+      },
+    ])
+    setBookDraft(emptyBookDraft())
   }
 
   return (
@@ -543,10 +831,10 @@ export function SchedulingModeSettings({
             {readSource === 'open_dental' && (
               <div className="space-y-4 rounded-md border border-gray-100 bg-gray-50 p-4">
                 <div>
-                  <p className="text-sm font-medium text-gray-700">Open Dental reading defaults</p>
+                  <p className="text-sm font-medium text-gray-700">Reading time slots</p>
                   <p className="text-xs text-gray-500 mt-1">
-                    Provider, operatory, and length used when checking available appointment slots.
-                    Slots are read from every operatory listed below.
+                    Providers and operatories used when checking available appointment slots. Slots
+                    are unioned across each provider&apos;s operatories.
                   </p>
                 </div>
                 {loadingLists ? (
@@ -555,63 +843,90 @@ export function SchedulingModeSettings({
                     Loading providers and operatories...
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">Default provider</label>
-                      <Select value={defaultReadProvNum} onValueChange={setDefaultReadProvNum}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Same as booking default" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value={NONE}>Same as booking default</SelectItem>
-                          {providers.map((p) => (
-                            <SelectItem key={p.provNum} value={String(p.provNum)}>
-                              {p.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                  <div className="space-y-4">
+                    {readConfigs.map((row, index) => (
+                      <div
+                        key={`read-${row.provNum}-${index}`}
+                        className="grid grid-cols-1 md:grid-cols-[1.2fr_1.4fr_0.8fr_auto] gap-3 items-start rounded-md border border-gray-200 bg-white p-3"
+                      >
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Provider</p>
+                          <p className="text-sm font-medium text-gray-900">
+                            {providerLabel(providers, row.provNum)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Operatories</p>
+                          <p className="text-sm text-gray-800">
+                            {row.operatoryNums.map((n) => operatoryLabel(operatories, n)).join(', ')}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Length</p>
+                          <p className="text-sm text-gray-800">{row.lengthMinutes} minutes</p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setReadConfigs(readConfigs.filter((_, i) => i !== index))}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    ))}
+
+                    <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1.4fr_0.8fr_auto] gap-3 items-end">
+                      <div className="space-y-1">
+                        <label className="text-sm font-medium text-gray-700">Provider</label>
+                        <Select
+                          value={readDraft.provNum}
+                          onValueChange={(v) => setReadDraft((d) => ({ ...d, provNum: v }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select provider" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={NONE}>Select provider</SelectItem>
+                            {providers.map((p) => (
+                              <SelectItem key={p.provNum} value={String(p.provNum)}>
+                                {p.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-sm font-medium text-gray-700">Operatory</label>
+                        <MultiOperatoryPicker
+                          selected={readDraft.operatoryNums}
+                          operatories={operatories}
+                          onChange={(nums) => setReadDraft((d) => ({ ...d, operatoryNums: nums }))}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-sm font-medium text-gray-700">Appointment length</label>
+                        <Select
+                          value={readDraft.lengthMinutes}
+                          onValueChange={(v) => setReadDraft((d) => ({ ...d, lengthMinutes: v }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {LENGTH_OPTIONS.map((m) => (
+                              <SelectItem key={m} value={String(m)}>
+                                {m} minutes
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button type="button" onClick={addReadConfig}>
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add
+                      </Button>
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">Default operatory</label>
-                      <Select value={defaultReadOperatoryNum} onValueChange={setDefaultReadOperatoryNum}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Same as booking default" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value={NONE}>Same as booking default</SelectItem>
-                          {operatories.map((o) => (
-                            <SelectItem key={o.operatoryNum} value={String(o.operatoryNum)}>
-                              {o.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">Default length</label>
-                      <Select value={defaultReadLengthMinutes} onValueChange={setDefaultReadLengthMinutes}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Same as booking default" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value={NONE}>Same as booking default</SelectItem>
-                          {LENGTH_OPTIONS.map((m) => (
-                            <SelectItem key={m} value={String(m)}>
-                              {m} minutes
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <AdditionalOperatoriesEditor
-                      label="Additional reading operatories"
-                      description="Open slots are also pulled from these operatories and merged into availability."
-                      primaryOperatoryNum={defaultReadOperatoryNum}
-                      additionalOperatoryNums={additionalReadOperatoryNums}
-                      operatories={operatories}
-                      onChangeAdditional={setAdditionalReadOperatoryNums}
-                    />
                   </div>
                 )}
               </div>
@@ -620,78 +935,163 @@ export function SchedulingModeSettings({
             {writeSource === 'open_dental' && (
               <div className="space-y-4 rounded-md border border-gray-100 bg-gray-50 p-4">
                 <div>
-                  <p className="text-sm font-medium text-gray-700">Open Dental booking defaults</p>
+                  <p className="text-sm font-medium text-gray-700">Booking time slots</p>
                   <p className="text-xs text-gray-500 mt-1">
-                    Provider, operatory, and length used when writing a new appointment into Open
-                    Dental. New appointments book into the default operatory unless another is
-                    specified.
+                    Providers, write operatories, and EHR visit types used when booking. Add
+                    natural-language aliases so the voice agent can map patient requests to visit
+                    types.
                   </p>
                 </div>
                 {loadingLists ? (
                   <div className="flex items-center gap-2 text-sm text-gray-500">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading providers and operatories...
+                    Loading providers, operatories, and visit types...
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">Default provider</label>
-                      <Select value={defaultProvNum} onValueChange={setDefaultProvNum}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Practice default" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value={NONE}>Practice default</SelectItem>
-                          {providers.map((p) => (
-                            <SelectItem key={p.provNum} value={String(p.provNum)}>
-                              {p.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">Default operatory</label>
-                      <Select value={defaultOperatoryNum} onValueChange={setDefaultOperatoryNum}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Auto" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value={NONE}>Auto (first available)</SelectItem>
-                          {operatories.map((o) => (
-                            <SelectItem key={o.operatoryNum} value={String(o.operatoryNum)}>
-                              {o.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">Default length</label>
-                      <Select
-                        value={String(defaultLengthMinutes)}
-                        onValueChange={(v) => setDefaultLengthMinutes(Number(v))}
+                  <div className="space-y-4">
+                    {bookConfigs.map((row, index) => (
+                      <div
+                        key={`book-${row.provNum}-${index}`}
+                        className="space-y-3 rounded-md border border-gray-200 bg-white p-3"
                       >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {LENGTH_OPTIONS.map((m) => (
-                            <SelectItem key={m} value={String(m)}>
-                              {m} minutes
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1.4fr_0.8fr_auto] gap-3 items-start">
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Provider</p>
+                            <p className="text-sm font-medium text-gray-900">
+                              {providerLabel(providers, row.provNum)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Operatories</p>
+                            <MultiOperatoryPicker
+                              selected={row.operatoryNums}
+                              operatories={operatories}
+                              onChange={(nums) =>
+                                setBookConfigs(
+                                  bookConfigs.map((r, i) =>
+                                    i === index ? { ...r, operatoryNums: nums } : r
+                                  )
+                                )
+                              }
+                            />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Length</p>
+                            <Select
+                              value={String(row.lengthMinutes)}
+                              onValueChange={(v) =>
+                                setBookConfigs(
+                                  bookConfigs.map((r, i) =>
+                                    i === index ? { ...r, lengthMinutes: Number(v) } : r
+                                  )
+                                )
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {LENGTH_OPTIONS.map((m) => (
+                                  <SelectItem key={m} value={String(m)}>
+                                    {m} minutes
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setBookConfigs(bookConfigs.filter((_, i) => i !== index))}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Visit types</p>
+                          <SearchableVisitTypePicker
+                            selected={row.visitTypes}
+                            allVisitTypes={visitTypes}
+                            reservedByOthers={reservedVisitTypesForRow(index)}
+                            onChange={(next) =>
+                              setBookConfigs(
+                                bookConfigs.map((r, i) =>
+                                  i === index ? { ...r, visitTypes: next } : r
+                                )
+                              )
+                            }
+                          />
+                        </div>
+                      </div>
+                    ))}
+
+                    <div className="space-y-3 rounded-md border border-dashed border-gray-300 bg-white p-3">
+                      <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1.4fr_0.8fr_auto] gap-3 items-end">
+                        <div className="space-y-1">
+                          <label className="text-sm font-medium text-gray-700">Provider</label>
+                          <Select
+                            value={bookDraft.provNum}
+                            onValueChange={(v) => setBookDraft((d) => ({ ...d, provNum: v }))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select provider" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={NONE}>Select provider</SelectItem>
+                              {providers.map((p) => (
+                                <SelectItem key={p.provNum} value={String(p.provNum)}>
+                                  {p.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-sm font-medium text-gray-700">Operatory</label>
+                          <MultiOperatoryPicker
+                            selected={bookDraft.operatoryNums}
+                            operatories={operatories}
+                            onChange={(nums) => setBookDraft((d) => ({ ...d, operatoryNums: nums }))}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-sm font-medium text-gray-700">
+                            Appointment length
+                          </label>
+                          <Select
+                            value={bookDraft.lengthMinutes}
+                            onValueChange={(v) => setBookDraft((d) => ({ ...d, lengthMinutes: v }))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {LENGTH_OPTIONS.map((m) => (
+                                <SelectItem key={m} value={String(m)}>
+                                  {m} minutes
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button type="button" onClick={addBookConfig}>
+                          <Plus className="h-4 w-4 mr-1" />
+                          Add
+                        </Button>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-gray-700">Visit types</label>
+                        <div className="mt-1">
+                          <SearchableVisitTypePicker
+                            selected={bookDraft.visitTypes}
+                            allVisitTypes={visitTypes}
+                            reservedByOthers={reservedVisitTypesForRow(-1)}
+                            onChange={(next) => setBookDraft((d) => ({ ...d, visitTypes: next }))}
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <AdditionalOperatoriesEditor
-                      label="Additional booking operatories"
-                      description="These operatories are eligible for writes; the default operatory is used unless another is specified."
-                      primaryOperatoryNum={defaultOperatoryNum}
-                      additionalOperatoryNums={additionalBookOperatoryNums}
-                      operatories={operatories}
-                      onChangeAdditional={setAdditionalBookOperatoryNums}
-                    />
                   </div>
                 )}
               </div>
@@ -700,8 +1100,13 @@ export function SchedulingModeSettings({
             {writeSource === 'none' && readSource !== 'none' && (
               <p className="text-sm text-gray-600 rounded-md border border-blue-100 bg-blue-50 p-3">
                 Availability can be checked from{' '}
-                {readSource === 'open_dental' ? 'Open Dental' : 'Cal.com'}, but booking is disabled
-                for this practice. Agents and staff can share open slots without writing appointments.
+                {readSource === 'open_dental'
+                  ? 'Open Dental'
+                  : readSource === 'ecw'
+                    ? 'eClinicalWorks'
+                    : 'Cal.com'}
+                , but booking is disabled for this practice. Agents and staff can share open slots
+                without writing appointments.
               </p>
             )}
 

@@ -1,7 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import {
+  resolveBookConfigForVisitType,
   resolveBookOperatoryNum,
   resolveBookOperatoryNums,
+  resolveOdBookConfigs,
+  resolveOdReadConfigs,
+  resolveReadConfigsForVisitType,
   resolveReadLengthMinutes,
   resolveReadOperatoryNum,
   resolveReadOperatoryNums,
@@ -9,6 +13,8 @@ import {
   resolveReadPractitionerRefs,
   resolveReadProvNum,
   resolveReadSource,
+  resolveVisitTypeFromNaturalLanguage,
+  resolveWriteOperatoryForBooking,
   resolveWriteSource,
   usesOpenDentalForRead,
   usesOpenDentalForWrite,
@@ -174,6 +180,71 @@ describe('scheduling settings resolvers', () => {
           defaultWritePractitionerRef: 'Practitioner/z',
         })
       ).toBe('Practitioner/z')
+    })
+  })
+
+  describe('multi-provider OD configs', () => {
+    const multi: SchedulingSettings = {
+      readSource: 'open_dental',
+      writeSource: 'open_dental',
+      odReadSlotConfigs: [
+        { provNum: 10, operatoryNums: [1, 2], lengthMinutes: 30 },
+        { provNum: 20, operatoryNums: [1, 2, 3, 4], lengthMinutes: 30 },
+      ],
+      odBookSlotConfigs: [
+        {
+          provNum: 10,
+          operatoryNums: [2],
+          lengthMinutes: 30,
+          visitTypes: [{ visitType: 'OrthoRetent', aliases: ['retainer check', 'ortho retention'] }],
+        },
+        {
+          provNum: 20,
+          operatoryNums: [1, 2, 3, 4],
+          lengthMinutes: 30,
+          visitTypes: [
+            { visitType: 'OrthoAdj', aliases: ['ortho adjustment'] },
+            { visitType: 'FMX', aliases: ['full mouth x-ray', 'full mouth xrays'] },
+            { visitType: 'Pro', aliases: ['prophy', 'cleaning'] },
+          ],
+        },
+      ],
+    }
+
+    it('returns configured read/book rows', () => {
+      expect(resolveOdReadConfigs(multi)).toHaveLength(2)
+      expect(resolveOdBookConfigs(multi)).toHaveLength(2)
+    })
+
+    it('falls back to legacy single read config when arrays empty', () => {
+      expect(resolveOdReadConfigs(base)).toEqual([
+        { provNum: 24, operatoryNums: [1, 3, 4], lengthMinutes: 30 },
+      ])
+    })
+
+    it('resolves visit type from exact alias and natural language', () => {
+      expect(resolveVisitTypeFromNaturalLanguage(multi, 'retainer check')).toBe('OrthoRetent')
+      expect(resolveVisitTypeFromNaturalLanguage(multi, 'patient wants a full mouth x-ray')).toBe(
+        'FMX'
+      )
+      expect(resolveVisitTypeFromNaturalLanguage(multi, 'OrthoAdj')).toBe('OrthoAdj')
+      expect(resolveVisitTypeFromNaturalLanguage(multi, 'unknown thing')).toBeNull()
+    })
+
+    it('routes book/read configs by visit type', () => {
+      const book = resolveBookConfigForVisitType(multi, 'OrthoRetent')
+      expect(book?.provNum).toBe(10)
+      expect(book?.operatoryNums).toEqual([2])
+      expect(resolveReadConfigsForVisitType(multi, 'OrthoRetent').map((r) => r.provNum)).toEqual([
+        10,
+      ])
+      expect(resolveReadConfigsForVisitType(multi, null)).toHaveLength(2)
+    })
+
+    it('prefers slot operatory when allowed for write', () => {
+      const book = resolveBookConfigForVisitType(multi, 'FMX')!
+      expect(resolveWriteOperatoryForBooking(book, 3)).toBe(3)
+      expect(resolveWriteOperatoryForBooking(book, 99)).toBe(1)
     })
   })
 })

@@ -15,7 +15,7 @@ describe('getOpenDentalOpenSlotsForOperatories', () => {
     vi.clearAllMocks()
   })
 
-  it('returns only start times open on every configured operatory', async () => {
+  it('returns the union of start times across configured operatories', async () => {
     const getSlots = vi.fn().mockImplementation(async (query: Record<string, unknown>) => {
       const op = Number(query.OpNum)
       if (op === 1) {
@@ -61,9 +61,14 @@ describe('getOpenDentalOpenSlotsForOperatories', () => {
     })
 
     expect(getSlots).toHaveBeenCalledTimes(2)
-    expect(merged).toHaveLength(1)
-    expect(merged[0].start).toBe('2026-07-03 14:00:00')
-    expect(merged[0].opNum).toBe(2)
+    expect(merged).toHaveLength(2)
+    expect(merged.map((s) => s.start)).toEqual([
+      '2026-07-03 14:00:00',
+      '2026-07-03 15:00:00',
+    ])
+    // Shared start prefers the earliest configured operatory.
+    expect(merged[0].opNum).toBe(1)
+    expect(merged[1].opNum).toBe(2)
   })
 
   it('returns all slots when only one operatory is configured', async () => {

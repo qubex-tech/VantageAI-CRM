@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/middleware'
 import { isVantageAdmin, canManagePractice } from '@/lib/permissions'
 import { prisma } from '@/lib/db'
+import { getSchedulingSettings } from '@/lib/integrations/clinical-system/server'
+import { usesOpenDentalForRead, usesOpenDentalForWrite } from '@/lib/integrations/clinical-system/types'
+import { listOpenDentalAppointmentTypes } from '@/lib/integrations/opendental/scheduling'
 
 export async function GET(req: NextRequest) {
   try {
@@ -21,7 +24,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const [appointmentTypes, calMappings] = await Promise.all([
+    const [appointmentTypes, calMappings, scheduling] = await Promise.all([
       prisma.appointment.findMany({
         where: { practiceId, visitType: { not: '' } },
         select: { visitType: true },
@@ -31,14 +34,26 @@ export async function GET(req: NextRequest) {
         where: { practiceId },
         select: { visitTypeName: true },
       }),
+      getSchedulingSettings(practiceId),
     ])
 
-    const visitTypes = Array.from(
-      new Set([
-        ...appointmentTypes.map((row) => row.visitType.trim()).filter(Boolean),
-        ...calMappings.map((row) => row.visitTypeName.trim()).filter(Boolean),
-      ])
-    ).sort((a, b) => a.localeCompare(b))
+    const names = new Set<string>([
+      ...appointmentTypes.map((row) => row.visitType.trim()).filter(Boolean),
+      ...calMappings.map((row) => row.visitTypeName.trim()).filter(Boolean),
+    ])
+
+    if (usesOpenDentalForRead(scheduling) || usesOpenDentalForWrite(scheduling)) {
+      try {
+        const odTypes = await listOpenDentalAppointmentTypes(practiceId)
+        for (const row of odTypes) {
+          if (!row.isHidden && row.name.trim()) names.add(row.name.trim())
+        }
+      } catch {
+        // Non-fatal — fall back to CRM/Cal names when OD is unreachable.
+      }
+    }
+
+    const visitTypes = Array.from(names).sort((a, b) => a.localeCompare(b))
 
     return NextResponse.json({ visitTypes })
   } catch (error) {

@@ -394,16 +394,19 @@ export async function handleToolCall(
 
     case 'get_available_slots':
       // Each slot: speak `time_local` to the caller; pass `time` (UTC ISO) to book_appointment.
+      // For Open Dental practices, pass appointmentType as natural language or EHR visit type.
       return await getAvailableSlots(
         practiceId,
         parameters.eventTypeId,
         parameters.dateFrom,
         parameters.dateTo,
-        parameters.timezone || 'America/New_York'
+        parameters.timezone || 'America/New_York',
+        parameters.appointmentType || parameters.appointment_type
       )
 
     case 'book_appointment':
       // `startTime` must be the UTC ISO from get_available_slots.time (not time_local).
+      // Prefer appointmentType (NL / EHR visit type) for OD; keep eventTypeId for Cal.com.
       return await bookAppointment(
         practiceId,
         parameters.patientId,
@@ -411,7 +414,11 @@ export async function handleToolCall(
         parameters.startTime,
         parameters.timezone || 'America/New_York',
         parameters.reason,
-        parameters.paymentType || parameters.payment_type
+        parameters.paymentType || parameters.payment_type,
+        parameters.appointmentType || parameters.appointment_type,
+        parameters.opNum != null ? Number(parameters.opNum) : parameters.op_num != null
+          ? Number(parameters.op_num)
+          : null
       )
 
     case 'cancel_appointment':

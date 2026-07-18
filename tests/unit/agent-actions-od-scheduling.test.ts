@@ -27,6 +27,7 @@ vi.mock('@/lib/integrations/opendental/patientWriteback', () => ({
 vi.mock('@/lib/integrations/opendental/scheduling', () => ({
   bookOpenDentalAppointment: vi.fn(),
   getOpenDentalOpenSlotsForOperatories: vi.fn(),
+  getOpenDentalOpenSlotsForReadConfigs: vi.fn(),
 }))
 
 vi.mock('@/lib/practice-timezone', () => ({
@@ -255,18 +256,19 @@ describe('agentActions Open Dental scheduling', () => {
   })
 
   describe('getAvailableSlots', () => {
-    it('queries all resolved read operatories in Open Dental mode', async () => {
-      const { getOpenDentalOpenSlotsForOperatories } = await import(
+    it('queries all resolved read configs in Open Dental mode', async () => {
+      const { getOpenDentalOpenSlotsForReadConfigs } = await import(
         '@/lib/integrations/opendental/scheduling'
       )
       vi.mocked(getSchedulingSettings).mockResolvedValue({
         mode: 'open_dental',
+        defaultReadProvNum: 24,
         defaultReadOperatoryNum: 1,
         defaultReadOperatoryNums: [3],
         defaultOperatoryNum: 2,
         defaultLengthMinutes: 30,
       })
-      vi.mocked(getOpenDentalOpenSlotsForOperatories).mockResolvedValue([
+      vi.mocked(getOpenDentalOpenSlotsForReadConfigs).mockResolvedValue([
         {
           start: '2026-07-03 14:00:00',
           startUtc: '2026-07-03T19:00:00.000Z',
@@ -285,10 +287,15 @@ describe('agentActions Open Dental scheduling', () => {
         'America/Chicago'
       )
 
-      expect(getOpenDentalOpenSlotsForOperatories).toHaveBeenCalledWith(
+      expect(getOpenDentalOpenSlotsForReadConfigs).toHaveBeenCalledWith(
         expect.objectContaining({
           practiceId,
-          opNums: [1, 3],
+          configs: [
+            expect.objectContaining({
+              provNum: 24,
+              operatoryNums: [1, 3],
+            }),
+          ],
         })
       )
       expect(slots).toHaveLength(1)
@@ -296,6 +303,7 @@ describe('agentActions Open Dental scheduling', () => {
       expect(slots[0].attendeeCount).toBe(0)
       expect(slots[0].timezone).toBe('America/Chicago')
       expect(slots[0].time_local).toMatch(/Friday, July 3 at 2:00/)
+      expect(slots[0].opNum).toBe(1)
     })
   })
 })

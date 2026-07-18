@@ -98,6 +98,12 @@ function parseScheduling(value: unknown): SchedulingSettings | undefined {
     mode: legacyModeValid,
     readSource,
     writeSource,
+    odReadSlotConfigs: Array.isArray(raw.odReadSlotConfigs)
+      ? (raw.odReadSlotConfigs as SchedulingSettings['odReadSlotConfigs'])
+      : null,
+    odBookSlotConfigs: Array.isArray(raw.odBookSlotConfigs)
+      ? (raw.odBookSlotConfigs as SchedulingSettings['odBookSlotConfigs'])
+      : null,
     defaultReadProvNum: toPositiveInt(raw.defaultReadProvNum),
     defaultReadOperatoryNum: toPositiveInt(raw.defaultReadOperatoryNum),
     defaultReadOperatoryNums: toPositiveIntArray(raw.defaultReadOperatoryNums),
