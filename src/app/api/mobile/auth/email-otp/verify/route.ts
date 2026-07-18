@@ -56,6 +56,13 @@ export async function POST(req: NextRequest) {
       ? await prisma.practice.findUnique({ where: { id: user.practiceId }, select: { name: true } })
       : null
 
+    const practiceSettings = user.practiceId
+      ? await prisma.practiceSettings.findUnique({
+          where: { practiceId: user.practiceId },
+          select: { ariaScribeEnabled: true },
+        })
+      : null
+
     // Issue 90-day mobile JWT
     const token = await new SignJWT({
       sub: user.id,
@@ -79,6 +86,7 @@ export async function POST(req: NextRequest) {
         practiceId: user.practiceId,
         practiceName: practice?.name ?? null,
         role: user.role,
+        ariaScribeEnabled: Boolean(practiceSettings?.ariaScribeEnabled),
       },
     })
   } catch (err) {

@@ -93,6 +93,7 @@ model Practice {
   callReviews                CallReview[]
   knowledgeBaseFaqs          KnowledgeBaseFaq[]
   preVisitCharts             PreVisitChart[]
+  scribeSessions             ScribeSession[]
 
   @@index([slug])
   @@index([portalDomain])
@@ -133,6 +134,7 @@ model User {
   callReviews                      CallReview[]
   preVisitChartsCreated            PreVisitChart[]            @relation("PreVisitChartCreator")
   devicePushTokens                 DevicePushToken[]
+  scribeSessions                   ScribeSession[]            @relation("ScribeSessionProvider")
 
   @@index([practiceId])
   @@index([email])
@@ -217,6 +219,7 @@ model Patient {
   campaignEnrollments        CampaignEnrollment[]
   listMemberships            PatientListMember[]
   preVisitCharts             PreVisitChart[]
+  scribeSessions             ScribeSession[]
 
   @@index([practiceId])
   @@index([phone])
@@ -693,6 +696,8 @@ model PracticeSettings {
   outboundAgents                 Json?
   /// Practice hours of operation + lunch window (used by slot-fill availability)
   hoursOfOperation               Json?
+  /// When true, Aria (AI scribe agent) is available in mobile + APIs
+  ariaScribeEnabled              Boolean  @default(false)
   createdAt                      DateTime @default(now())
   updatedAt                      DateTime @updatedAt
 
@@ -700,6 +705,61 @@ model PracticeSettings {
 
   @@index([practiceId])
   @@map("practice_settings")
+}
+
+/// Aria AI scribe session (ambient / dictation → SOAP draft → sign → EHR)
+model ScribeSession {
+  id                     String    @id @default(uuid())
+  practiceId             String
+  patientId              String
+  appointmentId          String?
+  providerUserId         String
+  mode                   String // 'ambient' | 'dictation' | 'hybrid'
+  status                 String    @default("recording") // recording | uploading | transcribing | generating | ready_for_review | signed | failed | discarded
+  consentAt              DateTime?
+  startedAt              DateTime  @default(now())
+  endedAt                DateTime?
+  transcript             String?
+  soapJson               Json?
+  rawModelMeta           Json?
+  patientNoteId          String?
+  ehrDocumentReferenceId String?
+  ehrWritebackStatus     String? // pending | success | failed | skipped
+  ehrWritebackError      String?
+  error                  String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  practice  Practice           @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient   Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  provider  User               @relation("ScribeSessionProvider", fields: [providerUserId], references: [id], onDelete: Cascade)
+  chunks    ScribeAudioChunk[]
+
+  @@index([practiceId])
+  @@index([patientId])
+  @@index([providerUserId])
+  @@index([status])
+  @@index([startedAt])
+  @@map("scribe_sessions")
+}
+
+model ScribeAudioChunk {
+  id         String   @id @default(uuid())
+  sessionId  String
+  seq        Int
+  kind       String   @default("ambient") // ambient | dictation
+  mimeType   String   @default("audio/m4a")
+  durationMs Int?
+  sha256     String?
+  /// Raw audio bytes (MVP storage; migrate to object storage later)
+  audioData  Bytes?
+  uploadedAt DateTime @default(now())
+
+  session ScribeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, seq])
+  @@index([sessionId])
+  @@map("scribe_audio_chunks")
 }
 
 model EhrConnection {

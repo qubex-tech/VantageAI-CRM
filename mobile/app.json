@@ -24,7 +24,8 @@
       "bundleIdentifier": "com.vantageai.crm",
       "buildNumber": "1",
       "infoPlist": {
-        "UIBackgroundModes": ["fetch", "remote-notification"]
+        "UIBackgroundModes": ["fetch", "remote-notification"],
+        "NSMicrophoneUsageDescription": "Aria needs microphone access to record visit audio for draft clinical notes."
       },
       "config": {
         "usesNonExemptEncryption": false
@@ -40,7 +41,8 @@
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "RECORD_AUDIO"
       ]
     },
     "web": {
@@ -54,6 +56,12 @@
         {
           "color": "#3B82F6",
           "defaultChannel": "default"
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Aria needs microphone access to record visit audio for draft clinical notes."
         }
       ],
       "expo-updates"

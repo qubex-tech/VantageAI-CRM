@@ -14,6 +14,7 @@ export interface AuthUser {
   practiceId: string | null
   practiceName: string | null
   role: string
+  ariaScribeEnabled?: boolean
 }
 
 export interface AuthState {
@@ -160,4 +161,71 @@ export interface CallsResponse {
 
 export interface CallDetailResponse {
   call: RetellCall
+}
+
+// ─── Aria (Scribe Agent) ─────────────────────────────────────────────────────
+
+export type AriaSessionStatus =
+  | 'recording'
+  | 'uploading'
+  | 'transcribing'
+  | 'generating'
+  | 'ready_for_review'
+  | 'signed'
+  | 'failed'
+  | 'discarded'
+
+export interface AriaSoapNote {
+  subjective: string
+  objective: string
+  assessment: string
+  plan: string
+  addendum?: string
+}
+
+export interface AriaSession {
+  id: string
+  practiceId: string
+  patientId: string
+  appointmentId: string | null
+  providerUserId: string
+  mode: 'ambient' | 'dictation' | 'hybrid'
+  status: AriaSessionStatus
+  consentAt: string | null
+  startedAt: string
+  endedAt: string | null
+  transcript: string | null
+  soap: AriaSoapNote
+  patientNoteId: string | null
+  ehrDocumentReferenceId: string | null
+  ehrWritebackStatus: string | null
+  ehrWritebackError: string | null
+  error: string | null
+  createdAt: string
+  updatedAt: string
+  patient: {
+    id: string
+    name: string | null
+    firstName: string | null
+    lastName: string | null
+    dateOfBirth: string | null
+  } | null
+}
+
+export interface AriaScheduleAppointment {
+  id: string
+  startTime: string
+  endTime: string
+  visitType: string
+  reason: string | null
+  status: string
+  timezone: string
+  patient: {
+    id: string
+    name: string
+    firstName: string | null
+    lastName: string | null
+    dateOfBirth: string | null
+    primaryPhone: string | null
+  }
 }

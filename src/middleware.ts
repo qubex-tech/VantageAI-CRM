@@ -104,12 +104,14 @@ export async function middleware(req: NextRequest) {
     }
     
     // Allow access to auth pages and public API routes (webhooks)
+    // /api/mobile/* authenticates via Bearer JWT inside route handlers (requireAuth)
     const publicPaths = [
       '/login',
       '/signup',
       '/forgot-password',
       '/reset-password',
       '/auth/callback',
+      '/api/mobile',
       '/api/integrations/ehr/login',
       '/api/integrations/ehr/launch',
       '/api/integrations/ehr/callback',

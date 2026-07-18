@@ -24,9 +24,22 @@ export type CallsStackParamList = {
   CallDetail: { callId: string }
 }
 
+export type AriaStackParamList = {
+  AriaHome: undefined
+  AriaPatientPicker: undefined
+  AriaCapture: {
+    sessionId: string
+    patientName: string
+    visitType?: string | null
+  }
+  AriaReview: { sessionId: string }
+  AriaSigned: { sessionId: string }
+}
+
 export type RootTabParamList = {
   Inbox: NavigatorScreenParams<InboxStackParamList>
   Calls: NavigatorScreenParams<CallsStackParamList>
+  Aria?: NavigatorScreenParams<AriaStackParamList>
   Notifications: undefined
   Profile: undefined
 }

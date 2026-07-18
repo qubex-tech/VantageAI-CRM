@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import * as SecureStore from 'expo-secure-store'
 import type { AuthUser } from '@/types'
 import {
   login as loginService,
@@ -7,7 +8,7 @@ import {
   getStoredUser,
   isStoredSessionValid,
 } from '@/services/auth'
-import { getApiErrorMessage } from '@/services/apiClient'
+import { getApiErrorMessage, USER_KEY } from '@/services/apiClient'
 import { deregisterPushNotifications } from '@/services/notifications'
 
 interface AuthStore {
@@ -20,6 +21,7 @@ interface AuthStore {
   logout: () => Promise<void>
   forceLogout: () => Promise<void>
   restoreSession: () => Promise<boolean>
+  setAriaScribeEnabled: (enabled: boolean) => void
   clearError: () => void
 }
 
@@ -78,6 +80,14 @@ export const useAuthStore = create<AuthStore>((set) => ({
     set({ token, user })
     return true
   },
+
+  setAriaScribeEnabled: (enabled) =>
+    set((state) => {
+      if (!state.user) return state
+      const user = { ...state.user, ariaScribeEnabled: enabled }
+      void SecureStore.setItemAsync(USER_KEY, JSON.stringify(user)).catch(() => null)
+      return { user }
+    }),
 
   clearError: () => set({ error: null }),
 }))

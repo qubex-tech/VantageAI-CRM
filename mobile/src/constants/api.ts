@@ -26,4 +26,15 @@ export const ENDPOINTS = {
   mobileCalls: '/api/mobile/calls',
   mobileCallById: (id: string) => `/api/mobile/calls/${id}`,
   mobileCallReview: (id: string) => `/api/mobile/calls/${id}/review`,
+
+  // Features / Aria
+  mobileFeatures: '/api/mobile/features',
+  ariaSchedule: '/api/mobile/scribe/schedule',
+  ariaSessions: '/api/mobile/scribe/sessions',
+  ariaSessionById: (id: string) => `/api/mobile/scribe/sessions/${id}`,
+  ariaSessionChunks: (id: string) => `/api/mobile/scribe/sessions/${id}/chunks`,
+  ariaSessionStop: (id: string) => `/api/mobile/scribe/sessions/${id}/stop`,
+  ariaSessionNote: (id: string) => `/api/mobile/scribe/sessions/${id}/note`,
+  ariaSessionSign: (id: string) => `/api/mobile/scribe/sessions/${id}/sign`,
+  ariaSessionDiscard: (id: string) => `/api/mobile/scribe/sessions/${id}/discard`,
 } as const

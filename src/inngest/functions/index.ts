@@ -10,4 +10,5 @@ export { handleOpenSlotCreated, checkOpenSlotStatus } from './appointment-optimi
 export { slotFillRulesEvalDaily } from './slot-fill-rules-eval'
 export { enrichPatientFromEhrJob } from './enrich-patient-from-ehr'
 export { pollAvailityCoverage } from './poll-availity-coverage'
+export { processAriaSession } from './process-aria-session'
 
