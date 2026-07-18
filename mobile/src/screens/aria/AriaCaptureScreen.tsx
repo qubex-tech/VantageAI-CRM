@@ -20,7 +20,7 @@ import {
   stopAmbientRecording,
 } from '@/lib/ariaRecorder'
 import { activateKeepAwakeSafe, deactivateKeepAwakeSafe } from '@/lib/keepAwake'
-import { stopAriaSession, uploadAriaChunk } from '@/services/aria'
+import { processAriaSession, stopAriaSession, uploadAriaChunk } from '@/services/aria'
 import { getApiErrorMessage } from '@/services/apiClient'
 import { colors, spacing, fontSize, fontWeight, radius } from '@/constants/theme'
 import type { AriaStackParamList } from '@/navigation/types'
@@ -118,7 +118,16 @@ export function AriaCaptureScreen() {
         durationMs,
       })
       setPhase('processing')
-      await stopAriaSession(sessionId)
+      const { session } = await stopAriaSession(sessionId)
+      if (session.status === 'ready_for_review' || session.status === 'failed') {
+        navigation.replace('AriaReview', { sessionId })
+        return
+      }
+      // If still queued somehow, force sync process once
+      const retried = await processAriaSession(sessionId)
+      if (retried.session.status === 'ready_for_review' || retried.session.status === 'failed') {
+        navigation.replace('AriaReview', { sessionId })
+      }
     } catch (err) {
       setError(getApiErrorMessage(err, 'Upload failed'))
       setPhase('idle')

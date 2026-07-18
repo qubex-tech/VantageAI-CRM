@@ -34,6 +34,7 @@ export const ENDPOINTS = {
   ariaSessionById: (id: string) => `/api/mobile/scribe/sessions/${id}`,
   ariaSessionChunks: (id: string) => `/api/mobile/scribe/sessions/${id}/chunks`,
   ariaSessionStop: (id: string) => `/api/mobile/scribe/sessions/${id}/stop`,
+  ariaSessionProcess: (id: string) => `/api/mobile/scribe/sessions/${id}/process`,
   ariaSessionNote: (id: string) => `/api/mobile/scribe/sessions/${id}/note`,
   ariaSessionSign: (id: string) => `/api/mobile/scribe/sessions/${id}/sign`,
   ariaSessionDiscard: (id: string) => `/api/mobile/scribe/sessions/${id}/discard`,

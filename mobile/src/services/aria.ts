@@ -59,7 +59,21 @@ export async function uploadAriaChunk(params: {
 }
 
 export async function stopAriaSession(sessionId: string): Promise<{ session: AriaSession }> {
-  return apiPost(ENDPOINTS.ariaSessionStop(sessionId))
+  const client = getApiClient()
+  const res = await client.post<{ session: AriaSession }>(ENDPOINTS.ariaSessionStop(sessionId), undefined, {
+    timeout: 180000,
+  })
+  return res.data
+}
+
+export async function processAriaSession(sessionId: string): Promise<{ session: AriaSession }> {
+  const client = getApiClient()
+  const res = await client.post<{ session: AriaSession }>(
+    ENDPOINTS.ariaSessionProcess(sessionId),
+    undefined,
+    { timeout: 180000 }
+  )
+  return res.data
 }
 
 export async function patchAriaNote(
