@@ -13,6 +13,7 @@ import { setUnauthorizedHandler } from './src/services/apiClient'
 import { useAuthStore } from './src/store/authStore'
 import { getConfigError } from './src/lib/config'
 import { useOtaUpdates } from './src/hooks/useOtaUpdates'
+import { configureAriaDeepgram } from './src/lib/ariaDeepgram'
 
 function shouldRetryQuery(failureCount: number, error: unknown): boolean {
   if (isAxiosError(error)) {
@@ -36,6 +37,14 @@ const queryClient = new QueryClient({
 
 function SessionGuard() {
   useOtaUpdates()
+
+  useEffect(() => {
+    try {
+      configureAriaDeepgram()
+    } catch {
+      // Native module may be missing until a new EAS/dev-client build.
+    }
+  }, [])
 
   useEffect(() => {
     setUnauthorizedHandler(async () => {

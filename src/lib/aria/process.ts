@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { isAriaScribeEnabled } from '@/lib/aria/enabled'
+import { ARIA_STREAM_TRANSCRIPT_MIN_CHARS } from '@/lib/aria/deepgram'
 import { loadAriaPatientContext, type AriaPatientContext } from '@/lib/aria/context'
 import { generateAriaSoapNote, transcribeAriaAudio } from '@/lib/aria/generate'
 import { notifyUsers } from '@/lib/push-notifications'
@@ -124,6 +125,86 @@ export async function runAriaSessionPipeline(params: {
     data: { status: 'transcribing', error: null },
   })
 
+  const contextPromise = (async (): Promise<AriaPatientContext> => {
+    const cached = contextFromPrefetch(session.rawModelMeta)
+    if (cached) return cached
+    return loadAriaPatientContext({
+      practiceId,
+      patientId: session.patientId,
+      appointmentId: session.appointmentId,
+    })
+  })()
+
+  const streamed = (session.transcript || '').trim()
+  const useStreamTranscript = streamed.length >= ARIA_STREAM_TRANSCRIPT_MIN_CHARS
+
+  // Prefer Deepgram live transcript for SOAP when we already have enough text.
+  if (useStreamTranscript) {
+    const context = await contextPromise
+    const asrDoneAt = Date.now()
+    const existingMeta =
+      session.rawModelMeta && typeof session.rawModelMeta === 'object'
+        ? (session.rawModelMeta as Record<string, unknown>)
+        : {}
+
+    await prisma.scribeSession.update({
+      where: { id: sessionId },
+      data: {
+        status: 'generating',
+        rawModelMeta: {
+          ...existingMeta,
+          asr: { source: 'deepgram_stream', chars: streamed.length },
+          timings: {
+            asrMs: asrDoneAt - pipelineStarted,
+            source: 'deepgram_stream',
+          },
+        } as Prisma.InputJsonValue,
+      },
+    })
+
+    const { soap, meta } = await generateAriaSoapNote({
+      transcript: streamed,
+      patientName: context.patientName,
+      visitType: context.visitType,
+      reason: context.reason,
+      contextSnippets: context.snippets,
+    })
+
+    await prisma.scribeSession.update({
+      where: { id: sessionId },
+      data: {
+        soapJson: soap as unknown as Prisma.InputJsonValue,
+        status: 'ready_for_review',
+        rawModelMeta: {
+          ...existingMeta,
+          asr: { source: 'deepgram_stream', chars: streamed.length },
+          generation: meta,
+          timings: {
+            asrMs: asrDoneAt - pipelineStarted,
+            totalMs: Date.now() - pipelineStarted,
+            source: 'deepgram_stream',
+          },
+        } as Prisma.InputJsonValue,
+        error: null,
+      },
+    })
+
+    await prisma.scribeAudioChunk.updateMany({
+      where: { sessionId },
+      data: { audioData: null },
+    })
+
+    if (notify) {
+      void notifyUsers([session.providerUserId], {
+        title: 'Aria: note ready',
+        body: 'Your draft visit note is ready for review.',
+        data: { type: 'aria_note_ready', sessionId },
+      }).catch(() => null)
+    }
+
+    return { sessionId, status: 'ready_for_review' }
+  }
+
   // Persist fresh audio + load existing chunks concurrently
   let freshSeq: number | null = null
   const persistFreshPromise = (async () => {
@@ -160,16 +241,6 @@ export async function runAriaSessionPipeline(params: {
       transcript: true,
     },
   })
-
-  const contextPromise = (async (): Promise<AriaPatientContext> => {
-    const cached = contextFromPrefetch(session.rawModelMeta)
-    if (cached) return cached
-    return loadAriaPatientContext({
-      practiceId,
-      patientId: session.patientId,
-      appointmentId: session.appointmentId,
-    })
-  })()
 
   const [, existingChunks, context] = await Promise.all([
     persistFreshPromise,
@@ -278,6 +349,7 @@ export async function runAriaSessionPipeline(params: {
           asrMs: asrDoneAt - pipelineStarted,
           cachedSegments: cachedCount,
           pendingAsrSegments: Math.max(0, pendingAsr),
+          source: 'whisper_segments',
         },
       } as Prisma.InputJsonValue,
     },
@@ -308,6 +380,7 @@ export async function runAriaSessionPipeline(params: {
         timings: {
           asrMs: asrDoneAt - pipelineStarted,
           totalMs: Date.now() - pipelineStarted,
+          source: 'whisper_segments',
         },
       } as Prisma.InputJsonValue,
       error: null,
