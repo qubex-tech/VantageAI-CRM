@@ -1,5 +1,4 @@
 import { Audio } from 'expo-av'
-import * as FileSystem from 'expo-file-system'
 
 export type AriaRecorderState = 'idle' | 'recording' | 'paused'
 
@@ -83,11 +82,6 @@ export async function stopAmbientRecording(): Promise<{
 
   if (!uri) {
     throw new Error('Recording file missing')
-  }
-
-  const info = await FileSystem.getInfoAsync(uri)
-  if (!info.exists) {
-    throw new Error('Recording file was not saved')
   }
 
   return { uri, durationMs: accumulatedMs || status.durationMillis || 0 }
