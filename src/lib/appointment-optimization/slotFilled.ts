@@ -60,8 +60,9 @@ export async function isSlotOpenForReplies(openSlotEventId: string): Promise<boo
 
 /**
  * Align slot status with reality:
- * - occupied → filled
- * - past and unfilled → exhausted (never reopen into Active)
+ * - future + occupied → filled (someone took the opening while outreach was live)
+ * - past → exhausted, unless it was already marked filled before the slot started
+ *   (post-hoc calendar overlap after the slot time must not inflate Filled)
  * - future filled/exhausted that is free again → open
  */
 export async function syncOpenSlotLifecycle(openSlotEventId: string): Promise<void> {
@@ -73,17 +74,23 @@ export async function syncOpenSlotLifecycle(openSlotEventId: string): Promise<vo
   const occupied = await isOpenSlotFilled(openSlotEventId)
   const isPast = slot.slotStart <= new Date()
 
-  if (occupied) {
-    if (slot.status !== OPEN_SLOT_STATUS.FILLED) {
-      await markOpenSlotFilled(openSlotEventId)
+  if (isPast) {
+    const filledBeforeSlotStart =
+      slot.status === OPEN_SLOT_STATUS.FILLED &&
+      slot.filledAt != null &&
+      slot.filledAt.getTime() <= slot.slotStart.getTime()
+
+    if (filledBeforeSlotStart) return
+
+    if (slot.status !== OPEN_SLOT_STATUS.EXHAUSTED || slot.filledAt != null) {
+      await markOpenSlotExhausted(openSlotEventId)
     }
     return
   }
 
-  // Past unfilled slots stay out of Active — including former filled that later cancelled.
-  if (isPast) {
-    if (slot.status !== OPEN_SLOT_STATUS.EXHAUSTED) {
-      await markOpenSlotExhausted(openSlotEventId)
+  if (occupied) {
+    if (slot.status !== OPEN_SLOT_STATUS.FILLED) {
+      await markOpenSlotFilled(openSlotEventId)
     }
     return
   }
@@ -112,6 +119,6 @@ export async function markOpenSlotFilled(openSlotEventId: string) {
 export async function markOpenSlotExhausted(openSlotEventId: string) {
   return prisma.openSlotEvent.update({
     where: { id: openSlotEventId },
-    data: { status: OPEN_SLOT_STATUS.EXHAUSTED },
+    data: { status: OPEN_SLOT_STATUS.EXHAUSTED, filledAt: null },
   })
 }

@@ -34,7 +34,7 @@ describe('reconcileStaleOpenSlotsForPractice', () => {
       expect.objectContaining({
         where: expect.objectContaining({
           practiceId: 'practice-1',
-          status: 'open',
+          status: { in: ['open', 'filled'] },
           slotStart: expect.objectContaining({ lte: expect.any(Date) }),
         }),
       })

@@ -46,6 +46,7 @@ describe('syncOpenSlotLifecycle', () => {
       practiceId: 'p1',
       providerId: null,
       status: 'open',
+      filledAt: null,
       slotStart: past,
       slotEnd: new Date(past.getTime() + 30 * 60_000),
     })
@@ -58,20 +59,22 @@ describe('syncOpenSlotLifecycle', () => {
 
     expect(update).toHaveBeenCalledWith({
       where: { id: 'slot-1' },
-      data: { status: 'exhausted' },
+      data: { status: 'exhausted', filledAt: null },
     })
   })
 
-  it('does not reopen a past filled slot after occupancy clears', async () => {
+  it('exhausts past slots marked filled only after the slot started', async () => {
     const past = new Date(Date.now() - 60_000)
     findUnique.mockResolvedValue({
       id: 'slot-2',
       practiceId: 'p1',
       providerId: null,
       status: 'filled',
+      filledAt: new Date(), // post-hoc occupancy sync
       slotStart: past,
       slotEnd: new Date(past.getTime() + 30 * 60_000),
     })
+    appointmentFindFirst.mockResolvedValue({ id: 'appt-1' })
     update.mockResolvedValue({})
 
     const { syncOpenSlotLifecycle } = await import(
@@ -81,7 +84,29 @@ describe('syncOpenSlotLifecycle', () => {
 
     expect(update).toHaveBeenCalledWith({
       where: { id: 'slot-2' },
-      data: { status: 'exhausted' },
+      data: { status: 'exhausted', filledAt: null },
     })
+  })
+
+  it('keeps past slots that were filled before the slot started', async () => {
+    const past = new Date(Date.now() - 60_000)
+    const filledAt = new Date(past.getTime() - 60_000)
+    findUnique.mockResolvedValue({
+      id: 'slot-3',
+      practiceId: 'p1',
+      providerId: null,
+      status: 'filled',
+      filledAt,
+      slotStart: past,
+      slotEnd: new Date(past.getTime() + 30 * 60_000),
+    })
+    update.mockResolvedValue({})
+
+    const { syncOpenSlotLifecycle } = await import(
+      '@/lib/appointment-optimization/slotFilled'
+    )
+    await syncOpenSlotLifecycle('slot-3')
+
+    expect(update).not.toHaveBeenCalled()
   })
 })
