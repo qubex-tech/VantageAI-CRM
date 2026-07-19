@@ -15,9 +15,10 @@ import { getSchedulingSettings } from '@/lib/integrations/clinical-system/server
 import type { SchedulingSettings } from '@/lib/integrations/clinical-system/types'
 import {
   canBookAppointments,
+  hasTypedOdBookConfigs,
   resolveBookConfigForVisitType,
   resolveBookOperatoryNum,
-  resolveOdBookConfigs,
+  resolveDefaultOdBookConfig,
   resolveOdReadConfigs,
   resolveReadConfigsForVisitType,
   resolveReadLengthMinutes,
@@ -588,9 +589,29 @@ async function bookAppointmentViaOpenDental(params: {
   } = params
 
   const visitType = resolveOdVisitTypeFromAgentInput(scheduling, appointmentType, eventTypeId)
-  const bookConfig = visitType
+  const defaultBookConfig = resolveDefaultOdBookConfig(scheduling)
+  let bookConfig = visitType
     ? resolveBookConfigForVisitType(scheduling, visitType)
     : null
+
+  // Visit-type rows are optional. When none match (or none provided), use the
+  // default booking row (empty visitTypes) — same as pre visit-type routing.
+  if (!bookConfig) {
+    bookConfig = defaultBookConfig
+  }
+
+  if (hasTypedOdBookConfigs(scheduling)) {
+    if (visitType && !resolveBookConfigForVisitType(scheduling, visitType) && !defaultBookConfig) {
+      throw new Error(
+        `Visit type "${visitType}" is not assigned to any booking time-slot configuration.`
+      )
+    }
+    if (!visitType && !defaultBookConfig) {
+      throw new Error(
+        'Could not map the requested appointment type to an EHR visit type. Ask the patient to clarify the visit type.'
+      )
+    }
+  }
 
   const provNum = bookConfig?.provNum ?? scheduling.defaultProvNum ?? null
   const lengthMinutes = bookConfig?.lengthMinutes ?? scheduling.defaultLengthMinutes ?? null
@@ -602,20 +623,6 @@ async function bookAppointmentViaOpenDental(params: {
     throw new Error(
       'Open Dental scheduling is enabled but no booking operatory is configured. Set booking time slots in Scheduling settings.'
     )
-  }
-
-  // Only enforce NL/visit-type routing when multi-provider booking rows are configured.
-  if (resolveOdBookConfigs(scheduling).length > 0) {
-    if (!visitType) {
-      throw new Error(
-        'Could not map the requested appointment type to an EHR visit type. Ask the patient to clarify the visit type.'
-      )
-    }
-    if (!bookConfig) {
-      throw new Error(
-        `Visit type "${visitType}" is not assigned to any booking time-slot configuration.`
-      )
-    }
   }
 
   const startInstant = new Date(startTime)

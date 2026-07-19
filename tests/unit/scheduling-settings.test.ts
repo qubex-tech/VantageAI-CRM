@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import {
+  hasTypedOdBookConfigs,
   resolveBookConfigForVisitType,
   resolveBookOperatoryNum,
   resolveBookOperatoryNums,
+  resolveDefaultOdBookConfig,
   resolveOdBookConfigs,
   resolveOdReadConfigs,
   resolveReadConfigsForVisitType,
@@ -119,8 +121,52 @@ describe('scheduling settings resolvers', () => {
           ...base,
           defaultOperatoryNum: null,
           defaultOperatoryNums: [],
+          defaultProvNum: null,
         })
       ).toBeNull()
+    })
+
+    it('uses default odBookSlotConfigs row when legacy booking ops are unset', () => {
+      expect(
+        resolveBookOperatoryNum({
+          ...base,
+          defaultOperatoryNum: null,
+          defaultOperatoryNums: [],
+          defaultProvNum: null,
+          odBookSlotConfigs: [
+            {
+              provNum: 24,
+              operatoryNums: [2],
+              lengthMinutes: 30,
+              visitTypes: [],
+            },
+          ],
+        })
+      ).toBe(2)
+    })
+  })
+
+  describe('default book configs without visit types', () => {
+    const afdLike: SchedulingSettings = {
+      readSource: 'open_dental',
+      writeSource: 'open_dental',
+      defaultOperatoryNum: null,
+      defaultOperatoryNums: [],
+      defaultProvNum: null,
+      odBookSlotConfigs: [
+        {
+          provNum: 24,
+          operatoryNums: [2],
+          lengthMinutes: 30,
+          visitTypes: [],
+        },
+      ],
+    }
+
+    it('keeps book rows with empty visitTypes as the default booking target', () => {
+      expect(resolveOdBookConfigs(afdLike)).toHaveLength(1)
+      expect(resolveDefaultOdBookConfig(afdLike)?.operatoryNums).toEqual([2])
+      expect(hasTypedOdBookConfigs(afdLike)).toBe(false)
     })
   })
 

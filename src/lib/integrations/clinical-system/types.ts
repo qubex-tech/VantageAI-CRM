@@ -117,12 +117,35 @@ export function resolveBookOperatoryNums(settings: SchedulingSettings): number[]
   if (primary && primary > 0) {
     return dedupePositiveInts([primary, ...additional])
   }
-  return dedupePositiveInts(additional)
+  const fromLegacy = dedupePositiveInts(additional)
+  if (fromLegacy.length > 0) return fromLegacy
+
+  // Prefer default (no visit-type) book rows; otherwise any configured book ops.
+  const configs = resolveOdBookConfigs(settings)
+  const defaults = configs.filter((c) => c.visitTypes.length === 0)
+  const source = defaults.length > 0 ? defaults : configs
+  return dedupePositiveInts(source.flatMap((c) => c.operatoryNums))
 }
 
 /** Primary operatory for booking — first entry from {@link resolveBookOperatoryNums}. */
 export function resolveBookOperatoryNum(settings: SchedulingSettings): number | null {
   return resolveBookOperatoryNums(settings)[0] ?? null
+}
+
+/**
+ * Booking row used when the agent does not supply a mapped visit type:
+ * first `odBookSlotConfigs` row with empty visitTypes, else legacy-derived default.
+ */
+export function resolveDefaultOdBookConfig(
+  settings: SchedulingSettings
+): OdBookSlotConfig | null {
+  const configs = resolveOdBookConfigs(settings)
+  return configs.find((c) => c.visitTypes.length === 0) ?? null
+}
+
+/** True when at least one booking row has visit-type routing configured. */
+export function hasTypedOdBookConfigs(settings: SchedulingSettings): boolean {
+  return resolveOdBookConfigs(settings).some((c) => c.visitTypes.length > 0)
 }
 
 /** Visit length for slot availability queries — read default, then booking default. */
@@ -201,7 +224,7 @@ function coerceOdBookSlotConfig(raw: unknown): OdBookSlotConfig | null {
       }
     }
   }
-  if (visitTypes.length === 0) return null
+  // Empty visitTypes is valid: that row is the default booking target (pre visit-type routing).
   return { provNum, operatoryNums, lengthMinutes, visitTypes }
 }
 
@@ -229,7 +252,18 @@ export function resolveOdBookConfigs(settings: SchedulingSettings): OdBookSlotCo
         .filter((c): c is OdBookSlotConfig => c !== null)
     : []
   if (fromNew.length > 0) return fromNew
-  return []
+
+  // Legacy single booking defaults (no visit-type routing).
+  const primary = settings.defaultOperatoryNum
+  const additional = settings.defaultOperatoryNums ?? []
+  const operatoryNums =
+    primary && primary > 0
+      ? dedupePositiveInts([primary, ...additional])
+      : dedupePositiveInts(additional)
+  const provNum = settings.defaultProvNum
+  const lengthMinutes = settings.defaultLengthMinutes ?? 30
+  if (!provNum || provNum <= 0 || operatoryNums.length === 0) return []
+  return [{ provNum, operatoryNums, lengthMinutes, visitTypes: [] }]
 }
 
 /** Flatten all configured visit-type mappings across booking rows. */

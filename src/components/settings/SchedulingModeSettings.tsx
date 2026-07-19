@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Loader2, CalendarClock, X, Plus } from 'lucide-react'
+import { Loader2, CalendarClock, X, Plus, ChevronDown, Check } from 'lucide-react'
 import type {
   OdBookSlotConfig,
   OdReadSlotConfig,
@@ -208,36 +208,52 @@ function SearchableVisitTypePicker({
   reservedByOthers: Set<string>
   onChange: (next: VisitTypeMapping[]) => void
 }) {
+  const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [aliasDrafts, setAliasDrafts] = useState<Record<string, string>>({})
+  const [expandedAliases, setExpandedAliases] = useState<string | null>(null)
+  const rootRef = useRef<HTMLDivElement | null>(null)
 
-  const selectedKeys = useMemo(
-    () => new Set(selected.map((s) => s.visitType.trim().toLowerCase())),
-    [selected]
-  )
+  const selectedByKey = useMemo(() => {
+    const map = new Map<string, VisitTypeMapping>()
+    for (const mapping of selected) {
+      map.set(mapping.visitType.trim().toLowerCase(), mapping)
+    }
+    return map
+  }, [selected])
 
-  const filtered = useMemo(() => {
+  const options = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return allVisitTypes
-      .filter((vt) => {
-        const key = vt.trim().toLowerCase()
-        if (selectedKeys.has(key) || reservedByOthers.has(key)) return false
-        if (!q) return true
-        return vt.toLowerCase().includes(q)
-      })
-      .slice(0, 12)
-  }, [allVisitTypes, query, reservedByOthers, selectedKeys])
+    return allVisitTypes.filter((vt) => {
+      const key = vt.trim().toLowerCase()
+      // Keep already-selected options visible (checked); hide ones claimed by other rows.
+      if (reservedByOthers.has(key) && !selectedByKey.has(key)) return false
+      if (!q) return true
+      return vt.toLowerCase().includes(q)
+    })
+  }, [allVisitTypes, query, reservedByOthers, selectedByKey])
 
-  const addVisitType = (visitType: string) => {
-    if (!visitType.trim()) return
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false)
+        setQuery('')
+      }
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    return () => document.removeEventListener('mousedown', onPointerDown)
+  }, [open])
+
+  const toggleVisitType = (visitType: string) => {
     const key = visitType.trim().toLowerCase()
-    if (selectedKeys.has(key) || reservedByOthers.has(key)) return
+    if (!key || reservedByOthers.has(key)) return
+    if (selectedByKey.has(key)) {
+      onChange(selected.filter((s) => s.visitType.trim().toLowerCase() !== key))
+      if (expandedAliases?.trim().toLowerCase() === key) setExpandedAliases(null)
+      return
+    }
     onChange([...selected, { visitType: visitType.trim(), aliases: [] }])
-    setQuery('')
-  }
-
-  const removeVisitType = (visitType: string) => {
-    onChange(selected.filter((s) => s.visitType !== visitType))
   }
 
   const addAlias = (visitType: string) => {
@@ -264,100 +280,171 @@ function SearchableVisitTypePicker({
     )
   }
 
+  const triggerLabel =
+    selected.length === 0
+      ? 'Select visit types…'
+      : selected.length === 1
+        ? selected[0].visitType
+        : `${selected.length} visit types selected`
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-2" ref={rootRef}>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          disabled={allVisitTypes.length === 0}
+          className="flex h-10 w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          aria-haspopup="listbox"
+          aria-expanded={open}
+        >
+          <span className={selected.length === 0 ? 'text-gray-500' : 'text-gray-900'}>
+            {allVisitTypes.length === 0 ? 'No EMR visit types available' : triggerLabel}
+          </span>
+          <ChevronDown className="h-4 w-4 text-gray-400" />
+        </button>
+
+        {open && (
+          <div className="absolute z-20 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg">
+            <div className="border-b border-gray-100 p-2">
+              <Input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search EMR visit types…"
+                className="h-8 text-sm"
+              />
+            </div>
+            <ul className="max-h-56 overflow-auto py-1" role="listbox" aria-multiselectable="true">
+              {options.length === 0 ? (
+                <li className="px-3 py-2 text-xs text-gray-500">No matching visit types.</li>
+              ) : (
+                options.map((vt) => {
+                  const key = vt.trim().toLowerCase()
+                  const checked = selectedByKey.has(key)
+                  return (
+                    <li key={vt} role="option" aria-selected={checked}>
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-gray-800 hover:bg-gray-50"
+                        onClick={() => toggleVisitType(vt)}
+                      >
+                        <span
+                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                            checked
+                              ? 'border-gray-900 bg-gray-900 text-white'
+                              : 'border-gray-300 bg-white'
+                          }`}
+                          aria-hidden="true"
+                        >
+                          {checked && <Check className="h-3 w-3" strokeWidth={3} />}
+                        </span>
+                        <span className="truncate">{vt}</span>
+                      </button>
+                    </li>
+                  )
+                })
+              )}
+            </ul>
+            {selected.length > 0 && (
+              <div className="border-t border-gray-100 px-3 py-2 text-xs text-gray-500">
+                {selected.length} selected — click outside to close
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {selected.length > 0 && (
-        <ul className="space-y-3">
+        <ul className="flex flex-wrap gap-2">
           {selected.map((mapping) => (
-            <li
-              key={mapping.visitType}
-              className="rounded-md border border-gray-200 bg-white p-3 space-y-2"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-sm font-medium text-gray-900">{mapping.visitType}</p>
-                <button
-                  type="button"
-                  onClick={() => removeVisitType(mapping.visitType)}
+            <li key={mapping.visitType}>
+              <button
+                type="button"
+                onClick={() =>
+                  setExpandedAliases((current) =>
+                    current === mapping.visitType ? null : mapping.visitType
+                  )
+                }
+                className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-sm text-gray-800 hover:border-gray-300"
+                title="Click to manage aliases"
+              >
+                {mapping.visitType}
+                {mapping.aliases.length > 0 && (
+                  <span className="text-xs text-gray-500">+{mapping.aliases.length}</span>
+                )}
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleVisitType(mapping.visitType)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      toggleVisitType(mapping.visitType)
+                    }
+                  }}
                   className="rounded p-0.5 text-gray-400 hover:text-gray-700"
                   aria-label={`Remove ${mapping.visitType}`}
                 >
                   <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-              {mapping.aliases.length > 0 && (
-                <ul className="flex flex-wrap gap-1.5">
-                  {mapping.aliases.map((alias) => (
-                    <li
-                      key={alias}
-                      className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs text-gray-700"
-                    >
-                      {alias}
-                      <button
-                        type="button"
-                        onClick={() => removeAlias(mapping.visitType, alias)}
-                        className="text-gray-400 hover:text-gray-700"
-                        aria-label={`Remove alias ${alias}`}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <div className="flex gap-2">
-                <Input
-                  value={aliasDrafts[mapping.visitType] || ''}
-                  onChange={(e) =>
-                    setAliasDrafts((prev) => ({ ...prev, [mapping.visitType]: e.target.value }))
-                  }
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      addAlias(mapping.visitType)
-                    }
-                  }}
-                  placeholder="Add natural-language alias…"
-                  className="h-8 text-xs"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => addAlias(mapping.visitType)}
-                >
-                  Alias
-                </Button>
-              </div>
+                </span>
+              </button>
             </li>
           ))}
         </ul>
       )}
 
-      <div className="space-y-1">
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search visit types…"
-        />
-        {query.trim() && filtered.length > 0 && (
-          <ul className="max-h-40 overflow-auto rounded-md border border-gray-200 bg-white shadow-sm">
-            {filtered.map((vt) => (
-              <li key={vt}>
+      {expandedAliases && selected.some((s) => s.visitType === expandedAliases) && (
+        <div className="rounded-md border border-gray-200 bg-gray-50 p-3 space-y-2">
+          <p className="text-xs font-medium text-gray-700">Aliases for {expandedAliases}</p>
+          {selected
+            .find((s) => s.visitType === expandedAliases)
+            ?.aliases.map((alias) => (
+              <span
+                key={alias}
+                className="mr-1.5 mb-1 inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-0.5 text-xs text-gray-700"
+              >
+                {alias}
                 <button
                   type="button"
-                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
-                  onClick={() => addVisitType(vt)}
+                  onClick={() => removeAlias(expandedAliases, alias)}
+                  className="text-gray-400 hover:text-gray-700"
+                  aria-label={`Remove alias ${alias}`}
                 >
-                  {vt}
+                  <X className="h-3 w-3" />
                 </button>
-              </li>
+              </span>
             ))}
-          </ul>
-        )}
-        {query.trim() && filtered.length === 0 && (
-          <p className="text-xs text-gray-500 px-1">No matching visit types.</p>
-        )}
-      </div>
+          <div className="flex gap-2">
+            <Input
+              value={aliasDrafts[expandedAliases] || ''}
+              onChange={(e) =>
+                setAliasDrafts((prev) => ({ ...prev, [expandedAliases]: e.target.value }))
+              }
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  addAlias(expandedAliases)
+                }
+              }}
+              placeholder="Add natural-language alias…"
+              className="h-8 text-xs"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => addAlias(expandedAliases)}
+            >
+              Alias
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -515,14 +602,16 @@ export function SchedulingModeSettings({
   const loadLists = useCallback(async () => {
     setLoadingLists(true)
     try {
-      const [pRes, oRes, vRes] = await Promise.all([
+      const [pRes, oRes, odTypesRes, vRes] = await Promise.all([
         fetch(withPractice('/api/integrations/opendental/providers')),
         fetch(withPractice('/api/integrations/opendental/operatories')),
+        fetch(withPractice('/api/integrations/opendental/appointment-types')),
         fetch(withPractice('/api/appointments/visit-types')),
       ])
       const pData = await pRes.json()
       const oData = await oRes.json()
-      const vData = await vRes.json()
+      const odTypesData = await odTypesRes.json().catch(() => ({}))
+      const vData = await vRes.json().catch(() => ({}))
       if (pRes.ok)
         setProviders(
           (pData.providers || []).filter((p: ProviderOption & { isHidden?: boolean }) => !p.isHidden)
@@ -533,7 +622,20 @@ export function SchedulingModeSettings({
             (o: OperatoryOption & { isHidden?: boolean }) => !o.isHidden
           )
         )
-      if (vRes.ok) setVisitTypes(Array.isArray(vData.visitTypes) ? vData.visitTypes : [])
+
+      // Prefer Open Dental AppointmentTypes (EMR), then merge CRM/Cal names.
+      const names = new Set<string>()
+      if (odTypesRes.ok && Array.isArray(odTypesData.appointmentTypes)) {
+        for (const row of odTypesData.appointmentTypes as Array<{ name?: string }>) {
+          if (row?.name?.trim()) names.add(row.name.trim())
+        }
+      }
+      if (vRes.ok && Array.isArray(vData.visitTypes)) {
+        for (const name of vData.visitTypes as string[]) {
+          if (name?.trim()) names.add(name.trim())
+        }
+      }
+      setVisitTypes(Array.from(names).sort((a, b) => a.localeCompare(b)))
     } catch {
       // Non-fatal — admin can still pick sources without defaults.
     } finally {
@@ -646,10 +748,7 @@ export function SchedulingModeSettings({
       setError('Select at least one operatory for the booking time slot row.')
       return
     }
-    if (bookDraft.visitTypes.length === 0) {
-      setError('Select at least one visit type for the booking time slot row.')
-      return
-    }
+    // Visit types are optional: empty = default booking target (any visit / voice book).
     setError('')
     setBookConfigs([
       ...bookConfigs,
@@ -937,9 +1036,10 @@ export function SchedulingModeSettings({
                 <div>
                   <p className="text-sm font-medium text-gray-700">Booking time slots</p>
                   <p className="text-xs text-gray-500 mt-1">
-                    Providers, write operatories, and EHR visit types used when booking. Add
-                    natural-language aliases so the voice agent can map patient requests to visit
-                    types.
+                    Providers and write operatories used when booking. Visit types are optional —
+                    leave them empty for a default booking target (same as before). Add visit types
+                    and aliases when you want the voice agent to route different visits to different
+                    providers/chairs.
                   </p>
                 </div>
                 {loadingLists ? (

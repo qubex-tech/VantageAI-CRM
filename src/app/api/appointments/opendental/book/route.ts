@@ -9,6 +9,7 @@ import {
   resolveBookConfigForVisitType,
   resolveBookOperatoryNum,
   resolveBookOperatoryNums,
+  resolveDefaultOdBookConfig,
   resolveVisitTypeFromNaturalLanguage,
   resolveWriteOperatoryForBooking,
   usesOpenDentalForWrite,
@@ -56,9 +57,12 @@ export async function POST(req: NextRequest) {
     const resolvedVisitType = input.visitType
       ? resolveVisitTypeFromNaturalLanguage(scheduling, input.visitType) || input.visitType.trim()
       : null
-    const bookConfig = resolvedVisitType
+    let bookConfig = resolvedVisitType
       ? resolveBookConfigForVisitType(scheduling, resolvedVisitType)
       : null
+    if (!bookConfig) {
+      bookConfig = resolveDefaultOdBookConfig(scheduling)
+    }
 
     const bookOperatoryNums = bookConfig?.operatoryNums ?? resolveBookOperatoryNums(scheduling)
     const requestedOpNum = input.opNum ?? undefined
