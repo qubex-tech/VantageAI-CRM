@@ -40,6 +40,8 @@ export default async function PatientsPage({
       OR: search
         ? [
             { name: { contains: search, mode: 'insensitive' as const } },
+            { firstName: { contains: search, mode: 'insensitive' as const } },
+            { lastName: { contains: search, mode: 'insensitive' as const } },
             { phone: { contains: search } },
             { primaryPhone: { contains: search } },
             { email: { contains: search, mode: 'insensitive' as const } },

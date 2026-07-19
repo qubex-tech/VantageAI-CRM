@@ -17,6 +17,8 @@ import {
   resolveReadPractitionerRefs,
   type SchedulingSettings,
 } from '@/lib/integrations/clinical-system/types'
+import { formatFhirPatientDisplayName } from '@/lib/patient-name'
+import { phoneMatchKey } from '@/lib/patient-identity'
 
 const WRITEBACK_PROVIDER_ID = 'ecw_write'
 const STALE_SYNC_WINDOW_MS = 12 * 60 * 60 * 1000
@@ -539,11 +541,8 @@ function parsePatientIdFromReference(reference: string | undefined) {
 }
 
 function formatPatientName(patient: FhirPatient) {
-  const name = patient.name?.[0]
-  if (!name) return null
-  if (name.text?.trim()) return name.text.trim()
-  const combined = [...(name.given || []), name.family || ''].filter(Boolean).join(' ').trim()
-  return combined || null
+  // Prefer given+family (First Last). eCW name.text is often "Last First".
+  return formatFhirPatientDisplayName(patient)
 }
 
 function mapEncounterStatusToAppointment(status: string | undefined) {
@@ -855,13 +854,17 @@ async function upsertPatientFromEhr(params: {
     patient = null
   }
 
-  const fullName = formatPatientName(patient || {}) || `EHR Patient ${normalizedPatientId.slice(0, 8)}`
+  const firstName = patient?.name?.[0]?.given?.[0]?.trim() || null
+  const lastName = patient?.name?.[0]?.family?.trim() || null
+  const fullName =
+    formatPatientName(patient || {}) ||
+    [firstName, lastName].filter(Boolean).join(' ') ||
+    `EHR Patient ${normalizedPatientId.slice(0, 8)}`
   const primaryPhone =
     patient?.telecom?.find((entry) => entry.system === 'phone')?.value?.trim() || null
   const email = patient?.telecom?.find((entry) => entry.system === 'email')?.value?.trim() || null
-  const firstName = patient?.name?.[0]?.given?.[0] || null
-  const lastName = patient?.name?.[0]?.family || null
   const birthDate = patient?.birthDate ? new Date(patient.birthDate) : null
+  const phoneKey = phoneMatchKey(primaryPhone)
 
   // Before creating a new profile, merge with an existing local patient match and attach EHR ID.
   const mergeOrConditions: Array<Record<string, unknown>> = []
@@ -871,6 +874,26 @@ async function upsertPatientFromEhr(params: {
   if (primaryPhone) {
     mergeOrConditions.push({ primaryPhone })
     mergeOrConditions.push({ phone: primaryPhone })
+  }
+  // Retell/voice often stores digits-only; eCW sends formatted. Require DOB to avoid
+  // merging distinct people who share a household phone.
+  if (phoneKey.length === 10 && birthDate && phoneKey !== primaryPhone) {
+    mergeOrConditions.push({
+      AND: [{ phone: phoneKey }, { dateOfBirth: birthDate }],
+    })
+    mergeOrConditions.push({
+      AND: [{ primaryPhone: phoneKey }, { dateOfBirth: birthDate }],
+    })
+  }
+  // Structured First+Last+DOB — survives eCW last-first name.text and legacy name drift.
+  if (firstName && lastName && birthDate) {
+    mergeOrConditions.push({
+      AND: [
+        { firstName: { equals: firstName, mode: 'insensitive' } },
+        { lastName: { equals: lastName, mode: 'insensitive' } },
+        { dateOfBirth: birthDate },
+      ],
+    })
   }
   if (fullName && birthDate) {
     mergeOrConditions.push({
@@ -890,13 +913,17 @@ async function upsertPatientFromEhr(params: {
     })
 
     if (mergeCandidate) {
+      const resolvedFirst = mergeCandidate.firstName || firstName
+      const resolvedLast = mergeCandidate.lastName || lastName
+      const displayName =
+        [resolvedFirst, resolvedLast].filter(Boolean).join(' ') || mergeCandidate.name || fullName
       const merged = await prisma.patient.update({
         where: { id: mergeCandidate.id },
         data: {
           externalEhrId: normalizedPatientId,
-          firstName: mergeCandidate.firstName || firstName,
-          lastName: mergeCandidate.lastName || lastName,
-          name: mergeCandidate.name || fullName,
+          firstName: resolvedFirst,
+          lastName: resolvedLast,
+          name: displayName,
           dateOfBirth: mergeCandidate.dateOfBirth || birthDate,
           gender: mergeCandidate.gender || patient?.gender || null,
           primaryPhone: mergeCandidate.primaryPhone || primaryPhone,

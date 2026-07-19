@@ -11,6 +11,7 @@ import { FhirClient } from '@/lib/integrations/fhir/fhirClient'
 import { logEhrAudit } from '@/lib/integrations/ehr/audit'
 import { createPatient } from '@/lib/integrations/fhir/resources/patient'
 import { formatDateOnlyForInput } from '@/lib/date'
+import { formatFhirPatientDisplayName } from '@/lib/patient-name'
 
 const UPDATE_PROVIDER_ID = 'ecw_write'
 const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.326070'
@@ -125,11 +126,8 @@ type FhirPatientRead = {
 }
 
 function displayNameFromFhirPatient(p: FhirPatientRead): string | null {
-  const name = p.name?.[0]
-  if (!name) return null
-  if (name.text?.trim()) return name.text.trim()
-  const combined = [...(name.given || []), name.family || ''].filter(Boolean).join(' ').trim()
-  return combined || null
+  // Prefer given+family (First Last). eCW name.text is often "Last First".
+  return formatFhirPatientDisplayName(p)
 }
 
 /**

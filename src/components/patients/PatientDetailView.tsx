@@ -531,7 +531,7 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                 <div className="h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0">
                   <User className="h-4 w-4 text-gray-600" />
                 </div>
-                <h1 className="text-base md:text-lg font-semibold text-gray-900 truncate">{patient.name}</h1>
+                <h1 className="text-base md:text-lg font-semibold text-gray-900 truncate">{getDisplayName()}</h1>
                 <Star className="h-4 w-4 text-gray-400 flex-shrink-0 hidden md:block" />
               </div>
               {tags.length > 0 && (
@@ -1808,7 +1808,7 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
         open={composeEmailOpen}
         onOpenChange={setComposeEmailOpen}
         patientEmail={patient.email || undefined}
-        patientName={patient.name}
+        patientName={getDisplayName()}
         patientId={patient.id}
       />
 
@@ -1817,7 +1817,7 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
         open={composeSmsOpen}
         onOpenChange={setComposeSmsOpen}
         patientPhone={patient.primaryPhone || patient.phone || undefined}
-        patientName={patient.name}
+        patientName={getDisplayName()}
         patientId={patient.id}
       />
 

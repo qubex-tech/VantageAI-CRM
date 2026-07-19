@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { calculateAgeFromDateOnly } from '@/lib/date'
+import { formatPatientDisplayName } from '@/lib/patient-name'
 import { PatientFilters, FilterRule } from './PatientFilters'
 import { Phone, Mail, Calendar, Heart, User, CheckCircle2 } from 'lucide-react'
 
@@ -124,8 +125,10 @@ export function PatientsList({ initialPatients }: PatientsListProps) {
     if (search) {
       const searchLower = search.toLowerCase()
       const phoneNumber = patient.primaryPhone || patient.phone || ''
+      const displayName = formatPatientDisplayName(patient)
       const matchesSearch =
-        patient.name.toLowerCase().includes(searchLower) ||
+        displayName.toLowerCase().includes(searchLower) ||
+        (patient.name || '').toLowerCase().includes(searchLower) ||
         phoneNumber.includes(search) ||
         (patient.email && patient.email.toLowerCase().includes(searchLower))
       if (!matchesSearch) return false
@@ -210,7 +213,7 @@ export function PatientsList({ initialPatients }: PatientsListProps) {
 
       switch (field) {
         case 'name':
-          fieldValue = patient.name
+          fieldValue = formatPatientDisplayName(patient)
           break
         case 'email':
           fieldValue = patient.email || ''
@@ -382,7 +385,8 @@ export function PatientsList({ initialPatients }: PatientsListProps) {
                   const age = patient.dateOfBirth ? calculateAge(patient.dateOfBirth) : null
                   const nextAppointment = getNextAppointment(patient)
                   const insuranceStatus = getPrimaryInsuranceStatus(patient)
-                  const initials = getInitials(patient.name)
+                  const displayName = formatPatientDisplayName(patient)
+                  const initials = getInitials(displayName)
                   const isSelected = selectedPatients.has(patient.id)
                   
                   return (
@@ -408,7 +412,7 @@ export function PatientsList({ initialPatients }: PatientsListProps) {
                           </div>
                           <div className="min-w-0">
                             <div className="text-sm font-medium text-gray-900 group-hover:text-gray-700">
-                              {patient.name}
+                              {displayName}
                             </div>
                             {age !== null && (
                               <div className="text-xs text-gray-500">
