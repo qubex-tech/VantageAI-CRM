@@ -197,4 +197,32 @@ describe('Open Dental blockout slot filtering', () => {
     expect(slots).toHaveLength(1)
     expect(slots[0].start).toBe('2026-07-23 14:00:00')
   })
+
+  it('fetches blockout days concurrently across a multi-day window', async () => {
+    const { listOpenDentalBlockouts } = await import('@/lib/integrations/opendental/scheduling')
+    let inFlight = 0
+    let maxInFlight = 0
+    const list = vi.fn().mockImplementation(async () => {
+      inFlight++
+      maxInFlight = Math.max(maxInFlight, inFlight)
+      await new Promise((r) => setTimeout(r, 20))
+      inFlight--
+      return []
+    })
+
+    vi.mocked(getOpenDentalServices).mockResolvedValue({
+      appointments: { getSlots: vi.fn() },
+      schedules: { list },
+    } as never)
+
+    await listOpenDentalBlockouts({
+      practiceId: 'practice-1',
+      dateStart: '2026-07-23',
+      dateEnd: '2026-07-30',
+    })
+
+    expect(list).toHaveBeenCalledTimes(8)
+    // Sequential would keep maxInFlight at 1.
+    expect(maxInFlight).toBeGreaterThan(1)
+  })
 })

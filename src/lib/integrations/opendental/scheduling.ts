@@ -137,9 +137,60 @@ export function filterOpenDentalSlotsAgainstBlockouts(
   )
 }
 
+/** Cap concurrent OD schedule day fetches so we don't stampede the API. */
+const BLOCKOUT_FETCH_CONCURRENCY = 8
+
+async function mapPool<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  if (items.length === 0) return []
+  const limit = Math.max(1, Math.min(concurrency, items.length))
+  const results = new Array<R>(items.length)
+  let next = 0
+
+  await Promise.all(
+    Array.from({ length: limit }, async () => {
+      while (true) {
+        const index = next++
+        if (index >= items.length) return
+        results[index] = await fn(items[index], index)
+      }
+    })
+  )
+
+  return results
+}
+
+function parseBlockoutsFromScheduleRows(
+  date: string,
+  raw: Array<Record<string, unknown>>
+): OpenDentalBlockout[] {
+  const blockouts: OpenDentalBlockout[] = []
+  for (const row of raw) {
+    if (String(row.SchedType ?? '').trim() !== 'Blockout') continue
+    const start = combineSchedDateAndTime(row.SchedDate ?? date, row.StartTime)
+    const end = combineSchedDateAndTime(row.SchedDate ?? date, row.StopTime)
+    if (!start || !end) continue
+    if (diffMinutesNaive(start, end) <= 0) continue
+    blockouts.push({
+      start: formatNaive(start),
+      end: formatNaive(end),
+      opNums: parseOpNums(row.operatories ?? row.Ops ?? row.OpNums),
+      note: str(row.Note),
+      blockoutType: num(row.BlockoutType),
+    })
+  }
+  return blockouts
+}
+
 /**
  * Pull chairside blockouts from Open Dental schedules for an inclusive date range.
  * `appointments/Slots` does not honor these, so callers must subtract them locally.
+ *
+ * Days are fetched concurrently (bounded) — sequential day-by-day calls were ~1s each
+ * and dominated voice slot latency on multi-week windows.
  */
 export async function listOpenDentalBlockouts(params: {
   practiceId: string
@@ -150,28 +201,14 @@ export async function listOpenDentalBlockouts(params: {
   const dateEnd = params.dateEnd ?? dateStart
   const services = await getOpenDentalServices(practiceId)
   const dates = eachDateInRange(dateStart, dateEnd)
-  const blockouts: OpenDentalBlockout[] = []
 
-  for (const date of dates) {
+  const perDay = await mapPool(dates, BLOCKOUT_FETCH_CONCURRENCY, async (date) => {
     const raw = (await services.schedules.list({ date })) as Array<Record<string, unknown>>
-    if (!Array.isArray(raw)) continue
-    for (const row of raw) {
-      if (String(row.SchedType ?? '').trim() !== 'Blockout') continue
-      const start = combineSchedDateAndTime(row.SchedDate ?? date, row.StartTime)
-      const end = combineSchedDateAndTime(row.SchedDate ?? date, row.StopTime)
-      if (!start || !end) continue
-      if (diffMinutesNaive(start, end) <= 0) continue
-      blockouts.push({
-        start: formatNaive(start),
-        end: formatNaive(end),
-        opNums: parseOpNums(row.operatories ?? row.Ops ?? row.OpNums),
-        note: str(row.Note),
-        blockoutType: num(row.BlockoutType),
-      })
-    }
-  }
+    if (!Array.isArray(raw)) return [] as OpenDentalBlockout[]
+    return parseBlockoutsFromScheduleRows(date, raw)
+  })
 
-  return blockouts
+  return perDay.flat()
 }
 
 export async function listOpenDentalProviders(practiceId: string): Promise<OpenDentalProvider[]> {
@@ -287,10 +324,10 @@ function diffMinutesNaive(start: NaiveParts, end: NaiveParts): number {
 
 /**
  * Fetch open scheduling windows from Open Dental and subdivide them into discrete,
- * bookable start times of `lengthMinutes` each. Open Dental returns whole open ranges,
- * not appointment-sized slots, so we slice them here.
+ * bookable start times of `lengthMinutes` each. Does **not** apply blockout filtering —
+ * callers that already loaded blockouts once should filter after merging.
  */
-export async function getOpenDentalOpenSlots(params: {
+async function getOpenDentalOpenSlotsRaw(params: {
   practiceId: string
   provNum?: number | null
   opNum?: number | null
@@ -343,24 +380,50 @@ export async function getOpenDentalOpenSlots(params: {
   }
 
   slots.sort((a, b) => a.start.localeCompare(b.start))
+  return slots
+}
 
-  // appointments/Slots ignores chairside blockouts — subtract them from schedules.
+async function loadBlockoutsOrEmpty(params: {
+  practiceId: string
+  dateStart: string
+  dateEnd?: string
+}): Promise<OpenDentalBlockout[]> {
   try {
-    const blockouts = await listOpenDentalBlockouts({
-      practiceId,
-      dateStart,
-      dateEnd: dateEnd ?? dateStart,
-    })
-    return filterOpenDentalSlotsAgainstBlockouts(slots, blockouts)
+    return await listOpenDentalBlockouts(params)
   } catch (error) {
     console.error('[OpenDental] Failed to load blockouts; returning unfiltered slots', {
+      practiceId: params.practiceId,
+      dateStart: params.dateStart,
+      dateEnd: params.dateEnd ?? params.dateStart,
+      error: error instanceof Error ? error.message : error,
+    })
+    return []
+  }
+}
+
+/**
+ * Fetch open scheduling windows from Open Dental and subdivide them into discrete,
+ * bookable start times of `lengthMinutes` each. Open Dental returns whole open ranges,
+ * not appointment-sized slots, so we slice them here.
+ */
+export async function getOpenDentalOpenSlots(params: {
+  practiceId: string
+  provNum?: number | null
+  opNum?: number | null
+  dateStart: string
+  dateEnd?: string
+  lengthMinutes?: number | null
+}): Promise<OpenDentalOpenSlot[]> {
+  const { practiceId, dateStart, dateEnd } = params
+  const [slots, blockouts] = await Promise.all([
+    getOpenDentalOpenSlotsRaw(params),
+    loadBlockoutsOrEmpty({
       practiceId,
       dateStart,
       dateEnd: dateEnd ?? dateStart,
-      error: error instanceof Error ? error.message : error,
-    })
-    return slots
-  }
+    }),
+  ])
+  return filterOpenDentalSlotsAgainstBlockouts(slots, blockouts)
 }
 
 /**
@@ -368,6 +431,9 @@ export async function getOpenDentalOpenSlots(params: {
  * Returns the **union** of free starts across configured operatories. When the same
  * start is free on multiple chairs, the earliest configured operatory is kept so the
  * slot's `opNum` can be preferred at booking time.
+ *
+ * Blockouts are loaded **once** for the date range (not once per operatory), and
+ * per-operatory slot fetches run in parallel.
  */
 export async function getOpenDentalOpenSlotsForOperatories(params: {
   practiceId: string
@@ -377,25 +443,52 @@ export async function getOpenDentalOpenSlotsForOperatories(params: {
   dateEnd?: string
   lengthMinutes?: number | null
 }): Promise<OpenDentalOpenSlot[]> {
-  const { opNums, ...rest } = params
+  const { practiceId, provNum, opNums, dateStart, dateEnd, lengthMinutes } = params
   const uniqueOps = [...new Set(opNums.filter((n) => Number.isInteger(n) && n > 0))]
 
   if (uniqueOps.length === 0) {
-    return getOpenDentalOpenSlots({ ...rest, opNum: null })
+    return getOpenDentalOpenSlots({
+      practiceId,
+      provNum,
+      opNum: null,
+      dateStart,
+      dateEnd,
+      lengthMinutes,
+    })
   }
 
   if (uniqueOps.length === 1) {
-    return getOpenDentalOpenSlots({ ...rest, opNum: uniqueOps[0] })
+    return getOpenDentalOpenSlots({
+      practiceId,
+      provNum,
+      opNum: uniqueOps[0],
+      dateStart,
+      dateEnd,
+      lengthMinutes,
+    })
   }
 
-  const slotsByOp: OpenDentalOpenSlot[][] = []
-  for (const opNum of uniqueOps) {
-    slotsByOp.push(await getOpenDentalOpenSlots({ ...rest, opNum }))
-  }
+  const [blockouts, ...slotsByOp] = await Promise.all([
+    loadBlockoutsOrEmpty({
+      practiceId,
+      dateStart,
+      dateEnd: dateEnd ?? dateStart,
+    }),
+    ...uniqueOps.map((opNum) =>
+      getOpenDentalOpenSlotsRaw({
+        practiceId,
+        provNum,
+        opNum,
+        dateStart,
+        dateEnd,
+        lengthMinutes,
+      })
+    ),
+  ])
 
   const pickedByStart = new Map<string, OpenDentalOpenSlot>()
-  for (let i = 0; i < uniqueOps.length; i++) {
-    for (const slot of slotsByOp[i]) {
+  for (const slots of slotsByOp) {
+    for (const slot of slots) {
       if (!pickedByStart.has(slot.start)) {
         pickedByStart.set(slot.start, slot)
       }
@@ -404,7 +497,7 @@ export async function getOpenDentalOpenSlotsForOperatories(params: {
 
   const merged = [...pickedByStart.values()]
   merged.sort((a, b) => a.start.localeCompare(b.start))
-  return merged
+  return filterOpenDentalSlotsAgainstBlockouts(merged, blockouts)
 }
 
 /**
@@ -419,18 +512,20 @@ export async function getOpenDentalOpenSlotsForReadConfigs(params: {
   const { practiceId, configs, dateStart, dateEnd } = params
   if (configs.length === 0) return []
 
-  const all: OpenDentalOpenSlot[] = []
-  for (const config of configs) {
-    const slots = await getOpenDentalOpenSlotsForOperatories({
-      practiceId,
-      provNum: config.provNum,
-      opNums: config.operatoryNums,
-      dateStart,
-      dateEnd,
-      lengthMinutes: config.lengthMinutes,
-    })
-    all.push(...slots)
-  }
+  const all = (
+    await Promise.all(
+      configs.map((config) =>
+        getOpenDentalOpenSlotsForOperatories({
+          practiceId,
+          provNum: config.provNum,
+          opNums: config.operatoryNums,
+          dateStart,
+          dateEnd,
+          lengthMinutes: config.lengthMinutes,
+        })
+      )
+    )
+  ).flat()
 
   const byKey = new Map<string, OpenDentalOpenSlot>()
   for (const slot of all) {

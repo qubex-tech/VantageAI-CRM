@@ -47,9 +47,10 @@ describe('getOpenDentalOpenSlotsForOperatories', () => {
       return []
     })
 
+    const list = vi.fn().mockResolvedValue([])
     vi.mocked(getOpenDentalServices).mockResolvedValue({
       appointments: { getSlots },
-      schedules: { list: vi.fn().mockResolvedValue([]) },
+      schedules: { list },
     } as never)
 
     const merged = await getOpenDentalOpenSlotsForOperatories({
@@ -61,6 +62,8 @@ describe('getOpenDentalOpenSlotsForOperatories', () => {
     })
 
     expect(getSlots).toHaveBeenCalledTimes(2)
+    // Blockouts load once for the range, not once per operatory.
+    expect(list).toHaveBeenCalledTimes(1)
     expect(merged).toHaveLength(2)
     expect(merged.map((s) => s.start)).toEqual([
       '2026-07-03 14:00:00',
