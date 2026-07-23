@@ -162,6 +162,7 @@ export async function getUpcomingAppointmentsByPatientId(
       timezone: true,
       visitType: true,
       reason: true,
+      notes: true,
       providerId: true,
     },
   })

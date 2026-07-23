@@ -77,6 +77,7 @@ async function resolveCurrentAppointmentContext(params: {
         timezone: true,
         visitType: true,
         reason: true,
+        notes: true,
         providerId: true,
       },
     })

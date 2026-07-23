@@ -20,6 +20,7 @@ export interface VoiceAppointmentInput {
   visitType: string | null
   reason: string | null
   providerId: string | null
+  notes?: string | null
 }
 
 export interface VoiceAppointment {
@@ -27,11 +28,31 @@ export interface VoiceAppointment {
   status: string
   visit_type?: string
   reason?: string
+  /** Appointment note from the chart/EHR (cleaned for the agent to speak or use). */
+  notes?: string
   provider?: string
   start_time: string
   start_time_local: string
   timezone: string
   summary: string
+}
+
+/**
+ * Strip CRM sync prefixes so Retell gets the real chairside note
+ * (e.g. "Amir: Tooth pain") instead of "Synced from Open Dental Appointment/…".
+ */
+export function cleanAppointmentNoteForVoice(notes: string | null | undefined): string | undefined {
+  const raw = notes?.trim()
+  if (!raw) return undefined
+
+  const stripped = raw
+    .replace(/^Synced from Open Dental Appointment\/\d+\s*[—\-–]\s*/i, '')
+    .trim()
+
+  if (!stripped || /^Synced from Open Dental Appointment\/\d+$/i.test(stripped)) {
+    return undefined
+  }
+  return stripped
 }
 
 function providerLabel(providerId: string | null): string | undefined {
@@ -93,15 +114,19 @@ export function formatAppointmentForVoice(appt: VoiceAppointmentInput): VoiceApp
 
   const visit = appt.visitType?.trim() || 'appointment'
   const provider = providerLabel(appt.providerId)
-  const summary = provider
+  const notes = cleanAppointmentNoteForVoice(appt.notes)
+  const reason = appt.reason?.trim() || undefined
+  const summaryBase = provider
     ? `${visit} with ${provider} on ${localWhen}`
     : `${visit} on ${localWhen}`
+  const summary = notes ? `${summaryBase}. Note: ${notes}` : summaryBase
 
   return {
     id: appt.id,
     status: appt.status,
     visit_type: appt.visitType?.trim() || undefined,
-    reason: appt.reason?.trim() || undefined,
+    reason,
+    notes,
     provider,
     start_time: appt.startTime.toISOString(),
     start_time_local: localWhen,
