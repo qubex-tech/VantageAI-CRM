@@ -53,6 +53,7 @@ const TRIGGER_EVENTS = [
   { value: 'crm/appointment.upcoming', label: 'Appointment Upcoming (Scheduled)' },
   { value: 'crm/patient.created', label: 'Patient Created' },
   { value: 'crm/patient.updated', label: 'Patient Updated' },
+  { value: 'crm/patient.birthday', label: 'Patient Birthday' },
   { value: 'crm/message.drafted', label: 'Message Drafted' },
 ]
 

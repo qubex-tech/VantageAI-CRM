@@ -1,6 +1,6 @@
 'use client'
 
-import { Zap, GitBranch, PlayCircle, Mail, MessageSquare, FileText, User, Clock, Calendar, Shield, Phone, Tag, CheckCircle, XCircle, AlertCircle, List } from 'lucide-react'
+import { Zap, GitBranch, PlayCircle, Mail, MessageSquare, FileText, User, Clock, Calendar, Shield, Phone, Tag, CheckCircle, XCircle, AlertCircle, List, Cake } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { FlowNodeData } from './FlowBuilder'
@@ -22,6 +22,7 @@ const TRIGGER_OPTIONS = [
   // Patients
   { value: 'crm/patient.created', label: 'Patient Created', icon: User, category: 'Patients' },
   { value: 'crm/patient.updated', label: 'Patient Updated', icon: User, category: 'Patients' },
+  { value: 'crm/patient.birthday', label: 'Patient Birthday', icon: Cake, category: 'Patients' },
   { value: 'crm/patient.tag_added', label: 'Patient Tag Added', icon: Tag, category: 'Patients' },
   { value: 'crm/patient.note_created', label: 'Patient Note Created', icon: FileText, category: 'Patients' },
   

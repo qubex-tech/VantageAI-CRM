@@ -3,6 +3,7 @@ import { inngest } from '@/inngest/client'
 import {
   runAutomationsForEvent,
   emitUpcomingAppointmentEvents,
+  emitPatientBirthdayEvents,
   processRetellCallEnded,
   syncEhrAppointmentsDaily,
   syncOpenDentalDaily,
@@ -26,6 +27,7 @@ const handler = serve({
   functions: [
     runAutomationsForEvent,
     emitUpcomingAppointmentEvents,
+    emitPatientBirthdayEvents,
     processRetellCallEnded,
     syncEhrAppointmentsDaily,
     syncOpenDentalDaily,

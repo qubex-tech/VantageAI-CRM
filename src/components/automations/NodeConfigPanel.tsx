@@ -143,6 +143,12 @@ const EVENT_FIELDS: Record<string, Array<{ value: string; label: string; type: '
     { value: 'changes.preferredContactMethod', label: 'Preferred Contact Method Changed', type: 'string' },
     { value: 'changes.notes', label: 'Notes Changed', type: 'string' },
   ],
+  'crm/patient.birthday': [
+    ...PATIENT_FIELDS,
+    { value: 'birthday.date', label: 'Birthday Date', type: 'date' },
+    { value: 'birthday.year', label: 'Birthday Year', type: 'number' },
+    { value: 'birthday.age', label: 'Age', type: 'number' },
+  ],
   'crm/patient.tag_added': [
     ...PATIENT_FIELDS,
     { value: 'tag', label: 'Tag', type: 'string' },
@@ -448,6 +454,7 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                 <SelectItem value="crm/appointment.no_show">Appointment No-Show</SelectItem>
                 <SelectItem value="crm/patient.created">Patient Created</SelectItem>
                 <SelectItem value="crm/patient.updated">Patient Updated</SelectItem>
+                <SelectItem value="crm/patient.birthday">Patient Birthday</SelectItem>
                 <SelectItem value="crm/patient.tag_added">Patient Tag Added</SelectItem>
                 <SelectItem value="crm/patient.note_created">Patient Note Created</SelectItem>
                 <SelectItem value="crm/insurance.created">Insurance Policy Created</SelectItem>
