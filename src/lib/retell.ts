@@ -413,12 +413,17 @@ export async function handleToolCall(
         parameters.eventTypeId,
         parameters.startTime,
         parameters.timezone || 'America/New_York',
-        parameters.reason,
+        parameters.reason || parameters.notes,
         parameters.paymentType || parameters.payment_type,
         parameters.appointmentType || parameters.appointment_type,
         parameters.opNum != null ? Number(parameters.opNum) : parameters.op_num != null
           ? Number(parameters.op_num)
-          : null
+          : null,
+        parameters.previousAppointmentId ||
+          parameters.previous_appointment_id ||
+          parameters.sourceAppointmentId ||
+          parameters.source_appointment_id ||
+          null
       )
 
     case 'cancel_appointment':

@@ -575,6 +575,7 @@ async function bookAppointmentViaOpenDental(params: {
   appointmentType?: string | null
   eventTypeId?: string | null
   preferredOpNum?: number | null
+  previousAppointmentId?: string | null
 }): Promise<BookAppointmentResult> {
   const {
     practiceId,
@@ -586,6 +587,7 @@ async function bookAppointmentViaOpenDental(params: {
     appointmentType,
     eventTypeId,
     preferredOpNum,
+    previousAppointmentId,
   } = params
 
   const visitType = resolveOdVisitTypeFromAgentInput(scheduling, appointmentType, eventTypeId)
@@ -642,11 +644,42 @@ async function bookAppointmentViaOpenDental(params: {
   const isNewPatient = Boolean(
     patient?.createdAt && Date.now() - patient.createdAt.getTime() < 6 * 60 * 60 * 1000
   )
+
+  const { resolveBookingNoteFromPriorAppointment, isRescheduleMetaReason } = await import(
+    '@/lib/appointments/voice-context'
+  )
+  let effectiveReason = reason?.trim() || undefined
+  const shouldCarryPriorNote =
+    Boolean(previousAppointmentId?.trim()) || isRescheduleMetaReason(reason)
+  if (shouldCarryPriorNote) {
+    const prior = previousAppointmentId?.trim()
+      ? await prisma.appointment.findFirst({
+          where: { id: previousAppointmentId.trim(), practiceId, patientId },
+          select: { notes: true, reason: true },
+        })
+      : await prisma.appointment.findFirst({
+          where: {
+            practiceId,
+            patientId,
+            status: { in: ['scheduled', 'confirmed'] },
+            startTime: { gte: new Date() },
+          },
+          orderBy: { startTime: 'asc' },
+          select: { notes: true, reason: true },
+        })
+    effectiveReason =
+      resolveBookingNoteFromPriorAppointment({
+        reason,
+        priorNotes: prior?.notes,
+        priorReason: prior?.reason,
+      }) || undefined
+  }
+
   const { buildOpenDentalAppointmentNote } = await import(
     '@/lib/integrations/opendental/commlogWriteback'
   )
   const note = buildOpenDentalAppointmentNote({
-    reason,
+    reason: effectiveReason,
     paymentType,
     isNewPatient,
   })
@@ -681,7 +714,8 @@ export async function bookAppointment(
   reason?: string,
   paymentType?: string,
   appointmentType?: string,
-  preferredOpNum?: number | null
+  preferredOpNum?: number | null,
+  previousAppointmentId?: string | null
 ): Promise<BookAppointmentResult> {
   // Get patient
   const patient = await prisma.patient.findFirst({
@@ -733,6 +767,7 @@ export async function bookAppointment(
       appointmentType,
       eventTypeId,
       preferredOpNum,
+      previousAppointmentId,
     })
   }
 

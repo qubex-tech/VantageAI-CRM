@@ -55,6 +55,39 @@ export function cleanAppointmentNoteForVoice(notes: string | null | undefined): 
   return stripped
 }
 
+/** True when `reason` is reschedule metadata rather than a clinical visit note. */
+export function isRescheduleMetaReason(reason?: string | null): boolean {
+  const r = reason?.trim().toLowerCase() || ''
+  if (!r) return false
+  return (
+    /\breschedul/.test(r) ||
+    /\bmove(d|s|ing)?\s+(my\s+)?(the\s+)?appointment\b/.test(r) ||
+    /\bchang(e|ing)\s+(my\s+)?(the\s+)?appointment\b/.test(r)
+  )
+}
+
+/**
+ * Pick the note that should be written on a newly booked appointment during reschedule.
+ * Prefer the prior appointment's chairside note when the agent only sent meta text like
+ * "reschedule existing appointment".
+ */
+export function resolveBookingNoteFromPriorAppointment(params: {
+  reason?: string | null
+  priorNotes?: string | null
+  priorReason?: string | null
+}): string | null {
+  const prior =
+    cleanAppointmentNoteForVoice(params.priorNotes) ||
+    params.priorReason?.trim() ||
+    null
+  const reason = params.reason?.trim() || ''
+
+  if (!prior) return reason || null
+  if (reason && reason.toLowerCase().includes(prior.toLowerCase())) return reason
+  if (!reason || isRescheduleMetaReason(reason)) return prior
+  return reason
+}
+
 function providerLabel(providerId: string | null): string | undefined {
   if (!providerId) return undefined
   const trimmed = providerId.trim()

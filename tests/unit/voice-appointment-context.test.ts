@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   cleanAppointmentNoteForVoice,
   formatAppointmentForVoice,
+  isRescheduleMetaReason,
+  resolveBookingNoteFromPriorAppointment,
 } from '@/lib/appointments/voice-context'
 
 describe('voice appointment notes for Retell', () => {
@@ -31,5 +33,23 @@ describe('voice appointment notes for Retell', () => {
     expect(formatted.notes).toBe('Amir: Tooth pain')
     expect(formatted.summary).toContain('Thursday, July 23 at 2:00 PM')
     expect(formatted.summary).toContain('Note: Amir: Tooth pain')
+  })
+
+  it('carries prior chairside note onto reschedule bookings', () => {
+    expect(isRescheduleMetaReason('reschedule existing appointment')).toBe(true)
+    // Mirrors call_6990da166c12fbdf0c7add3915c: agent sent meta reason, prior had tooth pain.
+    expect(
+      resolveBookingNoteFromPriorAppointment({
+        reason: 'reschedule existing appointment',
+        priorNotes: 'Synced from Open Dental Appointment/72434 — Amir: Tooth pain',
+        priorReason: null,
+      })
+    ).toBe('Amir: Tooth pain')
+    expect(
+      resolveBookingNoteFromPriorAppointment({
+        reason: 'cleaning and exam',
+        priorNotes: 'Synced from Open Dental Appointment/72434 — Amir: Tooth pain',
+      })
+    ).toBe('cleaning and exam')
   })
 })

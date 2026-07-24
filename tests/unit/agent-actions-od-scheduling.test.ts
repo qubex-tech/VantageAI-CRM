@@ -13,6 +13,9 @@ vi.mock('@/lib/db', () => ({
       update: vi.fn(),
       create: vi.fn(),
     },
+    appointment: {
+      findFirst: vi.fn(),
+    },
   },
 }))
 
@@ -74,6 +77,7 @@ describe('agentActions Open Dental scheduling', () => {
     vi.mocked(getSchedulingSettings).mockResolvedValue(odScheduling)
     vi.mocked(bookOpenDentalAppointment).mockReset()
     vi.mocked(createOpenDentalPatientFromCrm).mockReset()
+    vi.mocked(prisma.appointment.findFirst).mockResolvedValue(null)
   })
 
   describe('findOrCreatePatientByPhone', () => {
@@ -252,6 +256,44 @@ describe('agentActions Open Dental scheduling', () => {
         })
       )
       expect(result.calBookingId).toBe('opendental:apt:100')
+    })
+
+    it('carries prior appointment note when booking a reschedule', async () => {
+      vi.mocked(prisma.patient.findFirst).mockResolvedValue({
+        ...patientRow,
+        externalEhrId: 'opendental:2275',
+        createdAt: new Date('2020-01-01T00:00:00.000Z'),
+      } as never)
+      vi.mocked(prisma.appointment.findFirst).mockResolvedValue({
+        notes: 'Synced from Open Dental Appointment/72434 — Amir: Tooth pain',
+        reason: null,
+      } as never)
+      vi.mocked(bookOpenDentalAppointment).mockResolvedValue({
+        appointmentId: 'appt-2',
+        aptNum: 101,
+        startTime: new Date('2026-07-25T14:00:00.000Z'),
+        endTime: new Date('2026-07-25T14:30:00.000Z'),
+      })
+
+      const { bookAppointment } = await import('@/lib/agentActions')
+      await bookAppointment(
+        practiceId,
+        'patient-1',
+        'ignored',
+        '2026-07-25T14:00:00.000Z',
+        'America/Chicago',
+        'reschedule existing appointment',
+        undefined,
+        undefined,
+        null,
+        '24113f42-a0f7-4134-a907-c120a402600d'
+      )
+
+      expect(bookOpenDentalAppointment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          note: 'Amir: Tooth pain',
+        })
+      )
     })
   })
 
