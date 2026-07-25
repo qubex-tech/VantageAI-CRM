@@ -418,10 +418,12 @@ export function ListDetailClient({
                       <div>
                         <div className="font-medium text-gray-900">{selectedPatient.name}</div>
                         <div className="text-xs text-gray-500">
-                          {selectedPatient.primaryPhone ||
-                            selectedPatient.phone ||
-                            selectedPatient.email ||
-                            'No phone'}
+                          {[
+                            selectedPatient.primaryPhone || selectedPatient.phone,
+                            selectedPatient.email,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ') || 'No contact info'}
                         </div>
                       </div>
                       <Button
@@ -459,7 +461,9 @@ export function ListDetailClient({
                             >
                               <span className="font-medium text-gray-900">{patient.name}</span>
                               <span className="ml-3 truncate text-xs text-gray-400">
-                                {patient.primaryPhone || patient.phone || 'No phone'}
+                                {[patient.primaryPhone || patient.phone, patient.email]
+                                  .filter(Boolean)
+                                  .join(' · ') || 'No contact info'}
                               </span>
                             </button>
                           ))}
