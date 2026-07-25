@@ -418,10 +418,10 @@ export function ListDetailClient({
                       <div>
                         <div className="font-medium text-gray-900">{selectedPatient.name}</div>
                         <div className="text-xs text-gray-500">
-                          {selectedPatient.email ||
-                            selectedPatient.primaryPhone ||
+                          {selectedPatient.primaryPhone ||
                             selectedPatient.phone ||
-                            'No contact info'}
+                            selectedPatient.email ||
+                            'No phone'}
                         </div>
                       </div>
                       <Button
@@ -459,7 +459,7 @@ export function ListDetailClient({
                             >
                               <span className="font-medium text-gray-900">{patient.name}</span>
                               <span className="ml-3 truncate text-xs text-gray-400">
-                                {patient.email || patient.primaryPhone || patient.phone || ''}
+                                {patient.primaryPhone || patient.phone || 'No phone'}
                               </span>
                             </button>
                           ))}
