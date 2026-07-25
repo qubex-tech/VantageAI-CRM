@@ -6,12 +6,14 @@ import { useRouter } from 'next/navigation'
 import {
   ArrowLeft,
   Download,
+  Pencil,
   Play,
   Plus,
   Trash2,
   Upload,
   Loader2,
   UserPlus,
+  X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -105,6 +107,10 @@ export function ListDetailClient({
   const [newPhone, setNewPhone] = useState('')
   const [newEmail, setNewEmail] = useState('')
   const [newDob, setNewDob] = useState('')
+
+  const [editingMembers, setEditingMembers] = useState(false)
+  const [selectedPatientIds, setSelectedPatientIds] = useState<Set<string>>(new Set())
+  const [removingMembers, setRemovingMembers] = useState(false)
 
   const resetAddForm = () => {
     setAddTab('existing')
@@ -348,12 +354,96 @@ export function ListDetailClient({
       setMembers([])
       setTotal(0)
       setMemberCount(0)
+      setEditingMembers(false)
+      setSelectedPatientIds(new Set())
       setMessage(`Cleared list. Removed ${data.removedCount || 0} patients from this list.`)
       router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to clear list')
     } finally {
       setClearing(false)
+    }
+  }
+
+  const exitEditMode = () => {
+    setEditingMembers(false)
+    setSelectedPatientIds(new Set())
+  }
+
+  const togglePatientSelected = (patientId: string) => {
+    setSelectedPatientIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(patientId)) next.delete(patientId)
+      else next.add(patientId)
+      return next
+    })
+  }
+
+  const allVisibleSelected =
+    members.length > 0 && members.every((member) => selectedPatientIds.has(member.patient.id))
+
+  const toggleSelectAllVisible = () => {
+    if (allVisibleSelected) {
+      setSelectedPatientIds(new Set())
+      return
+    }
+    setSelectedPatientIds(new Set(members.map((member) => member.patient.id)))
+  }
+
+  const removePatientsFromListUi = async (patientIds: string[]) => {
+    const uniqueIds = [...new Set(patientIds)]
+    if (uniqueIds.length === 0) return
+
+    const label =
+      uniqueIds.length === 1
+        ? 'this patient'
+        : `${uniqueIds.length} patients`
+    if (
+      !confirm(
+        `Remove ${label} from "${list.name}"?\n\nThis will not delete patient records from the CRM.`
+      )
+    ) {
+      return
+    }
+
+    setRemovingMembers(true)
+    setError('')
+    setMessage('')
+    try {
+      const res = await fetch(`/api/lists/${list.id}/members`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ patientIds: uniqueIds }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to remove patients from list')
+
+      const removedSet = new Set(uniqueIds)
+      setMembers((prev) => {
+        const next = prev.filter((member) => !removedSet.has(member.patient.id))
+        if (next.length === 0) {
+          setEditingMembers(false)
+          setSelectedPatientIds(new Set())
+        }
+        return next
+      })
+      setTotal((prev) => Math.max(0, prev - (data.removedCount || uniqueIds.length)))
+      setMemberCount(data.remainingCount ?? Math.max(0, memberCount - (data.removedCount || uniqueIds.length)))
+      setSelectedPatientIds((prev) => {
+        const next = new Set(prev)
+        for (const id of uniqueIds) next.delete(id)
+        return next
+      })
+      setMessage(
+        `Removed ${data.removedCount || uniqueIds.length} ${
+          (data.removedCount || uniqueIds.length) === 1 ? 'patient' : 'patients'
+        } from this list.`
+      )
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove patients from list')
+    } finally {
+      setRemovingMembers(false)
     }
   }
 
@@ -640,16 +730,48 @@ export function ListDetailClient({
       </Card>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
           <CardTitle className="text-base">Members ({total})</CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setAddOpen(true)}
-          >
-            <UserPlus className="mr-2 h-4 w-4" />
-            Add patient
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {editingMembers ? (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void removePatientsFromListUi([...selectedPatientIds])}
+                  disabled={removingMembers || selectedPatientIds.size === 0}
+                  className="text-red-700 border-red-200 hover:bg-red-50"
+                >
+                  {removingMembers ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="mr-2 h-4 w-4" />
+                  )}
+                  Remove selected ({selectedPatientIds.size})
+                </Button>
+                <Button variant="outline" size="sm" onClick={exitEditMode} disabled={removingMembers}>
+                  <X className="mr-2 h-4 w-4" />
+                  Done
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditingMembers(true)}
+                  disabled={members.length === 0}
+                >
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Edit
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Add patient
+                </Button>
+              </>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {members.length === 0 ? (
@@ -661,32 +783,76 @@ export function ListDetailClient({
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="border-b border-gray-200 text-gray-500">
+                    {editingMembers && (
+                      <th className="w-10 py-2 pr-3 font-medium">
+                        <input
+                          type="checkbox"
+                          aria-label="Select all patients"
+                          checked={allVisibleSelected}
+                          onChange={toggleSelectAllVisible}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                      </th>
+                    )}
                     <th className="py-2 pr-4 font-medium">Name</th>
                     <th className="py-2 pr-4 font-medium">Email</th>
                     <th className="py-2 pr-4 font-medium">Phone</th>
                     <th className="py-2 pr-4 font-medium">Source</th>
                     <th className="py-2 font-medium">Match</th>
+                    {editingMembers && <th className="py-2 pl-2 font-medium text-right">Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {members.map((member) => (
-                    <tr key={member.id} className="border-b border-gray-100">
-                      <td className="py-2 pr-4">
-                        <Link
-                          href={`/patients/${member.patient.id}`}
-                          className="font-medium text-gray-900 hover:underline"
-                        >
-                          {member.patient.name}
-                        </Link>
-                      </td>
-                      <td className="py-2 pr-4 text-gray-600">{member.patient.email || '—'}</td>
-                      <td className="py-2 pr-4 text-gray-600">
-                        {member.patient.primaryPhone || member.patient.phone || '—'}
-                      </td>
-                      <td className="py-2 pr-4 text-gray-600">{member.source}</td>
-                      <td className="py-2 text-gray-600">{member.matchedBy || '—'}</td>
-                    </tr>
-                  ))}
+                  {members.map((member) => {
+                    const checked = selectedPatientIds.has(member.patient.id)
+                    return (
+                      <tr
+                        key={member.id}
+                        className={`border-b border-gray-100 ${checked ? 'bg-gray-50' : ''}`}
+                      >
+                        {editingMembers && (
+                          <td className="py-2 pr-3">
+                            <input
+                              type="checkbox"
+                              aria-label={`Select ${member.patient.name}`}
+                              checked={checked}
+                              onChange={() => togglePatientSelected(member.patient.id)}
+                              className="h-4 w-4 rounded border-gray-300"
+                            />
+                          </td>
+                        )}
+                        <td className="py-2 pr-4">
+                          <Link
+                            href={`/patients/${member.patient.id}`}
+                            className="font-medium text-gray-900 hover:underline"
+                          >
+                            {member.patient.name}
+                          </Link>
+                        </td>
+                        <td className="py-2 pr-4 text-gray-600">{member.patient.email || '—'}</td>
+                        <td className="py-2 pr-4 text-gray-600">
+                          {member.patient.primaryPhone || member.patient.phone || '—'}
+                        </td>
+                        <td className="py-2 pr-4 text-gray-600">{member.source}</td>
+                        <td className="py-2 text-gray-600">{member.matchedBy || '—'}</td>
+                        {editingMembers && (
+                          <td className="py-2 pl-2 text-right">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 text-red-700 hover:bg-red-50 hover:text-red-800"
+                              disabled={removingMembers}
+                              onClick={() => void removePatientsFromListUi([member.patient.id])}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              <span className="sr-only">Remove {member.patient.name}</span>
+                            </Button>
+                          </td>
+                        )}
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

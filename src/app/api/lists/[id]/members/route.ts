@@ -3,9 +3,14 @@ import { z } from 'zod'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
 import { addPatientToList } from '@/lib/lists/add-member'
+import { removePatientsFromList } from '@/lib/lists/remove-members'
 
 const addMemberSchema = z.object({
   patientId: z.string().min(1, 'patientId is required'),
+})
+
+const removeMembersSchema = z.object({
+  patientIds: z.array(z.string().min(1)).min(1, 'At least one patientId is required'),
 })
 
 export async function POST(
@@ -131,6 +136,36 @@ export async function DELETE(
       return NextResponse.json({ error: 'List not found' }, { status: 404 })
     }
 
+    // Optional body: { patientIds: [...] } removes those members.
+    // No body / empty body clears the entire list (legacy Clear List behavior).
+    const rawBody = await req.text()
+    if (rawBody.trim()) {
+      let parsedJson: unknown
+      try {
+        parsedJson = JSON.parse(rawBody)
+      } catch {
+        return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+      }
+      const parsed = removeMembersSchema.safeParse(parsedJson)
+      if (!parsed.success) {
+        return NextResponse.json(
+          { error: parsed.error.issues[0]?.message || 'Invalid request' },
+          { status: 400 }
+        )
+      }
+
+      const result = await removePatientsFromList({
+        practiceId,
+        listId: id,
+        patientIds: parsed.data.patientIds,
+      })
+
+      return NextResponse.json({
+        success: true,
+        ...result,
+      })
+    }
+
     const { removedCount, remainingCount, removedTagCount } = await prisma.$transaction(async (tx) => {
       const membersBeforeClear = await tx.patientListMember.findMany({
         where: {
@@ -199,9 +234,8 @@ export async function DELETE(
       removedTagCount,
     })
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to clear list members' },
-      { status: 500 }
-    )
+    const message = error instanceof Error ? error.message : 'Failed to clear list members'
+    const status = message === 'List not found' ? 404 : message.includes('patientId') ? 400 : 500
+    return NextResponse.json({ error: message }, { status })
   }
 }
