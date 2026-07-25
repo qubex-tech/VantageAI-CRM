@@ -36,7 +36,17 @@ export async function GET(req: NextRequest) {
     )
 
     return NextResponse.json(
-      { slots },
+      {
+        slots,
+        meta: {
+          practiceId: user.practiceId,
+          eventTypeId: validated.eventTypeId,
+          dateFrom: validated.dateFrom,
+          dateTo: validated.dateTo,
+          timezone: validated.timezone,
+          count: slots.length,
+        },
+      },
       {
         headers: {
           'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',

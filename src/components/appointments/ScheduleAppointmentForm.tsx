@@ -67,6 +67,7 @@ export function ScheduleAppointmentForm({
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [error, setError] = useState<string>('')
   const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([])
+  const [slotsDebug, setSlotsDebug] = useState<string>('')
   const [timeFormat, setTimeFormat] = useState<'12h' | '24h'>('12h')
   const mappingsRef = useRef(eventTypeMappings)
   const fetchIdRef = useRef(0)
@@ -81,6 +82,7 @@ export function ScheduleAppointmentForm({
       setAvailableSlots([])
       setSelectedTime('')
       setLoadingSlots(false)
+      setSlotsDebug('')
       return
     }
 
@@ -89,66 +91,70 @@ export function ScheduleAppointmentForm({
       setError('Invalid event type selected')
       setAvailableSlots([])
       setLoadingSlots(false)
+      setSlotsDebug('No event-type mapping found for selection')
       return
     }
 
     const fetchId = ++fetchIdRef.current
-    const controller = new AbortController()
 
     const run = async () => {
       setLoadingSlots(true)
       setError('')
       setSelectedTime('')
 
-      try {
-        // Local calendar dates — avoid toISOString() day-shifting before Cal gets start/end.
-        // End is next local day because Cal returns 0 slots when start === end for late evenings.
-        const dateFrom = localDateKey(startOfDay(selectedDate))
-        const dateTo = localDateKey(addDays(startOfDay(selectedDate), 1))
-        const params = new URLSearchParams({
-          eventTypeId: mapping.calEventTypeId,
-          dateFrom,
-          dateTo,
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          // Bust any intermediate GET caches of earlier empty responses.
-          _ts: String(Date.now()),
-        })
+      // Local calendar dates — avoid toISOString() day-shifting before Cal gets start/end.
+      // End is next local day because Cal returns 0 slots when start === end for late evenings.
+      const dateFrom = localDateKey(startOfDay(selectedDate))
+      const dateTo = localDateKey(addDays(startOfDay(selectedDate), 1))
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+      const params = new URLSearchParams({
+        eventTypeId: mapping.calEventTypeId,
+        dateFrom,
+        dateTo,
+        timezone,
+        _ts: String(Date.now()),
+      })
 
+      try {
         const response = await fetch(`/api/appointments/slots?${params.toString()}`, {
-          signal: controller.signal,
           cache: 'no-store',
           headers: { 'Cache-Control': 'no-cache' },
         })
         const data = await response.json()
 
+        if (fetchId !== fetchIdRef.current) return
+
         if (!response.ok) {
           throw new Error(data.error || 'Failed to fetch available slots')
         }
-        if (fetchId !== fetchIdRef.current) return
+
         const nextSlots = Array.isArray(data.slots) ? data.slots : []
         setAvailableSlots(nextSlots)
-        if (nextSlots.length === 0) {
-          console.warn('[schedule-slots] Cal returned 0 slots', {
-            eventTypeId: mapping.calEventTypeId,
-            dateFrom,
-            dateTo,
-            timezone: params.get('timezone'),
-          })
-        }
+        const meta = data.meta || {}
+        setSlotsDebug(
+          `event=${mapping.calEventTypeId} ${dateFrom}→${dateTo} tz=${timezone} apiCount=${meta.count ?? nextSlots.length} first=${nextSlots[0]?.time ?? 'none'}`
+        )
+        console.warn('[schedule-slots]', {
+          eventTypeId: mapping.calEventTypeId,
+          dateFrom,
+          dateTo,
+          timezone,
+          status: response.status,
+          meta: data.meta,
+          slots: nextSlots,
+        })
       } catch (err) {
         if (fetchId !== fetchIdRef.current || isAbortError(err)) return
-        setError(err instanceof Error ? err.message : 'Failed to fetch available slots')
+        const message = err instanceof Error ? err.message : 'Failed to fetch available slots'
+        setError(message)
         setAvailableSlots([])
+        setSlotsDebug(`error: ${message}`)
       } finally {
         if (fetchId === fetchIdRef.current) setLoadingSlots(false)
       }
     }
 
     void run()
-
-    return () => {
-      controller.abort()
-    }
   }, [selectedEventType, selectedDate])
 
   const handleDateSelect = (date: Date) => {
@@ -215,7 +221,10 @@ export function ScheduleAppointmentForm({
 
   // Server already drops neighboring-day Cal leaks; render what the API returned.
   const timeSlots = availableSlots
-    .map((slot) => parseISO(slot.time))
+    .map((slot) => {
+      const parsed = parseISO(slot.time)
+      return Number.isNaN(parsed.getTime()) ? new Date(slot.time) : parsed
+    })
     .filter((slotDate) => !Number.isNaN(slotDate.getTime()))
     .sort((a, b) => a.getTime() - b.getTime())
 
@@ -384,8 +393,13 @@ export function ScheduleAppointmentForm({
                       Loading available times...
                     </div>
                   ) : timeSlots.length === 0 ? (
-                    <div className="p-4 text-center text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg">
-                      No available time slots for this date. Please select another date.
+                    <div className="p-4 text-center text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg space-y-2">
+                      <p>No available time slots for this date. Please select another date.</p>
+                      {slotsDebug && (
+                        <p className="text-[11px] leading-snug text-yellow-900/70 break-all font-mono">
+                          {slotsDebug}
+                        </p>
+                      )}
                     </div>
                   ) : (
                     timeSlots.map((slotDate, index) => {
