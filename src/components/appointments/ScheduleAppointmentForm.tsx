@@ -226,17 +226,17 @@ export function ScheduleAppointmentForm({
   const minDate = startOfDay(new Date())
   const maxDate = addMonths(new Date(), 3) // 3 months in advance
 
-  // Prefer slots for the selected calendar day; if Cal returns times that don't
-  // match the day key filter, still show them so a filter mismatch can't blank the UI.
+  // Strictly keep slots for the selected calendar day.
+  // Cal sometimes returns the previous evening's late slots when querying the next
+  // day (e.g. Fri 10:30pm appears in a Sat request) — never fall back to those.
   const selectedDateKey = selectedDate ? localDateKey(selectedDate) : null
-  const matchedSlots = selectedDateKey
-    ? availableSlots.filter((slot) => slotDateKey(slot.time) === selectedDateKey)
+  const timeSlots = selectedDateKey
+    ? availableSlots
+        .filter((slot) => slotDateKey(slot.time) === selectedDateKey)
+        .map((slot) => parseISO(slot.time))
+        .filter((slotDate) => !Number.isNaN(slotDate.getTime()))
+        .sort((a, b) => a.getTime() - b.getTime())
     : []
-  const slotsForUi = matchedSlots.length > 0 ? matchedSlots : availableSlots
-  const timeSlots = slotsForUi
-    .map((slot) => parseISO(slot.time))
-    .filter((slotDate) => !Number.isNaN(slotDate.getTime()))
-    .sort((a, b) => a.getTime() - b.getTime())
 
   const formatTime = (date: Date) => {
     if (timeFormat === '24h') {

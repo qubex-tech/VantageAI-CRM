@@ -134,41 +134,40 @@ export class CalApiClient {
       const data = await response.json()
       
       // Cal.com v2 API returns: { status: "success", data: { "date": [{ start, end, ... }] } }
-      if (data.status === 'success' && data.data) {
-        // Flatten all slots from all dates into a single array
+      // Cal may include neighboring-day late slots in the window; keep only times whose
+      // calendar day (from the timestamp / date key) falls within [start, end).
+      const flattenSlots = (payload: Record<string, unknown>) => {
         const allSlots: Array<{ time: string; attendeeCount: number }> = []
-        for (const date in data.data) {
-          const slots = data.data[date]
-          if (Array.isArray(slots)) {
-            for (const slot of slots) {
-              // With format=range, each slot has { start, end, attendeesCount?, bookingUid? }
-              allSlots.push({
-                time: slot.start || slot.time || date,
-                attendeeCount: slot.attendeesCount || 0,
-              })
-            }
+        for (const date in payload) {
+          const slots = payload[date]
+          if (!Array.isArray(slots)) continue
+          for (const slot of slots) {
+            const time =
+              (slot && typeof slot === 'object' && (slot as { start?: string; time?: string }).start) ||
+              (slot && typeof slot === 'object' && (slot as { start?: string; time?: string }).time) ||
+              date
+            const dayKey = String(time).split('T')[0] || date
+            // Inclusive of start; end is exclusive next-day bound from callers.
+            if (dayKey < start || dayKey >= end) continue
+            allSlots.push({
+              time: String(time),
+              attendeeCount:
+                (slot && typeof slot === 'object' && (slot as { attendeesCount?: number }).attendeesCount) || 0,
+            })
           }
         }
         return allSlots
       }
-      
+
+      if (data.status === 'success' && data.data && typeof data.data === 'object') {
+        return flattenSlots(data.data as Record<string, unknown>)
+      }
+
       // Fallback for other response formats
       if (data.data && typeof data.data === 'object') {
-        const allSlots: Array<{ time: string; attendeeCount: number }> = []
-        for (const date in data.data) {
-          const slots = data.data[date]
-          if (Array.isArray(slots)) {
-            for (const slot of slots) {
-              allSlots.push({
-                time: slot.start || slot.time || date,
-                attendeeCount: slot.attendeesCount || 0,
-              })
-            }
-          }
-        }
-        return allSlots
+        return flattenSlots(data.data as Record<string, unknown>)
       }
-      
+
       return []
     } catch (error) {
       console.error('Error fetching Cal.com slots:', error)
