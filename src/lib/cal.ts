@@ -91,10 +91,18 @@ export class CalApiClient {
     try {
       // Cal.com API v2 slots endpoint: GET /v2/slots
       // Documentation: https://cal.com/docs/api-reference/v2/slots/get-available-time-slots-for-an-event-type
+      let start = dateFrom.split('T')[0]
+      let end = dateTo.split('T')[0]
+      // Cal returns no late-day slots when start === end; always query at least a 1-day window.
+      if (!end || end <= start) {
+        const next = new Date(`${start}T00:00:00.000Z`)
+        next.setUTCDate(next.getUTCDate() + 1)
+        end = next.toISOString().split('T')[0]
+      }
       const params = new URLSearchParams({
         eventTypeId: String(eventTypeId),
-        start: dateFrom.split('T')[0], // Extract date part (YYYY-MM-DD)
-        end: dateTo.split('T')[0], // Extract date part (YYYY-MM-DD)
+        start,
+        end,
         timeZone,
         format: 'range', // Use range format to get start and end times
       })

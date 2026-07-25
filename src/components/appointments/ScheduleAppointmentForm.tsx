@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -48,6 +48,24 @@ function isAbortError(err: unknown): boolean {
   )
 }
 
+/** Calendar day key in the viewer's local timezone. */
+function localDateKey(value: Date): string {
+  return format(value, 'yyyy-MM-dd')
+}
+
+/**
+ * Prefer the offset/wall-clock day from Cal timestamps like
+ * 2026-07-24T22:30:00.000-05:00 so DST/offset slots are not shifted
+ * into the wrong local day before display filtering.
+ */
+function slotDateKey(iso: string): string | null {
+  // Cal range-format times include an explicit offset — trust that calendar day.
+  const offsetMatch = iso.match(/^(\d{4}-\d{2}-\d{2})T.*[+-]\d{2}:\d{2}$/)
+  if (offsetMatch) return offsetMatch[1]
+  const parsed = parseISO(iso)
+  return Number.isNaN(parsed.getTime()) ? null : localDateKey(parsed)
+}
+
 export function ScheduleAppointmentForm({
   patientId,
   patient,
@@ -63,12 +81,14 @@ export function ScheduleAppointmentForm({
   const [error, setError] = useState<string>('')
   const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([])
   const [timeFormat, setTimeFormat] = useState<'12h' | '24h'>('12h')
+  const mappingsRef = useRef(eventTypeMappings)
+  const fetchIdRef = useRef(0)
+  mappingsRef.current = eventTypeMappings
 
   const selectedMapping = eventTypeMappings.find(m => m.id === selectedEventType)
 
   // When event type or date changes, fetch available slots.
-  // Abort in-flight requests so a slower older response cannot wipe newer results
-  // (that race shows a brief slot flicker, then the yellow empty state).
+  // Ignore stale responses so an older in-flight result cannot wipe newer ones.
   useEffect(() => {
     if (!selectedEventType || !selectedDate) {
       setAvailableSlots([])
@@ -77,7 +97,7 @@ export function ScheduleAppointmentForm({
       return
     }
 
-    const mapping = eventTypeMappings.find((m) => m.id === selectedEventType)
+    const mapping = mappingsRef.current.find((m) => m.id === selectedEventType)
     if (!mapping) {
       setError('Invalid event type selected')
       setAvailableSlots([])
@@ -85,8 +105,8 @@ export function ScheduleAppointmentForm({
       return
     }
 
+    const fetchId = ++fetchIdRef.current
     const controller = new AbortController()
-    let cancelled = false
 
     const run = async () => {
       setLoadingSlots(true)
@@ -96,8 +116,8 @@ export function ScheduleAppointmentForm({
       try {
         // Local calendar dates — avoid toISOString() day-shifting before Cal gets start/end.
         // End is next local day because Cal returns 0 slots when start === end for late evenings.
-        const dateFrom = format(startOfDay(selectedDate), 'yyyy-MM-dd')
-        const dateTo = format(addDays(startOfDay(selectedDate), 1), 'yyyy-MM-dd')
+        const dateFrom = localDateKey(startOfDay(selectedDate))
+        const dateTo = localDateKey(addDays(startOfDay(selectedDate), 1))
         const params = new URLSearchParams({
           eventTypeId: mapping.calEventTypeId,
           dateFrom,
@@ -113,24 +133,23 @@ export function ScheduleAppointmentForm({
         if (!response.ok) {
           throw new Error(data.error || 'Failed to fetch available slots')
         }
-        if (cancelled) return
-        setAvailableSlots(data.slots || [])
+        if (fetchId !== fetchIdRef.current) return
+        setAvailableSlots(Array.isArray(data.slots) ? data.slots : [])
       } catch (err) {
-        if (cancelled || isAbortError(err)) return
+        if (fetchId !== fetchIdRef.current || isAbortError(err)) return
         setError(err instanceof Error ? err.message : 'Failed to fetch available slots')
         setAvailableSlots([])
       } finally {
-        if (!cancelled) setLoadingSlots(false)
+        if (fetchId === fetchIdRef.current) setLoadingSlots(false)
       }
     }
 
     void run()
 
     return () => {
-      cancelled = true
       controller.abort()
     }
-  }, [selectedEventType, selectedDate, eventTypeMappings])
+  }, [selectedEventType, selectedDate])
 
   const handleDateSelect = (date: Date) => {
     // Only allow dates from today onwards
@@ -194,16 +213,13 @@ export function ScheduleAppointmentForm({
   const minDate = startOfDay(new Date())
   const maxDate = addMonths(new Date(), 3) // 3 months in advance
 
-  // Keep slots whose local calendar day matches the selected date
-  const selectedDateKey = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : null
+  // Keep slots for the selected calendar day (use Cal's offset date when present)
+  const selectedDateKey = selectedDate ? localDateKey(selectedDate) : null
   const timeSlots = selectedDateKey
     ? availableSlots
+        .filter((slot) => slotDateKey(slot.time) === selectedDateKey)
         .map((slot) => parseISO(slot.time))
-        .filter(
-          (slotDate) =>
-            !Number.isNaN(slotDate.getTime()) &&
-            format(slotDate, 'yyyy-MM-dd') === selectedDateKey
-        )
+        .filter((slotDate) => !Number.isNaN(slotDate.getTime()))
         .sort((a, b) => a.getTime() - b.getTime())
     : []
 
