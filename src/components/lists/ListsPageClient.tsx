@@ -64,7 +64,7 @@ export function ListsPageClient({ initialLists }: { initialLists: PatientListSum
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-gray-600">
-          Upload patient lists and use them in workflow automations.
+          Build patient lists (CSV or one-by-one) and use them in workflow automations.
         </p>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
@@ -77,7 +77,7 @@ export function ListsPageClient({ initialLists }: { initialLists: PatientListSum
             <DialogHeader>
               <DialogTitle>Create list</DialogTitle>
               <DialogDescription>
-                Create a named list, then upload a CSV of patients.
+                Create a named list, then add patients individually or upload a CSV.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-2">

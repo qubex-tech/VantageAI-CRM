@@ -1,6 +1,56 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
+import { addPatientToList } from '@/lib/lists/add-member'
+
+const addMemberSchema = z.object({
+  patientId: z.string().min(1, 'patientId is required'),
+})
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireAuth(req)
+    if (!user.practiceId) {
+      return NextResponse.json({ error: 'Practice ID is required' }, { status: 400 })
+    }
+    const practiceId = user.practiceId
+
+    const { id } = await params
+    const body = await req.json()
+    const parsed = addMemberSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message || 'Invalid request' },
+        { status: 400 }
+      )
+    }
+
+    const result = await addPatientToList({
+      practiceId,
+      listId: id,
+      patientId: parsed.data.patientId,
+      source: 'manual',
+    })
+
+    return NextResponse.json(
+      {
+        status: result.status,
+        member: result.member,
+        list: result.list,
+      },
+      { status: result.status === 'added' ? 201 : 200 }
+    )
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to add member'
+    const status =
+      message === 'List not found' || message === 'Patient not found' ? 404 : 500
+    return NextResponse.json({ error: message }, { status })
+  }
+}
 
 export async function GET(
   req: NextRequest,
