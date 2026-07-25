@@ -123,10 +123,14 @@ export function ScheduleAppointmentForm({
           dateFrom,
           dateTo,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          // Bust any intermediate GET caches of earlier empty responses.
+          _ts: String(Date.now()),
         })
 
         const response = await fetch(`/api/appointments/slots?${params.toString()}`, {
           signal: controller.signal,
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' },
         })
         const data = await response.json()
 
@@ -134,7 +138,16 @@ export function ScheduleAppointmentForm({
           throw new Error(data.error || 'Failed to fetch available slots')
         }
         if (fetchId !== fetchIdRef.current) return
-        setAvailableSlots(Array.isArray(data.slots) ? data.slots : [])
+        const nextSlots = Array.isArray(data.slots) ? data.slots : []
+        setAvailableSlots(nextSlots)
+        if (nextSlots.length === 0) {
+          console.warn('[schedule-slots] Cal returned 0 slots', {
+            eventTypeId: mapping.calEventTypeId,
+            dateFrom,
+            dateTo,
+            timezone: params.get('timezone'),
+          })
+        }
       } catch (err) {
         if (fetchId !== fetchIdRef.current || isAbortError(err)) return
         setError(err instanceof Error ? err.message : 'Failed to fetch available slots')
@@ -213,15 +226,17 @@ export function ScheduleAppointmentForm({
   const minDate = startOfDay(new Date())
   const maxDate = addMonths(new Date(), 3) // 3 months in advance
 
-  // Keep slots for the selected calendar day (use Cal's offset date when present)
+  // Prefer slots for the selected calendar day; if Cal returns times that don't
+  // match the day key filter, still show them so a filter mismatch can't blank the UI.
   const selectedDateKey = selectedDate ? localDateKey(selectedDate) : null
-  const timeSlots = selectedDateKey
-    ? availableSlots
-        .filter((slot) => slotDateKey(slot.time) === selectedDateKey)
-        .map((slot) => parseISO(slot.time))
-        .filter((slotDate) => !Number.isNaN(slotDate.getTime()))
-        .sort((a, b) => a.getTime() - b.getTime())
+  const matchedSlots = selectedDateKey
+    ? availableSlots.filter((slot) => slotDateKey(slot.time) === selectedDateKey)
     : []
+  const slotsForUi = matchedSlots.length > 0 ? matchedSlots : availableSlots
+  const timeSlots = slotsForUi
+    .map((slot) => parseISO(slot.time))
+    .filter((slotDate) => !Number.isNaN(slotDate.getTime()))
+    .sort((a, b) => a.getTime() - b.getTime())
 
   const formatTime = (date: Date) => {
     if (timeFormat === '24h') {
@@ -390,6 +405,11 @@ export function ScheduleAppointmentForm({
                   ) : timeSlots.length === 0 ? (
                     <div className="p-4 text-center text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg">
                       No available time slots for this date. Please select another date.
+                      {availableSlots.length > 0 && (
+                        <p className="mt-2 text-xs text-yellow-800/80">
+                          Cal returned {availableSlots.length} slot(s) but none matched this day.
+                        </p>
+                      )}
                     </div>
                   ) : (
                     timeSlots.map((slotDate, index) => {
