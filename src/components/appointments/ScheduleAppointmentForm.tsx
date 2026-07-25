@@ -53,19 +53,6 @@ function localDateKey(value: Date): string {
   return format(value, 'yyyy-MM-dd')
 }
 
-/**
- * Prefer the offset/wall-clock day from Cal timestamps like
- * 2026-07-24T22:30:00.000-05:00 so DST/offset slots are not shifted
- * into the wrong local day before display filtering.
- */
-function slotDateKey(iso: string): string | null {
-  // Cal range-format times include an explicit offset — trust that calendar day.
-  const offsetMatch = iso.match(/^(\d{4}-\d{2}-\d{2})T.*[+-]\d{2}:\d{2}$/)
-  if (offsetMatch) return offsetMatch[1]
-  const parsed = parseISO(iso)
-  return Number.isNaN(parsed.getTime()) ? null : localDateKey(parsed)
-}
-
 export function ScheduleAppointmentForm({
   patientId,
   patient,
@@ -226,17 +213,11 @@ export function ScheduleAppointmentForm({
   const minDate = startOfDay(new Date())
   const maxDate = addMonths(new Date(), 3) // 3 months in advance
 
-  // Strictly keep slots for the selected calendar day.
-  // Cal sometimes returns the previous evening's late slots when querying the next
-  // day (e.g. Fri 10:30pm appears in a Sat request) — never fall back to those.
-  const selectedDateKey = selectedDate ? localDateKey(selectedDate) : null
-  const timeSlots = selectedDateKey
-    ? availableSlots
-        .filter((slot) => slotDateKey(slot.time) === selectedDateKey)
-        .map((slot) => parseISO(slot.time))
-        .filter((slotDate) => !Number.isNaN(slotDate.getTime()))
-        .sort((a, b) => a.getTime() - b.getTime())
-    : []
+  // Server already drops neighboring-day Cal leaks; render what the API returned.
+  const timeSlots = availableSlots
+    .map((slot) => parseISO(slot.time))
+    .filter((slotDate) => !Number.isNaN(slotDate.getTime()))
+    .sort((a, b) => a.getTime() - b.getTime())
 
   const formatTime = (date: Date) => {
     if (timeFormat === '24h') {
@@ -405,11 +386,6 @@ export function ScheduleAppointmentForm({
                   ) : timeSlots.length === 0 ? (
                     <div className="p-4 text-center text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg">
                       No available time slots for this date. Please select another date.
-                      {availableSlots.length > 0 && (
-                        <p className="mt-2 text-xs text-yellow-800/80">
-                          Cal returned {availableSlots.length} slot(s) but none matched this day.
-                        </p>
-                      )}
                     </div>
                   ) : (
                     timeSlots.map((slotDate, index) => {
