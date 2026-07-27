@@ -445,6 +445,19 @@ export async function POST(req: NextRequest) {
       contextString = contextParts.join('\n')
     }
 
+    if (isTomorrowScheduleQuestion(userMessage)) {
+      const tomorrowScheduleContext = await buildTomorrowScheduleContext({
+        practiceId: user.practiceId,
+        timeZone,
+        locale,
+      })
+      if (tomorrowScheduleContext) {
+        contextString = contextString
+          ? `${contextString}\n\n${tomorrowScheduleContext}`
+          : tomorrowScheduleContext
+      }
+    }
+
     // Build messages array for OpenAI
     const openaiMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
       { role: 'system', content: HEALIX_SYSTEM_PROMPT },
@@ -658,5 +671,87 @@ function extractPatientQuery(message: string): string | null {
     }
   }
   return null
+}
+
+function isTomorrowScheduleQuestion(message: string): boolean {
+  const normalized = message.trim().toLowerCase()
+  if (!normalized) return false
+
+  const mentionsTomorrow = /\btomorrow\b/.test(normalized)
+  const mentionsSchedule = /\b(schedule|scheduled|appointment|appointments|booked)\b/.test(normalized)
+  return mentionsTomorrow && mentionsSchedule
+}
+
+async function buildTomorrowScheduleContext({
+  practiceId,
+  timeZone,
+  locale,
+}: {
+  practiceId: string
+  timeZone?: string
+  locale?: string
+}) {
+  const now = new Date()
+  const effectiveTimeZone = timeZone || 'America/Chicago'
+  const effectiveLocale = locale || 'en-US'
+
+  const dateKeyFormatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: effectiveTimeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+
+  const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+  const tomorrowKey = dateKeyFormatter.format(tomorrow)
+
+  const lookback = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+  const horizon = new Date(now.getTime() + 72 * 60 * 60 * 1000)
+
+  const appointments = await prisma.appointment.findMany({
+    where: {
+      practiceId,
+      startTime: {
+        gte: lookback,
+        lte: horizon,
+      },
+    },
+    orderBy: { startTime: 'asc' },
+    select: {
+      id: true,
+      startTime: true,
+      status: true,
+      visitType: true,
+      patient: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+  })
+
+  const tomorrowAppointments = appointments
+    .filter((appointment) => dateKeyFormatter.format(appointment.startTime) === tomorrowKey)
+    .filter((appointment) => {
+      const status = appointment.status?.toLowerCase?.() || ''
+      return status !== 'cancelled' && status !== 'canceled' && status !== 'no_show'
+    })
+
+  if (tomorrowAppointments.length === 0) {
+    return `Tomorrow schedule context (${effectiveTimeZone}): no non-cancelled appointments found for tomorrow.`
+  }
+
+  const lines = [
+    `Tomorrow schedule context (${effectiveTimeZone}): ${tomorrowAppointments.length} appointment(s).`,
+  ]
+
+  for (const appointment of tomorrowAppointments.slice(0, 25)) {
+    lines.push(
+      `- ${formatDateTime(appointment.startTime, { timeZone: effectiveTimeZone, locale: effectiveLocale })} — ${appointment.patient?.name || 'Unknown patient'}${appointment.visitType ? ` (${appointment.visitType})` : ''} [${appointment.status}]`
+    )
+  }
+
+  return lines.join('\n')
 }
 
