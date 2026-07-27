@@ -67,6 +67,13 @@ export function normalizeRetellPaymentType(value: unknown): 'insurance' | 'self 
   return null
 }
 
+/** Read a `Payment type: …` line from an appointment note / reason. */
+export function extractPaymentTypeFromNote(note?: string | null): 'insurance' | 'self pay' | null {
+  if (!note?.trim()) return null
+  const match = note.match(/payment\s*type\s*:\s*([^\n\r]+)/i)
+  return match ? normalizeRetellPaymentType(match[1]) : null
+}
+
 /** True when Retell classified the caller as a new patient. */
 export function isRetellNewPatientCall(extractedData: ExtractedCallData): boolean {
   if (extractedData.new_patient_add === true) return true
@@ -79,16 +86,20 @@ export function isRetellNewPatientCall(extractedData: ExtractedCallData): boolea
 
 /**
  * Build the Open Dental appointment Note for a booking.
- * For new patients, appends Retell Payment Type when available (`insurance` | `self pay`).
+ * Appends `Payment type: …` when `paymentType` is set and either this is a new-patient
+ * booking (`isNewPatient`) or the caller opts in (`applyPaymentType`) — e.g. carrying
+ * payment from a prior appointment on reschedule.
  */
 export function buildOpenDentalAppointmentNote(params: {
   reason?: string | null
   paymentType?: string | null
   isNewPatient?: boolean
+  /** When true, stamp payment type even if not a new-patient booking. */
+  applyPaymentType?: boolean
 }): string | null {
   const reason = params.reason?.trim() || ''
-  const payment =
-    params.isNewPatient === true ? normalizeRetellPaymentType(params.paymentType) : null
+  const shouldApply = params.applyPaymentType === true || params.isNewPatient === true
+  const payment = shouldApply ? normalizeRetellPaymentType(params.paymentType) : null
 
   if (!payment) return reason || null
 

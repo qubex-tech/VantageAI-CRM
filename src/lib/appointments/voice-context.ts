@@ -70,6 +70,7 @@ export function isRescheduleMetaReason(reason?: string | null): boolean {
  * Pick the note that should be written on a newly booked appointment during reschedule.
  * Prefer the prior appointment's chairside note when the agent only sent meta text like
  * "reschedule existing appointment".
+ * Always preserves a prior `Payment type: …` line onto the chosen note.
  */
 export function resolveBookingNoteFromPriorAppointment(params: {
   reason?: string | null
@@ -82,10 +83,32 @@ export function resolveBookingNoteFromPriorAppointment(params: {
     null
   const reason = params.reason?.trim() || ''
 
-  if (!prior) return reason || null
-  if (reason && reason.toLowerCase().includes(prior.toLowerCase())) return reason
-  if (!reason || isRescheduleMetaReason(reason)) return prior
-  return reason
+  let resolved: string | null
+  if (!prior) resolved = reason || null
+  else if (reason && reason.toLowerCase().includes(prior.toLowerCase())) resolved = reason
+  else if (!reason || isRescheduleMetaReason(reason)) resolved = prior
+  else resolved = reason
+
+  // Agent often reuses only the visit reason ("checkup and cleaning") and drops the
+  // Payment type line from get_upcoming notes — put it back from the prior apt.
+  const priorPayment = extractPaymentTypeLine(prior) || extractPaymentTypeLine(params.priorNotes)
+  if (!priorPayment) return resolved
+  if (resolved && /payment\s*type\s*:/i.test(resolved)) {
+    return resolved.replace(/payment\s*type\s*:[^\n\r]*/i, priorPayment).trim()
+  }
+  if (!resolved) return priorPayment
+  return `${resolved}\n${priorPayment}`
+}
+
+function extractPaymentTypeLine(note?: string | null): string | null {
+  if (!note?.trim()) return null
+  const cleaned = cleanAppointmentNoteForVoice(note) || note.trim()
+  const match = cleaned.match(/payment\s*type\s*:\s*([^\n\r]+)/i)
+  if (!match) return null
+  const raw = match[1].trim().toLowerCase()
+  if (/(self[-\s]?pay|cash|out[\s-]?of[\s-]?pocket)/i.test(raw)) return 'Payment type: self pay'
+  if (/insurance|insured/.test(raw)) return 'Payment type: insurance'
+  return `Payment type: ${match[1].trim()}`
 }
 
 function providerLabel(providerId: string | null): string | undefined {

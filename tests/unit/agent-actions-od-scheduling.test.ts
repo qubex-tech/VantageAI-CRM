@@ -295,6 +295,82 @@ describe('agentActions Open Dental scheduling', () => {
         })
       )
     })
+
+    it('carries Payment type from upcoming apt when Mira omits previousAppointmentId', async () => {
+      vi.mocked(prisma.patient.findFirst).mockResolvedValue({
+        ...patientRow,
+        externalEhrId: 'opendental:12458',
+        createdAt: new Date('2020-01-01T00:00:00.000Z'),
+      } as never)
+      // No previousAppointmentId — look up soonest upcoming (book-then-cancel).
+      vi.mocked(prisma.appointment.findFirst).mockResolvedValue({
+        notes:
+          'Synced from Open Dental Appointment/72459 — regular checkup and cleaning\r\nPayment type: insurance',
+        reason: null,
+      } as never)
+      vi.mocked(bookOpenDentalAppointment).mockResolvedValue({
+        appointmentId: 'appt-3',
+        aptNum: 72460,
+        startTime: new Date('2026-07-27T21:00:00.000Z'),
+        endTime: new Date('2026-07-27T21:30:00.000Z'),
+      })
+
+      const { bookAppointment } = await import('@/lib/agentActions')
+      await bookAppointment(
+        practiceId,
+        'patient-1',
+        'ignored',
+        '2026-07-27T21:00:00.000Z',
+        'America/Chicago',
+        'regular checkup and cleaning',
+        undefined,
+        undefined,
+        null,
+        null
+      )
+
+      expect(bookOpenDentalAppointment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          note: 'regular checkup and cleaning\nPayment type: insurance',
+        })
+      )
+    })
+
+    it('stamps Payment type on new-patient books when Mira sends paymentType', async () => {
+      vi.mocked(prisma.patient.findFirst).mockResolvedValue({
+        ...patientRow,
+        externalEhrId: 'opendental:12458',
+        createdAt: new Date(Date.now() - 60_000),
+      } as never)
+      vi.mocked(prisma.appointment.findFirst).mockResolvedValue(null as never)
+      vi.mocked(bookOpenDentalAppointment).mockResolvedValue({
+        appointmentId: 'appt-4',
+        aptNum: 200,
+        startTime: new Date('2026-07-27T19:00:00.000Z'),
+        endTime: new Date('2026-07-27T19:30:00.000Z'),
+      })
+
+      const { bookAppointment } = await import('@/lib/agentActions')
+      await bookAppointment(
+        practiceId,
+        'patient-1',
+        'ignored',
+        '2026-07-27T19:00:00.000Z',
+        'America/Chicago',
+        'new patient checkup and cleaning',
+        'self pay',
+        undefined,
+        null,
+        null
+      )
+
+      expect(bookOpenDentalAppointment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          note: 'new patient checkup and cleaning\nPayment type: self pay',
+          isNewPatient: true,
+        })
+      )
+    })
   })
 
   describe('getAvailableSlots', () => {

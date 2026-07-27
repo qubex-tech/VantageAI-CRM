@@ -52,4 +52,22 @@ describe('voice appointment notes for Retell', () => {
       })
     ).toBe('cleaning and exam')
   })
+
+  it('preserves Payment type from prior notes when agent only sends visit reason', () => {
+    // Mirrors call_79e22d0f0523432ea4dbc4ca44e book-then-cancel reschedule.
+    expect(
+      resolveBookingNoteFromPriorAppointment({
+        reason: 'regular checkup and cleaning',
+        priorNotes:
+          'Synced from Open Dental Appointment/72459 — regular checkup and cleaning\r\nPayment type: insurance',
+      })
+    ).toBe('regular checkup and cleaning\nPayment type: insurance')
+
+    expect(
+      resolveBookingNoteFromPriorAppointment({
+        reason: 'reschedule existing appointment',
+        priorNotes: 'new patient checkup and cleaning\nPayment type: self pay',
+      })
+    ).toBe('new patient checkup and cleaning\nPayment type: self pay')
+  })
 })

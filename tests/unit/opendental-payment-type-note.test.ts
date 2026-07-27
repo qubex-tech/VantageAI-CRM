@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildCommlogNote,
   buildOpenDentalAppointmentNote,
+  extractPaymentTypeFromNote,
   isRetellNewPatientCall,
   normalizeRetellPaymentType,
 } from '@/lib/integrations/opendental/commlogWriteback'
@@ -32,7 +33,7 @@ describe('Retell payment type for Open Dental notes', () => {
     ).toBe(false)
   })
 
-  it('appends Payment type to appointment notes for new patients only', () => {
+  it('appends Payment type to appointment notes for new patients only by default', () => {
     expect(
       buildOpenDentalAppointmentNote({
         reason: 'new patient exam and cleaning',
@@ -64,6 +65,27 @@ describe('Retell payment type for Open Dental notes', () => {
         isNewPatient: true,
       })
     ).toBe('checkup\nPayment type: insurance')
+  })
+
+  it('can force Payment type onto notes when carrying from a prior appointment', () => {
+    expect(
+      buildOpenDentalAppointmentNote({
+        reason: 'regular checkup and cleaning',
+        paymentType: 'insurance',
+        isNewPatient: false,
+        applyPaymentType: true,
+      })
+    ).toBe('regular checkup and cleaning\nPayment type: insurance')
+  })
+
+  it('extracts Payment type from existing notes', () => {
+    expect(extractPaymentTypeFromNote('checkup\nPayment type: insurance')).toBe('insurance')
+    expect(
+      extractPaymentTypeFromNote(
+        'Synced from Open Dental Appointment/72459 — regular checkup and cleaning\r\nPayment type: self pay'
+      )
+    ).toBe('self pay')
+    expect(extractPaymentTypeFromNote('checkup only')).toBeNull()
   })
 
   it('includes Payment type in commlog notes for new patients only', () => {

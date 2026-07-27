@@ -648,40 +648,64 @@ async function bookAppointmentViaOpenDental(params: {
   const { resolveBookingNoteFromPriorAppointment, isRescheduleMetaReason } = await import(
     '@/lib/appointments/voice-context'
   )
-  let effectiveReason = reason?.trim() || undefined
+  const {
+    buildOpenDentalAppointmentNote,
+    extractPaymentTypeFromNote,
+    normalizeRetellPaymentType,
+  } = await import('@/lib/integrations/opendental/commlogWriteback')
+
+  // Always load the prior/upcoming apt when possible so Payment type survives
+  // book-then-cancel reschedules even if Mira omits previousAppointmentId.
+  const prior = previousAppointmentId?.trim()
+    ? await prisma.appointment.findFirst({
+        where: { id: previousAppointmentId.trim(), practiceId, patientId },
+        select: { notes: true, reason: true },
+      })
+    : await prisma.appointment.findFirst({
+        where: {
+          practiceId,
+          patientId,
+          status: { in: ['scheduled', 'confirmed'] },
+          startTime: { gte: new Date() },
+        },
+        orderBy: { startTime: 'asc' },
+        select: { notes: true, reason: true },
+      })
+
   const shouldCarryPriorNote =
     Boolean(previousAppointmentId?.trim()) || isRescheduleMetaReason(reason)
+
+  let effectiveReason = reason?.trim() || undefined
   if (shouldCarryPriorNote) {
-    const prior = previousAppointmentId?.trim()
-      ? await prisma.appointment.findFirst({
-          where: { id: previousAppointmentId.trim(), practiceId, patientId },
-          select: { notes: true, reason: true },
-        })
-      : await prisma.appointment.findFirst({
-          where: {
-            practiceId,
-            patientId,
-            status: { in: ['scheduled', 'confirmed'] },
-            startTime: { gte: new Date() },
-          },
-          orderBy: { startTime: 'asc' },
-          select: { notes: true, reason: true },
-        })
     effectiveReason =
       resolveBookingNoteFromPriorAppointment({
         reason,
         priorNotes: prior?.notes,
         priorReason: prior?.reason,
       }) || undefined
+  } else if (prior && effectiveReason) {
+    // Book-then-cancel path: Mira reuses visit reason but drops Payment type from notes.
+    effectiveReason =
+      resolveBookingNoteFromPriorAppointment({
+        reason: effectiveReason,
+        priorNotes: prior.notes,
+        priorReason: prior.reason,
+      }) || effectiveReason
   }
 
-  const { buildOpenDentalAppointmentNote } = await import(
-    '@/lib/integrations/opendental/commlogWriteback'
-  )
+  const paymentFromPrior =
+    extractPaymentTypeFromNote(effectiveReason) ||
+    extractPaymentTypeFromNote(prior?.notes) ||
+    extractPaymentTypeFromNote(prior?.reason)
+  const resolvedPayment =
+    normalizeRetellPaymentType(paymentType) || paymentFromPrior || null
+
   const note = buildOpenDentalAppointmentNote({
     reason: effectiveReason,
-    paymentType,
+    paymentType: resolvedPayment,
     isNewPatient,
+    // Carry payment onto reschedules / any book that already had it on a prior apt.
+    applyPaymentType: Boolean(resolvedPayment) && (isNewPatient || Boolean(paymentFromPrior)),
   })
 
   const result = await bookOpenDentalAppointment({
