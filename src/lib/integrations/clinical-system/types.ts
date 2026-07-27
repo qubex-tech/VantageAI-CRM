@@ -26,11 +26,19 @@ export type VisitTypeMapping = {
   aliases: string[]
 }
 
+/** How multiple read operatories combine into offered starts. */
+export type OdOperatoryMatchMode = 'any' | 'all'
+
 /** Provider + operatories + length used when reading Open Dental availability. */
 export type OdReadSlotConfig = {
   provNum: number
   operatoryNums: number[]
   lengthMinutes: number
+  /**
+   * `any` (default): offer a start if free on any selected operatory (OR / union).
+   * `all`: offer a start only if free on every selected operatory (AND / intersection).
+   */
+  operatoryMatch?: OdOperatoryMatchMode
 }
 
 /** Provider + write operatories + length + visit types used when booking into Open Dental. */
@@ -177,12 +185,17 @@ function coerceVisitTypeMapping(raw: unknown): VisitTypeMapping | null {
   return { visitType, aliases }
 }
 
+export function coerceOdOperatoryMatchMode(raw: unknown): OdOperatoryMatchMode {
+  return raw === 'all' ? 'all' : 'any'
+}
+
 function coerceOdReadSlotConfig(raw: unknown): OdReadSlotConfig | null {
   if (!raw || typeof raw !== 'object') return null
   const obj = raw as {
     provNum?: unknown
     operatoryNums?: unknown
     lengthMinutes?: unknown
+    operatoryMatch?: unknown
   }
   const provNum = Number(obj.provNum)
   const lengthMinutes = Number(obj.lengthMinutes)
@@ -192,7 +205,12 @@ function coerceOdReadSlotConfig(raw: unknown): OdReadSlotConfig | null {
     Array.isArray(obj.operatoryNums) ? obj.operatoryNums.map((n) => Number(n)) : []
   )
   if (operatoryNums.length === 0) return null
-  return { provNum, operatoryNums, lengthMinutes }
+  return {
+    provNum,
+    operatoryNums,
+    lengthMinutes,
+    operatoryMatch: coerceOdOperatoryMatchMode(obj.operatoryMatch),
+  }
 }
 
 function coerceOdBookSlotConfig(raw: unknown): OdBookSlotConfig | null {
@@ -241,7 +259,7 @@ export function resolveOdReadConfigs(settings: SchedulingSettings): OdReadSlotCo
   const operatoryNums = resolveReadOperatoryNums(settings)
   const lengthMinutes = resolveReadLengthMinutes(settings) ?? 30
   if (!provNum || operatoryNums.length === 0) return []
-  return [{ provNum, operatoryNums, lengthMinutes }]
+  return [{ provNum, operatoryNums, lengthMinutes, operatoryMatch: 'any' }]
 }
 
 /** Multi-provider OD booking configs, or a single legacy-derived row without visit types. */

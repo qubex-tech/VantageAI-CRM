@@ -14,6 +14,7 @@ import {
 import { Loader2, CalendarClock, X, Plus, ChevronDown, Check } from 'lucide-react'
 import type {
   OdBookSlotConfig,
+  OdOperatoryMatchMode,
   OdReadSlotConfig,
   SchedulingSource,
   VisitTypeMapping,
@@ -449,8 +450,13 @@ function SearchableVisitTypePicker({
   )
 }
 
-function emptyReadDraft(): { provNum: string; operatoryNums: number[]; lengthMinutes: string } {
-  return { provNum: NONE, operatoryNums: [], lengthMinutes: '30' }
+function emptyReadDraft(): {
+  provNum: string
+  operatoryNums: number[]
+  lengthMinutes: string
+  operatoryMatch: OdOperatoryMatchMode
+} {
+  return { provNum: NONE, operatoryNums: [], lengthMinutes: '30', operatoryMatch: 'any' }
 }
 
 function emptyBookDraft(): {
@@ -520,7 +526,12 @@ export function SchedulingModeSettings({
           setDefaultWritePractitionerRef(sched.defaultWritePractitionerRef || NONE)
 
           if (Array.isArray(sched.odReadSlotConfigs) && sched.odReadSlotConfigs.length > 0) {
-            setReadConfigs(sched.odReadSlotConfigs)
+            setReadConfigs(
+              sched.odReadSlotConfigs.map((row: OdReadSlotConfig) => ({
+                ...row,
+                operatoryMatch: row.operatoryMatch === 'all' ? 'all' : 'any',
+              }))
+            )
           } else {
             const prov = sched.defaultReadProvNum || sched.defaultProvNum
             const ops = [
@@ -534,6 +545,7 @@ export function SchedulingModeSettings({
                   provNum: prov,
                   operatoryNums: uniqueOps,
                   lengthMinutes: sched.defaultReadLengthMinutes || sched.defaultLengthMinutes || 30,
+                  operatoryMatch: 'any',
                 },
               ])
             } else {
@@ -732,7 +744,12 @@ export function SchedulingModeSettings({
     setError('')
     setReadConfigs([
       ...readConfigs,
-      { provNum, operatoryNums: readDraft.operatoryNums, lengthMinutes },
+      {
+        provNum,
+        operatoryNums: readDraft.operatoryNums,
+        lengthMinutes,
+        operatoryMatch: readDraft.operatoryMatch,
+      },
     ])
     setReadDraft(emptyReadDraft())
   }
@@ -932,8 +949,9 @@ export function SchedulingModeSettings({
                 <div>
                   <p className="text-sm font-medium text-gray-700">Reading time slots</p>
                   <p className="text-xs text-gray-500 mt-1">
-                    Providers and operatories used when checking available appointment slots. Slots
-                    are unioned across each provider&apos;s operatories.
+                    Providers and operatories used when checking available appointment slots. For
+                    each row, choose whether a time is offered when any selected operatory is free
+                    (OR), or only when all are free (AND).
                   </p>
                 </div>
                 {loadingLists ? (
@@ -946,7 +964,7 @@ export function SchedulingModeSettings({
                     {readConfigs.map((row, index) => (
                       <div
                         key={`read-${row.provNum}-${index}`}
-                        className="grid grid-cols-1 md:grid-cols-[1.2fr_1.4fr_0.8fr_auto] gap-3 items-start rounded-md border border-gray-200 bg-white p-3"
+                        className="grid grid-cols-1 md:grid-cols-[1.1fr_1.2fr_1.3fr_0.7fr_auto] gap-3 items-start rounded-md border border-gray-200 bg-white p-3"
                       >
                         <div>
                           <p className="text-xs text-gray-500 mb-1">Provider</p>
@@ -959,6 +977,29 @@ export function SchedulingModeSettings({
                           <p className="text-sm text-gray-800">
                             {row.operatoryNums.map((n) => operatoryLabel(operatories, n)).join(', ')}
                           </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs text-gray-500 mb-1">Offer when</p>
+                          <Select
+                            value={row.operatoryMatch === 'all' ? 'all' : 'any'}
+                            onValueChange={(v) =>
+                              setReadConfigs(
+                                readConfigs.map((r, i) =>
+                                  i === index
+                                    ? { ...r, operatoryMatch: v === 'all' ? 'all' : 'any' }
+                                    : r
+                                )
+                              )
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="any">Any operatory free (OR)</SelectItem>
+                              <SelectItem value="all">All operatories free (AND)</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
                         <div>
                           <p className="text-xs text-gray-500 mb-1">Length</p>
@@ -975,7 +1016,7 @@ export function SchedulingModeSettings({
                       </div>
                     ))}
 
-                    <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1.4fr_0.8fr_auto] gap-3 items-end">
+                    <div className="grid grid-cols-1 md:grid-cols-[1.1fr_1.2fr_1.3fr_0.7fr_auto] gap-3 items-end">
                       <div className="space-y-1">
                         <label className="text-sm font-medium text-gray-700">Provider</label>
                         <Select
@@ -1002,6 +1043,26 @@ export function SchedulingModeSettings({
                           operatories={operatories}
                           onChange={(nums) => setReadDraft((d) => ({ ...d, operatoryNums: nums }))}
                         />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-sm font-medium text-gray-700">Offer when</label>
+                        <Select
+                          value={readDraft.operatoryMatch}
+                          onValueChange={(v) =>
+                            setReadDraft((d) => ({
+                              ...d,
+                              operatoryMatch: v === 'all' ? 'all' : 'any',
+                            }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="any">Any operatory free (OR)</SelectItem>
+                            <SelectItem value="all">All operatories free (AND)</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="space-y-1">
                         <label className="text-sm font-medium text-gray-700">Appointment length</label>

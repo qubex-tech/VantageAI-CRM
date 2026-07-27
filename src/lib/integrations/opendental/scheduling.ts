@@ -428,9 +428,12 @@ export async function getOpenDentalOpenSlots(params: {
 
 /**
  * Fetch open slots across multiple operatories.
- * Returns the **union** of free starts across configured operatories. When the same
- * start is free on multiple chairs, the earliest configured operatory is kept so the
- * slot's `opNum` can be preferred at booking time.
+ *
+ * - `operatoryMatch: 'any'` (default): **union** — a start is offered if free on any
+ *   configured operatory. When the same start is free on multiple chairs, the earliest
+ *   configured operatory is kept so the slot's `opNum` can be preferred at booking time.
+ * - `operatoryMatch: 'all'`: **intersection** — a start is offered only if free on every
+ *   configured operatory. `opNum` is taken from the first configured operatory.
  *
  * Blockouts are loaded **once** for the date range (not once per operatory), and
  * per-operatory slot fetches run in parallel.
@@ -442,8 +445,10 @@ export async function getOpenDentalOpenSlotsForOperatories(params: {
   dateStart: string
   dateEnd?: string
   lengthMinutes?: number | null
+  operatoryMatch?: 'any' | 'all'
 }): Promise<OpenDentalOpenSlot[]> {
   const { practiceId, provNum, opNums, dateStart, dateEnd, lengthMinutes } = params
+  const operatoryMatch = params.operatoryMatch === 'all' ? 'all' : 'any'
   const uniqueOps = [...new Set(opNums.filter((n) => Number.isInteger(n) && n > 0))]
 
   if (uniqueOps.length === 0) {
@@ -487,10 +492,24 @@ export async function getOpenDentalOpenSlotsForOperatories(params: {
   ])
 
   const pickedByStart = new Map<string, OpenDentalOpenSlot>()
-  for (const slots of slotsByOp) {
-    for (const slot of slots) {
-      if (!pickedByStart.has(slot.start)) {
-        pickedByStart.set(slot.start, slot)
+
+  if (operatoryMatch === 'all') {
+    const startSets = slotsByOp.map((slots) => new Set(slots.map((s) => s.start)))
+    const firstOpByStart = new Map<string, OpenDentalOpenSlot>()
+    for (const slot of slotsByOp[0]) {
+      if (!firstOpByStart.has(slot.start)) firstOpByStart.set(slot.start, slot)
+    }
+    for (const [start, slot] of firstOpByStart) {
+      if (startSets.every((set) => set.has(start))) {
+        pickedByStart.set(start, slot)
+      }
+    }
+  } else {
+    for (const slots of slotsByOp) {
+      for (const slot of slots) {
+        if (!pickedByStart.has(slot.start)) {
+          pickedByStart.set(slot.start, slot)
+        }
       }
     }
   }
@@ -505,7 +524,12 @@ export async function getOpenDentalOpenSlotsForOperatories(params: {
  */
 export async function getOpenDentalOpenSlotsForReadConfigs(params: {
   practiceId: string
-  configs: Array<{ provNum: number; operatoryNums: number[]; lengthMinutes: number }>
+  configs: Array<{
+    provNum: number
+    operatoryNums: number[]
+    lengthMinutes: number
+    operatoryMatch?: 'any' | 'all'
+  }>
   dateStart: string
   dateEnd?: string
 }): Promise<OpenDentalOpenSlot[]> {
@@ -522,6 +546,7 @@ export async function getOpenDentalOpenSlotsForReadConfigs(params: {
           dateStart,
           dateEnd,
           lengthMinutes: config.lengthMinutes,
+          operatoryMatch: config.operatoryMatch,
         })
       )
     )

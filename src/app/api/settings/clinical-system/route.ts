@@ -16,6 +16,7 @@ const odReadSlotConfigSchema = z.object({
   provNum: z.number().int().positive(),
   operatoryNums: z.array(z.number().int().positive()).min(1),
   lengthMinutes: z.number().int().positive().max(600),
+  operatoryMatch: z.enum(['any', 'all']).optional().default('any'),
 })
 
 const odBookSlotConfigSchema = z.object({

@@ -59,6 +59,7 @@ describe('getOpenDentalOpenSlotsForOperatories', () => {
       opNums: [1, 2],
       dateStart: '2026-07-03',
       lengthMinutes: 30,
+      operatoryMatch: 'any',
     })
 
     expect(getSlots).toHaveBeenCalledTimes(2)
@@ -72,6 +73,57 @@ describe('getOpenDentalOpenSlotsForOperatories', () => {
     // Shared start prefers the earliest configured operatory.
     expect(merged[0].opNum).toBe(1)
     expect(merged[1].opNum).toBe(2)
+  })
+
+  it('intersects starts when operatoryMatch is all (AND)', async () => {
+    const getSlots = vi.fn().mockImplementation(async (query: Record<string, unknown>) => {
+      const op = Number(query.OpNum)
+      if (op === 1) {
+        return [
+          {
+            DateTimeStart: '2026-07-03 14:00:00',
+            DateTimeEnd: '2026-07-03 14:30:00',
+            ProvNum: 24,
+            OpNum: 1,
+          },
+          {
+            DateTimeStart: '2026-07-03 14:30:00',
+            DateTimeEnd: '2026-07-03 15:00:00',
+            ProvNum: 24,
+            OpNum: 1,
+          },
+        ]
+      }
+      if (op === 2) {
+        return [
+          {
+            DateTimeStart: '2026-07-03 14:00:00',
+            DateTimeEnd: '2026-07-03 14:30:00',
+            ProvNum: 24,
+            OpNum: 2,
+          },
+        ]
+      }
+      return []
+    })
+
+    vi.mocked(getOpenDentalServices).mockResolvedValue({
+      appointments: { getSlots },
+      schedules: { list: vi.fn().mockResolvedValue([]) },
+    } as never)
+
+    const merged = await getOpenDentalOpenSlotsForOperatories({
+      practiceId: 'practice-1',
+      provNum: 24,
+      opNums: [1, 2],
+      dateStart: '2026-07-03',
+      lengthMinutes: 30,
+      operatoryMatch: 'all',
+    })
+
+    // 14:00 free on both; 14:30 only on OP-1 → excluded under AND.
+    expect(merged.map((s) => s.start)).toEqual(['2026-07-03 14:00:00'])
+    expect(merged[0].opNum).toBe(1)
   })
 
   it('returns all slots when only one operatory is configured', async () => {

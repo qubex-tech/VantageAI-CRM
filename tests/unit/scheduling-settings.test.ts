@@ -264,7 +264,21 @@ describe('scheduling settings resolvers', () => {
 
     it('falls back to legacy single read config when arrays empty', () => {
       expect(resolveOdReadConfigs(base)).toEqual([
-        { provNum: 24, operatoryNums: [1, 3, 4], lengthMinutes: 30 },
+        { provNum: 24, operatoryNums: [1, 3, 4], lengthMinutes: 30, operatoryMatch: 'any' },
+      ])
+    })
+
+    it('defaults operatoryMatch to any and preserves all', () => {
+      expect(
+        resolveOdReadConfigs({
+          odReadSlotConfigs: [
+            { provNum: 10, operatoryNums: [1, 2], lengthMinutes: 30 },
+            { provNum: 20, operatoryNums: [1], lengthMinutes: 30, operatoryMatch: 'all' },
+          ],
+        })
+      ).toEqual([
+        { provNum: 10, operatoryNums: [1, 2], lengthMinutes: 30, operatoryMatch: 'any' },
+        { provNum: 20, operatoryNums: [1], lengthMinutes: 30, operatoryMatch: 'all' },
       ])
     })
 
