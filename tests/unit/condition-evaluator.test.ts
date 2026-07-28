@@ -183,5 +183,56 @@ describe('Condition Evaluator', () => {
       expect(evaluateConditions(condition, {})).toBe(false)
     })
   })
+
+  describe('boolean coercion', () => {
+    it('matches boolean field values against true/false strings', () => {
+      expect(
+        evaluateConditions(
+          { field: 'call.transferFailed', operator: 'equals', value: 'true' },
+          { call: { transferFailed: true } }
+        )
+      ).toBe(true)
+      expect(
+        evaluateConditions(
+          { field: 'call.transferFailed', operator: 'equals', value: true },
+          { call: { transferFailed: true } }
+        )
+      ).toBe(true)
+      expect(
+        evaluateConditions(
+          { field: 'call.transferFailed', operator: 'equals', value: 'false' },
+          { call: { transferFailed: true } }
+        )
+      ).toBe(false)
+    })
+
+    it('matches missed-transfer + patient type automation conditions', () => {
+      const condition = {
+        operator: 'and' as const,
+        conditions: [
+          { field: 'call.transferFailed', operator: 'equals' as const, value: true },
+          { field: 'call.patientTypeCategory', operator: 'equals' as const, value: 'new' },
+        ],
+      }
+      expect(
+        evaluateConditions(condition, {
+          patientId: 'pat_1',
+          patient: { id: 'pat_1' },
+          call: {
+            transferFailed: true,
+            patientTypeCategory: 'new',
+          },
+        })
+      ).toBe(true)
+      expect(
+        evaluateConditions(condition, {
+          call: {
+            transferFailed: true,
+            patientTypeCategory: 'existing',
+          },
+        })
+      ).toBe(false)
+    })
+  })
 })
 

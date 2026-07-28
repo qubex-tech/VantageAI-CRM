@@ -76,12 +76,30 @@ function evaluateFieldCondition(
 
   const fieldValue = getNestedValue(data, condition.field)
 
+  const valuesEqual = (left: unknown, right: unknown): boolean => {
+    if (left === right) return true
+    // UI text inputs historically store booleans as "true"/"false" strings.
+    if (typeof left === 'boolean' && typeof right === 'string') {
+      const normalized = right.trim().toLowerCase()
+      if (normalized === 'true' || normalized === 'false') {
+        return left === (normalized === 'true')
+      }
+    }
+    if (typeof right === 'boolean' && typeof left === 'string') {
+      const normalized = left.trim().toLowerCase()
+      if (normalized === 'true' || normalized === 'false') {
+        return right === (normalized === 'true')
+      }
+    }
+    return false
+  }
+
   switch (condition.operator) {
     case 'equals':
-      return fieldValue === condition.value
+      return valuesEqual(fieldValue, condition.value)
 
     case 'not_equals':
-      return fieldValue !== condition.value
+      return !valuesEqual(fieldValue, condition.value)
 
     case 'contains':
       if (typeof fieldValue === 'string' && typeof condition.value === 'string') {

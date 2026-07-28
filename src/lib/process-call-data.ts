@@ -23,7 +23,11 @@ import {
   trimCurogramIntentTopicForApi,
 } from './curogram'
 import { looksLikePhoneNumber } from './retell-patient-identity'
-import { maybeNotifyUnsuccessfulTransfer } from './outbound-customer-notifications'
+import {
+  isUnsuccessfulTransferFromRetellAnalysis,
+  maybeNotifyUnsuccessfulTransfer,
+  readRetellTransferNotificationFields,
+} from './outbound-customer-notifications'
 import { persistInsuranceVerificationNote } from './insurance-verification-note'
 import {
   buildSafePatientUpdate,
@@ -31,6 +35,7 @@ import {
   resolveDemographics,
   resolvePostCallPatientMatch,
 } from './patient-identity'
+import { emitEvent } from './outbox'
 
 function metadataObjectFromRow(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -158,6 +163,206 @@ export function shouldTriggerCurogramEscalation(params: {
   if (patientType.includes('new')) return true
 
   return false
+}
+
+export type RetellPatientTypeCategory = 'new' | 'existing' | 'unknown'
+
+/**
+ * Retell-only new vs existing classification for automation conditions.
+ * Prefer explicit analysis booleans, then patient_type string heuristics.
+ */
+export function classifyRetellPatientTypeCategory(
+  extractedData: ExtractedCallData
+): RetellPatientTypeCategory {
+  const customData = (extractedData.retell_custom_data || {}) as Record<string, unknown>
+  const newPatientAdd = parseBooleanLike(
+    customData['New Patient Add'] ??
+      customData['new patient add'] ??
+      extractedData.new_patient_add
+  )
+  const existingPatientUpdate = parseBooleanLike(
+    customData['Existing Patient Update'] ??
+      customData['existing patient update'] ??
+      extractedData.existing_patient_update
+  )
+
+  if (existingPatientUpdate === true) return 'existing'
+  if (newPatientAdd === true) return 'new'
+
+  const patientType = String(extractedData.patient_type || '')
+    .trim()
+    .toLowerCase()
+  if (!patientType) return 'unknown'
+
+  if (
+    /\bexisting\b/.test(patientType) ||
+    /\bestablished\b/.test(patientType) ||
+    /\breturning\b/.test(patientType)
+  ) {
+    return 'existing'
+  }
+  if (patientType.includes('new')) return 'new'
+  return 'unknown'
+}
+
+export function buildVoiceConversationEndedEventData(params: {
+  call: RetellCall
+  extractedData: ExtractedCallData
+  conversation: {
+    id: string
+    patientId?: string | null
+    outcome?: string | null
+    retellCallId?: string | null
+  }
+  patient: {
+    id: string
+    name: string | null
+    firstName?: string | null
+    lastName?: string | null
+    email?: string | null
+    phone?: string | null
+    primaryPhone?: string | null
+    dateOfBirth?: Date | null
+  } | null
+}): Record<string, unknown> {
+  const { call, extractedData, conversation, patient } = params
+  const { transferOutcome } = readRetellTransferNotificationFields(call)
+  const customData = (extractedData.retell_custom_data || {}) as Record<string, unknown>
+  const newPatientAdd =
+    parseBooleanLike(
+      customData['New Patient Add'] ??
+        customData['new patient add'] ??
+        extractedData.new_patient_add
+    ) ?? null
+  const existingPatientUpdate =
+    parseBooleanLike(
+      customData['Existing Patient Update'] ??
+        customData['existing patient update'] ??
+        extractedData.existing_patient_update
+    ) ?? null
+  const patientId = patient?.id || conversation.patientId || null
+
+  return {
+    patientId,
+    patient: patient
+      ? {
+          id: patient.id,
+          name: patient.name,
+          firstName: patient.firstName ?? null,
+          lastName: patient.lastName ?? null,
+          email: patient.email ?? null,
+          phone: patient.primaryPhone || patient.phone || null,
+          primaryPhone: patient.primaryPhone ?? null,
+          dateOfBirth: patient.dateOfBirth?.toISOString() ?? null,
+        }
+      : undefined,
+    conversation: {
+      id: conversation.id,
+      patientId: conversation.patientId ?? patientId,
+      outcome: conversation.outcome ?? null,
+      retellCallId: conversation.retellCallId ?? call.call_id ?? null,
+    },
+    call: {
+      transferFailed: isUnsuccessfulTransferFromRetellAnalysis(call),
+      transferOutcome: transferOutcome,
+      patientType: extractedData.patient_type?.trim() || null,
+      newPatientAdd,
+      existingPatientUpdate,
+      patientTypeCategory: classifyRetellPatientTypeCategory(extractedData),
+    },
+  }
+}
+
+async function emitVoiceConversationEndedEvent(params: {
+  practiceId: string
+  call: RetellCall
+  extractedData: ExtractedCallData
+  conversationId: string
+  patientId: string | null
+}): Promise<void> {
+  const { practiceId, call, extractedData, conversationId, patientId } = params
+
+  try {
+    const latest = await prisma.voiceConversation.findUnique({
+      where: { id: conversationId },
+      select: {
+        id: true,
+        patientId: true,
+        outcome: true,
+        retellCallId: true,
+        metadata: true,
+      },
+    })
+    if (!latest) return
+
+    const meta = metadataObjectFromRow(latest.metadata)
+    if (meta.voiceConversationEndedEventEmittedAt) return
+
+    const resolvedPatientId = patientId || latest.patientId || null
+    let patient: {
+      id: string
+      name: string | null
+      firstName: string | null
+      lastName: string | null
+      email: string | null
+      phone: string | null
+      primaryPhone: string | null
+      dateOfBirth: Date | null
+    } | null = null
+
+    if (resolvedPatientId) {
+      patient = await prisma.patient.findFirst({
+        where: { id: resolvedPatientId, practiceId, deletedAt: null },
+        select: {
+          id: true,
+          name: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          phone: true,
+          primaryPhone: true,
+          dateOfBirth: true,
+        },
+      })
+    }
+
+    const data = buildVoiceConversationEndedEventData({
+      call,
+      extractedData,
+      conversation: latest,
+      patient,
+    })
+
+    await emitEvent({
+      practiceId,
+      eventName: 'crm/voice_conversation.ended',
+      entityType: 'voice_conversation',
+      entityId: conversationId,
+      data,
+    })
+
+    // Re-read before write so concurrent metadata patches are not clobbered.
+    const afterEmit = await prisma.voiceConversation.findUnique({
+      where: { id: conversationId },
+      select: { metadata: true },
+    })
+    await prisma.voiceConversation.update({
+      where: { id: conversationId },
+      data: {
+        metadata: {
+          ...metadataObjectFromRow(afterEmit?.metadata),
+          voiceConversationEndedEventEmittedAt: new Date().toISOString(),
+        } as Prisma.InputJsonObject,
+      },
+    })
+  } catch (error) {
+    console.error('[processRetellCallData] Failed to emit voice_conversation.ended', {
+      practiceId,
+      callId: call.call_id,
+      conversationId,
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
 }
 
 async function triggerCurogramAfterRetellProcessing(
@@ -1711,6 +1916,17 @@ export async function processRetellCallData(
   }
 
   let resolvedPatientId = patientId || conversationForEscalation?.patientId || null
+
+  if (conversationForEscalation?.id) {
+    await emitVoiceConversationEndedEvent({
+      practiceId,
+      call,
+      extractedData,
+      conversationId: conversationForEscalation.id,
+      patientId: resolvedPatientId,
+    })
+  }
+
   if (extractedData.insurance_verification) {
     const noteResult = await persistInsuranceVerificationNote({
       practiceId,

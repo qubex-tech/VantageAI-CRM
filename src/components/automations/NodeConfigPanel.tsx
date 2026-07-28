@@ -185,6 +185,10 @@ const EVENT_FIELDS: Record<string, Array<{ value: string; label: string; type: '
   'crm/voice_conversation.ended': [
     { value: 'conversation.patientId', label: 'Patient ID', type: 'string' },
     { value: 'conversation.outcome', label: 'Outcome', type: 'string' },
+    { value: 'call.transferFailed', label: 'Transfer failed', type: 'boolean' },
+    { value: 'call.patientTypeCategory', label: 'Patient type (new/existing)', type: 'string' },
+    { value: 'call.patientType', label: 'Patient type (raw)', type: 'string' },
+    { value: 'call.transferOutcome', label: 'Transfer outcome', type: 'string' },
     ...PATIENT_FIELDS,
   ],
   'crm/form_request.created': [
@@ -242,6 +246,17 @@ const ELIGIBILITY_STATUS_OPTIONS = [
 const OPEN_SLOT_SOURCE_OPTIONS: Array<{ value: OpenSlotSource; label: string }> = (
   Object.entries(OPEN_SLOT_SOURCE_LABELS) as Array<[OpenSlotSource, string]>
 ).map(([value, label]) => ({ value, label }))
+
+const BOOLEAN_CONDITION_OPTIONS = [
+  { value: 'true', label: 'True' },
+  { value: 'false', label: 'False' },
+] as const
+
+const PATIENT_TYPE_CATEGORY_OPTIONS = [
+  { value: 'new', label: 'New' },
+  { value: 'existing', label: 'Existing' },
+  { value: 'unknown', label: 'Unknown' },
+] as const
 
 interface MarketingTemplate {
   id: string
@@ -726,6 +741,57 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                               <SelectContent>
                                 {OPEN_SLOT_SOURCE_OPTIONS.map((option) => (
                                   <SelectItem key={option.value} value={option.label}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : condition.field === 'call.transferFailed' ||
+                            uniqueFields.find((field) => field.value === condition.field)?.type ===
+                              'boolean' ? (
+                            <Select
+                              value={
+                                condition.value === true || condition.value === 'true'
+                                  ? 'true'
+                                  : condition.value === false || condition.value === 'false'
+                                    ? 'false'
+                                    : ''
+                              }
+                              onValueChange={(value) => {
+                                const newConditions = [...(config.conditions || [])]
+                                newConditions[index] = {
+                                  ...condition,
+                                  value: value === 'true',
+                                }
+                                handleUpdate({ conditions: newConditions })
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select true or false" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {BOOLEAN_CONDITION_OPTIONS.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : condition.field === 'call.patientTypeCategory' ? (
+                            <Select
+                              value={condition.value || ''}
+                              onValueChange={(value) => {
+                                const newConditions = [...(config.conditions || [])]
+                                newConditions[index] = { ...condition, value }
+                                handleUpdate({ conditions: newConditions })
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select patient type" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {PATIENT_TYPE_CATEGORY_OPTIONS.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
                                     {option.label}
                                   </SelectItem>
                                 ))}
