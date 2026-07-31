@@ -18,6 +18,7 @@ export type ActivityType =
   | 'payment'
   | 'reminder'
   | 'task'
+  | 'automation'
   | 'other'
 
 export interface ActivityMetadata {
@@ -371,6 +372,45 @@ export async function logCustomActivity(params: {
     metadata: {
       ...params.metadata,
       userId: params.userId,
+    },
+  })
+}
+
+/**
+ * Log when an automation rule runs for a patient (shown in CRM activity feed).
+ */
+export async function logAutomationActivity(params: {
+  patientId: string
+  ruleId: string
+  ruleName: string
+  triggerEvent: string
+  runId: string
+  status: 'succeeded' | 'failed' | 'skipped'
+  description?: string
+  metadata?: ActivityMetadata
+}): Promise<void> {
+  const statusLabel =
+    params.status === 'succeeded'
+      ? 'ran'
+      : params.status === 'failed'
+        ? 'failed'
+        : 'was skipped'
+
+  await logPatientActivity({
+    patientId: params.patientId,
+    type: 'automation',
+    title: `Automation ${statusLabel}: ${params.ruleName}`,
+    description:
+      params.description ||
+      `Triggered by ${params.triggerEvent}`,
+    metadata: {
+      ruleId: params.ruleId,
+      ruleName: params.ruleName,
+      triggerEvent: params.triggerEvent,
+      runId: params.runId,
+      status: params.status,
+      createdBy: 'automation',
+      ...params.metadata,
     },
   })
 }

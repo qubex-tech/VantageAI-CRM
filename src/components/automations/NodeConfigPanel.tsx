@@ -419,6 +419,11 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
   const availableFields = [
     ...PATIENT_FIELDS,
     { value: 'patient_on_list', label: 'Patient is on list', type: 'string' as const },
+    {
+      value: 'patient.hasFutureScheduledAppointment',
+      label: 'Has future scheduled appointment',
+      type: 'boolean' as const,
+    },
     ...eventSpecificFields,
   ]
   
@@ -626,9 +631,16 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                               value={condition.value || ''}
                               onValueChange={(value) => {
                                 const newConditions = [...(config.conditions || [])]
+                                const keepOperator =
+                                  condition.operator === 'not_equals' ||
+                                  condition.operator === 'not_contains' ||
+                                  condition.operator === 'equals' ||
+                                  condition.operator === 'contains'
+                                    ? condition.operator
+                                    : 'equals'
                                 newConditions[index] = {
                                   ...condition,
-                                  operator: 'equals',
+                                  operator: keepOperator,
                                   value,
                                 }
                                 handleUpdate({ conditions: newConditions })

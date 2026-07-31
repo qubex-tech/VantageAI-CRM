@@ -2,6 +2,8 @@ import { inngest } from '../client'
 import { prisma } from '@/lib/db'
 import { evaluateConditions } from '@/automations/condition-evaluator'
 import { runAction } from '@/automations/action-runner'
+import { logAutomationActivity } from '@/lib/patient-activity'
+import { notifyPracticeAutomationRun } from '@/automations/automation-push-notification'
 
 const DEFAULT_OUTREACH_COOLDOWN_HOURS = 24
 const DEDUPABLE_NOTIFICATION_ACTIONS = new Set([
@@ -128,10 +130,59 @@ function substituteVariables(args: any, eventData: Record<string, any>): any {
   return args
 }
 
+function resolvePatientIdFromPayload(payload: {
+  entityType: string
+  entityId: string
+  data: Record<string, any>
+}): string | null {
+  const data = payload.data || {}
+  const candidates = [
+    data.patient?.id,
+    data.appointment?.patientId,
+    data.insurance?.patientId,
+    data.formRequest?.patientId,
+    data.message?.patientId,
+    data.conversation?.patientId,
+    data.patientId,
+    payload.entityType === 'patient' ? payload.entityId : null,
+  ]
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim()
+    }
+  }
+  return null
+}
+
+function resolvePatientNameFromPayload(data: Record<string, any>): string | null {
+  const patient = data?.patient
+  if (!patient || typeof patient !== 'object') return null
+  if (typeof patient.name === 'string' && patient.name.trim()) return patient.name.trim()
+  const first = typeof patient.firstName === 'string' ? patient.firstName.trim() : ''
+  const last = typeof patient.lastName === 'string' ? patient.lastName.trim() : ''
+  const combined = `${first} ${last}`.trim()
+  return combined || null
+}
+
+function summarizeActionResults(
+  actionResults: Array<{ actionType: string; status: string; error?: string }>
+): string {
+  if (actionResults.length === 0) return 'No actions executed.'
+  return actionResults
+    .map((action) => {
+      if (action.status === 'succeeded') return `${action.actionType} succeeded`
+      if (action.status === 'skipped') return `${action.actionType} skipped`
+      return `${action.actionType} failed${action.error ? `: ${action.error}` : ''}`
+    })
+    .join('; ')
+}
+
 function buildAutomationContext(
   eventData: Record<string, any>,
   practice?: { name?: string | null; phone?: string | null; address?: string | null },
-  patientListIds: string[] = []
+  patientListIds: string[] = [],
+  patientFlags: { hasFutureScheduledAppointment?: boolean } = {}
 ) {
   const patient = eventData.patient || {}
   const appointment = eventData.appointment || {}
@@ -163,6 +214,7 @@ function buildAutomationContext(
       lastName: patient.lastName || inferredLastName,
       preferredName: patient.preferredName || patient.firstName || inferredFirstName,
       listIds: patientListIds,
+      hasFutureScheduledAppointment: Boolean(patientFlags.hasFutureScheduledAppointment),
     },
     appointment: {
       ...appointment,
@@ -263,23 +315,38 @@ export const runAutomationsForEvent = inngest.createFunction(
       })
     })
 
-    const patientListIds = await step.run('load-patient-list-ids', async () => {
+    const patientContext = await step.run('load-patient-condition-context', async () => {
       const patientId =
         payload.data.patient?.id ||
         payload.data.appointment?.patientId ||
         payload.data.patientId ||
         (payload.entityType === 'patient' ? payload.entityId : null)
 
-      if (!patientId) return [] as string[]
+      if (!patientId) {
+        return {
+          listIds: [] as string[],
+          hasFutureScheduledAppointment: false,
+        }
+      }
 
-      const memberships = await prisma.patientListMember.findMany({
-        where: {
-          practiceId,
-          patientId,
-        },
-        select: { listId: true },
-      })
-      return memberships.map((m) => m.listId)
+      const { patientHasFutureScheduledAppointment } = await import(
+        '@/automations/patient-future-appointment'
+      )
+      const [memberships, hasFutureScheduledAppointment] = await Promise.all([
+        prisma.patientListMember.findMany({
+          where: {
+            practiceId,
+            patientId,
+          },
+          select: { listId: true },
+        }),
+        patientHasFutureScheduledAppointment({ practiceId, patientId }),
+      ])
+
+      return {
+        listIds: memberships.map((m) => m.listId),
+        hasFutureScheduledAppointment,
+      }
     })
 
     // Step 2: Evaluate conditions for each rule
@@ -290,7 +357,10 @@ export const runAutomationsForEvent = inngest.createFunction(
         const automationContext = buildAutomationContext(
           payload.data,
           practice || undefined,
-          patientListIds
+          patientContext.listIds,
+          {
+            hasFutureScheduledAppointment: patientContext.hasFutureScheduledAppointment,
+          }
         )
         for (const rule of matchingRules) {
           try {
@@ -312,6 +382,7 @@ export const runAutomationsForEvent = inngest.createFunction(
 
     // Step 3: Execute actions for each matching rule
     const executionResults = []
+    const patientId = resolvePatientIdFromPayload(payload)
 
     for (const rule of evaluatedRules) {
       // Create AutomationRun
@@ -357,7 +428,10 @@ export const runAutomationsForEvent = inngest.createFunction(
             const automationContext = buildAutomationContext(
               payload.data,
               practice || undefined,
-              patientListIds
+              patientContext.listIds,
+              {
+                hasFutureScheduledAppointment: patientContext.hasFutureScheduledAppointment,
+              }
             )
             let processedArgs = substituteVariables(rawArgs, automationContext)
 
@@ -365,15 +439,16 @@ export const runAutomationsForEvent = inngest.createFunction(
             const actionsRequiringPatientId = ['create_note', 'send_email', 'send_sms', 'send_reminder', 'update_patient_fields', 'tag_patient', 'create_insurance_policy', 'trigger_curogram_template']
             if (actionsRequiringPatientId.includes(action.type) && !processedArgs.patientId) {
               // Try to extract patientId from common event data paths
-              const patientId =
+              const resolvedPatientId =
+                patientId ||
                 payload.data.appointment?.patientId ||
                 payload.data.patient?.id ||
                 payload.data.patientId ||
                 payload.data.entityId // Fallback to entityId if it's a patient entity
 
-              if (patientId) {
-                console.log(`[AUTOMATION] Auto-filled patientId from event data:`, patientId)
-                processedArgs = { ...processedArgs, patientId }
+              if (resolvedPatientId) {
+                console.log(`[AUTOMATION] Auto-filled patientId from event data:`, resolvedPatientId)
+                processedArgs = { ...processedArgs, patientId: resolvedPatientId }
               } else {
                 console.warn(`[AUTOMATION] Could not auto-fill patientId for action ${action.type}. Event data:`, Object.keys(payload.data))
               }
@@ -491,9 +566,9 @@ export const runAutomationsForEvent = inngest.createFunction(
 
             // Avoid bombarding the same patient with repeat outreach when a list is re-run.
             if (DEDUPABLE_NOTIFICATION_ACTIONS.has(action.type)) {
-              const patientId =
+              const actionPatientId =
                 typeof processedArgs.patientId === 'string' ? processedArgs.patientId.trim() : ''
-              if (patientId) {
+              if (actionPatientId) {
                 const isCurogramTemplateAction = action.type === 'trigger_curogram_template'
                 const preventDuplicatesForever =
                   isCurogramTemplateAction && parseBoolean(processedArgs.preventDuplicateActions)
@@ -504,7 +579,7 @@ export const runAutomationsForEvent = inngest.createFunction(
                   practiceId,
                   ruleId: rule.id,
                   actionType: action.type,
-                  patientId,
+                  patientId: actionPatientId,
                   ...(preventDuplicatesForever ? {} : { withinHours: cooldownHours }),
                   ...(isCurogramTemplateAction && normalizedActionId
                     ? { actionId: normalizedActionId }
@@ -519,7 +594,7 @@ export const runAutomationsForEvent = inngest.createFunction(
                     isCurogramTemplateAction && normalizedActionId
                       ? ` for actionId ${normalizedActionId}`
                       : ''
-                  const skipReason = `Skipped duplicate outreach: ${action.type}${actionIdSuffix} for patient ${patientId} ${reasonSuffix}`
+                  const skipReason = `Skipped duplicate outreach: ${action.type}${actionIdSuffix} for patient ${actionPatientId} ${reasonSuffix}`
 
                   await prisma.automationActionLog.create({
                     data: {
@@ -601,6 +676,43 @@ export const runAutomationsForEvent = inngest.createFunction(
           },
         })
 
+        if (patientId) {
+          await step.run(`log-activity-${rule.id}-${payload.sourceEventId}`, async () => {
+            await logAutomationActivity({
+              patientId,
+              ruleId: rule.id,
+              ruleName: rule.name,
+              triggerEvent: payload.eventName,
+              runId: run.id,
+              status: 'succeeded',
+              description: `Triggered by ${payload.eventName}. ${summarizeActionResults(actionResults)}`,
+              metadata: {
+                sourceEventId: payload.sourceEventId,
+                actionsExecuted: actionResults.length,
+                actionResults,
+              },
+            })
+          })
+        } else {
+          console.warn(
+            `[AUTOMATION] Skipping activity feed log for run ${run.id}: no patientId on event ${payload.eventName}`
+          )
+        }
+
+        await step.run(`push-automation-${rule.id}-${payload.sourceEventId}`, async () => {
+          await notifyPracticeAutomationRun({
+            practiceId,
+            ruleId: rule.id,
+            ruleName: rule.name,
+            triggerEvent: payload.eventName,
+            runId: run.id,
+            status: 'succeeded',
+            patientId,
+            patientName: resolvePatientNameFromPayload(payload.data),
+            actionResults,
+          })
+        })
+
         executionResults.push({
           ruleId: rule.id,
           ruleName: rule.name,
@@ -616,6 +728,38 @@ export const runAutomationsForEvent = inngest.createFunction(
             finishedAt: new Date(),
             error: error instanceof Error ? error.message : 'Unknown error',
           },
+        })
+
+        if (patientId) {
+          await step.run(`log-activity-failed-${rule.id}-${payload.sourceEventId}`, async () => {
+            await logAutomationActivity({
+              patientId,
+              ruleId: rule.id,
+              ruleName: rule.name,
+              triggerEvent: payload.eventName,
+              runId: run.id,
+              status: 'failed',
+              description: `Triggered by ${payload.eventName}. ${
+                error instanceof Error ? error.message : 'Unknown error'
+              }`,
+              metadata: {
+                sourceEventId: payload.sourceEventId,
+              },
+            })
+          })
+        }
+
+        await step.run(`push-automation-failed-${rule.id}-${payload.sourceEventId}`, async () => {
+          await notifyPracticeAutomationRun({
+            practiceId,
+            ruleId: rule.id,
+            ruleName: rule.name,
+            triggerEvent: payload.eventName,
+            runId: run.id,
+            status: 'failed',
+            patientId,
+            patientName: resolvePatientNameFromPayload(payload.data),
+          })
         })
 
         executionResults.push({

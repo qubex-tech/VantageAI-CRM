@@ -184,6 +184,44 @@ describe('Condition Evaluator', () => {
     })
   })
 
+  describe('patient.hasFutureScheduledAppointment condition', () => {
+    it('matches when patient has a future scheduled appointment', () => {
+      expect(
+        evaluateConditions(
+          {
+            field: 'patient.hasFutureScheduledAppointment',
+            operator: 'equals',
+            value: true,
+          },
+          { patient: { hasFutureScheduledAppointment: true } }
+        )
+      ).toBe(true)
+      expect(
+        evaluateConditions(
+          {
+            field: 'patient.hasFutureScheduledAppointment',
+            operator: 'equals',
+            value: false,
+          },
+          { patient: { hasFutureScheduledAppointment: true } }
+        )
+      ).toBe(false)
+    })
+
+    it('supports not_equals for patients without a future scheduled appointment', () => {
+      expect(
+        evaluateConditions(
+          {
+            field: 'patient.hasFutureScheduledAppointment',
+            operator: 'not_equals',
+            value: true,
+          },
+          { patient: { hasFutureScheduledAppointment: false } }
+        )
+      ).toBe(true)
+    })
+  })
+
   describe('boolean coercion', () => {
     it('matches boolean field values against true/false strings', () => {
       expect(

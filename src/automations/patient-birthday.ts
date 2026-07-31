@@ -5,7 +5,6 @@
  */
 
 export const DEFAULT_PRACTICE_TIMEZONE = 'America/Chicago'
-export const BIRTHDAY_EMIT_HOUR = 9
 export const PATIENT_BIRTHDAY_EVENT = 'crm/patient.birthday'
 
 export type ZonedDateParts = {
@@ -94,8 +93,48 @@ export function computeAgeOnDate(
   return Math.max(0, age)
 }
 
-export function isBirthdayEmitHour(hour: number): boolean {
-  return hour === BIRTHDAY_EMIT_HOUR
+type AutomationActionLike = {
+  type?: unknown
+  args?: Record<string, unknown> | null
+}
+
+/**
+ * Collect practice-local emit hours from birthday automation wait actions.
+ * Prefer wait_until_send_window.startHour; also honor wait_until_local_time.hour.
+ * Deduped and sorted ascending. Empty = no configured send time.
+ */
+export function extractBirthdayEmitHoursFromActions(actionsJson: unknown): number[] {
+  if (!Array.isArray(actionsJson)) return []
+
+  const hours = new Set<number>()
+  for (const raw of actionsJson) {
+    if (!raw || typeof raw !== 'object') continue
+    const action = raw as AutomationActionLike
+    const type = typeof action.type === 'string' ? action.type : ''
+    const args = action.args && typeof action.args === 'object' ? action.args : {}
+
+    let hour: number | null = null
+    if (type === 'wait_until_send_window') {
+      hour = Number(args.startHour)
+    } else if (type === 'wait_until_local_time') {
+      hour = Number(args.hour)
+    }
+
+    if (Number.isInteger(hour) && hour! >= 0 && hour! <= 23) {
+      hours.add(hour!)
+    }
+  }
+
+  return [...hours].sort((a, b) => a - b)
+}
+
+/** True when local hour matches a birthday automation send-window / local-time hour. */
+export function shouldEmitBirthdaysAtLocalHour(
+  localHour: number,
+  emitHours: number[]
+): boolean {
+  if (!Array.isArray(emitHours) || emitHours.length === 0) return false
+  return emitHours.includes(localHour)
 }
 
 export function formatBirthdayDate(year: number, month: number, day: number): string {

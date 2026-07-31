@@ -1,14 +1,14 @@
 import { inngest } from '../client'
 import { prisma } from '@/lib/db'
 import { emitEvent } from '@/lib/outbox'
+import { getPracticeTimeZone } from '@/lib/practice-timezone'
 import {
-  BIRTHDAY_EMIT_HOUR,
-  DEFAULT_PRACTICE_TIMEZONE,
   PATIENT_BIRTHDAY_EVENT,
   buildPatientBirthdayPayload,
+  extractBirthdayEmitHoursFromActions,
   getBirthdayMatchTargets,
   getZonedDateParts,
-  isBirthdayEmitHour,
+  shouldEmitBirthdaysAtLocalHour,
 } from '@/automations/patient-birthday'
 
 const SCHEDULE_CRON = '0 * * * *'
@@ -96,8 +96,9 @@ async function alreadyEmittedThisYear(
 }
 
 /**
- * Hourly cron that emits crm/patient.birthday once per patient per year
- * when practice-local time is 09:00–09:59 and DOB month/day matches today.
+ * Hourly cron that emits crm/patient.birthday once per patient per year when
+ * practice-local hour matches a birthday automation's send-window start hour
+ * (or wait_until_local_time hour), and DOB month/day matches today.
  */
 export const emitPatientBirthdayEvents = inngest.createFunction(
   {
@@ -108,35 +109,57 @@ export const emitPatientBirthdayEvents = inngest.createFunction(
   async ({ step }) => {
     const now = new Date()
 
-    const practices = await step.run('load-practices', async () => {
-      return prisma.practice.findMany({
+    const practices = await step.run('load-practices-with-birthday-rules', async () => {
+      const rules = await prisma.automationRule.findMany({
+        where: {
+          enabled: true,
+          triggerEvent: PATIENT_BIRTHDAY_EVENT,
+        },
         select: {
-          id: true,
-          brandProfile: {
-            select: {
-              timezone: true,
-            },
-          },
+          practiceId: true,
+          actionsJson: true,
         },
       })
+
+      const emitHoursByPractice = new Map<string, Set<number>>()
+      for (const rule of rules) {
+        const hours = extractBirthdayEmitHoursFromActions(rule.actionsJson)
+        if (hours.length === 0) continue
+        const existing = emitHoursByPractice.get(rule.practiceId) ?? new Set<number>()
+        for (const hour of hours) existing.add(hour)
+        emitHoursByPractice.set(rule.practiceId, existing)
+      }
+
+      return [...emitHoursByPractice.entries()].map(([practiceId, hours]) => ({
+        practiceId,
+        emitHours: [...hours].sort((a, b) => a - b),
+      }))
     })
 
     let emitted = 0
     let skippedOutsideWindow = 0
+    let skippedNoEmitHours = 0
     let skippedAlreadyEmitted = 0
 
     for (const practice of practices) {
-      const timezone = practice.brandProfile?.timezone || DEFAULT_PRACTICE_TIMEZONE
+      if (practice.emitHours.length === 0) {
+        skippedNoEmitHours += 1
+        continue
+      }
+
+      const timezone = await step.run(`timezone-${practice.practiceId}`, async () => {
+        return getPracticeTimeZone(practice.practiceId)
+      })
       const local = getZonedDateParts(now, timezone)
 
-      if (!isBirthdayEmitHour(local.hour)) {
+      if (!shouldEmitBirthdaysAtLocalHour(local.hour, practice.emitHours)) {
         skippedOutsideWindow += 1
         continue
       }
 
-      const result = await step.run(`emit-birthdays-${practice.id}`, async () => {
+      const result = await step.run(`emit-birthdays-${practice.practiceId}`, async () => {
         const targets = getBirthdayMatchTargets(local.month, local.day, local.year)
-        const patients = await findBirthdayPatients(practice.id, targets)
+        const patients = await findBirthdayPatients(practice.practiceId, targets)
 
         let practiceEmitted = 0
         let practiceSkipped = 0
@@ -149,13 +172,13 @@ export const emitPatientBirthdayEvents = inngest.createFunction(
 
           if (Number.isNaN(dateOfBirth.getTime())) continue
 
-          if (await alreadyEmittedThisYear(practice.id, patient.id, local.year)) {
+          if (await alreadyEmittedThisYear(practice.practiceId, patient.id, local.year)) {
             practiceSkipped += 1
             continue
           }
 
           await emitEvent({
-            practiceId: practice.id,
+            practiceId: practice.practiceId,
             eventName: PATIENT_BIRTHDAY_EVENT,
             entityType: 'patient',
             entityId: patient.id,
@@ -179,9 +202,9 @@ export const emitPatientBirthdayEvents = inngest.createFunction(
     }
 
     return {
-      emitHour: BIRTHDAY_EMIT_HOUR,
       practicesChecked: practices.length,
       practicesOutsideWindow: skippedOutsideWindow,
+      practicesMissingEmitHours: skippedNoEmitHours,
       emitted,
       skippedAlreadyEmitted,
     }

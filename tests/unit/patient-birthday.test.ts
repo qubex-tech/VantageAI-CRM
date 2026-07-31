@@ -3,9 +3,10 @@ import {
   buildPatientBirthdayPayload,
   computeAgeOnDate,
   dobMatchesToday,
+  extractBirthdayEmitHoursFromActions,
   getBirthdayMatchTargets,
-  isBirthdayEmitHour,
   isLeapYear,
+  shouldEmitBirthdaysAtLocalHour,
 } from '@/automations/patient-birthday'
 
 describe('patient birthday helpers', () => {
@@ -66,11 +67,43 @@ describe('patient birthday helpers', () => {
     })
   })
 
-  describe('isBirthdayEmitHour', () => {
-    it('only fires at 9am local', () => {
-      expect(isBirthdayEmitHour(9)).toBe(true)
-      expect(isBirthdayEmitHour(8)).toBe(false)
-      expect(isBirthdayEmitHour(10)).toBe(false)
+  describe('extractBirthdayEmitHoursFromActions', () => {
+    it('reads startHour from wait_until_send_window', () => {
+      expect(
+        extractBirthdayEmitHoursFromActions([
+          {
+            type: 'wait_until_send_window',
+            args: { startHour: 7, startMinute: 45, endHour: 20 },
+          },
+          { type: 'trigger_curogram_template', args: { actionId: 'x' } },
+        ])
+      ).toEqual([7])
+    })
+
+    it('reads hour from wait_until_local_time and dedupes', () => {
+      expect(
+        extractBirthdayEmitHoursFromActions([
+          { type: 'wait_until_local_time', args: { hour: 8, minute: 0 } },
+          { type: 'wait_until_send_window', args: { startHour: 8, endHour: 17 } },
+          { type: 'wait_until_send_window', args: { startHour: 10, endHour: 17 } },
+        ])
+      ).toEqual([8, 10])
+    })
+
+    it('returns empty when no wait actions are configured', () => {
+      expect(
+        extractBirthdayEmitHoursFromActions([
+          { type: 'trigger_curogram_template', args: { actionId: 'x' } },
+        ])
+      ).toEqual([])
+    })
+  })
+
+  describe('shouldEmitBirthdaysAtLocalHour', () => {
+    it('matches configured send hours only', () => {
+      expect(shouldEmitBirthdaysAtLocalHour(7, [7])).toBe(true)
+      expect(shouldEmitBirthdaysAtLocalHour(9, [7])).toBe(false)
+      expect(shouldEmitBirthdaysAtLocalHour(7, [])).toBe(false)
     })
   })
 
