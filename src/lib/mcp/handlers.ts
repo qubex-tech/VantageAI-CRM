@@ -3,12 +3,14 @@ import { computeReadiness } from './readiness'
 import { writeMcpAuditLog, collectFieldPaths } from './audit'
 import { buildVerificationAgentFields, formatPatientDob } from './verification-fields'
 import { formatAppointmentForVoice } from '@/lib/appointments/voice-context'
-import { refreshPatientAppointmentsFromOpenDentalForVoice } from '@/lib/appointments/live-opendental-refresh'
+import { getLiveUpcomingAppointmentsForVoice } from '@/lib/appointments/live-opendental-refresh'
 import {
   fetchOpenDentalChartFacts,
   normalizeDobToIso,
 } from '@/lib/patient-identity'
 import { findOrCreatePatientByPhone, lookupPatientForScheduling } from '@/lib/agentActions'
+import { getSchedulingSettings } from '@/lib/integrations/clinical-system/server'
+import { usesOpenDentalForRead } from '@/lib/integrations/clinical-system/types'
 import type {
   GetPatientIdentityInput,
   ListInsurancePoliciesInput,
@@ -583,17 +585,57 @@ export async function handleGetUpcomingAppointments(
     }
   }
 
-  // Live OD pull during the call so the agent does not speak from a stale CRM mirror.
+  // Live EHR pull for OD practices — never answer from CRM-only mirrors.
   const practiceId = ctx.practiceId ?? patient.practiceId
-  const refresh = practiceId
-    ? await refreshPatientAppointmentsFromOpenDentalForVoice({
-        practiceId,
-        patientId: patient.id,
-      })
-    : { attempted: false, summary: null, error: null }
+  const scheduling = practiceId ? await getSchedulingSettings(practiceId) : null
+  const useLiveOd = Boolean(practiceId && scheduling && usesOpenDentalForRead(scheduling))
 
-  const rows = await db.getUpcomingAppointmentsByPatientId(patientId, ctx.practiceId, input.limit ?? 5)
-  const appointments = rows.map(formatAppointmentForVoice)
+  let appointments: ReturnType<typeof formatAppointmentForVoice>[] = []
+  let opendentalRefresh: Record<string, number> | null = null
+  let refreshedFromOpendental = false
+  let opendentalRefreshError: string | null = null
+  let message: string | undefined
+
+  if (useLiveOd && practiceId) {
+    const live = await getLiveUpcomingAppointmentsForVoice({
+      practiceId,
+      patientId: patient.id,
+      limit: input.limit ?? 5,
+    })
+    appointments = live.appointments
+    refreshedFromOpendental = live.refreshedFromOpenDental
+    if (live.summary) {
+      opendentalRefresh = {
+        fetched: live.summary.fetched,
+        created: live.summary.created,
+        updated: live.summary.updated,
+        skipped: live.summary.skipped,
+        errors: live.summary.errors,
+        pruned: live.summary.pruned,
+        statusReconciled: live.summary.statusReconciled,
+      }
+    }
+    if (live.error) {
+      // Fail closed: do not fall back to CRM when the live OD pull fails.
+      opendentalRefreshError = live.error
+      appointments = []
+      refreshedFromOpendental = false
+      message =
+        'Could not load upcoming appointments from Open Dental. Please try again or transfer to the front desk.'
+    } else if (appointments.length === 0) {
+      message = 'No upcoming appointments found for this patient'
+    }
+  } else {
+    const rows = await db.getUpcomingAppointmentsByPatientId(
+      patientId,
+      ctx.practiceId,
+      input.limit ?? 5
+    )
+    appointments = rows.map(formatAppointmentForVoice)
+    if (appointments.length === 0) {
+      message = 'No upcoming appointments found for this patient'
+    }
+  }
 
   const output: Record<string, unknown> = {
     patient_id: patient.id,
@@ -601,22 +643,14 @@ export async function handleGetUpcomingAppointments(
     has_upcoming: appointments.length > 0,
     next_appointment: appointments[0] ?? null,
     appointments,
-    refreshed_from_opendental: Boolean(refresh.summary && refresh.summary.fetched > 0),
-    opendental_refresh: refresh.summary
-      ? {
-          fetched: refresh.summary.fetched,
-          created: refresh.summary.created,
-          updated: refresh.summary.updated,
-          skipped: refresh.summary.skipped,
-          errors: refresh.summary.errors,
-        }
-      : null,
+    refreshed_from_opendental: refreshedFromOpendental,
+    opendental_refresh: opendentalRefresh,
   }
-  if (refresh.error) {
-    output.opendental_refresh_error = refresh.error
+  if (opendentalRefreshError) {
+    output.opendental_refresh_error = opendentalRefreshError
   }
-  if (appointments.length === 0) {
-    output.message = 'No upcoming appointments found for this patient'
+  if (message) {
+    output.message = message
   }
 
   await writeMcpAuditLog({

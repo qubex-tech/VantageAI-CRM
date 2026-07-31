@@ -135,6 +135,15 @@ function isSchedulableStatus(status: unknown): boolean {
   return normalized !== 'unschedlist' && normalized !== 'planned' && normalized !== 'ptnote'
 }
 
+/**
+ * Statuses the voice agent may speak as an upcoming appointment.
+ * Broken/Complete/UnschedList/etc. must not be offered as "your next visit".
+ */
+export function isOpenDentalVoiceUpcomingStatus(status: unknown): boolean {
+  const normalized = cleanString(status)?.toLowerCase()
+  return normalized === 'scheduled' || normalized === 'asap'
+}
+
 type UpsertOutcome = 'created' | 'updated'
 
 async function upsertAppointmentFromOpenDental(params: {
@@ -216,32 +225,46 @@ export type AppointmentSyncSummary = {
   skipped: number
   errors: number
   errorSamples: string[]
+  /** Future CRM OD apts cancelled because AptNum is gone from the live OD list. */
+  pruned: number
+  /** Future CRM OD apts updated to cancelled/completed from live OD status. */
+  statusReconciled: number
 }
 
-/**
- * Pull appointments for a single Open Dental patient into the CRM appointment table.
- *
- * Self-gating: returns a zeroed summary when the practice has no active Open Dental
- * connection or when the patient is not linked to Open Dental. Deduped/idempotent via
- * the appointment's `calBookingId` (`opendental:apt:{AptNum}`), so repeated pulls update
- * rather than duplicate. Designed to run on-demand (e.g. when a patient profile is
- * opened); failures should be treated as best-effort by the caller.
- */
-export async function syncOpenDentalAppointmentsForPatient(params: {
-  practiceId: string
-  patientId: string
-  externalEhrId?: string | null
-  patNum?: number
-}): Promise<AppointmentSyncSummary> {
-  const { practiceId, patientId } = params
-  const summary: AppointmentSyncSummary = {
+export type ReconcileOpenDentalAppointmentsResult = {
+  summary: AppointmentSyncSummary
+  timeZone: string | null
+  patNum: number | null
+  liveOdAppointments: OdAppointment[]
+  linked: boolean
+  configured: boolean
+}
+
+function emptySyncSummary(): AppointmentSyncSummary {
+  return {
     fetched: 0,
     created: 0,
     updated: 0,
     skipped: 0,
     errors: 0,
     errorSamples: [],
+    pruned: 0,
+    statusReconciled: 0,
   }
+}
+
+/**
+ * Live OD list + CRM upsert/prune for one patient.
+ * Returns the raw OD rows so voice tools can answer from EHR, not CRM ghosts.
+ */
+export async function reconcileOpenDentalAppointmentsForPatient(params: {
+  practiceId: string
+  patientId: string
+  externalEhrId?: string | null
+  patNum?: number
+}): Promise<ReconcileOpenDentalAppointmentsResult> {
+  const { practiceId, patientId } = params
+  const summary = emptySyncSummary()
 
   let patNum = params.patNum
   if (!patNum) {
@@ -253,22 +276,73 @@ export async function syncOpenDentalAppointmentsForPatient(params: {
           select: { externalEhrId: true },
         })
       )?.externalEhrId
-    if (!externalEhrId || !externalEhrId.startsWith('opendental:')) return summary
+    if (!externalEhrId || !externalEhrId.startsWith('opendental:')) {
+      return {
+        summary,
+        timeZone: null,
+        patNum: null,
+        liveOdAppointments: [],
+        linked: false,
+        configured: false,
+      }
+    }
     const raw = externalEhrId.slice('opendental:'.length)
-    if (raw.startsWith('apt:')) return summary
+    if (raw.startsWith('apt:')) {
+      return {
+        summary,
+        timeZone: null,
+        patNum: null,
+        liveOdAppointments: [],
+        linked: false,
+        configured: false,
+      }
+    }
     const parsed = Number(raw)
-    if (!Number.isInteger(parsed) || parsed <= 0) return summary
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      return {
+        summary,
+        timeZone: null,
+        patNum: null,
+        liveOdAppointments: [],
+        linked: false,
+        configured: false,
+      }
+    }
     patNum = parsed
   }
 
   const connection = await getOpenDentalConnection(practiceId)
-  if (!connection || !connection.isActive) return summary
+  if (!connection || !connection.isActive) {
+    return {
+      summary,
+      timeZone: null,
+      patNum,
+      liveOdAppointments: [],
+      linked: true,
+      configured: false,
+    }
+  }
 
   const services = await getOpenDentalServices(practiceId)
   const timeZone = await getPracticeTimeZone(practiceId)
 
   const appts = (await services.appointments.list({ PatNum: patNum })) as OdAppointment[]
-  if (!Array.isArray(appts)) return summary
+  if (!Array.isArray(appts)) {
+    return {
+      summary,
+      timeZone,
+      patNum,
+      liveOdAppointments: [],
+      linked: true,
+      configured: true,
+    }
+  }
+
+  const liveByAptNum = new Map<number, OdAppointment>()
+  for (const od of appts) {
+    const n = Number(od.AptNum)
+    if (Number.isInteger(n) && n > 0) liveByAptNum.set(n, od)
+  }
 
   for (const od of appts) {
     summary.fetched += 1
@@ -288,7 +362,77 @@ export async function syncOpenDentalAppointmentsForPatient(params: {
     }
   }
 
-  return summary
+  // Cancel CRM ghosts: future OD-linked rows missing from live list, or no longer
+  // a real upcoming Scheduled/ASAP visit in OD (Broken/Complete/UnschedList/etc.).
+  const crmUpcoming = await prisma.appointment.findMany({
+    where: {
+      practiceId,
+      patientId,
+      startTime: { gte: new Date() },
+      status: { in: ['scheduled', 'confirmed'] },
+      calBookingId: { startsWith: APPT_BOOKING_PREFIX },
+    },
+    select: { id: true, calBookingId: true, status: true },
+  })
+
+  for (const crm of crmUpcoming) {
+    try {
+      const aptNum = parseOpenDentalAptNumFromBookingId(crm.calBookingId)
+      if (!aptNum) continue
+      const od = liveByAptNum.get(aptNum)
+      if (!od) {
+        await prisma.appointment.update({
+          where: { id: crm.id },
+          data: { status: 'cancelled' },
+        })
+        summary.pruned += 1
+        continue
+      }
+      if (!isOpenDentalVoiceUpcomingStatus(od.AptStatus)) {
+        const mapped = mapApptStatus(od.AptStatus)
+        const nextStatus = mapped === 'scheduled' || mapped === 'confirmed' ? 'cancelled' : mapped
+        if (nextStatus !== crm.status) {
+          await prisma.appointment.update({
+            where: { id: crm.id },
+            data: { status: nextStatus },
+          })
+          summary.statusReconciled += 1
+        }
+      }
+    } catch (error) {
+      summary.errors += 1
+      if (summary.errorSamples.length < 5) {
+        summary.errorSamples.push(error instanceof Error ? error.message : 'unknown error')
+      }
+    }
+  }
+
+  return {
+    summary,
+    timeZone,
+    patNum,
+    liveOdAppointments: appts,
+    linked: true,
+    configured: true,
+  }
+}
+
+/**
+ * Pull appointments for a single Open Dental patient into the CRM appointment table.
+ *
+ * Self-gating: returns a zeroed summary when the practice has no active Open Dental
+ * connection or when the patient is not linked to Open Dental. Deduped/idempotent via
+ * the appointment's `calBookingId` (`opendental:apt:{AptNum}`), so repeated pulls update
+ * rather than duplicate. Also cancels CRM orphans whose OD AptNum disappeared.
+ */
+export async function syncOpenDentalAppointmentsForPatient(params: {
+  practiceId: string
+  patientId: string
+  externalEhrId?: string | null
+  patNum?: number
+}): Promise<AppointmentSyncSummary> {
+  const result = await reconcileOpenDentalAppointmentsForPatient(params)
+  return result.summary
 }
 
 export type SingleAppointmentPullResult = {
@@ -399,14 +543,7 @@ export async function syncOpenDentalAppointments(params: {
   const timeZone = params.timeZone ?? (await getPracticeTimeZone(practiceId))
   const patientCache = new Map<number, string>()
 
-  const summary: AppointmentSyncSummary = {
-    fetched: 0,
-    created: 0,
-    updated: 0,
-    skipped: 0,
-    errors: 0,
-    errorSamples: [],
-  }
+  const summary = emptySyncSummary()
 
   const baseParams: Record<string, string | number> = {}
   if (params.dateStart) baseParams.dateStart = params.dateStart
