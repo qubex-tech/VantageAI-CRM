@@ -400,7 +400,12 @@ export const runAutomationsForEvent = inngest.createFunction(
         console.log(`[AUTOMATION] Rule ${rule.id} has ${actions.length} actions to execute`)
         console.log(`[AUTOMATION] Actions from database:`, JSON.stringify(actions, null, 2))
 
-        const actionResults = []
+        const actionResults: Array<{
+          actionType: string
+          status: string
+          result?: unknown
+          error?: string
+        }> = []
 
         // Execute actions sequentially
         for (const [index, action] of actions.entries()) {
@@ -672,7 +677,7 @@ export const runAutomationsForEvent = inngest.createFunction(
             result: {
               actionsExecuted: actionResults.length,
               actionResults,
-            },
+            } as any,
           },
         })
 
