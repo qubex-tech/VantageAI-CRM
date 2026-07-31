@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { getSchedulingSettings } from '@/lib/integrations/clinical-system/server'
 import { createOpenDentalPatientFromCrm } from '@/lib/integrations/opendental/patientWriteback'
 import { bookOpenDentalAppointment } from '@/lib/integrations/opendental/scheduling'
+import { fetchOpenDentalChartFacts } from '@/lib/patient-identity'
 
 vi.mock('@/lib/db', () => ({
   prisma: {
@@ -78,6 +79,12 @@ describe('agentActions Open Dental scheduling', () => {
     vi.mocked(bookOpenDentalAppointment).mockReset()
     vi.mocked(createOpenDentalPatientFromCrm).mockReset()
     vi.mocked(prisma.appointment.findFirst).mockResolvedValue(null)
+    vi.mocked(fetchOpenDentalChartFacts).mockResolvedValue(null)
+    vi.mocked(prisma.patient.update).mockImplementation(async ({ data, where }: any) => ({
+      ...patientRow,
+      id: where?.id ?? patientRow.id,
+      ...data,
+    }))
   })
 
   describe('findOrCreatePatientByPhone', () => {
@@ -102,6 +109,7 @@ describe('agentActions Open Dental scheduling', () => {
       expect(createOpenDentalPatientFromCrm).toHaveBeenCalledWith({
         practiceId,
         patientId: 'patient-1',
+        allowRelinkFromInactive: true,
       })
       expect(result.patientId).toBe('patient-1')
       expect(result.facts.crm_chart?.external_ehr_id).toBe('opendental:2275')
@@ -187,6 +195,39 @@ describe('agentActions Open Dental scheduling', () => {
       expect(result.patientId).toBe('patient-1')
       expect(result.isNew).toBe(false)
     })
+
+    it('treats Deleted OD chart as new patient and clears the dead link without recreating yet', async () => {
+      const linkedDeleted = {
+        ...patientRow,
+        externalEhrId: 'opendental:12458',
+      }
+      vi.mocked(prisma.patient.findMany).mockResolvedValue([linkedDeleted] as never)
+      // fetchOpenDentalChartFacts returns null for Deleted PatStatus
+      vi.mocked(fetchOpenDentalChartFacts).mockResolvedValue(null)
+      vi.mocked(prisma.patient.update).mockResolvedValue({
+        ...linkedDeleted,
+        externalEhrId: null,
+      } as never)
+
+      const { findOrCreatePatientByPhone } = await import('@/lib/agentActions')
+      const result = await findOrCreatePatientByPhone(practiceId, '+16309652880', {
+        name: 'Amin Thobani',
+        dateOfBirth: '1964-12-13',
+      })
+
+      expect(prisma.patient.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'patient-1' },
+          data: { externalEhrId: null },
+        })
+      )
+      // Defer OD create until book
+      expect(createOpenDentalPatientFromCrm).not.toHaveBeenCalled()
+      expect(result.patientId).toBe('patient-1')
+      expect(result.isNew).toBe(true)
+      expect(result.facts.open_dental_chart).toBeNull()
+      expect(result.facts.recommendation).toBe('create_new')
+    })
   })
 
   describe('bookAppointment', () => {
@@ -258,12 +299,83 @@ describe('agentActions Open Dental scheduling', () => {
       expect(result.calBookingId).toBe('opendental:apt:100')
     })
 
+    it('creates a new OD patient when booking against a Deleted chart link', async () => {
+      vi.mocked(prisma.patient.findFirst).mockResolvedValue({
+        ...patientRow,
+        externalEhrId: 'opendental:12458',
+        createdAt: new Date('2020-01-01T00:00:00.000Z'),
+      } as never)
+      vi.mocked(fetchOpenDentalChartFacts)
+        .mockResolvedValueOnce(null) // deleted during ensure
+        .mockResolvedValueOnce({
+          pat_num: 13001,
+          first_name: 'Amin',
+          last_name: 'Thobani',
+          birthdate: '1964-12-13',
+          wireless_phone: '6309652880',
+        })
+      vi.mocked(prisma.patient.update).mockResolvedValue({
+        ...patientRow,
+        externalEhrId: null,
+        createdAt: new Date('2020-01-01T00:00:00.000Z'),
+      } as never)
+      vi.mocked(createOpenDentalPatientFromCrm).mockResolvedValue({
+        status: 'success',
+        patNum: 13001,
+        externalEhrId: 'opendental:13001',
+        createdNew: true,
+      })
+      vi.mocked(prisma.patient.findUnique).mockResolvedValue({
+        ...patientRow,
+        externalEhrId: 'opendental:13001',
+        createdAt: new Date('2020-01-01T00:00:00.000Z'),
+      } as never)
+      vi.mocked(bookOpenDentalAppointment).mockResolvedValue({
+        appointmentId: 'appt-new',
+        aptNum: 72499,
+        startTime: new Date('2026-07-30T22:30:00.000Z'),
+        endTime: new Date('2026-07-30T23:00:00.000Z'),
+      })
+
+      const { bookAppointment } = await import('@/lib/agentActions')
+      await bookAppointment(
+        practiceId,
+        'patient-1',
+        'ignored',
+        '2026-07-30T22:30:00.000Z',
+        'America/Chicago',
+        'regular checkup and cleaning',
+        'self pay'
+      )
+
+      expect(createOpenDentalPatientFromCrm).toHaveBeenCalledWith(
+        expect.objectContaining({
+          practiceId,
+          patientId: 'patient-1',
+          allowRelinkFromInactive: true,
+        })
+      )
+      expect(bookOpenDentalAppointment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          isNewPatient: true,
+          note: 'regular checkup and cleaning\nPayment type: self pay',
+        })
+      )
+    })
+
     it('carries prior appointment note when booking a reschedule', async () => {
       vi.mocked(prisma.patient.findFirst).mockResolvedValue({
         ...patientRow,
         externalEhrId: 'opendental:2275',
         createdAt: new Date('2020-01-01T00:00:00.000Z'),
       } as never)
+      vi.mocked(fetchOpenDentalChartFacts).mockResolvedValue({
+        pat_num: 2275,
+        first_name: 'Amin',
+        last_name: 'Thobani',
+        birthdate: '1964-12-13',
+        wireless_phone: '6309652880',
+      })
       vi.mocked(prisma.appointment.findFirst).mockResolvedValue({
         notes: 'Synced from Open Dental Appointment/72434 — Amir: Tooth pain',
         reason: null,
@@ -302,6 +414,13 @@ describe('agentActions Open Dental scheduling', () => {
         externalEhrId: 'opendental:12458',
         createdAt: new Date('2020-01-01T00:00:00.000Z'),
       } as never)
+      vi.mocked(fetchOpenDentalChartFacts).mockResolvedValue({
+        pat_num: 12458,
+        first_name: 'Amin',
+        last_name: 'Thobani',
+        birthdate: '1964-12-13',
+        wireless_phone: '6309652880',
+      })
       // No previousAppointmentId — look up soonest upcoming (book-then-cancel).
       vi.mocked(prisma.appointment.findFirst).mockResolvedValue({
         notes:
@@ -342,6 +461,13 @@ describe('agentActions Open Dental scheduling', () => {
         externalEhrId: 'opendental:12458',
         createdAt: new Date(Date.now() - 60_000),
       } as never)
+      vi.mocked(fetchOpenDentalChartFacts).mockResolvedValue({
+        pat_num: 12458,
+        first_name: 'Amin',
+        last_name: 'Thobani',
+        birthdate: '1964-12-13',
+        wireless_phone: '6309652880',
+      })
       vi.mocked(prisma.appointment.findFirst).mockResolvedValue(null as never)
       vi.mocked(bookOpenDentalAppointment).mockResolvedValue({
         appointmentId: 'appt-4',

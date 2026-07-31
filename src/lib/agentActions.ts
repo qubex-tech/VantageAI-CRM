@@ -87,36 +87,85 @@ type PatientSchedulingRow = {
   email: string | null
 }
 
+type EnsureOdLinkResult = {
+  patient: PatientSchedulingRow
+  /** CRM was linked to a Deleted/inactive OD chart that we cleared. */
+  clearedInactiveLink: boolean
+  /** A new (or reactivated) OD chart was created/linked during this call. */
+  createdOdPatient: boolean
+}
+
 /**
  * When the practice books in Open Dental, ensure the CRM patient has an
  * `opendental:{PatNum}` link — creating or matching in OD when missing.
+ *
+ * Deleted/Archived/Deceased OD charts are treated as no chart. Pass
+ * `createIfMissing: false` from find_or_create so we only clear the dead link
+ * and defer OD create until the caller actually books.
  */
 async function ensureOpenDentalPatientLinkedForScheduling(
   practiceId: string,
-  patient: PatientSchedulingRow
-): Promise<PatientSchedulingRow> {
+  patient: PatientSchedulingRow,
+  options?: { createIfMissing?: boolean }
+): Promise<EnsureOdLinkResult> {
+  const createIfMissing = options?.createIfMissing !== false
   const scheduling = await getSchedulingSettings(practiceId)
-  if (!usesOpenDentalForWrite(scheduling)) return patient
-  if (patient.externalEhrId?.startsWith('opendental:')) return patient
+  if (!usesOpenDentalForWrite(scheduling)) {
+    return { patient, clearedInactiveLink: false, createdOdPatient: false }
+  }
+
+  let current = patient
+  let clearedInactiveLink = false
+
+  if (current.externalEhrId?.startsWith('opendental:')) {
+    const activeChart = await fetchOpenDentalChartFacts(practiceId, current.externalEhrId)
+    if (activeChart) {
+      return { patient: current, clearedInactiveLink: false, createdOdPatient: false }
+    }
+    // Dead link — clear so scheduling can treat this as a new OD patient.
+    const cleared = await prisma.patient.update({
+      where: { id: current.id },
+      data: { externalEhrId: null },
+      select: patientSchedulingSelect,
+    })
+    current = cleared
+    clearedInactiveLink = true
+    if (!createIfMissing) {
+      return { patient: current, clearedInactiveLink, createdOdPatient: false }
+    }
+  }
+
+  if (!createIfMissing) {
+    return { patient: current, clearedInactiveLink, createdOdPatient: false }
+  }
 
   const { createOpenDentalPatientFromCrm } = await import(
     '@/lib/integrations/opendental/patientWriteback'
   )
   const odResult = await createOpenDentalPatientFromCrm({
     practiceId,
-    patientId: patient.id,
+    patientId: current.id,
+    allowRelinkFromInactive: true,
   })
 
   const refreshed = await prisma.patient.findUnique({
-    where: { id: patient.id },
+    where: { id: current.id },
     select: patientSchedulingSelect,
   })
   if (refreshed?.externalEhrId?.startsWith('opendental:')) {
-    return refreshed
+    return {
+      patient: refreshed,
+      clearedInactiveLink,
+      createdOdPatient: Boolean(odResult.createdNew) || odResult.status === 'success',
+    }
   }
 
   if (odResult.status === 'success' && odResult.externalEhrId) {
-    return refreshed ?? { ...patient, externalEhrId: odResult.externalEhrId }
+    return {
+      patient: refreshed ?? { ...current, externalEhrId: odResult.externalEhrId },
+      clearedInactiveLink,
+      createdOdPatient: Boolean(odResult.createdNew) || true,
+    }
   }
 
   const reason = odResult.reason ?? 'unknown error'
@@ -301,8 +350,18 @@ export async function findOrCreatePatientByPhone(
     }
   }
 
+  // For find_or_create: clear Deleted OD links and treat as new, but do not create a
+  // replacement OD chart until they actually book (createIfMissing: false when cleared).
   try {
-    patient = await ensureOpenDentalPatientLinkedForScheduling(practiceId, patient)
+    const hadOdLink = Boolean(patient.externalEhrId?.startsWith('opendental:'))
+    const ensured = await ensureOpenDentalPatientLinkedForScheduling(practiceId, patient, {
+      // Unlinked CRM patients still get an OD chart up front; deleted links only clear here.
+      createIfMissing: !hadOdLink,
+    })
+    patient = ensured.patient
+    if (ensured.clearedInactiveLink) {
+      isNew = true
+    }
   } catch (error) {
     console.error('[OpenDental] Could not link patient for scheduling during find_or_create_patient', error)
   }
@@ -317,6 +376,11 @@ export async function findOrCreatePatientByPhone(
     openDentalChart: odChart,
     isNew,
   })
+  if (isNew && !odChart && facts.warnings.every((w) => !/deleted|inactive od/i.test(w))) {
+    facts.warnings.push(
+      'No active Open Dental chart is linked. Treat as a new patient; a new OD chart will be created when booking.'
+    )
+  }
 
   return {
     patientId: patient.id,
@@ -576,6 +640,8 @@ async function bookAppointmentViaOpenDental(params: {
   eventTypeId?: string | null
   preferredOpNum?: number | null
   previousAppointmentId?: string | null
+  /** True when we cleared a Deleted OD link or just created a new OD chart. */
+  treatAsNewPatient?: boolean
 }): Promise<BookAppointmentResult> {
   const {
     practiceId,
@@ -588,6 +654,7 @@ async function bookAppointmentViaOpenDental(params: {
     eventTypeId,
     preferredOpNum,
     previousAppointmentId,
+    treatAsNewPatient,
   } = params
 
   const visitType = resolveOdVisitTypeFromAgentInput(scheduling, appointmentType, eventTypeId)
@@ -640,10 +707,10 @@ async function bookAppointmentViaOpenDental(params: {
     select: { createdAt: true },
   })
   // Treat as new-patient booking when the CRM chart was just created on this call
-  // (within the last 6 hours) so we can stamp Retell Payment Type onto the OD note.
-  const isNewPatient = Boolean(
-    patient?.createdAt && Date.now() - patient.createdAt.getTime() < 6 * 60 * 60 * 1000
-  )
+  // (within the last 6 hours), or when we replaced a Deleted OD chart / created a new one.
+  const isNewPatient =
+    Boolean(treatAsNewPatient) ||
+    Boolean(patient?.createdAt && Date.now() - patient.createdAt.getTime() < 6 * 60 * 60 * 1000)
 
   const { resolveBookingNoteFromPriorAppointment, isRescheduleMetaReason } = await import(
     '@/lib/appointments/voice-context'
@@ -767,7 +834,10 @@ export async function bookAppointment(
     )
   }
   if (usesOpenDentalForWrite(scheduling)) {
-    const linkedPatient = await ensureOpenDentalPatientLinkedForScheduling(practiceId, patient)
+    const ensured = await ensureOpenDentalPatientLinkedForScheduling(practiceId, patient, {
+      createIfMissing: true,
+    })
+    const linkedPatient = ensured.patient
     const odChart = await fetchOpenDentalChartFacts(practiceId, linkedPatient.externalEhrId)
     if (odChart && !openDentalChartMatchesCaller(odChart, linkedPatient)) {
       throw new Error(
@@ -792,6 +862,7 @@ export async function bookAppointment(
       eventTypeId,
       preferredOpNum,
       previousAppointmentId,
+      treatAsNewPatient: ensured.clearedInactiveLink || ensured.createdOdPatient,
     })
   }
 

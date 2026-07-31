@@ -2,13 +2,19 @@ import { prisma } from '@/lib/db'
 import { getOpenDentalServices, getOpenDentalConnection } from './factory'
 import { logOpenDentalAudit } from './audit'
 import { resolveCreatedId } from './apiResponse'
-import { buildExternalId, OPEN_DENTAL_EXTERNAL_PREFIX } from './patientSync'
+import {
+  buildExternalId,
+  isOpenDentalPatientActive,
+  OPEN_DENTAL_EXTERNAL_PREFIX,
+} from './patientSync'
 
 export type PatientWritebackResult = {
   status: 'skipped' | 'success' | 'error'
   reason?: string
   patNum?: number
   externalEhrId?: string
+  /** True when we created a brand-new OD row (not linked/reactivated an existing one). */
+  createdNew?: boolean
 }
 
 function splitName(name: string): { first: string; last: string } {
@@ -21,10 +27,16 @@ function splitName(name: string): { first: string; last: string } {
 /**
  * Look up an existing Open Dental patient by name (+ birthdate when available) and
  * return their PatNum. Used to link rather than fail when OD already has the patient.
+ * Skips Deleted/Archived/Deceased unless `includeInactive` is set.
  */
 async function findExistingOpenDentalPatNum(
   services: Awaited<ReturnType<typeof getOpenDentalServices>>,
-  params: { firstName: string; lastName: string; birthdate?: string }
+  params: {
+    firstName: string
+    lastName: string
+    birthdate?: string
+    includeInactive?: boolean
+  }
 ): Promise<number | null> {
   const query: Record<string, string | number> = {
     LName: params.lastName,
@@ -41,7 +53,14 @@ async function findExistingOpenDentalPatNum(
     : matches
   for (const m of candidates.length ? candidates : matches) {
     const patNum = Number(m.PatNum)
-    if (Number.isFinite(patNum) && patNum > 0) return patNum
+    if (!Number.isFinite(patNum) || patNum <= 0) continue
+    if (
+      !params.includeInactive &&
+      !isOpenDentalPatientActive({ PatStatus: m.PatStatus as string | undefined })
+    ) {
+      continue
+    }
+    return patNum
   }
   return null
 }
@@ -67,31 +86,46 @@ function formatBirthdate(value: Date | null): string | undefined {
  * `externalEhrId = opendental:{PatNum}` so they become bookable in OD scheduling.
  *
  * Best-effort and idempotent: no-ops when OD isn't configured or the patient is
- * already linked, and never throws (returns a status instead).
+ * already linked to an *active* chart, and never throws (returns a status instead).
+ *
+ * When `allowRelinkFromInactive` is set and the CRM points at a Deleted/Archived/
+ * Deceased OD chart, clears that link and creates (or reactivates) a bookable chart.
  */
 export async function createOpenDentalPatientFromCrm(params: {
   practiceId: string
   patientId: string
   actorUserId?: string
+  /** Clear a dead OD link and create/reactivate a bookable chart. */
+  allowRelinkFromInactive?: boolean
 }): Promise<PatientWritebackResult> {
-  const { practiceId, patientId, actorUserId } = params
+  const { practiceId, patientId, actorUserId, allowRelinkFromInactive } = params
 
   const connection = await getOpenDentalConnection(practiceId)
   if (!connection || !connection.isActive) {
     return { status: 'skipped', reason: 'opendental_not_configured' }
   }
 
-  const patient = await prisma.patient.findFirst({
+  let patient = await prisma.patient.findFirst({
     where: { id: patientId, practiceId, deletedAt: null },
   })
   if (!patient) return { status: 'skipped', reason: 'patient_not_found' }
 
-  // Already linked to Open Dental — nothing to do.
   if (patient.externalEhrId?.startsWith(OPEN_DENTAL_EXTERNAL_PREFIX)) {
-    return { status: 'skipped', reason: 'already_linked', externalEhrId: patient.externalEhrId }
-  }
-  // Linked to a different external system — don't clobber it.
-  if (patient.externalEhrId) {
+    if (!allowRelinkFromInactive) {
+      return { status: 'skipped', reason: 'already_linked', externalEhrId: patient.externalEhrId }
+    }
+    const { fetchOpenDentalChartFacts } = await import('@/lib/patient-identity')
+    const activeChart = await fetchOpenDentalChartFacts(practiceId, patient.externalEhrId)
+    if (activeChart) {
+      return { status: 'skipped', reason: 'already_linked', externalEhrId: patient.externalEhrId }
+    }
+    // Dead link (deleted/missing) — clear so we can create a fresh OD patient.
+    patient = await prisma.patient.update({
+      where: { id: patient.id },
+      data: { externalEhrId: null },
+    })
+  } else if (patient.externalEhrId) {
+    // Linked to a different external system — don't clobber it.
     return { status: 'skipped', reason: 'linked_to_other_system' }
   }
 
@@ -141,9 +175,12 @@ export async function createOpenDentalPatientFromCrm(params: {
     const services = await getOpenDentalServices(practiceId)
     let patNum: number | null = null
     let linkedExisting = false
+    let reactivatedDeleted = false
+    let createdNew = false
     try {
       const created = await services.patients.create(body)
       patNum = resolveCreatedId(created, 'PatNum')
+      if (patNum && patNum > 0) createdNew = true
     } catch (createErr) {
       const msg = createErr instanceof Error ? createErr.message : String(createErr)
       // OD rejects duplicates with "A Patient with that information already exists" —
@@ -153,6 +190,20 @@ export async function createOpenDentalPatientFromCrm(params: {
     if (!patNum || patNum <= 0) {
       patNum = await findExistingOpenDentalPatNum(services, { firstName, lastName, birthdate })
       if (patNum && patNum > 0) linkedExisting = true
+    }
+    // Create blocked by a Deleted duplicate — reactivate that chart so booking can proceed.
+    if (!patNum || patNum <= 0) {
+      const deletedPatNum = await findExistingOpenDentalPatNum(services, {
+        firstName,
+        lastName,
+        birthdate,
+        includeInactive: true,
+      })
+      if (deletedPatNum && deletedPatNum > 0) {
+        await services.patients.update(deletedPatNum, { PatStatus: 'Patient' })
+        patNum = deletedPatNum
+        reactivatedDeleted = true
+      }
     }
     if (!patNum || patNum <= 0) {
       return { status: 'error', reason: 'missing_pat_num_in_response' }
@@ -177,10 +228,23 @@ export async function createOpenDentalPatientFromCrm(params: {
       action: 'patient.writeback_created',
       entity: 'Patient',
       entityId: String(patNum),
-      metadata: { patientId, externalEhrId, linked: !conflict, linkedExisting },
+      metadata: {
+        patientId,
+        externalEhrId,
+        linked: !conflict,
+        linkedExisting,
+        reactivatedDeleted,
+        createdNew,
+      },
     })
 
-    return { status: 'success', patNum, externalEhrId }
+    return {
+      status: 'success',
+      patNum,
+      externalEhrId,
+      createdNew: createdNew || reactivatedDeleted,
+      reason: reactivatedDeleted ? 'reactivated_deleted' : undefined,
+    }
   } catch (error) {
     return {
       status: 'error',

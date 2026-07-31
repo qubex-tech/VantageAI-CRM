@@ -203,10 +203,18 @@ export async function fetchOpenDentalChartFacts(
     const { getOpenDentalServices, getOpenDentalConnection } = await import(
       '@/lib/integrations/opendental/factory'
     )
+    const { isOpenDentalPatientActive } = await import(
+      '@/lib/integrations/opendental/patientSync'
+    )
     const connection = await getOpenDentalConnection(practiceId)
     if (!connection?.isActive) return null
     const services = await getOpenDentalServices(practiceId)
     const od = (await services.patients.get(patNum)) as Record<string, unknown>
+    // Deleted/Archived/Deceased charts are not usable for scheduling — treat as no chart
+    // so voice flow can create a fresh OD patient on book.
+    if (!isOpenDentalPatientActive({ PatStatus: od.PatStatus as string | undefined })) {
+      return null
+    }
     return {
       pat_num: patNum,
       first_name: String(od.FName ?? '').trim(),
