@@ -1,9 +1,10 @@
 import { createHash, randomBytes, timingSafeEqual } from 'crypto'
 
 export type PebbleWebhookSecretCandidate = {
+  id: string
   practiceId: string
   webhookSecret: string
-  providerUserId: string | null
+  providerUserId: string
   activeSessionId: string | null
 }
 

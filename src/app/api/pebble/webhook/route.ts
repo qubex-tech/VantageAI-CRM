@@ -18,7 +18,7 @@ export const maxDuration = 120
  *
  * Configure in Pebble app → Index → Webhook:
  *   URL:    https://<host>/api/pebble/webhook
- *   Header: Authorization: Bearer <practice webhook secret>
+ *   Header: Authorization: Bearer <provider webhook secret>
  *   Send:   Both (audio + transcription) recommended
  *   Trigger: Double click & hold (recommended for Aria)
  *
@@ -44,6 +44,7 @@ export async function POST(req: NextRequest) {
         webhookSecret: { not: null },
       },
       select: {
+        id: true,
         practiceId: true,
         webhookSecret: true,
         providerUserId: true,
@@ -54,8 +55,12 @@ export async function POST(req: NextRequest) {
     const match = matchPebbleWebhookPractice(
       token,
       integrations
-        .filter((row): row is typeof row & { webhookSecret: string } => Boolean(row.webhookSecret))
+        .filter(
+          (row): row is typeof row & { webhookSecret: string; providerUserId: string } =>
+            Boolean(row.webhookSecret) && Boolean(row.providerUserId)
+        )
         .map((row) => ({
+          id: row.id,
           practiceId: row.practiceId,
           webhookSecret: row.webhookSecret,
           providerUserId: row.providerUserId,

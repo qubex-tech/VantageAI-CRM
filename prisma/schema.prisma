@@ -581,23 +581,24 @@ model CalEventTypeMapping {
   @@map("cal_event_type_mappings")
 }
 
-/// Pebble Index 01 ring → Aria dictation webhook (practice-scoped shared secret)
+/// Pebble Index 01 ring → Aria dictation webhook (one credential per practice provider)
 model PebbleIntegration {
   id              String   @id @default(uuid())
-  practiceId      String   @unique
+  practiceId      String
   /// Shared token pasted into Pebble app Authorization / X-Widget-Token header
-  webhookSecret   String?
-  /// Provider whose open Aria session receives ring dictation
-  providerUserId  String?
-  /// Sticky active Aria session (set when clinician starts capture in mobile)
+  webhookSecret   String?  @unique
+  /// Provider whose open Aria session receives this ring's dictation
+  providerUserId  String
+  /// Sticky active Aria session (set when this clinician starts capture in mobile)
   activeSessionId String?
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
-  provider User?    @relation("PebbleIntegrationProvider", fields: [providerUserId], references: [id], onDelete: SetNull)
+  provider User     @relation("PebbleIntegrationProvider", fields: [providerUserId], references: [id], onDelete: Cascade)
 
+  @@unique([practiceId, providerUserId])
   @@index([practiceId])
   @@index([providerUserId])
   @@index([activeSessionId])

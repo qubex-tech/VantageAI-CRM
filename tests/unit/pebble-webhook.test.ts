@@ -38,22 +38,25 @@ describe('extractPebbleWebhookToken', () => {
 describe('matchPebbleWebhookPractice', () => {
   const candidates = [
     {
+      id: 'cred-a',
       practiceId: 'practice-a',
       webhookSecret: 'secret-a',
       providerUserId: 'user-a',
       activeSessionId: null,
     },
     {
-      practiceId: 'practice-b',
+      id: 'cred-b',
+      practiceId: 'practice-a',
       webhookSecret: 'secret-b',
-      providerUserId: null,
+      providerUserId: 'user-b',
       activeSessionId: 'session-1',
     },
   ]
 
-  it('matches the practice with the shared secret', () => {
+  it('matches the provider credential with the shared secret', () => {
     const match = matchPebbleWebhookPractice('secret-b', candidates)
-    expect(match?.practiceId).toBe('practice-b')
+    expect(match?.practiceId).toBe('practice-a')
+    expect(match?.providerUserId).toBe('user-b')
     expect(match?.activeSessionId).toBe('session-1')
   })
 
@@ -68,14 +71,15 @@ describe('matchPebbleWebhookPractice', () => {
   it('ignores blank secrets', () => {
     const match = matchPebbleWebhookPractice('secret-a', [
       {
-        practiceId: 'blank',
+        id: 'blank',
+        practiceId: 'practice-x',
         webhookSecret: '   ',
-        providerUserId: null,
+        providerUserId: 'user-x',
         activeSessionId: null,
       },
       ...candidates,
     ])
-    expect(match?.practiceId).toBe('practice-a')
+    expect(match?.providerUserId).toBe('user-a')
   })
 })
 

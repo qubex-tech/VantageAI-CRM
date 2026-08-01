@@ -309,27 +309,31 @@ export const calEventTypeMappingSchema = z.object({
   calEventTypeId: z.string().min(1, 'Cal event type ID is required'),
 })
 
-// Pebble Index 01 → Aria webhook integration
-export const pebbleIntegrationSchema = z.object({
-  webhookSecret: z
-    .string()
-    .optional()
-    .or(z.literal(''))
-    .transform((val) => (val === '' || val === '********' ? undefined : val)),
-  /** When true, server generates a new webhook secret */
-  rotateSecret: z.boolean().optional(),
-  providerUserId: z
-    .union([z.string().uuid(), z.literal(''), z.null()])
-    .optional()
-    .transform((val) => {
-      if (val === undefined) return undefined
-      if (val === '') return null
-      return val
-    }),
-  isActive: z.boolean().optional(),
-  /** Clear sticky active Aria session binding */
-  clearActiveSession: z.boolean().optional(),
-})
+// Pebble Index 01 → Aria webhook integration (one credential per provider)
+export const pebbleIntegrationSchema = z.discriminatedUnion('action', [
+  z.object({
+    action: z.literal('create'),
+    providerUserId: z.string().uuid(),
+    isActive: z.boolean().optional(),
+  }),
+  z.object({
+    action: z.literal('rotate'),
+    id: z.string().uuid(),
+  }),
+  z.object({
+    action: z.literal('update'),
+    id: z.string().uuid(),
+    isActive: z.boolean().optional(),
+  }),
+  z.object({
+    action: z.literal('clearActiveSession'),
+    id: z.string().uuid(),
+  }),
+  z.object({
+    action: z.literal('delete'),
+    id: z.string().uuid(),
+  }),
+])
 
 // RetellAI webhook schemas
 export const retellWebhookSchema = z.object({

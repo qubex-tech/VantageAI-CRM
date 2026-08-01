@@ -10,16 +10,15 @@ function redactPebbleIntegration(
     id: string
     practiceId: string
     webhookSecret: string | null
-    providerUserId: string | null
+    providerUserId: string
     activeSessionId: string | null
     isActive: boolean
     createdAt: Date
     updatedAt: Date
     provider?: { id: string; name: string; email: string } | null
-  } | null,
+  },
   opts?: { revealSecret?: string | null }
 ) {
-  if (!integration) return null
   const { webhookSecret: _secret, ...rest } = integration
   return {
     ...rest,
@@ -41,27 +40,28 @@ function resolvePracticeId(req: NextRequest, user: Awaited<ReturnType<typeof req
 }
 
 /**
- * GET Pebble Index → Aria integration settings
+ * GET all Pebble Index ring credentials for a practice
  */
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req)
-    const practiceId = await resolvePracticeId(req, user)
+    const practiceId = resolvePracticeId(req, user)
 
     if (!practiceId) {
-      return NextResponse.json({ integration: null, webhookUrl: null })
+      return NextResponse.json({ integrations: [], webhookUrl: null })
     }
 
-    const integration = await prisma.pebbleIntegration.findUnique({
+    const integrations = await prisma.pebbleIntegration.findMany({
       where: { practiceId },
       include: {
         provider: { select: { id: true, name: true, email: true } },
       },
+      orderBy: [{ createdAt: 'asc' }],
     })
 
     const origin = req.nextUrl.origin
     return NextResponse.json({
-      integration: redactPebbleIntegration(integration),
+      integrations: integrations.map((row) => redactPebbleIntegration(row)),
       webhookUrl: `${origin}/api/pebble/webhook`,
     })
   } catch (error) {
@@ -73,12 +73,12 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * Create or update Pebble Index → Aria integration
+ * Manage per-provider Pebble Index ring credentials
  */
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req)
-    const practiceId = await resolvePracticeId(req, user)
+    const practiceId = resolvePracticeId(req, user)
 
     if (!practiceId) {
       return NextResponse.json(
@@ -87,14 +87,11 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const body = await req.json()
-    const validated = pebbleIntegrationSchema.parse(body)
+    const validated = pebbleIntegrationSchema.parse(await req.json())
+    const origin = req.nextUrl.origin
+    const webhookUrl = `${origin}/api/pebble/webhook`
 
-    const existing = await prisma.pebbleIntegration.findUnique({
-      where: { practiceId },
-    })
-
-    if (validated.providerUserId) {
+    if (validated.action === 'create') {
       const provider = await prisma.user.findFirst({
         where: { id: validated.providerUserId, practiceId },
         select: { id: true },
@@ -102,51 +99,83 @@ export async function POST(req: NextRequest) {
       if (!provider) {
         return NextResponse.json({ error: 'Provider not found in this practice' }, { status: 400 })
       }
+
+      const existing = await prisma.pebbleIntegration.findUnique({
+        where: {
+          practiceId_providerUserId: {
+            practiceId,
+            providerUserId: validated.providerUserId,
+          },
+        },
+        select: { id: true },
+      })
+      if (existing) {
+        return NextResponse.json(
+          { error: 'This clinician already has an Index ring credential. Rotate that secret instead.' },
+          { status: 409 }
+        )
+      }
+
+      const webhookSecret = generatePebbleWebhookSecret()
+      const integration = await prisma.pebbleIntegration.create({
+        data: {
+          practiceId,
+          providerUserId: validated.providerUserId,
+          webhookSecret,
+          isActive: validated.isActive ?? true,
+          activeSessionId: null,
+        },
+        include: {
+          provider: { select: { id: true, name: true, email: true } },
+        },
+      })
+
+      return NextResponse.json({
+        integration: redactPebbleIntegration(integration, { revealSecret: webhookSecret }),
+        webhookUrl,
+        revealedSecret: webhookSecret,
+      })
     }
 
-    let webhookSecret = existing?.webhookSecret ?? null
+    const existing = await prisma.pebbleIntegration.findFirst({
+      where: { id: validated.id, practiceId },
+    })
+    if (!existing) {
+      return NextResponse.json({ error: 'Credential not found' }, { status: 404 })
+    }
+
+    if (validated.action === 'delete') {
+      await prisma.pebbleIntegration.delete({ where: { id: existing.id } })
+      return NextResponse.json({ ok: true, webhookUrl })
+    }
+
     let revealedSecret: string | null = null
+    const data: {
+      webhookSecret?: string
+      isActive?: boolean
+      activeSessionId?: string | null
+    } = {}
 
-    if (validated.rotateSecret) {
-      webhookSecret = generatePebbleWebhookSecret()
-      revealedSecret = webhookSecret
-    } else if (validated.webhookSecret !== undefined) {
-      webhookSecret = validated.webhookSecret
-      revealedSecret = validated.webhookSecret
+    if (validated.action === 'rotate') {
+      revealedSecret = generatePebbleWebhookSecret()
+      data.webhookSecret = revealedSecret
+    } else if (validated.action === 'update') {
+      if (validated.isActive !== undefined) data.isActive = validated.isActive
+    } else if (validated.action === 'clearActiveSession') {
+      data.activeSessionId = null
     }
 
-    if (!webhookSecret && !existing) {
-      webhookSecret = generatePebbleWebhookSecret()
-      revealedSecret = webhookSecret
-    }
-
-    const integration = await prisma.pebbleIntegration.upsert({
-      where: { practiceId },
-      create: {
-        practiceId,
-        webhookSecret,
-        providerUserId: validated.providerUserId ?? null,
-        isActive: validated.isActive ?? true,
-        activeSessionId: null,
-      },
-      update: {
-        ...(validated.rotateSecret || validated.webhookSecret !== undefined
-          ? { webhookSecret }
-          : {}),
-        ...(validated.providerUserId !== undefined ? { providerUserId: validated.providerUserId } : {}),
-        ...(validated.isActive !== undefined ? { isActive: validated.isActive } : {}),
-        ...(validated.clearActiveSession ? { activeSessionId: null } : {}),
-      },
+    const integration = await prisma.pebbleIntegration.update({
+      where: { id: existing.id },
+      data,
       include: {
         provider: { select: { id: true, name: true, email: true } },
       },
     })
 
-    const origin = req.nextUrl.origin
     return NextResponse.json({
       integration: redactPebbleIntegration(integration, { revealSecret: revealedSecret }),
-      webhookUrl: `${origin}/api/pebble/webhook`,
-      /** Present only when a new secret was generated/set — copy into Pebble app now */
+      webhookUrl,
       revealedSecret,
     })
   } catch (error) {

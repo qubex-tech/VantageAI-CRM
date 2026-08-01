@@ -324,31 +324,40 @@ describe('Validation Schemas', () => {
   })
 
   describe('pebbleIntegrationSchema', () => {
-    it('should accept rotateSecret and providerUserId', () => {
+    it('should accept create with providerUserId', () => {
       const result = pebbleIntegrationSchema.safeParse({
-        rotateSecret: true,
+        action: 'create',
         providerUserId: '11111111-1111-1111-1111-111111111111',
         isActive: true,
       })
       expect(result.success).toBe(true)
     })
 
-    it('should transform empty providerUserId to null', () => {
-      const result = pebbleIntegrationSchema.safeParse({
-        providerUserId: '',
-      })
-      expect(result.success).toBe(true)
-      if (result.success) {
-        expect(result.data.providerUserId).toBeNull()
-      }
+    it('should accept rotate/update/delete by credential id', () => {
+      expect(
+        pebbleIntegrationSchema.safeParse({
+          action: 'rotate',
+          id: '11111111-1111-1111-1111-111111111111',
+        }).success
+      ).toBe(true)
+      expect(
+        pebbleIntegrationSchema.safeParse({
+          action: 'update',
+          id: '11111111-1111-1111-1111-111111111111',
+          isActive: false,
+        }).success
+      ).toBe(true)
+      expect(
+        pebbleIntegrationSchema.safeParse({
+          action: 'delete',
+          id: '11111111-1111-1111-1111-111111111111',
+        }).success
+      ).toBe(true)
     })
 
-    it('should leave providerUserId undefined when omitted', () => {
-      const result = pebbleIntegrationSchema.safeParse({ rotateSecret: true })
-      expect(result.success).toBe(true)
-      if (result.success) {
-        expect(result.data.providerUserId).toBeUndefined()
-      }
+    it('should reject create without providerUserId', () => {
+      const result = pebbleIntegrationSchema.safeParse({ action: 'create' })
+      expect(result.success).toBe(false)
     })
   })
 

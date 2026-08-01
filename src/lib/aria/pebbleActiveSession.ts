@@ -2,35 +2,28 @@ import { prisma } from '@/lib/db'
 import { isOpenAriaSessionStatus } from '@/lib/pebble-webhook'
 
 /**
- * Bind the clinician's open Aria session so Index ring dictation appends to it.
- * No-op when the practice has no active Pebble integration for this provider.
+ * Bind the clinician's open Aria session so their Index ring dictation appends to it.
+ * No-op when this provider has no active Pebble credential for the practice.
  */
 export async function bindPebbleActiveSession(params: {
   practiceId: string
   providerUserId: string
   sessionId: string
 }): Promise<void> {
-  const integration = await prisma.pebbleIntegration.findFirst({
+  const integration = await prisma.pebbleIntegration.findUnique({
     where: {
-      practiceId: params.practiceId,
-      isActive: true,
-      OR: [{ providerUserId: params.providerUserId }, { providerUserId: null }],
+      practiceId_providerUserId: {
+        practiceId: params.practiceId,
+        providerUserId: params.providerUserId,
+      },
     },
-    select: { id: true, providerUserId: true },
+    select: { id: true, isActive: true },
   })
-  if (!integration) return
-
-  // Only bind when this provider owns the integration (or provider not yet set).
-  if (integration.providerUserId && integration.providerUserId !== params.providerUserId) {
-    return
-  }
+  if (!integration?.isActive) return
 
   await prisma.pebbleIntegration.update({
     where: { id: integration.id },
-    data: {
-      activeSessionId: params.sessionId,
-      ...(integration.providerUserId ? {} : { providerUserId: params.providerUserId }),
-    },
+    data: { activeSessionId: params.sessionId },
   })
 }
 
@@ -51,11 +44,12 @@ export async function clearPebbleActiveSession(params: {
 }
 
 /**
- * Resolve which Aria session should receive an Index ring dictation.
+ * Resolve which Aria session should receive an Index ring dictation
+ * for a specific practice + provider credential.
  */
 export async function resolvePebbleAriaSession(params: {
   practiceId: string
-  providerUserId: string | null
+  providerUserId: string
   activeSessionId: string | null
 }): Promise<{ id: string; status: string } | null> {
   if (params.activeSessionId) {
@@ -63,6 +57,7 @@ export async function resolvePebbleAriaSession(params: {
       where: {
         id: params.activeSessionId,
         practiceId: params.practiceId,
+        providerUserId: params.providerUserId,
         status: { notIn: ['signed', 'discarded'] },
       },
       select: { id: true, status: true },
@@ -70,10 +65,7 @@ export async function resolvePebbleAriaSession(params: {
     if (sticky && isOpenAriaSessionStatus(sticky.status)) {
       return sticky
     }
-    // Stale binding — fall through to newest open session
   }
-
-  if (!params.providerUserId) return null
 
   return prisma.scribeSession.findFirst({
     where: {
