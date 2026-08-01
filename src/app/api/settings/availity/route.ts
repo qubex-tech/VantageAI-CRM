@@ -17,6 +17,8 @@ const availitySettingsSchema = z.object({
   submitterId: z.string().optional().or(z.literal('')),
   submitterStateCode: z.string().optional().or(z.literal('')),
   useMockResponses: z.boolean().optional(),
+  portalRpaEnabled: z.boolean().optional(),
+  portalRpaUseMock: z.boolean().optional(),
   isActive: z.boolean().optional(),
 })
 
@@ -97,6 +99,8 @@ export async function POST(req: NextRequest) {
     if (parsed.submitterId !== undefined) data.submitterId = parsed.submitterId || null
     if (parsed.submitterStateCode !== undefined) data.submitterStateCode = parsed.submitterStateCode || null
     if (parsed.useMockResponses !== undefined) data.useMockResponses = parsed.useMockResponses
+    if (parsed.portalRpaEnabled !== undefined) data.portalRpaEnabled = parsed.portalRpaEnabled
+    if (parsed.portalRpaUseMock !== undefined) data.portalRpaUseMock = parsed.portalRpaUseMock
     if (parsed.isActive !== undefined) data.isActive = parsed.isActive
 
     const integration = await prisma.availityIntegration.update({

@@ -35,6 +35,8 @@ model Practice {
   retellIntegrations         RetellIntegration[]
   availityIntegrations       AvailityIntegration[]
   eligibilityChecks          EligibilityCheck[]
+  browserCredentials         BrowserCredential[]
+  browserAgentRuns           BrowserAgentRun[]
   sendgridIntegrations       SendgridIntegration[]
   twilioIntegrations         TwilioIntegration[]
   telnyxIntegrations         TelnyxIntegration[]
@@ -338,6 +340,10 @@ model AvailityIntegration {
   submitterId           String?
   submitterStateCode    String?
   useMockResponses      Boolean  @default(true)
+  /// When true, failed/unsupported API checks may fall back to Availity portal RPA
+  portalRpaEnabled      Boolean  @default(false)
+  /// When true, portal RPA returns synthetic results without a live browser session
+  portalRpaUseMock      Boolean  @default(true)
   isActive              Boolean  @default(true)
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
@@ -348,12 +354,64 @@ model AvailityIntegration {
   @@map("availity_integrations")
 }
 
+/// Practice-scoped portal login for browser-agent playbooks (Availity, payer portals, etc.)
+model BrowserCredential {
+  id             String    @id @default(uuid())
+  practiceId     String
+  site           String // availity | ecw_portal | ...
+  username       String
+  passwordEnc    String
+  totpSecretEnc  String?
+  extraEnc       String? // encrypted JSON for site-specific fields
+  isActive       Boolean   @default(true)
+  lastLoginAt    DateTime?
+  lastError      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@unique([practiceId, site])
+  @@index([practiceId])
+  @@index([site])
+  @@map("browser_credentials")
+}
+
+/// Audited browser-agent playbook execution
+model BrowserAgentRun {
+  id                 String    @id @default(uuid())
+  practiceId         String
+  playbookId         String
+  site               String
+  status             String    @default("pending") // pending | running | complete | failed | cancelled
+  input              Json?
+  output             Json?
+  errorMessage       String?
+  sessionId          String?
+  artifactUrls       Json?
+  eligibilityCheckId String?
+  durationMs         Int?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId])
+  @@index([status])
+  @@index([playbookId])
+  @@index([eligibilityCheckId])
+  @@index([practiceId, status])
+  @@map("browser_agent_runs")
+}
+
 model EligibilityCheck {
   id                  String    @id @default(uuid())
   practiceId          String
   patientId           String
   policyId            String
-  source              String    @default("availity_api") // availity_api | voice_agent
+  source              String    @default("availity_api") // availity_api | availity_rpa | voice_agent
   status              String    @default("pending") // pending | in_progress | complete | failed | fallback_voice
   availityCoverageId  String?
   availityStatusCode  String?

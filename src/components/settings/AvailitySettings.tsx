@@ -25,6 +25,8 @@ interface AvailitySettingsProps {
     submitterId?: string | null
     submitterStateCode?: string | null
     useMockResponses?: boolean
+    portalRpaEnabled?: boolean
+    portalRpaUseMock?: boolean
     isActive?: boolean
     hasClientSecret?: boolean
   } | null
@@ -60,10 +62,23 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
   const [useMockResponses, setUseMockResponses] = useState(
     initialIntegration?.useMockResponses ?? true
   )
+  const [portalRpaEnabled, setPortalRpaEnabled] = useState(
+    initialIntegration?.portalRpaEnabled ?? false
+  )
+  const [portalRpaUseMock, setPortalRpaUseMock] = useState(
+    initialIntegration?.portalRpaUseMock ?? true
+  )
   const [isActive, setIsActive] = useState(initialIntegration?.isActive ?? true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+
+  const [portalUsername, setPortalUsername] = useState('')
+  const [portalPassword, setPortalPassword] = useState('')
+  const [portalTotp, setPortalTotp] = useState('')
+  const [hasPortalPassword, setHasPortalPassword] = useState(false)
+  const [hasPortalTotp, setHasPortalTotp] = useState(false)
+  const [portalCredLoading, setPortalCredLoading] = useState(false)
 
   const hasClientSecret = Boolean(initialIntegration?.hasClientSecret)
 
@@ -78,8 +93,33 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
     setSubmitterId(initialIntegration?.submitterId || '')
     setSubmitterStateCode(initialIntegration?.submitterStateCode || '')
     setUseMockResponses(initialIntegration?.useMockResponses ?? true)
+    setPortalRpaEnabled(initialIntegration?.portalRpaEnabled ?? false)
+    setPortalRpaUseMock(initialIntegration?.portalRpaUseMock ?? true)
     setIsActive(initialIntegration?.isActive ?? true)
   }, [initialIntegration])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch(apiUrl('/api/settings/browser-credentials?site=availity'))
+        if (!res.ok) return
+        const data = await res.json()
+        const cred = data.credentials?.[0]
+        if (!cancelled && cred) {
+          setPortalUsername(cred.username || '')
+          setHasPortalPassword(Boolean(cred.hasPassword))
+          setHasPortalTotp(Boolean(cred.hasTotpSecret))
+        }
+      } catch {
+        // ignore
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [practiceId])
 
   const handleSave = async () => {
     setLoading(true)
@@ -101,6 +141,8 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
           submitterId,
           submitterStateCode,
           useMockResponses,
+          portalRpaEnabled,
+          portalRpaUseMock,
           isActive,
         }),
       })
@@ -117,13 +159,52 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
     }
   }
 
+  const handleSavePortalCredentials = async () => {
+    setPortalCredLoading(true)
+    setError('')
+    setSuccess('')
+    try {
+      if (!portalUsername.trim()) {
+        throw new Error('Portal username is required')
+      }
+      if (!portalPassword && !hasPortalPassword) {
+        throw new Error('Portal password is required')
+      }
+      const response = await fetch(apiUrl('/api/settings/browser-credentials'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          practiceId,
+          site: 'availity',
+          username: portalUsername,
+          password: portalPassword || undefined,
+          totpSecret: portalTotp || undefined,
+          isActive: true,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to save portal credentials')
+      }
+      setPortalPassword('')
+      setPortalTotp('')
+      setHasPortalPassword(Boolean(data.credential?.hasPassword))
+      setHasPortalTotp(Boolean(data.credential?.hasTotpSecret))
+      setSuccess('Availity portal credentials saved')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save portal credentials')
+    } finally {
+      setPortalCredLoading(false)
+    }
+  }
+
   return (
     <Card className="border border-gray-200">
       <CardHeader>
         <CardTitle className="text-base font-semibold text-gray-900">Availity Eligibility</CardTitle>
         <CardDescription className="text-sm text-gray-500">
           Configure Availity Coverages API (270/271) for real-time insurance eligibility checks.
-          Use mock mode until production credentials are provisioned.
+          Optionally enable portal automation as a fallback when the API fails.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -137,9 +218,9 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
 
         <div className="flex items-center justify-between rounded-lg border border-gray-200 p-4">
           <div>
-            <Label className="font-medium">Use mock responses</Label>
+            <Label className="font-medium">Use mock API responses</Label>
             <p className="text-sm text-gray-500 mt-1">
-              Returns demo eligibility data without live Availity credentials
+              Returns demo eligibility data without live Availity API credentials
             </p>
           </div>
           <Switch checked={useMockResponses} onCheckedChange={setUseMockResponses} disabled={loading} />
@@ -239,6 +320,91 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
               className="mt-1"
             />
           </div>
+        </div>
+
+        <div className="rounded-lg border border-gray-200 p-4 space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900">Portal automation (RPA)</h3>
+            <p className="text-sm text-gray-500 mt-1">
+              Fallback path: API → Availity website login → voice. Requires Browserbase for live
+              browsers, or mock mode for dry runs.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="font-medium">Enable Availity portal automation</Label>
+              <p className="text-sm text-gray-500 mt-1">
+                Used when the Coverages API fails or is unsupported
+              </p>
+            </div>
+            <Switch
+              checked={portalRpaEnabled}
+              onCheckedChange={setPortalRpaEnabled}
+              disabled={loading}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="font-medium">Use mock portal results</Label>
+              <p className="text-sm text-gray-500 mt-1">
+                Skip live browser login; return synthetic eligibility for testing
+              </p>
+            </div>
+            <Switch
+              checked={portalRpaUseMock}
+              onCheckedChange={setPortalRpaUseMock}
+              disabled={loading}
+            />
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="portalUsername">Portal username</Label>
+              <Input
+                id="portalUsername"
+                value={portalUsername}
+                onChange={(e) => setPortalUsername(e.target.value)}
+                placeholder="Availity login"
+                className="mt-1"
+                autoComplete="off"
+              />
+            </div>
+            <div>
+              <Label htmlFor="portalPassword">Portal password</Label>
+              <Input
+                id="portalPassword"
+                type="password"
+                value={portalPassword}
+                onChange={(e) => setPortalPassword(e.target.value)}
+                placeholder={hasPortalPassword ? 'Saved (enter to replace)' : 'Portal password'}
+                className="mt-1"
+                autoComplete="new-password"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Label htmlFor="portalTotp">TOTP secret (optional MFA)</Label>
+              <Input
+                id="portalTotp"
+                type="password"
+                value={portalTotp}
+                onChange={(e) => setPortalTotp(e.target.value)}
+                placeholder={hasPortalTotp ? 'Saved (enter to replace)' : 'Base32 authenticator secret'}
+                className="mt-1"
+                autoComplete="off"
+              />
+            </div>
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleSavePortalCredentials}
+            disabled={portalCredLoading}
+          >
+            {portalCredLoading ? 'Saving…' : 'Save portal credentials'}
+          </Button>
         </div>
 
         {error && <p className="text-sm text-red-600">{error}</p>}

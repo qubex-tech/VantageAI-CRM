@@ -1857,7 +1857,7 @@ export async function getAppointmentSummary(
 }
 
 /**
- * Check insurance eligibility via Availity API (voice fallback on failure).
+ * Check insurance eligibility via Availity API → portal RPA → voice fallback.
  */
 export async function checkInsuranceEligibility(
   params: CheckInsuranceEligibilityParams,

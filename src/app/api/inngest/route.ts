@@ -12,7 +12,12 @@ import {
   enrichPatientFromEhrJob,
   slotFillRulesEvalDaily,
   pollAvailityCoverage,
+  runBrowserAgent,
   processAriaSession,
+  runEhrBulkNightly,
+  ingestEhrBulkPatients,
+  runEhrBulkNameCrawl,
+  refreshEhrBackendTokens,
 } from '@/inngest/functions'
 
 // Export runtime configuration for Edge/Serverless
@@ -36,7 +41,12 @@ const handler = serve({
     enrichPatientFromEhrJob,
     slotFillRulesEvalDaily,
     pollAvailityCoverage,
+    runBrowserAgent,
     processAriaSession,
+    runEhrBulkNightly,
+    ingestEhrBulkPatients,
+    runEhrBulkNameCrawl,
+    refreshEhrBackendTokens,
   ],
 })
 

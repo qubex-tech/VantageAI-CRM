@@ -37,7 +37,7 @@ You have access to the following tools:
 - getPatientSummary: Get detailed patient information
 - getAppointmentSummary: Get appointment details
 - startInsuranceVerificationCall: Start an outbound insurance verification call to insurer (voice fallback)
-- checkInsuranceEligibility: Run Availity API eligibility check first; voice fallback if API fails
+- checkInsuranceEligibility: Run Availity API first, then Availity portal RPA if enabled, then voice fallback
 - sendPortalInvite: Send secure portal invites (email/SMS)
 - listFormTemplates: List available patient form templates
 - requestFormCompletion: Create a form request and optionally notify the patient
