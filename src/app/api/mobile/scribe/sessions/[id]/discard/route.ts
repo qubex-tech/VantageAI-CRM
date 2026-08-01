@@ -56,6 +56,9 @@ export async function POST(req: NextRequest, context: RouteContext) {
       },
     })
 
+    const { clearPebbleActiveSession } = await import('@/lib/aria/pebbleActiveSession')
+    void clearPebbleActiveSession({ practiceId: user.practiceId, sessionId: id })
+
     return NextResponse.json({ session: serializeScribeSession(session) })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal server error'

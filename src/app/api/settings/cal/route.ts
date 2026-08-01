@@ -1,9 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
-import { calIntegrationSchema, calEventTypeMappingSchema } from '@/lib/validations'
-import { getCalClient } from '@/lib/cal'
+import { calIntegrationSchema } from '@/lib/validations'
 import { isVantageAdmin } from '@/lib/permissions'
+
+function redactCalIntegration(integration: {
+  id: string
+  practiceId: string
+  apiKey: string
+  webhookSecret: string | null
+  calOrganizationId: string | null
+  calTeamId: string | null
+  isActive: boolean
+  createdAt: Date
+  updatedAt: Date
+  eventTypeMappings?: unknown
+} | null) {
+  if (!integration) return null
+  const { apiKey: _apiKey, webhookSecret: _webhookSecret, ...rest } = integration
+  return {
+    ...rest,
+    apiKey: integration.apiKey ? '********' : '',
+    hasApiKey: Boolean(integration.apiKey),
+    webhookSecret: '',
+    hasWebhookSecret: Boolean(integration.webhookSecret),
+  }
+}
 
 /**
  * Get Cal.com integration settings
@@ -14,13 +36,11 @@ export async function GET(req: NextRequest) {
     const searchParams = req.nextUrl.searchParams
     const queryPracticeId = searchParams.get('practiceId')
 
-    // Normalize user object for type compatibility
     const normalizedUser = {
       ...user,
       name: user.name ?? null,
     }
 
-    // If practiceId is provided in query and user is Vantage Admin, use it
     let practiceId: string | null = user.practiceId
     if (queryPracticeId && isVantageAdmin(normalizedUser)) {
       practiceId = queryPracticeId
@@ -37,7 +57,7 @@ export async function GET(req: NextRequest) {
       },
     })
 
-    return NextResponse.json({ integration })
+    return NextResponse.json({ integration: redactCalIntegration(integration) })
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to fetch Cal.com settings' },
@@ -56,13 +76,11 @@ export async function POST(req: NextRequest) {
     const searchParams = req.nextUrl.searchParams
     const queryPracticeId = searchParams.get('practiceId')
 
-    // Normalize user object for type compatibility
     const normalizedUser = {
       ...user,
       name: user.name ?? null,
     }
 
-    // If practiceId is provided in query and user is Vantage Admin, use it
     let practiceId: string | null = user.practiceId
     if (queryPracticeId && isVantageAdmin(normalizedUser)) {
       practiceId = queryPracticeId
@@ -77,27 +95,44 @@ export async function POST(req: NextRequest) {
 
     const validated = calIntegrationSchema.parse(body)
 
-    // Test connection
-    const { CalApiClient } = await import('@/lib/cal')
-    const testClient = new CalApiClient(validated.apiKey)
-    const isValid = await testClient.testConnection()
+    const existing = await prisma.calIntegration.findUnique({
+      where: { practiceId },
+    })
 
-    if (!isValid) {
-      return NextResponse.json({ error: 'Invalid API key or connection failed' }, { status: 400 })
+    const apiKey = validated.apiKey ?? existing?.apiKey
+    if (!apiKey) {
+      return NextResponse.json({ error: 'API key is required' }, { status: 400 })
     }
 
-    // Create or update integration
+    const webhookSecret =
+      validated.webhookSecret !== undefined
+        ? validated.webhookSecret
+        : existing?.webhookSecret ?? null
+
+    // Test connection when api key is new or changed
+    if (validated.apiKey) {
+      const { CalApiClient } = await import('@/lib/cal')
+      const testClient = new CalApiClient(validated.apiKey)
+      const isValid = await testClient.testConnection()
+
+      if (!isValid) {
+        return NextResponse.json({ error: 'Invalid API key or connection failed' }, { status: 400 })
+      }
+    }
+
     const integration = await prisma.calIntegration.upsert({
       where: { practiceId: practiceId },
       create: {
         practiceId: practiceId,
-        apiKey: validated.apiKey,
+        apiKey,
+        webhookSecret,
         calOrganizationId: validated.calOrganizationId,
         calTeamId: validated.calTeamId,
         isActive: true,
       },
       update: {
-        apiKey: validated.apiKey,
+        apiKey,
+        ...(validated.webhookSecret !== undefined ? { webhookSecret } : {}),
         calOrganizationId: validated.calOrganizationId,
         calTeamId: validated.calTeamId,
       },
@@ -106,7 +141,7 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    return NextResponse.json({ integration })
+    return NextResponse.json({ integration: redactCalIntegration(integration) })
   } catch (error) {
     if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
       const zodError = error as unknown as { issues: Array<{ path: (string | number)[]; message: string }> }
@@ -122,4 +157,3 @@ export async function POST(req: NextRequest) {
     )
   }
 }
-

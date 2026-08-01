@@ -7,6 +7,7 @@ import {
   insurancePolicyFormSchemaPartial,
   calIntegrationSchema,
   calEventTypeMappingSchema,
+  pebbleIntegrationSchema,
   bookAppointmentSchema,
   sendgridIntegrationSchema,
   twilioIntegrationSchema,
@@ -288,29 +289,65 @@ describe('Validation Schemas', () => {
     it('should accept valid Cal.com integration data', () => {
       const result = calIntegrationSchema.safeParse({
         apiKey: 'cal_live_abc123',
+        webhookSecret: 'practice-webhook-secret',
         calOrganizationId: 'org-123',
         calTeamId: 'team-456',
       })
       expect(result.success).toBe(true)
     })
 
-    it('should require apiKey', () => {
+    it('should allow omitting apiKey on update (keep existing)', () => {
       const result = calIntegrationSchema.safeParse({
         calOrganizationId: 'org-123',
       })
-      expect(result.success).toBe(false)
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.apiKey).toBeUndefined()
+      }
     })
 
-    it('should transform empty strings to undefined for optional fields', () => {
+    it('should transform empty strings and masked placeholders to undefined', () => {
       const result = calIntegrationSchema.safeParse({
-        apiKey: 'cal_live_abc123',
+        apiKey: '********',
+        webhookSecret: '',
         calOrganizationId: '',
         calTeamId: '',
       })
       expect(result.success).toBe(true)
       if (result.success) {
+        expect(result.data.apiKey).toBeUndefined()
+        expect(result.data.webhookSecret).toBeUndefined()
         expect(result.data.calOrganizationId).toBeUndefined()
         expect(result.data.calTeamId).toBeUndefined()
+      }
+    })
+  })
+
+  describe('pebbleIntegrationSchema', () => {
+    it('should accept rotateSecret and providerUserId', () => {
+      const result = pebbleIntegrationSchema.safeParse({
+        rotateSecret: true,
+        providerUserId: '11111111-1111-1111-1111-111111111111',
+        isActive: true,
+      })
+      expect(result.success).toBe(true)
+    })
+
+    it('should transform empty providerUserId to null', () => {
+      const result = pebbleIntegrationSchema.safeParse({
+        providerUserId: '',
+      })
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.providerUserId).toBeNull()
+      }
+    })
+
+    it('should leave providerUserId undefined when omitted', () => {
+      const result = pebbleIntegrationSchema.safeParse({ rotateSecret: true })
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.providerUserId).toBeUndefined()
       }
     })
   })

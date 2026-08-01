@@ -38,6 +38,7 @@ model Practice {
   sendgridIntegrations       SendgridIntegration[]
   twilioIntegrations         TwilioIntegration[]
   telnyxIntegrations         TelnyxIntegration[]
+  pebbleIntegrations         PebbleIntegration[]
   openDentalConnections      OpenDentalConnection[]
   ehrConnections             EhrConnection[]
   practiceSettings           PracticeSettings?
@@ -135,6 +136,7 @@ model User {
   preVisitChartsCreated            PreVisitChart[]            @relation("PreVisitChartCreator")
   devicePushTokens                 DevicePushToken[]
   scribeSessions                   ScribeSession[]            @relation("ScribeSessionProvider")
+  pebbleIntegrations               PebbleIntegration[]        @relation("PebbleIntegrationProvider")
 
   @@index([practiceId])
   @@index([email])
@@ -270,7 +272,7 @@ model PatientTag {
 model PatientTimelineEntry {
   id          String   @id @default(uuid())
   patientId   String
-  type        String // 'appointment', 'insurance', 'call', 'note', 'email', 'field_update', 'document', 'payment', 'reminder', 'task', 'other'
+  type        String // 'appointment', 'insurance', 'call', 'note', 'email', 'field_update', 'document', 'payment', 'reminder', 'task', 'automation', 'other'
   title       String
   description String?
   metadata    Json?
@@ -546,6 +548,8 @@ model CalIntegration {
   id                String   @id @default(uuid())
   practiceId        String   @unique
   apiKey            String // Encrypted in production
+  /// Per-practice Cal.com webhook signing secret (set in Cal.com webhook config)
+  webhookSecret     String?
   calOrganizationId String?
   calTeamId         String?
   isActive          Boolean  @default(true)
@@ -575,6 +579,29 @@ model CalEventTypeMapping {
   @@index([practiceId])
   @@index([calEventTypeId])
   @@map("cal_event_type_mappings")
+}
+
+/// Pebble Index 01 ring → Aria dictation webhook (practice-scoped shared secret)
+model PebbleIntegration {
+  id              String   @id @default(uuid())
+  practiceId      String   @unique
+  /// Shared token pasted into Pebble app Authorization / X-Widget-Token header
+  webhookSecret   String?
+  /// Provider whose open Aria session receives ring dictation
+  providerUserId  String?
+  /// Sticky active Aria session (set when clinician starts capture in mobile)
+  activeSessionId String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  provider User?    @relation("PebbleIntegrationProvider", fields: [providerUserId], references: [id], onDelete: SetNull)
+
+  @@index([practiceId])
+  @@index([providerUserId])
+  @@index([activeSessionId])
+  @@map("pebble_integrations")
 }
 
 model RetellIntegration {

@@ -151,8 +151,18 @@ export default async function SettingsPage() {
               <div className="space-y-6">
                 <SmsFromNumberSettings practiceId={user.practiceId ?? undefined} />
 
-                <CalSettings 
-                  initialIntegration={calIntegration} 
+                <CalSettings
+                  initialIntegration={
+                    calIntegration
+                      ? {
+                          ...calIntegration,
+                          apiKey: calIntegration.apiKey ? '********' : '',
+                          hasApiKey: Boolean(calIntegration.apiKey),
+                          webhookSecret: '',
+                          hasWebhookSecret: Boolean(calIntegration.webhookSecret),
+                        }
+                      : null
+                  }
                   initialMappings={calIntegration?.eventTypeMappings || []}
                 />
 

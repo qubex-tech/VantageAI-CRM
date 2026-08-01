@@ -31,8 +31,7 @@ export async function GET(req: NextRequest) {
         'To test if webhooks are being received, make a booking in Cal.com and check the logs.',
       ],
       webhookUrl: 'https://app.getvantage.tech/api/cal/webhook',
-      expectedSecret: process.env.CALCOM_WEBHOOK_SECRET ? 'configured' : 'not configured',
-      note: 'Make sure CALCOM_WEBHOOK_SECRET is set to "vantageai" in your Vercel environment variables',
+      note: 'Configure a unique webhook signing secret per practice under Settings → Cal.com. Use that same secret in the Cal.com webhook for that practice. Centralized CALCOM_WEBHOOK_SECRET is no longer used.',
     })
   } catch (error) {
     return NextResponse.json(

@@ -24,6 +24,7 @@ import { OutboundAgentsSettings } from './OutboundAgentsSettings'
 import { AvailitySettings } from './AvailitySettings'
 import { PreChartTemplateSettings } from './PreChartTemplateSettings'
 import { AriaScribeSettings } from './AriaScribeSettings'
+import { PebbleIndexSettings } from './PebbleIndexSettings'
 
 interface Practice {
   id: string
@@ -299,6 +300,7 @@ export function PracticeAPIConfiguration() {
               <TabsContent value="ai-configuration" className="mt-6 space-y-6">
                 <OutboundAgentsSettings practiceId={selectedPracticeId} />
                 <AriaScribeSettings practiceId={selectedPracticeId} />
+                <PebbleIndexSettings practiceId={selectedPracticeId} />
                 <PreChartTemplateSettings practiceId={selectedPracticeId} />
               </TabsContent>
             </>

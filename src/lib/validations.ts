@@ -288,9 +288,18 @@ export const bookAppointmentSchema = z.object({
   reason: z.string().optional(),
 })
 
-// Cal.com integration schemas
+// Cal.com integration schemas (apiKey / webhookSecret optional on update to keep existing)
 export const calIntegrationSchema = z.object({
-  apiKey: z.string().min(1, 'API key is required'),
+  apiKey: z
+    .string()
+    .optional()
+    .or(z.literal(''))
+    .transform((val) => (val === '' || val === '********' ? undefined : val)),
+  webhookSecret: z
+    .string()
+    .optional()
+    .or(z.literal(''))
+    .transform((val) => (val === '' || val === '********' ? undefined : val)),
   calOrganizationId: z.string().optional().or(z.literal('')).transform(val => val === '' ? undefined : val),
   calTeamId: z.string().optional().or(z.literal('')).transform(val => val === '' ? undefined : val),
 })
@@ -298,6 +307,28 @@ export const calIntegrationSchema = z.object({
 export const calEventTypeMappingSchema = z.object({
   visitTypeName: z.string().min(1, 'Visit type name is required'),
   calEventTypeId: z.string().min(1, 'Cal event type ID is required'),
+})
+
+// Pebble Index 01 → Aria webhook integration
+export const pebbleIntegrationSchema = z.object({
+  webhookSecret: z
+    .string()
+    .optional()
+    .or(z.literal(''))
+    .transform((val) => (val === '' || val === '********' ? undefined : val)),
+  /** When true, server generates a new webhook secret */
+  rotateSecret: z.boolean().optional(),
+  providerUserId: z
+    .union([z.string().uuid(), z.literal(''), z.null()])
+    .optional()
+    .transform((val) => {
+      if (val === undefined) return undefined
+      if (val === '') return null
+      return val
+    }),
+  isActive: z.boolean().optional(),
+  /** Clear sticky active Aria session binding */
+  clearActiveSession: z.boolean().optional(),
 })
 
 // RetellAI webhook schemas

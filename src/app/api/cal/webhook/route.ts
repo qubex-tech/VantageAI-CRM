@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { verifyCalSignature, rateLimit } from '@/lib/middleware'
+import { rateLimit } from '@/lib/middleware'
 import { createAuditLog, createTimelineEntry } from '@/lib/audit'
-import { syncBookingToPatient } from '@/lib/sync-booking-to-patient'
 import { handleAppointmentChangeForSlotFill } from '@/lib/appointment-optimization/appointmentChangeHandler'
 import { resolvePatientByContact } from '@/lib/patient-identity'
+import { matchCalWebhookPractice } from '@/lib/cal-webhook'
 import {
   canonicalCalBookingId,
   consolidateCalBookingDuplicates,
@@ -47,24 +47,43 @@ export async function POST(req: NextRequest) {
 
     // Cal.com uses x-cal-signature-256 header (not x-cal-signature)
     const signature = req.headers.get('x-cal-signature-256') || ''
-    const webhookVersion = req.headers.get('x-cal-webhook-version') || '2021-10-20'
 
-    // Verify webhook signature
-    const secret = process.env.CALCOM_WEBHOOK_SECRET || 'vantageai' // Fallback to user's secret
-    console.log(`[${requestId}] Secret configured: ${secret ? 'yes' : 'no'}`)
-    
-    if (secret && signature) {
-      const isValid = verifyCalSignature(body, signature, secret)
-      console.log(`[${requestId}] Signature verification: ${isValid ? 'valid' : 'invalid'}`)
-      if (!isValid) {
-        console.error(`[${requestId}] Cal.com webhook signature verification failed`)
-        console.error(`[${requestId}] Expected signature format: hex-encoded HMAC-SHA256`)
-        console.error(`[${requestId}] Received signature: ${signature.substring(0, 20)}...`)
-        return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
-      }
-    } else {
-      console.warn(`[${requestId}] Skipping signature verification (secret or signature missing)`)
+    if (!signature) {
+      console.error(`[${requestId}] Missing x-cal-signature-256 header`)
+      return NextResponse.json({ error: 'Missing signature' }, { status: 401 })
     }
+
+    // Per-practice webhook secrets (configured in Settings → Cal.com)
+    const calIntegrationsWithSecrets = await prisma.calIntegration.findMany({
+      where: {
+        isActive: true,
+        webhookSecret: { not: null },
+      },
+      select: {
+        practiceId: true,
+        webhookSecret: true,
+      },
+    })
+
+    const matchedPracticeId = matchCalWebhookPractice(
+      body,
+      signature,
+      calIntegrationsWithSecrets
+        .filter((row): row is { practiceId: string; webhookSecret: string } =>
+          Boolean(row.webhookSecret)
+        )
+        .map((row) => ({
+          practiceId: row.practiceId,
+          webhookSecret: row.webhookSecret,
+        }))
+    )
+
+    if (!matchedPracticeId) {
+      console.error(`[${requestId}] Cal.com webhook signature did not match any practice secret`)
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
+    }
+
+    console.log(`[${requestId}] Signature verified for practice ${matchedPracticeId}`)
 
     // Parse webhook payload
     let webhookData: any
@@ -141,13 +160,15 @@ export async function POST(req: NextRequest) {
       bookingId,
     })
     
-    let appointments = await findAppointmentsByCalBookingIds({
-      uid: bookingUid,
-      id: bookingId,
-    })
+    let appointments = (
+      await findAppointmentsByCalBookingIds({
+        uid: bookingUid,
+        id: bookingId,
+      })
+    ).filter((a) => a.practiceId === matchedPracticeId)
     let appointment = appointments[0] ?? null
-    
-    console.log(`[${requestId}] Found appointment(s):`, appointments.map((a) => a.id))
+
+    console.log(`[${requestId}] Found appointment(s) for practice:`, appointments.map((a) => a.id))
 
     // Handle different trigger events
     switch (triggerEvent) {
@@ -187,65 +208,43 @@ export async function POST(req: NextRequest) {
           // If appointment doesn't exist, try to find or create patient and appointment
           console.log(`[${requestId}] Appointment not found, attempting to create from webhook`)
           
-          // Try to find patient by email - need to search across all practices that have Cal integration
-          const calIntegrations = await prisma.calIntegration.findMany({
-            include: {
-              practice: true,
-            },
-          })
-          
-          console.log(`[${requestId}] Found ${calIntegrations.length} Cal integrations`)
-          
-          // Search for patient in those practices (DOB-aware; never guess among duplicates)
-          let patient = null
-          let practiceId = null
+          // Scope to the practice whose webhook secret matched this request
+          const practiceId: string = matchedPracticeId
           const attendeeDob =
             (payload?.responses?.dateOfBirth?.value as string | undefined) ||
             (payload?.metadata?.dateOfBirth as string | undefined) ||
             null
           const normalizedPhone = attendeePhone?.replace(/\D/g, '') || null
 
-          for (const integration of calIntegrations) {
-            const resolution = await resolvePatientByContact({
-              practiceId: integration.practiceId,
-              email: attendeeEmail,
-              phone: normalizedPhone,
-              name: attendeeName,
-              dateOfBirth: attendeeDob,
+          let patient = null
+          const resolution = await resolvePatientByContact({
+            practiceId,
+            email: attendeeEmail,
+            phone: normalizedPhone,
+            name: attendeeName,
+            dateOfBirth: attendeeDob,
+          })
+          if (resolution.ambiguous) {
+            console.warn(`[${requestId}] Ambiguous patient match for booking — shared contact info`, {
+              practiceId,
+              candidateCount: resolution.candidateCount,
             })
-            if (resolution.ambiguous) {
-              console.warn(`[${requestId}] Ambiguous patient match for booking — shared contact info`, {
-                practiceId: integration.practiceId,
-                candidateCount: resolution.candidateCount,
-                attendeeEmail,
-                attendeeName,
-              })
-              continue
-            }
-            if (resolution.patient) {
-              patient = await prisma.patient.findFirst({
-                where: { id: resolution.patient.id, deletedAt: null },
-              })
-              practiceId = integration.practiceId
-              console.log(`[${requestId}] Matched patient by ${resolution.matchReason}:`, patient?.id)
-              break
-            }
+          } else if (resolution.patient) {
+            patient = await prisma.patient.findFirst({
+              where: { id: resolution.patient.id, deletedAt: null },
+            })
+            console.log(`[${requestId}] Matched patient by ${resolution.matchReason}:`, patient?.id)
           }
-          
+
           // If still no patient found but we have attendee name, create a basic patient record
-          if (!patient && attendeeName && calIntegrations.length > 0) {
-            // Use the first practice with Cal integration
-            const targetIntegration = calIntegrations[0]
-            practiceId = targetIntegration.practiceId
-            
-            console.log(`[${requestId}] Creating new patient from Cal.com webhook: ${attendeeName} (${attendeeEmail || 'no email'})`)
-            
-            // Create patient with information from booking
+          if (!patient && attendeeName) {
+            console.log(`[${requestId}] Creating new patient from Cal.com webhook for practice ${practiceId}`)
+
             const phoneForCreation = attendeePhone?.replace(/\D/g, '') || '000-000-0000'
-            
+
             patient = await prisma.patient.create({
               data: {
-                practiceId: targetIntegration.practiceId,
+                practiceId,
                 name: attendeeName,
                 email: attendeeEmail || undefined,
                 phone: phoneForCreation,
@@ -254,7 +253,7 @@ export async function POST(req: NextRequest) {
                 notes: `Patient created from Cal.com booking (${calBookingId || 'unknown'})`,
               },
             })
-            
+
             console.log(`[${requestId}] Created new patient:`, patient.id)
           }
 

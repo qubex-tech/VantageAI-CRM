@@ -41,7 +41,14 @@ export function CalSettings({ initialIntegration, initialMappings = [], practice
     }
     return path
   }
-  const [apiKey, setApiKey] = useState(initialIntegration?.apiKey || '')
+  const [apiKey, setApiKey] = useState('')
+  const [hasApiKey, setHasApiKey] = useState(
+    Boolean(initialIntegration?.hasApiKey || (initialIntegration?.apiKey && initialIntegration.apiKey !== '********'))
+  )
+  const [webhookSecret, setWebhookSecret] = useState('')
+  const [hasWebhookSecret, setHasWebhookSecret] = useState(
+    Boolean(initialIntegration?.hasWebhookSecret)
+  )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -76,6 +83,13 @@ export function CalSettings({ initialIntegration, initialMappings = [], practice
     setMappings(initialMappings)
   }, [initialMappings])
 
+  useEffect(() => {
+    setHasApiKey(
+      Boolean(initialIntegration?.hasApiKey || (initialIntegration?.apiKey && initialIntegration.apiKey !== '********'))
+    )
+    setHasWebhookSecret(Boolean(initialIntegration?.hasWebhookSecret))
+  }, [initialIntegration])
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
@@ -83,11 +97,16 @@ export function CalSettings({ initialIntegration, initialMappings = [], practice
     setLoading(true)
 
     try {
+      if (!apiKey && !hasApiKey) {
+        throw new Error('API key is required')
+      }
+
       const response = await fetch(apiUrl('/api/settings/cal'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          apiKey,
+          apiKey: apiKey || undefined,
+          webhookSecret: webhookSecret || undefined,
           calOrganizationId: initialIntegration?.calOrganizationId || undefined,
           calTeamId: initialIntegration?.calTeamId || undefined,
         }),
@@ -98,6 +117,11 @@ export function CalSettings({ initialIntegration, initialMappings = [], practice
         throw new Error(error.error || 'Failed to save settings')
       }
 
+      const data = await response.json()
+      setHasApiKey(Boolean(data.integration?.hasApiKey))
+      setHasWebhookSecret(Boolean(data.integration?.hasWebhookSecret))
+      setApiKey('')
+      setWebhookSecret('')
       setSuccess('Cal.com integration saved successfully')
       // Clear event types so they need to be fetched again with new API key
       setEventTypes([])
@@ -341,12 +365,43 @@ export function CalSettings({ initialIntegration, initialMappings = [], practice
                 type="password"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Enter your Cal.com API key"
-                required
+                placeholder={hasApiKey ? 'API key saved — enter a new key to replace' : 'Enter your Cal.com API key'}
+                required={!hasApiKey}
               />
               <p className="text-xs text-gray-500">
-                You can find your API key in your Cal.com settings
+                Per-practice Cal.com API key from your Cal.com developer settings
               </p>
+              {hasApiKey && !apiKey && (
+                <p className="text-xs text-green-700">An API key is already saved for this practice.</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="webhookSecret">Webhook signing secret</Label>
+              <Input
+                id="webhookSecret"
+                type="password"
+                value={webhookSecret}
+                onChange={(e) => setWebhookSecret(e.target.value)}
+                placeholder={
+                  hasWebhookSecret
+                    ? 'Secret saved — enter a new secret to replace'
+                    : 'Enter the secret used in your Cal.com webhook'
+                }
+              />
+              <p className="text-xs text-gray-500">
+                Create a webhook in Cal.com pointing to{' '}
+                <span className="font-mono">https://app.getvantage.tech/api/cal/webhook</span> and use
+                the same unique secret here. Each practice must use its own secret.
+              </p>
+              {hasWebhookSecret && !webhookSecret && (
+                <p className="text-xs text-green-700">A webhook secret is already saved for this practice.</p>
+              )}
+              {!hasWebhookSecret && (
+                <p className="text-xs text-amber-700">
+                  Required for Cal.com booking sync. Webhooks are rejected until a secret is configured.
+                </p>
+              )}
             </div>
 
             {error && (
@@ -365,7 +420,7 @@ export function CalSettings({ initialIntegration, initialMappings = [], practice
                 type="button"
                 variant="outline"
                 onClick={handleTest}
-                disabled={loading || !apiKey}
+                disabled={loading || (!apiKey && !hasApiKey)}
               >
                 Test Connection
               </Button>
@@ -389,7 +444,7 @@ export function CalSettings({ initialIntegration, initialMappings = [], practice
                 type="button"
                 variant="outline"
                 onClick={fetchEventTypes}
-                disabled={loadingEventTypes || !apiKey}
+                disabled={loadingEventTypes || (!apiKey && !hasApiKey)}
               >
                 {loadingEventTypes ? 'Loading...' : 'Fetch Cal.com Event Types'}
               </Button>

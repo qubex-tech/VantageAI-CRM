@@ -125,6 +125,14 @@ export async function POST(req: NextRequest) {
       appointmentId: body.appointmentId ?? null,
     })
 
+    // Bind Index ring dictation to this visit (no-op if Pebble not configured).
+    const { bindPebbleActiveSession } = await import('@/lib/aria/pebbleActiveSession')
+    void bindPebbleActiveSession({
+      practiceId: user.practiceId,
+      providerUserId: user.id,
+      sessionId: session.id,
+    })
+
     return NextResponse.json({ session: serializeScribeSession(session) }, { status: 201 })
   } catch (err: unknown) {
     if (err instanceof Error && err.name === 'ZodError') {
