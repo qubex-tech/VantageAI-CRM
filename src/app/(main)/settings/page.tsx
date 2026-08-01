@@ -13,8 +13,6 @@ import { CommunicationsSettings } from '@/components/settings/CommunicationsSett
 import { SmsFromNumberSettings } from '@/components/settings/SmsFromNumberSettings'
 import { PracticeManagement } from '@/components/settings/PracticeManagement'
 import { PracticeAPIConfiguration } from '@/components/settings/PracticeAPIConfiguration'
-import { AriaScribeSettings } from '@/components/settings/AriaScribeSettings'
-import { PebbleIndexSettings } from '@/components/settings/PebbleIndexSettings'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { PageIntro } from '@/components/layout/PageIntro'
 
@@ -177,10 +175,6 @@ export default async function SettingsPage() {
                 <TelnyxSettings initialIntegration={telnyxIntegration} />
 
                 <TwilioSettings initialIntegration={twilioIntegration} />
-
-                <AriaScribeSettings practiceId={user.practiceId ?? undefined} />
-
-                <PebbleIndexSettings practiceId={user.practiceId ?? undefined} />
               </div>
             </TabsContent>
           )}
