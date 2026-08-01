@@ -1,10 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Keep browser automation deps out of the Next server bundle (optional native modules).
+  serverExternalPackages: ['playwright-core', '@browserbasehq/sdk'],
   experimental: {
     serverActions: {
       bodySizeLimit: '2mb',
     },
+    serverComponentsExternalPackages: ['playwright-core', '@browserbasehq/sdk'],
     optimizePackageImports: [
       'lucide-react',
       '@radix-ui/react-dialog',
@@ -20,6 +23,22 @@ const nextConfig = {
       config.resolve.fallback = {
         ...config.resolve.fallback,
         fs: false,
+      }
+    }
+    if (isServer) {
+      const externals = ['playwright-core', '@browserbasehq/sdk']
+      if (Array.isArray(config.externals)) {
+        config.externals.push(...externals)
+      } else if (typeof config.externals === 'function') {
+        const original = config.externals
+        config.externals = async (ctx, callback) => {
+          if (ctx.request && externals.includes(ctx.request)) {
+            return callback ? callback(null, `commonjs ${ctx.request}`) : `commonjs ${ctx.request}`
+          }
+          return original(ctx, callback)
+        }
+      } else {
+        config.externals = [...externals]
       }
     }
     return config

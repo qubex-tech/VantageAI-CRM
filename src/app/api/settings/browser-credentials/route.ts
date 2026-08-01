@@ -3,7 +3,10 @@ import { z } from 'zod'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
 import { isVantageAdmin } from '@/lib/permissions'
-import { redactBrowserCredential, upsertBrowserCredential } from '@/lib/browser-agent'
+import {
+  redactBrowserCredential,
+  upsertBrowserCredential,
+} from '@/lib/browser-agent/credentials'
 
 const upsertSchema = z.object({
   site: z.string().min(1).max(64),

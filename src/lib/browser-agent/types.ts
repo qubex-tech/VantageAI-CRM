@@ -1,4 +1,22 @@
-import type { Page } from 'playwright-core'
+/** Minimal page surface used by playbooks (avoids importing playwright-core types into Next bundles). */
+export interface BrowserPage {
+  goto: (url: string, options?: Record<string, unknown>) => Promise<unknown>
+  title: () => Promise<string>
+  url: () => string
+  locator: (selector: string) => BrowserLocator
+  getByRole: (role: string, options?: { name?: RegExp | string }) => BrowserLocator
+  waitForLoadState: (state?: string, options?: Record<string, unknown>) => Promise<unknown>
+  waitForTimeout: (ms: number) => Promise<void>
+  screenshot: (options?: Record<string, unknown>) => Promise<Buffer>
+}
+
+export interface BrowserLocator {
+  first: () => BrowserLocator
+  count: () => Promise<number>
+  fill: (value: string) => Promise<void>
+  click: (options?: Record<string, unknown>) => Promise<void>
+  innerText: () => Promise<string>
+}
 
 export type BrowserAgentRunStatus =
   | 'pending'
@@ -9,7 +27,7 @@ export type BrowserAgentRunStatus =
 
 export interface BrowserSessionHandle {
   sessionId: string
-  page: Page
+  page: BrowserPage
   close: () => Promise<void>
   screenshotDataUrl?: () => Promise<string>
 }

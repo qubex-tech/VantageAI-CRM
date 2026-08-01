@@ -16,7 +16,6 @@ import {
   processAriaSession,
   runEhrBulkNightly,
   ingestEhrBulkPatients,
-  runEhrBulkNameCrawl,
   refreshEhrBackendTokens,
 } from '@/inngest/functions'
 
@@ -45,7 +44,6 @@ const handler = serve({
     processAriaSession,
     runEhrBulkNightly,
     ingestEhrBulkPatients,
-    runEhrBulkNameCrawl,
     refreshEhrBackendTokens,
   ],
 })
