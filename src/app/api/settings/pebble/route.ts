@@ -28,14 +28,16 @@ function redactPebbleIntegration(
   }
 }
 
-async function resolvePracticeId(req: NextRequest, user: { practiceId: string | null; name: string | null }) {
+function resolvePracticeId(req: NextRequest, user: Awaited<ReturnType<typeof requireAuth>>) {
   const queryPracticeId = req.nextUrl.searchParams.get('practiceId')
-  const normalizedUser = { ...user, name: user.name ?? null }
-  let practiceId: string | null = user.practiceId
-  if (queryPracticeId && isVantageAdmin(normalizedUser)) {
-    practiceId = queryPracticeId
+  const normalizedUser = {
+    ...user,
+    name: user.name ?? null,
   }
-  return practiceId
+  if (queryPracticeId && isVantageAdmin(normalizedUser)) {
+    return queryPracticeId
+  }
+  return user.practiceId
 }
 
 /**
