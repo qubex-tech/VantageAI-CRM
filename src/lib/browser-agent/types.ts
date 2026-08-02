@@ -32,6 +32,12 @@ export type BrowserAgentRunStatus =
 export interface BrowserSessionHandle {
   sessionId: string
   page: BrowserPage
+  /** Switch active page to the newest tab (Availity often opens apps in a new tab). */
+  adoptNewestPage?: () => Promise<BrowserPage | null>
+  /** Find a page/frame that contains the selector and make that page active. */
+  focusPageWithSelector?: (selector: string, timeoutMs?: number) => Promise<boolean>
+  /** Locate an element across all open tabs and frames (Availity apps are often iframe-hosted). */
+  findLocator?: (selector: string, timeoutMs?: number) => Promise<BrowserLocator | null>
   close: () => Promise<void>
   screenshotDataUrl?: () => Promise<string>
 }

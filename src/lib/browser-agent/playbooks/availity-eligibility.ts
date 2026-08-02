@@ -339,77 +339,90 @@ async function clickFirstMatch(
   return false
 }
 
+const MEMBER_FIELD_SELECTOR =
+  'input[name="memberId"], input[id*="member" i], input[placeholder*="Member" i], input[aria-label*="Member" i]'
+
+async function hasMemberField(ctx: PlaybookContext): Promise<boolean> {
+  if (!ctx.session) return false
+  if (await ctx.session.findLocator?.(MEMBER_FIELD_SELECTOR, 2_000)) return true
+  return (await ctx.session.page.locator(MEMBER_FIELD_SELECTOR).count()) > 0
+}
+
 async function navigateToEligibilityForm(
   ctx: PlaybookContext
 ): Promise<{ ok: true } | PlaybookResult> {
   if (!ctx.session) return { ok: false, errorMessage: 'No browser session' }
-  const { page } = ctx.session
 
-  await page.waitForTimeout(2000)
+  const pageNow = () => ctx.session!.page
+  await pageNow().waitForTimeout(2000)
 
   // Preferred path: Patient Registration → Eligibility and Benefits Inquiry
-  const openedPatientReg = await clickFirstMatch(page, [
-    page.getByRole('button', { name: /patient registration/i }).first(),
-    page.getByRole('link', { name: /patient registration/i }).first(),
-    page.locator('text=Patient Registration').first(),
-    page.locator('[aria-label*="Patient Registration" i]').first(),
+  const openedPatientReg = await clickFirstMatch(pageNow(), [
+    pageNow().getByRole('button', { name: /patient registration/i }).first(),
+    pageNow().getByRole('link', { name: /patient registration/i }).first(),
+    pageNow().locator('text=Patient Registration').first(),
+    pageNow().locator('[aria-label*="Patient Registration" i]').first(),
   ])
   if (openedPatientReg) {
     ctx.log('Opened Patient Registration menu')
-    await page.waitForTimeout(1000)
-    const openedEligibility = await clickFirstMatch(page, [
-      page.getByRole('menuitem', { name: /eligibility and benefits/i }).first(),
-      page.getByRole('link', { name: /eligibility and benefits/i }).first(),
-      page.locator('text=Eligibility and Benefits Inquiry').first(),
-      page.locator('text=Eligibility and Benefits').first(),
-      page.locator('a:has-text("Eligibility")').first(),
+    await pageNow().waitForTimeout(1000)
+    const openedEligibility = await clickFirstMatch(pageNow(), [
+      pageNow().getByRole('menuitem', { name: /eligibility and benefits/i }).first(),
+      pageNow().getByRole('link', { name: /eligibility and benefits/i }).first(),
+      pageNow().locator('text=Eligibility and Benefits Inquiry').first(),
+      pageNow().locator('text=Eligibility and Benefits').first(),
+      pageNow().locator('a:has-text("Eligibility")').first(),
     ])
     if (openedEligibility) {
       ctx.log('Opened Eligibility and Benefits Inquiry')
-      await page.waitForTimeout(3000)
-      await page.waitForLoadState('domcontentloaded', { timeout: 45_000 }).catch(() => undefined)
+      await pageNow().waitForTimeout(2500)
+      // Availity often opens the tool in a new tab
+      await ctx.session.adoptNewestPage?.()
+      const focused = await ctx.session.focusPageWithSelector?.(MEMBER_FIELD_SELECTOR, 20_000)
+      ctx.log('Post-menu eligibility focus', {
+        focused,
+        url: pageNow().url(),
+        tabsAdopted: Boolean(ctx.session.adoptNewestPage),
+      })
+      await pageNow().waitForLoadState('domcontentloaded', { timeout: 45_000 }).catch(() => undefined)
     }
   }
 
-  // Direct URL fallbacks if menu path didn't land on a form
-  const hasMemberField = async () =>
-    (await page.locator('input[name="memberId"], input[id*="member" i], input[placeholder*="Member" i]').count()) >
-    0
-
-  if (!(await hasMemberField())) {
+  if (!(await hasMemberField(ctx))) {
     const urls = [
       process.env.AVAILITY_ELIGIBILITY_URL,
       'https://essentials.availity.com/static/web/webui/#/eligibility',
       'https://essentials.availity.com/static/web/webui/index.html#/eligibility',
-      'https://apps.availity.com/web/onboarding/availity-fr-ui/#/eligibility',
     ].filter(Boolean) as string[]
 
     for (const url of urls) {
       ctx.log('Trying eligibility URL', { url })
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45_000 }).catch(() => undefined)
-      await page.waitForTimeout(2500)
-      if (await hasMemberField()) break
+      await pageNow().goto(url, { waitUntil: 'domcontentloaded', timeout: 45_000 }).catch(() => undefined)
+      await pageNow().waitForTimeout(2500)
+      await ctx.session.adoptNewestPage?.()
+      if (await hasMemberField(ctx)) break
     }
   }
 
-  // Last resort: site search / any eligibility link
-  if (!(await hasMemberField())) {
-    await clickFirstMatch(page, [
-      page.getByRole('link', { name: /eligibility/i }).first(),
-      page.locator('a:has-text("Eligibility")').first(),
-      page.locator('text=/Eligibility and Benefits/i').first(),
+  if (!(await hasMemberField(ctx))) {
+    await clickFirstMatch(pageNow(), [
+      pageNow().getByRole('link', { name: /eligibility/i }).first(),
+      pageNow().locator('a:has-text("Eligibility")').first(),
+      pageNow().locator('text=/Eligibility and Benefits/i').first(),
     ])
-    await page.waitForTimeout(2500)
+    await pageNow().waitForTimeout(2500)
+    await ctx.session.adoptNewestPage?.()
+    await ctx.session.focusPageWithSelector?.(MEMBER_FIELD_SELECTOR, 15_000)
   }
 
-  if (!(await hasMemberField())) {
-    const bodyText = (await page.locator('body').innerText().catch(() => '')) || ''
+  if (!(await hasMemberField(ctx))) {
+    const bodyText = (await pageNow().locator('body').innerText().catch(() => '')) || ''
     return {
       ok: false,
       errorMessage:
         'Could not open Availity Eligibility and Benefits form (check user role: Eligibility & Benefits)',
       escalateToVoice: true,
-      output: { pageSnippet: bodyText.slice(0, 2000), url: page.url() },
+      output: { pageSnippet: bodyText.slice(0, 2000), url: pageNow().url() },
     }
   }
 
@@ -420,13 +433,13 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
   if (!ctx.session) {
     return { ok: false, errorMessage: 'No browser session' }
   }
-  const { page } = ctx.session
   const artifacts: string[] = []
+  const page = () => ctx.session!.page
 
   const nav = await navigateToEligibilityForm(ctx)
   if (!('ok' in nav && nav.ok === true)) return nav as PlaybookResult
 
-  await page.waitForTimeout(1500)
+  await page().waitForTimeout(1500)
 
   const memberId = asString(ctx.input.memberId)
   const payerName = asString(ctx.input.payerName)
@@ -437,21 +450,26 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
 
   const fillFirst = async (selectors: string[], value: string) => {
     if (!value) return false
+    const p = page()
     for (const sel of selectors) {
-      const el = page.locator(sel).first()
+      const across = await ctx.session!.findLocator?.(sel, 2_500)
+      if (across) {
+        await typeInto(p, across, value)
+        return true
+      }
+      const el = p.locator(sel).first()
       if ((await el.count()) > 0) {
-        await typeInto(page, el, value)
+        await typeInto(p, el, value)
         return true
       }
     }
-    // Label-based fallback
-    if (page.getByLabel) {
+    if (p.getByLabel) {
       for (const label of selectors.filter((s) => s.includes('placeholder'))) {
         const guess = label.match(/placeholder\*="([^"]+)/i)?.[1]
         if (!guess) continue
-        const byLabel = page.getByLabel(new RegExp(guess.replace('*', ''), 'i')).first()
+        const byLabel = p.getByLabel(new RegExp(guess.replace('*', ''), 'i')).first()
         if ((await byLabel.count()) > 0) {
-          await typeInto(page, byLabel, value)
+          await typeInto(p, byLabel, value)
           return true
         }
       }
@@ -504,26 +522,25 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
       payerName
     )
     if (payerFilled) {
-      await page.waitForTimeout(1000)
-      await clickFirstMatch(page, [
-        page.getByRole('option', { name: new RegExp(payerName.slice(0, 12), 'i') }).first(),
-        page.locator('[role="option"]').first(),
-        page.locator('.dropdown-item, li[role="option"], .av-select__option').first(),
+      await page().waitForTimeout(1000)
+      await clickFirstMatch(page(), [
+        page().getByRole('option', { name: new RegExp(payerName.slice(0, 12), 'i') }).first(),
+        page().locator('[role="option"]').first(),
+        page().locator('.dropdown-item, li[role="option"], .av-select__option').first(),
       ])
     }
   }
 
   ctx.log('Filled eligibility form fields', { filledMember, payerName, memberId: Boolean(memberId) })
 
-  const submit = page
-    .locator(
-      'button:has-text("Submit"), button:has-text("Check Eligibility"), button:has-text("Request Eligibility"), button[type="submit"], input[type="submit"][value*="Submit" i]'
-    )
-    .first()
-  if ((await submit.count()) > 0) {
+  const submitSelector =
+    'button:has-text("Submit"), button:has-text("Check Eligibility"), button:has-text("Request Eligibility"), button[type="submit"], input[type="submit"][value*="Submit" i]'
+  const submitAcross = await ctx.session.findLocator?.(submitSelector, 5_000)
+  const submit = submitAcross || page().locator(submitSelector).first()
+  if (submitAcross || (await submit.count()) > 0) {
     await submit.click({ timeout: 15_000 })
   } else {
-    const bodyText = (await page.locator('body').innerText().catch(() => '')) || ''
+    const bodyText = (await page().locator('body').innerText().catch(() => '')) || ''
     if (ctx.session.screenshotDataUrl) {
       artifacts.push(await ctx.session.screenshotDataUrl())
     }
@@ -532,27 +549,27 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
       errorMessage: 'Availity eligibility submit button not found (UI may have changed)',
       escalateToVoice: true,
       artifactUrls: artifacts,
-      output: { pageSnippet: bodyText.slice(0, 2000), url: page.url() },
+      output: { pageSnippet: bodyText.slice(0, 2000), url: page().url() },
     }
   }
 
-  await page.waitForTimeout(4000)
-  await page.waitForLoadState('networkidle', { timeout: 60_000 }).catch(() => undefined)
+  await page().waitForTimeout(4000)
+  await page().waitForLoadState('networkidle', { timeout: 60_000 }).catch(() => undefined)
 
   if (ctx.session.screenshotDataUrl) {
     artifacts.push(await ctx.session.screenshotDataUrl())
   }
 
-  const bodyText = (await page.locator('body').innerText().catch(() => '')) || ''
+  const bodyText = (await page().locator('body').innerText().catch(() => '')) || ''
   const lower = bodyText.toLowerCase()
 
-  if (looksLikeLoginPage(bodyText, page.url())) {
+  if (looksLikeLoginPage(bodyText, page().url())) {
     return {
       ok: false,
       errorMessage: 'Session lost — still on Availity Sign In while submitting eligibility',
       escalateToVoice: true,
       artifactUrls: artifacts,
-      output: { pageSnippet: bodyText.slice(0, 2000), url: page.url() },
+      output: { pageSnippet: bodyText.slice(0, 2000), url: page().url() },
     }
   }
 
@@ -580,7 +597,7 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
       errorMessage: 'Could not parse Availity eligibility result page',
       escalateToVoice: true,
       artifactUrls: artifacts,
-      output: { pageSnippet: bodyText.slice(0, 2000), url: page.url() },
+      output: { pageSnippet: bodyText.slice(0, 2000), url: page().url() },
     }
   }
 
@@ -600,7 +617,7 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
       summary,
       source: 'availity_rpa',
       pageSnippet: bodyText.slice(0, 2000),
-      url: page.url(),
+      url: page().url(),
     },
     artifactUrls: artifacts,
   }
