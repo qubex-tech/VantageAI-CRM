@@ -1,5 +1,5 @@
 import type { ParsedEligibilitySummary } from '@/lib/availity'
-import { generateTotp } from '../totp'
+import { generateTotpFresh } from '../totp'
 import { markBrowserCredentialLogin } from '../credentials'
 import type { BrowserLocator, BrowserPlaybook, PlaybookContext, PlaybookResult } from '../types'
 
@@ -114,10 +114,10 @@ async function completeAvailityMfa(ctx: PlaybookContext): Promise<PlaybookResult
       }
     }
 
-    // Step 2: enter TOTP
+    // Step 2: enter TOTP (retry once if Availity rejects a near-expiry / reused code)
     const mfaInput = page
       .locator(
-        'input[name="otp"], input[name="code"], input[name="oneTimeCode"], input[autocomplete="one-time-code"], input[placeholder*="code" i], input[aria-label*="code" i], input[id*="code" i]'
+        'input[name="otp"], input[name="code"], input[name="oneTimeCode"], input[autocomplete="one-time-code"], input[placeholder*="code" i], input[aria-label*="Authenticator" i], input[aria-label*="code" i], input[id*="code" i]'
       )
       .first()
     if ((await mfaInput.count()) > 0) {
@@ -132,17 +132,30 @@ async function completeAvailityMfa(ctx: PlaybookContext): Promise<PlaybookResult
           escalateToVoice: true,
         }
       }
-      const code = generateTotp(credential.totpSecret)
-      ctx.log('Submitting Availity TOTP code')
-      await typeInto(page, mfaInput, code)
-      const mfaSubmit = page
-        .locator(
-          'button[type="submit"], button:has-text("Verify"), button:has-text("Continue"), button:has-text("Submit")'
-        )
-        .first()
-      await mfaSubmit.click({ timeout: 15_000 })
-      await page.waitForTimeout(3000)
-      await page.waitForLoadState('domcontentloaded', { timeout: 45_000 }).catch(() => undefined)
+
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        const code = await generateTotpFresh(credential.totpSecret, { minRemainingSeconds: 5 })
+        ctx.log('Submitting Availity TOTP code', { attempt })
+        await typeInto(page, mfaInput, code)
+        const mfaSubmit = page
+          .locator(
+            'button[type="submit"], button:has-text("Verify"), button:has-text("Continue"), button:has-text("Submit")'
+          )
+          .first()
+        await mfaSubmit.click({ timeout: 15_000 })
+        await page.waitForTimeout(3500)
+        await page.waitForLoadState('domcontentloaded', { timeout: 45_000 }).catch(() => undefined)
+
+        const after = ((await page.locator('body').innerText().catch(() => '')) || '').toLowerCase()
+        if (looksLikeLoggedIn(after, page.url())) return null
+        if (!/enter a valid code|invalid code|code is incorrect|authentication failed/.test(after)) {
+          // Left the error state (navigation may still be settling)
+          return null
+        }
+        ctx.log('Availity rejected TOTP code; retrying with next window', { attempt })
+        // Wait for the next TOTP step before regenerating
+        await page.waitForTimeout(6000)
+      }
       return null
     }
 

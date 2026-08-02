@@ -32,3 +32,26 @@ export function generateTotp(secretBase32: string, nowMs = Date.now(), stepSecon
     (hmac[offset + 3] & 0xff)
   return String(code % 1_000_000).padStart(6, '0')
 }
+
+/** Seconds remaining in the current TOTP step. */
+export function totpSecondsRemaining(nowMs = Date.now(), stepSeconds = 30): number {
+  const elapsed = Math.floor(nowMs / 1000) % stepSeconds
+  return stepSeconds - elapsed
+}
+
+/**
+ * Wait until we're safely inside a TOTP window (not the last few seconds),
+ * then return a freshly generated code.
+ */
+export async function generateTotpFresh(
+  secretBase32: string,
+  opts?: { minRemainingSeconds?: number; stepSeconds?: number }
+): Promise<string> {
+  const stepSeconds = opts?.stepSeconds ?? 30
+  const minRemaining = opts?.minRemainingSeconds ?? 4
+  const remaining = totpSecondsRemaining(Date.now(), stepSeconds)
+  if (remaining < minRemaining) {
+    await new Promise((r) => setTimeout(r, (remaining + 1) * 1000))
+  }
+  return generateTotp(secretBase32, Date.now(), stepSeconds)
+}
