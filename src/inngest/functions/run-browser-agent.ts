@@ -13,8 +13,8 @@ export const runBrowserAgent = inngest.createFunction(
     retries: 1,
     concurrency: [
       {
-        // Cap concurrent portal sessions globally
-        limit: 10,
+        // Cap concurrent portal sessions globally (must be <= Inngest plan limit)
+        limit: 5,
       },
       {
         // Cap per practice to reduce portal ban risk
