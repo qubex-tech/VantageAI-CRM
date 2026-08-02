@@ -134,6 +134,8 @@ export async function middleware(req: NextRequest) {
       '/api/integrations/ehr/writeback/retell',
       // Retell custom-function endpoints (auth via signature/fail-open, not session)
       '/api/check-do-not-schedule',
+      // Ops probes (auth via Bearer EHR_BACKEND_API_KEY inside the route)
+      '/api/internal/browser-agent/probe',
     ]
     const isPublicPath = publicPaths.some(path => pathname.startsWith(path))
     
