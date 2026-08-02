@@ -14,6 +14,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useQuery } from '@tanstack/react-query'
 import { apiGet, getApiErrorMessage } from '@/services/apiClient'
 import { createAriaSession } from '@/services/aria'
+import { patientPhone } from '@/services/patients'
 import { colors, spacing, fontSize, fontWeight, radius } from '@/constants/theme'
 import type { AriaStackParamList } from '@/navigation/types'
 import type { PatientSummary } from '@/types'
@@ -76,7 +77,7 @@ export function AriaPatientPickerScreen() {
           <Pressable style={styles.row} onPress={() => void start(item)} disabled={startingId === item.id}>
             <View style={{ flex: 1 }}>
               <Text style={styles.name}>{item.name}</Text>
-              {item.primaryPhone ? <Text style={styles.meta}>{item.primaryPhone}</Text> : null}
+              {patientPhone(item) ? <Text style={styles.meta}>{patientPhone(item)}</Text> : null}
             </View>
             {startingId === item.id ? <ActivityIndicator color={colors.accent} /> : null}
           </Pressable>

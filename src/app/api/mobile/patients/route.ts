@@ -56,15 +56,21 @@ export async function GET(req: NextRequest) {
       take: limit,
     })
 
-    const shaped = patients.map((p) => ({
-      id: p.id,
-      name:
-        (p.firstName && p.lastName
-          ? `${p.firstName} ${p.lastName}`
-          : p.name) || 'Unknown',
-      phone: p.primaryPhone || p.phone || null,
-      email: p.email || null,
-    }))
+    const shaped = patients.map((p) => {
+      const phone = p.primaryPhone || p.phone || null
+      return {
+        id: p.id,
+        name:
+          (p.firstName && p.lastName
+            ? `${p.firstName} ${p.lastName}`
+            : p.name) || 'Unknown',
+        firstName: p.firstName,
+        lastName: p.lastName,
+        phone,
+        primaryPhone: phone,
+        email: p.email || null,
+      }
+    })
 
     return NextResponse.json({ patients: shaped })
   } catch (err: any) {

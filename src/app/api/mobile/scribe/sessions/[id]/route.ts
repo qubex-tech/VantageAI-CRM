@@ -31,6 +31,10 @@ export async function GET(req: NextRequest, context: RouteContext) {
             dateOfBirth: true,
           },
         },
+        chunks: {
+          orderBy: { seq: 'asc' },
+          select: { seq: true, kind: true, transcript: true },
+        },
       },
     })
 
@@ -38,7 +42,19 @@ export async function GET(req: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ session: serializeScribeSession(session) })
+    const serialized = serializeScribeSession(session)
+    const liveFromChunks = session.chunks
+      .map((chunk) => (chunk.transcript || '').trim())
+      .filter(Boolean)
+      .join('\n\n')
+
+    return NextResponse.json({
+      session: {
+        ...serialized,
+        transcript: serialized.transcript || liveFromChunks || null,
+        chunkCount: session.chunks.length,
+      },
+    })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal server error'
     if (message === 'Unauthorized') {

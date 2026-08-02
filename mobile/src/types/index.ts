@@ -27,10 +27,56 @@ export interface AuthState {
 export interface PatientSummary {
   id: string
   name: string
+  firstName?: string | null
+  lastName?: string | null
+  primaryPhone?: string | null
+  phone?: string | null
+  email: string | null
+}
+
+export interface PatientProfile {
+  id: string
+  name: string
   firstName: string | null
   lastName: string | null
-  primaryPhone: string | null
+  preferredName: string | null
+  dateOfBirth: string | null
+  gender: string | null
+  phone: string | null
+  secondaryPhone: string | null
   email: string | null
+  address: string | null
+  insuranceStatus: string | null
+  selfPay: boolean
+  preferredChannel: string | null
+  doNotContact: boolean
+  chartNotes: string | null
+  externalEhrId: string | null
+  tags: Array<{ id: string; name: string }>
+  insurancePolicies: Array<{
+    id: string
+    carrierName: string
+    memberId: string
+    groupNumber: string | null
+    planName: string | null
+    isPrimary: boolean
+    status: string | null
+  }>
+  appointments: Array<{
+    id: string
+    startTime: string
+    endTime: string
+    status: string
+    visitType: string
+    reason: string | null
+    notes: string | null
+  }>
+  notes: Array<{
+    id: string
+    type: string
+    content: string
+    createdAt: string
+  }>
 }
 
 export interface MessageSummary {
@@ -195,6 +241,7 @@ export interface AriaSession {
   startedAt: string
   endedAt: string | null
   transcript: string | null
+  chunkCount?: number
   soap: AriaSoapNote
   patientNoteId: string | null
   ehrDocumentReferenceId: string | null

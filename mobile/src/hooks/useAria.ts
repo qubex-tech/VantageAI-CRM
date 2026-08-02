@@ -46,7 +46,10 @@ export function useAriaSessions() {
   })
 }
 
-export function useAriaSession(sessionId: string | undefined, opts?: { poll?: boolean }) {
+export function useAriaSession(
+  sessionId: string | undefined,
+  opts?: { poll?: boolean; pollMs?: number }
+) {
   return useQuery({
     queryKey: ['aria-session', sessionId],
     queryFn: () => fetchAriaSession(sessionId!),
@@ -54,10 +57,12 @@ export function useAriaSession(sessionId: string | undefined, opts?: { poll?: bo
     refetchInterval: (q) => {
       if (!opts?.poll) return false
       const status = q.state.data?.session.status
-      if (!status) return 3000
+      if (!status) return opts.pollMs ?? 3000
       if (['uploading', 'transcribing', 'generating', 'recording'].includes(status)) {
-        return 2500
+        return opts.pollMs ?? 2500
       }
+      // Keep polling ring listen screens for late-arriving dictation chunks
+      if (opts.pollMs) return opts.pollMs
       return false
     },
   })

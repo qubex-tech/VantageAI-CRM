@@ -5,6 +5,7 @@ import { AriaCaptureScreen } from '@/screens/aria/AriaCaptureScreen'
 import { AriaReviewScreen } from '@/screens/aria/AriaReviewScreen'
 import { AriaSignedScreen } from '@/screens/aria/AriaSignedScreen'
 import { AriaPatientPickerScreen } from '@/screens/aria/AriaPatientPickerScreen'
+import { AriaRingListenScreen } from '@/screens/aria/AriaRingListenScreen'
 import type { AriaStackParamList } from '@/navigation/types'
 import { colors } from '@/constants/theme'
 
@@ -35,6 +36,11 @@ export function AriaNavigator() {
         name="AriaCapture"
         component={AriaCaptureScreen}
         options={{ title: 'Aria', headerBackVisible: false, gestureEnabled: false }}
+      />
+      <Stack.Screen
+        name="AriaRingListen"
+        component={AriaRingListenScreen}
+        options={{ title: 'Index ring' }}
       />
       <Stack.Screen
         name="AriaReview"

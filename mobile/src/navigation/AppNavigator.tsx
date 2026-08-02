@@ -8,6 +8,7 @@ import { View, ActivityIndicator, StyleSheet } from 'react-native'
 import { AuthNavigator } from './AuthNavigator'
 import { InboxNavigator } from './InboxNavigator'
 import { CallsNavigator } from './CallsNavigator'
+import { PatientsNavigator } from './PatientsNavigator'
 import { AriaNavigator } from './AriaNavigator'
 import { NotificationsScreen } from '@/screens/notifications/NotificationsScreen'
 import { ProfileScreen } from '@/screens/profile/ProfileScreen'
@@ -25,6 +26,7 @@ const Tab = createBottomTabNavigator<RootTabParamList>()
 
 const TAB_ICONS: Record<string, [string, string]> = {
   Inbox:         ['chatbubbles',   'chatbubbles-outline'],
+  Patients:      ['people',        'people-outline'],
   Calls:         ['call',          'call-outline'],
   Aria:          ['mic',           'mic-outline'],
   Notifications: ['notifications', 'notifications-outline'],
@@ -61,7 +63,7 @@ function MainTabs() {
             },
           })
         )
-      } else if (data.type === 'slot_fill') {
+      } else if (data.type === 'slot_fill' || data.type === 'automation') {
         navigation.dispatch(CommonActions.navigate({ name: 'Notifications' }))
       } else if (typeof data.conversationId === 'string') {
         navigation.dispatch(
@@ -105,6 +107,7 @@ function MainTabs() {
           tabBarBadgeStyle: { backgroundColor: colors.error, fontSize: 10 },
         }}
       />
+      <Tab.Screen name="Patients" component={PatientsNavigator} options={{ title: 'Patients' }} />
       <Tab.Screen name="Calls" component={CallsNavigator} />
       {ariaEnabled ? (
         <Tab.Screen

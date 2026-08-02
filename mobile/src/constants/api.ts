@@ -27,6 +27,10 @@ export const ENDPOINTS = {
   mobileCallById: (id: string) => `/api/mobile/calls/${id}`,
   mobileCallReview: (id: string) => `/api/mobile/calls/${id}/review`,
 
+  // Patients
+  mobilePatients: '/api/mobile/patients',
+  mobilePatientById: (id: string) => `/api/mobile/patients/${id}`,
+
   // Features / Aria
   mobileFeatures: '/api/mobile/features',
   ariaSchedule: '/api/mobile/scribe/schedule',

@@ -32,12 +32,26 @@ export type AriaStackParamList = {
     patientName: string
     visitType?: string | null
   }
+  AriaRingListen: {
+    sessionId: string
+    patientName: string
+    visitType?: string | null
+  }
   AriaReview: { sessionId: string }
   AriaSigned: { sessionId: string }
 }
 
+export type PatientsStackParamList = {
+  PatientsSearch: undefined
+  PatientDetail: {
+    patientId: string
+    patientName?: string
+  }
+}
+
 export type RootTabParamList = {
   Inbox: NavigatorScreenParams<InboxStackParamList>
+  Patients: NavigatorScreenParams<PatientsStackParamList>
   Calls: NavigatorScreenParams<CallsStackParamList>
   Aria?: NavigatorScreenParams<AriaStackParamList>
   Notifications: undefined
