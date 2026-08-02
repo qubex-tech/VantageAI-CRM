@@ -71,6 +71,98 @@ function looksLikeLoggedIn(text: string, url: string): boolean {
   )
 }
 
+async function completeAvailityMfa(ctx: PlaybookContext): Promise<PlaybookResult | null> {
+  if (!ctx.credential || !ctx.session) return null
+  const { page } = ctx.session
+  const { credential } = ctx
+
+  for (let i = 0; i < 12; i++) {
+    const bodyText = ((await page.locator('body').innerText().catch(() => '')) || '').toLowerCase()
+
+    // Step 1: method chooser — pick Authenticator app
+    if (
+      bodyText.includes('how would you like to authenticate') ||
+      bodyText.includes('authenticate me using my authenticator app')
+    ) {
+      const optionCandidates = [
+        page.getByRole('radio', { name: /authenticator/i }).first(),
+        page.locator('label:has-text("Authenticator app")').first(),
+        page.locator('text=Authenticate me using my Authenticator app').first(),
+        page.locator('input[type="radio"]').first(),
+      ]
+      for (const opt of optionCandidates) {
+        if ((await opt.count()) > 0) {
+          await opt.click({ timeout: 10_000 }).catch(() => undefined)
+          break
+        }
+      }
+      const continueBtn = page
+        .locator('button:has-text("Continue"), button[type="submit"]')
+        .first()
+      if ((await continueBtn.count()) > 0) {
+        await continueBtn.click({ timeout: 10_000 })
+        await page.waitForTimeout(2000)
+        await page.waitForLoadState('domcontentloaded', { timeout: 30_000 }).catch(() => undefined)
+      }
+    }
+
+    // Step 2: enter TOTP
+    const mfaInput = page
+      .locator(
+        'input[name="otp"], input[name="code"], input[name="oneTimeCode"], input[autocomplete="one-time-code"], input[placeholder*="code" i], input[aria-label*="code" i], input[id*="code" i]'
+      )
+      .first()
+    if ((await mfaInput.count()) > 0) {
+      if (!credential.totpSecret) {
+        await markBrowserCredentialLogin(credential.id, {
+          ok: false,
+          error: 'mfa_required_no_totp',
+        })
+        return {
+          ok: false,
+          errorMessage: 'Availity MFA required but no TOTP secret stored',
+          escalateToVoice: true,
+        }
+      }
+      const code = generateTotp(credential.totpSecret)
+      ctx.log('Submitting Availity TOTP code')
+      await typeInto(page, mfaInput, code)
+      const mfaSubmit = page
+        .locator(
+          'button[type="submit"], button:has-text("Verify"), button:has-text("Continue"), button:has-text("Submit")'
+        )
+        .first()
+      await mfaSubmit.click({ timeout: 15_000 })
+      await page.waitForTimeout(3000)
+      await page.waitForLoadState('domcontentloaded', { timeout: 45_000 }).catch(() => undefined)
+      return null
+    }
+
+    // Already past MFA
+    if (looksLikeLoggedIn(bodyText, page.url())) return null
+    if (
+      looksLikeLoginPage(bodyText, page.url()) &&
+      !/2-step|authenticator|verification code|one-time/.test(bodyText)
+    ) {
+      return null // let caller evaluate login failure
+    }
+
+    await page.waitForTimeout(1000)
+  }
+
+  const snippet = (await page.locator('body').innerText().catch(() => '')) || ''
+  if (/2-step|authenticator|how would you like to authenticate/.test(snippet.toLowerCase())) {
+    await markBrowserCredentialLogin(credential.id, { ok: false, error: 'mfa_not_completed' })
+    return {
+      ok: false,
+      errorMessage: 'Availity MFA challenge was not completed',
+      escalateToVoice: true,
+      output: { pageSnippet: snippet.slice(0, 2000), url: page.url() },
+    }
+  }
+  return null
+}
+
 async function loginAvaility(ctx: PlaybookContext): Promise<PlaybookResult | null> {
   if (!ctx.credential || !ctx.session) {
     return { ok: false, errorMessage: 'Missing Availity portal credentials or browser session' }
@@ -165,44 +257,9 @@ async function loginAvaility(ctx: PlaybookContext): Promise<PlaybookResult | nul
     await page.waitForLoadState('domcontentloaded', { timeout: 45_000 }).catch(() => undefined)
     await page.waitForTimeout(2000)
 
-    // MFA / TOTP — poll briefly; Availity often loads the challenge after Sign In
-    for (let i = 0; i < 8; i++) {
-      const mfaInput = page
-        .locator(
-          'input[name="otp"], input[name="code"], input[name="oneTimeCode"], input[autocomplete="one-time-code"], input[placeholder*="code" i], input[aria-label*="code" i]'
-        )
-        .first()
-      if ((await mfaInput.count()) > 0) {
-        if (!credential.totpSecret) {
-          await markBrowserCredentialLogin(credential.id, {
-            ok: false,
-            error: 'mfa_required_no_totp',
-          })
-          return {
-            ok: false,
-            errorMessage: 'Availity MFA required but no TOTP secret stored',
-            escalateToVoice: true,
-          }
-        }
-        const code = generateTotp(credential.totpSecret)
-        await typeInto(page, mfaInput, code)
-        const mfaSubmit = page
-          .locator(
-            'button[type="submit"], button:has-text("Verify"), button:has-text("Continue"), button:has-text("Submit")'
-          )
-          .first()
-        await mfaSubmit.click({ timeout: 15_000 })
-        await page.waitForTimeout(2500)
-        await page.waitForLoadState('domcontentloaded', { timeout: 45_000 }).catch(() => undefined)
-        break
-      }
-      const earlyBody = ((await page.locator('body').innerText().catch(() => '')) || '').toLowerCase()
-      if (!looksLikeLoginPage(earlyBody, page.url()) || /authenticator|verification code|2-step|one-time/.test(earlyBody)) {
-        // keep waiting a bit for MFA UI, else break if clearly past login
-        if (!looksLikeLoginPage(earlyBody, page.url())) break
-      }
-      await page.waitForTimeout(1000)
-    }
+    // MFA chooser → Authenticator app → TOTP code
+    const mfaResult = await completeAvailityMfa(ctx)
+    if (mfaResult) return mfaResult
 
     const bodyText = (await page.locator('body').innerText().catch(() => '')) || ''
     const url = page.url()
@@ -210,8 +267,8 @@ async function loginAvaility(ctx: PlaybookContext): Promise<PlaybookResult | nul
 
     if (
       lower.includes('captcha') ||
-      lower.includes('unusual activity') ||
-      lower.includes('verify you are human')
+      lower.includes('verify you are human') ||
+      (lower.includes('recaptcha') && !/2-step authentication|authenticator app/.test(lower))
     ) {
       await markBrowserCredentialLogin(credential.id, { ok: false, error: 'captcha_or_challenge' })
       return {
@@ -225,6 +282,7 @@ async function loginAvaility(ctx: PlaybookContext): Promise<PlaybookResult | nul
     if (
       lower.includes('enter a valid user id') ||
       lower.includes('enter a valid password') ||
+      lower.includes('combination was not recognized') ||
       lower.includes('invalid user') ||
       lower.includes('invalid password') ||
       lower.includes('authentication failed')

@@ -6,6 +6,7 @@ export interface BrowserPage {
   locator: (selector: string) => BrowserLocator
   getByRole: (role: string, options?: { name?: RegExp | string }) => BrowserLocator
   getByLabel?: (text: string | RegExp, options?: Record<string, unknown>) => BrowserLocator
+  getByText?: (text: string | RegExp, options?: Record<string, unknown>) => BrowserLocator
   frameLocator?: (selector: string) => { locator: (selector: string) => BrowserLocator }
   waitForLoadState: (state?: string, options?: Record<string, unknown>) => Promise<unknown>
   waitForTimeout: (ms: number) => Promise<void>
