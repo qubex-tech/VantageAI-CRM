@@ -86,6 +86,7 @@ export async function middleware(req: NextRequest) {
     // Allow webhooks on portal domain (shared infrastructure)
     if (pathname.startsWith('/api/cal/webhook') || 
         pathname.startsWith('/api/retell/webhook') ||
+        pathname.startsWith('/api/pebble/webhook') ||
         pathname.startsWith('/api/inngest') ||
         pathname.startsWith('/api/webhooks')) {
       return res
@@ -149,6 +150,7 @@ export async function middleware(req: NextRequest) {
     if (isPublicPath || 
         pathname.startsWith('/api/cal/webhook') || 
         pathname.startsWith('/api/retell/webhook') ||
+        pathname.startsWith('/api/pebble/webhook') ||
         pathname.startsWith('/api/inngest') ||
         pathname.startsWith('/api/webhooks')) {
       return res
