@@ -340,7 +340,7 @@ async function clickFirstMatch(
 }
 
 const MEMBER_FIELD_SELECTOR =
-  'input[name="memberId"], input[id*="member" i], input[placeholder*="Member" i], input[aria-label*="Member" i]'
+  'input[name="memberId"], input[id*="member" i], input[placeholder*="Member" i], input[aria-label*="Member" i], input[placeholder*="Patient ID" i], input[aria-label*="Patient ID" i], input[name*="patientId" i]'
 
 async function hasMemberField(ctx: PlaybookContext): Promise<boolean> {
   if (!ctx.session) return false
@@ -478,7 +478,15 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
   }
 
   const filledMember = await fillFirst(
-    ['input[name="memberId"]', 'input[id*="member" i]', 'input[placeholder*="Member" i]'],
+    [
+      'input[name="memberId"]',
+      'input[name*="patientId" i]',
+      'input[id*="member" i]',
+      'input[id*="patientId" i]',
+      'input[placeholder*="Member" i]',
+      'input[placeholder*="Patient ID" i]',
+      'input[aria-label*="Patient ID" i]',
+    ],
     memberId
   )
   await fillFirst(
@@ -531,73 +539,121 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
     }
   }
 
-  ctx.log('Filled eligibility form fields', { filledMember, payerName, memberId: Boolean(memberId) })
+  ctx.log('Filled eligibility form fields', {
+    filledMember,
+    payerName,
+    memberId: Boolean(memberId),
+    dob: Boolean(dobUi),
+    npi: Boolean(npi),
+  })
 
-  const submitSelector =
-    'button:has-text("Submit"), button:has-text("Check Eligibility"), button:has-text("Request Eligibility"), button[type="submit"], input[type="submit"][value*="Submit" i]'
-  const submitAcross = await ctx.session.findLocator?.(submitSelector, 5_000)
-  const submit = submitAcross || page().locator(submitSelector).first()
-  if (submitAcross || (await submit.count()) > 0) {
-    await submit.click({ timeout: 15_000 })
-  } else {
-    const bodyText = (await page().locator('body').innerText().catch(() => '')) || ''
+  // Availity keeps Submit disabled while the eligibility iframe finishes loading / validating.
+  const submitAnySelector =
+    'button:has-text("Submit"), button:has-text("Check Eligibility"), button:has-text("Request Eligibility"), button[type="submit"]'
+
+  const submitBtn = await ctx.session.findLocator?.(submitAnySelector, 20_000)
+  if (submitBtn) {
+    await submitBtn.scrollIntoViewIfNeeded?.().catch(() => undefined)
+  }
+
+  let submitEnabled = false
+  if (submitBtn) {
+    const enableDeadline = Date.now() + 60_000
+    while (Date.now() < enableDeadline) {
+      const enabled = submitBtn.isEnabled ? await submitBtn.isEnabled().catch(() => false) : true
+      if (enabled) {
+        submitEnabled = true
+        break
+      }
+      await page().waitForTimeout(1000)
+    }
+  }
+
+  if (!submitBtn || !submitEnabled) {
+    const bodyText =
+      (await ctx.session.collectTextAcrossFrames?.()) ||
+      (await page().locator('body').innerText().catch(() => '')) ||
+      ''
     if (ctx.session.screenshotDataUrl) {
       artifacts.push(await ctx.session.screenshotDataUrl())
     }
     return {
       ok: false,
-      errorMessage: 'Availity eligibility submit button not found (UI may have changed)',
+      errorMessage: 'Availity eligibility Submit stayed disabled (form incomplete or still loading)',
       escalateToVoice: true,
       artifactUrls: artifacts,
-      output: { pageSnippet: bodyText.slice(0, 2000), url: page().url() },
+      output: { pageSnippet: bodyText.slice(0, 2500), url: page().url(), filledMember },
     }
   }
 
-  await page().waitForTimeout(4000)
-  await page().waitForLoadState('networkidle', { timeout: 60_000 }).catch(() => undefined)
+  await submitBtn.click({ timeout: 15_000 })
+  ctx.log('Clicked Availity eligibility Submit')
+
+  // Wait for results inside the eligibility iframe (parent shell text is just the nav chrome).
+  const resultDeadline = Date.now() + 90_000
+  let bodyText = ''
+  let eligibilityStatus: ParsedEligibilitySummary['eligibilityStatus'] = 'unknown'
+  while (Date.now() < resultDeadline) {
+    await page().waitForTimeout(2000)
+    bodyText =
+      (await ctx.session.collectTextAcrossFrames?.()) ||
+      (await page().locator('body').innerText().catch(() => '')) ||
+      ''
+    const lower = bodyText.toLowerCase()
+
+    if (looksLikeLoginPage(bodyText, page().url())) {
+      if (ctx.session.screenshotDataUrl) {
+        artifacts.push(await ctx.session.screenshotDataUrl())
+      }
+      return {
+        ok: false,
+        errorMessage: 'Session lost — still on Availity Sign In while submitting eligibility',
+        escalateToVoice: true,
+        artifactUrls: artifacts,
+        output: { pageSnippet: bodyText.slice(0, 2500), url: page().url() },
+      }
+    }
+
+    // Prefer explicit result signals — the inquiry form itself contains the word "Benefits".
+    if (
+      /not eligible|inactive|terminated|coverage.*(ended|terminated)|patient is not/i.test(lower)
+    ) {
+      eligibilityStatus = 'inactive'
+      break
+    }
+    if (
+      /coverage status\s*[:\-]?\s*active|\bactive coverage\b|\beligible\b|patient is eligible|status\s*[:\-]?\s*active/i.test(
+        lower
+      )
+    ) {
+      eligibilityStatus = 'active'
+      break
+    }
+    if (/unable to (process|verify|respond)|transaction error|no response from payer/i.test(lower)) {
+      eligibilityStatus = 'error'
+      break
+    }
+    // Results view often replaces the form or shows a results section
+    if (
+      /benefit details|plan coverage|copay|coinsurance|deductible|out of pocket/i.test(lower) &&
+      !/submit another patient/i.test(lower)
+    ) {
+      eligibilityStatus = /inactive|terminated|not eligible/i.test(lower) ? 'inactive' : 'active'
+      break
+    }
+  }
 
   if (ctx.session.screenshotDataUrl) {
     artifacts.push(await ctx.session.screenshotDataUrl())
   }
 
-  const bodyText = (await page().locator('body').innerText().catch(() => '')) || ''
-  const lower = bodyText.toLowerCase()
-
-  if (looksLikeLoginPage(bodyText, page().url())) {
-    return {
-      ok: false,
-      errorMessage: 'Session lost — still on Availity Sign In while submitting eligibility',
-      escalateToVoice: true,
-      artifactUrls: artifacts,
-      output: { pageSnippet: bodyText.slice(0, 2000), url: page().url() },
-    }
-  }
-
-  let eligibilityStatus: ParsedEligibilitySummary['eligibilityStatus'] = 'unknown'
-  if (lower.includes('not eligible') || lower.includes('inactive') || lower.includes('terminated')) {
-    eligibilityStatus = 'inactive'
-  } else if (
-    /\bactive\b/.test(lower) ||
-    lower.includes('eligible') ||
-    lower.includes('benefits')
-  ) {
-    eligibilityStatus = lower.includes('inactive') ? 'inactive' : 'active'
-  } else if (lower.includes('error') || lower.includes('unable to')) {
-    eligibilityStatus = 'error'
-  }
-
-  if (
-    eligibilityStatus === 'unknown' &&
-    !lower.includes('eligibility') &&
-    !lower.includes('benefit') &&
-    !lower.includes('coverage')
-  ) {
+  if (eligibilityStatus === 'unknown') {
     return {
       ok: false,
       errorMessage: 'Could not parse Availity eligibility result page',
       escalateToVoice: true,
       artifactUrls: artifacts,
-      output: { pageSnippet: bodyText.slice(0, 2000), url: page().url() },
+      output: { pageSnippet: bodyText.slice(0, 2500), url: page().url(), filledMember },
     }
   }
 
@@ -616,7 +672,7 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
     output: {
       summary,
       source: 'availity_rpa',
-      pageSnippet: bodyText.slice(0, 2000),
+      pageSnippet: bodyText.slice(0, 2500),
       url: page().url(),
     },
     artifactUrls: artifacts,

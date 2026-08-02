@@ -20,6 +20,8 @@ export interface BrowserLocator {
   fill: (value: string) => Promise<void>
   click: (options?: Record<string, unknown>) => Promise<void>
   innerText: () => Promise<string>
+  isEnabled?: () => Promise<boolean>
+  scrollIntoViewIfNeeded?: () => Promise<void>
 }
 
 export type BrowserAgentRunStatus =
@@ -38,6 +40,8 @@ export interface BrowserSessionHandle {
   focusPageWithSelector?: (selector: string, timeoutMs?: number) => Promise<boolean>
   /** Locate an element across all open tabs and frames (Availity apps are often iframe-hosted). */
   findLocator?: (selector: string, timeoutMs?: number) => Promise<BrowserLocator | null>
+  /** Concatenate visible text from every frame (parent shell text alone is usually useless). */
+  collectTextAcrossFrames?: () => Promise<string>
   close: () => Promise<void>
   screenshotDataUrl?: () => Promise<string>
 }

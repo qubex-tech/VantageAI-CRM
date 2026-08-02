@@ -93,6 +93,20 @@ export async function createBrowserSession(params?: {
       return Boolean(found)
     },
     findLocator: async (selector: string, timeoutMs = 5_000) => findLocatorAcross(selector, timeoutMs),
+    collectTextAcrossFrames: async () => {
+      const chunks: string[] = []
+      for (const p of context.pages()) {
+        for (const frame of p.frames()) {
+          try {
+            const text = await frame.locator('body').innerText({ timeout: 3_000 })
+            if (text?.trim()) chunks.push(text.trim())
+          } catch {
+            // cross-origin / detached
+          }
+        }
+      }
+      return chunks.join('\n---FRAME---\n')
+    },
     screenshotDataUrl: async () => {
       const buf = await activePage.screenshot({ type: 'png', fullPage: false })
       return `data:image/png;base64,${buf.toString('base64')}`
