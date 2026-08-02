@@ -53,20 +53,28 @@ async function typeInto(
 function looksLikeLoginPage(text: string, url: string): boolean {
   const lower = text.toLowerCase()
   const u = url.toLowerCase()
+  // Post-login shells also live under onboarding-ui paths — rely on page copy, not that path alone.
+  if (/logout|log out|sign out|saqib's account|my favorites|payer spaces|patient registration/.test(lower)) {
+    return false
+  }
   return (
-    /sign in|user id|forgot your password|forgot your user id|enter a valid user id|enter a valid password|create a free account/.test(
+    (/sign in|forgot your password|forgot your user id|enter a valid user id|enter a valid password|create a free account|user id \/ password combination was not recognized/.test(
       lower
-    ) || /\/login|signin|authenticate|onboarding-ui|availity-fr-ui/.test(u)
+    ) &&
+      !/logout|log out/.test(lower)) ||
+    /availity-fr-ui\/#\/login|\/#\/login\b/.test(u)
   )
 }
 
 function looksLikeLoggedIn(text: string, url: string): boolean {
   const lower = text.toLowerCase()
   const u = url.toLowerCase()
-  // Marketing copy on the login page mentions "claims" / "eligibility" — do not treat that as success.
   if (looksLikeLoginPage(text, url)) return false
   return (
-    /my top tasks|sign out|log out|payer spaces|welcome back/.test(lower) ||
+    /logout|log out|sign out|my favorites|payer spaces|patient registration|claims & payments|availity essentials navigation/.test(
+      lower
+    ) ||
+    (/onboarding-ui-apps\/navigation/.test(u) && !/login/.test(u)) ||
     (/static\/web\/webui/.test(u) && !/login/.test(u))
   )
 }
