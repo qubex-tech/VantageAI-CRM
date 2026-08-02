@@ -51,11 +51,15 @@ const SKIP_ELIGIBILITY = new Set([
 ])
 
 /** Medicare of Texas NON-PAR fixed copays from LSR manual. */
-export const MEDICARE_TX_NONPAR_COPAYS = {
+export const MEDICARE_TX_NONPAR_COPAYS: {
+  newPatientOvTv: string
+  establishedOv: string
+  establishedTv: string
+} = {
   newPatientOvTv: '226.76',
   establishedOv: '121.80',
   establishedTv: '91.90',
-} as const
+}
 
 export function normalizeAppointmentType(code?: string | null): string {
   return String(code || '')
@@ -126,7 +130,7 @@ export function buildMedicareTxNonParPacket(params: {
 }): RheumEligibilityPacket {
   const televisit = isTelevisitAppointment(params.appointmentType)
   const isNew = params.isNewPatient || normalizeAppointmentType(params.appointmentType).includes('NP')
-  let copay = MEDICARE_TX_NONPAR_COPAYS.establishedOv
+  let copay: string = MEDICARE_TX_NONPAR_COPAYS.establishedOv
   if (isNew) copay = MEDICARE_TX_NONPAR_COPAYS.newPatientOvTv
   else if (televisit) copay = MEDICARE_TX_NONPAR_COPAYS.establishedTv
 
