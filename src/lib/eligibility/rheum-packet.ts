@@ -16,6 +16,8 @@ export type EligibilityPacketSource =
 
 export interface RheumMoneyFields {
   total?: string
+  /** Out-of-pocket maximum (alias used for OOP rows). */
+  max?: string
   met?: string
   remaining?: string
 }
