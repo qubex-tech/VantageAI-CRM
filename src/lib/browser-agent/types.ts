@@ -8,6 +8,7 @@ export interface BrowserPage {
   waitForLoadState: (state?: string, options?: Record<string, unknown>) => Promise<unknown>
   waitForTimeout: (ms: number) => Promise<void>
   screenshot: (options?: Record<string, unknown>) => Promise<Buffer>
+  keyboard?: { type: (text: string, options?: { delay?: number }) => Promise<void> }
 }
 
 export interface BrowserLocator {
