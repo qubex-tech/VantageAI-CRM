@@ -39,26 +39,15 @@ async function findVisibleInput(
   return null
 }
 
-/** React-controlled inputs often ignore fill(); click + clear + type is more reliable. */
+/** Click, clear, then fill once — never append a second keyboard pass. */
 async function typeInto(
-  page: NonNullable<PlaybookContext['session']>['page'],
+  _page: NonNullable<PlaybookContext['session']>['page'],
   el: BrowserLocator,
   value: string
 ) {
-  await el.click({ timeout: 10_000 }).catch(async () => {
-    await el.fill('')
-  })
-  // Clear existing value via fill then re-type
+  await el.click({ timeout: 10_000 }).catch(() => undefined)
   await el.fill('')
   await el.fill(value)
-  // Some Availity fields need key events; best-effort second pass via keyboard if supported
-  const anyPage = page as unknown as {
-    keyboard?: { type: (text: string, opts?: { delay?: number }) => Promise<void> }
-  }
-  if (anyPage.keyboard?.type) {
-    await el.click().catch(() => undefined)
-    await anyPage.keyboard.type(value, { delay: 20 }).catch(() => undefined)
-  }
 }
 
 function looksLikeLoginPage(text: string, url: string): boolean {
