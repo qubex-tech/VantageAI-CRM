@@ -63,21 +63,22 @@ async function typeInto(
 
 function looksLikeLoginPage(text: string, url: string): boolean {
   const lower = text.toLowerCase()
+  const u = url.toLowerCase()
   return (
-    /sign in|user id|forgot your password|create a free account/.test(lower) ||
-    /login|signin|authenticate/.test(url.toLowerCase())
+    /sign in|user id|forgot your password|forgot your user id|enter a valid user id|enter a valid password|create a free account/.test(
+      lower
+    ) || /\/login|signin|authenticate|onboarding-ui|availity-fr-ui/.test(u)
   )
 }
 
 function looksLikeLoggedIn(text: string, url: string): boolean {
   const lower = text.toLowerCase()
   const u = url.toLowerCase()
-  if (looksLikeLoginPage(text, url) && !/eligibility|dashboard|essentials/.test(lower)) {
-    return false
-  }
+  // Marketing copy on the login page mentions "claims" / "eligibility" — do not treat that as success.
+  if (looksLikeLoginPage(text, url)) return false
   return (
-    /eligibility|my top tasks|sign out|log out|essentials|payer spaces|claims/.test(lower) ||
-    (/essentials\.availity\.com/.test(u) && !/login|signin/.test(u) && !looksLikeLoginPage(text, url))
+    /my top tasks|sign out|log out|payer spaces|welcome back/.test(lower) ||
+    (/static\/web\/webui/.test(u) && !/login/.test(u))
   )
 }
 
@@ -94,17 +95,58 @@ async function loginAvaility(ctx: PlaybookContext): Promise<PlaybookResult | nul
     await page.waitForTimeout(2500)
     await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => undefined)
 
-    const userEl = await findVisibleInput(page, [
-      'input[name="userId"]',
-      'input#userId',
-      'input[name="username"]',
-      'input[autocomplete="username"]',
-      'input[id*="user" i]',
-      'input[placeholder*="User ID" i]',
-      'input[placeholder*="Username" i]',
-      'input[type="email"]',
-      'input[type="text"]',
-    ])
+    // Prefer label-based selectors; Availity onboarding UI may also mount inside iframes.
+    let userEl =
+      (page.getByLabel
+        ? page.getByLabel(/user id|username/i).first()
+        : null)
+    if (userEl && (await userEl.count()) === 0) userEl = null
+
+    let passEl =
+      (page.getByLabel ? page.getByLabel(/^password$/i).first() : null)
+    if (passEl && (await passEl.count()) === 0) passEl = null
+
+    if (!userEl) {
+      userEl = await findVisibleInput(page, [
+        'input[name="userId"]',
+        'input#userId',
+        'input[name="username"]',
+        'input[autocomplete="username"]',
+        'input[id*="user" i]',
+        'input[placeholder*="User ID" i]',
+        'input[placeholder*="Username" i]',
+        'input[type="email"]',
+      ])
+    }
+
+    if (!passEl) {
+      passEl = await findVisibleInput(page, [
+        'input[name="password"]',
+        'input#password',
+        'input[autocomplete="current-password"]',
+        'input[type="password"]',
+      ])
+    }
+
+    // Iframe fallback (Availity FR / onboarding shell)
+    if ((!userEl || !passEl) && page.frameLocator) {
+      for (const frameSel of ['iframe', 'iframe[src*="availity"]', 'iframe[src*="onb"]']) {
+        const frame = page.frameLocator(frameSel)
+        const frameUser = frame.locator(
+          'input[name="userId"], input#userId, input[autocomplete="username"], input[placeholder*="User ID" i]'
+        ).first()
+        const framePass = frame.locator(
+          'input[name="password"], input#password, input[type="password"]'
+        ).first()
+        if ((await frameUser.count()) > 0 && (await framePass.count()) > 0) {
+          userEl = frameUser
+          passEl = framePass
+          ctx.log('Using Availity login iframe', { frameSel })
+          break
+        }
+      }
+    }
+
     if (!userEl) {
       return {
         ok: false,
@@ -112,13 +154,6 @@ async function loginAvaility(ctx: PlaybookContext): Promise<PlaybookResult | nul
         escalateToVoice: true,
       }
     }
-
-    const passEl = await findVisibleInput(page, [
-      'input[name="password"]',
-      'input#password',
-      'input[autocomplete="current-password"]',
-      'input[type="password"]',
-    ])
     if (!passEl) {
       return {
         ok: false,
