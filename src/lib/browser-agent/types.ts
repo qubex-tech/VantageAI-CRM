@@ -20,6 +20,8 @@ export interface BrowserLocator {
   fill: (value: string) => Promise<void>
   click: (options?: Record<string, unknown>) => Promise<void>
   innerText: () => Promise<string>
+  inputValue?: () => Promise<string>
+  filter?: (options: { hasText?: RegExp | string }) => BrowserLocator
   isEnabled?: () => Promise<boolean>
   scrollIntoViewIfNeeded?: () => Promise<void>
 }

@@ -93,9 +93,15 @@ export async function runAvailityRpaEligibility(
     return { started: false, reason: 'patient_not_found' }
   }
 
-  const integration = await prisma.availityIntegration.findUnique({
-    where: { practiceId: input.practiceId },
-  })
+  const [integration, practice] = await Promise.all([
+    prisma.availityIntegration.findUnique({
+      where: { practiceId: input.practiceId },
+    }),
+    prisma.practice.findUnique({
+      where: { id: input.practiceId },
+      select: { name: true },
+    }),
+  ])
 
   let checkId = input.eligibilityCheckId
   if (checkId) {
@@ -120,22 +126,26 @@ export async function runAvailityRpaEligibility(
           payerName: policy.payerNameRaw,
           payerId: policy.availityPayerId,
           providerNpi: integration?.defaultProviderNpi,
+          organizationName: practice?.name,
         },
       },
     })
     checkId = check.id
   }
 
+  // All patient/payer/practice values come from CRM records — playbook must not hardcode them.
   const playbookInput = {
     memberId: policy.memberId,
     groupNumber: policy.groupNumber || '',
-    payerName: policy.payerNameRaw,
+    payerName: policy.payerNameRaw || '',
     payerId: policy.availityPayerId || '',
     patientFirstName: patient.firstName || patient.name.split(/\s+/)[0] || '',
     patientLastName:
       patient.lastName || patient.name.split(/\s+/).slice(1).join(' ') || '',
     patientDob: formatDob(patient.dateOfBirth),
     providerNpi: integration?.defaultProviderNpi || '',
+    providerTaxId: integration?.defaultProviderTaxId || '',
+    organizationName: practice?.name || '',
     serviceType: integration?.defaultServiceType || '30',
     appointmentType: input.appointmentType || '',
   }

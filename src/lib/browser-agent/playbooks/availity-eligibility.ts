@@ -12,6 +12,183 @@ function asString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+const PAYER_STOP_WORDS = new Set([
+  'the',
+  'and',
+  'of',
+  'for',
+  'inc',
+  'llc',
+  'ltd',
+  'corp',
+  'corporation',
+  'company',
+  'insurance',
+  'ins',
+  'plan',
+  'health',
+  'care',
+  'medical',
+  'healthcare',
+  'group',
+  'services',
+  'service',
+  'associates',
+])
+
+function uniqueStrings(values: string[]): string[] {
+  const seen = new Set<string>()
+  return values
+    .map((t) => t.trim())
+    .filter((t) => {
+      if (!t) return false
+      const key = t.toLowerCase()
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+}
+
+/** Significant word tokens from any payer label (practice-agnostic). */
+export function payerWordTokens(payerName: string): string[] {
+  return payerName
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length >= 3 && !PAYER_STOP_WORDS.has(w))
+}
+
+/**
+ * Build Availity payer typeahead queries from whatever CRM payer label we have.
+ * All variants are derived from the input — no practice/payer hardcoding.
+ */
+export function payerSearchTerms(payerName: string, payerId?: string): string[] {
+  const raw = payerName.trim()
+  const terms: string[] = []
+  if (raw) {
+    terms.push(raw)
+    const collapsed = raw.replace(/\s+/g, ' ')
+    if (collapsed !== raw) terms.push(collapsed)
+
+    const words = collapsed.split(/\s+/).filter(Boolean)
+    if (words.length >= 2) {
+      // "Foo Health spring" → "Foo Healthspring" and "Healthspring"
+      terms.push([...words.slice(0, -2), words.slice(-2).join('')].join(' ').trim())
+      terms.push(words.slice(-2).join(''))
+      // Primary brand / first word often works in Availity typeahead
+      terms.push(words[0])
+      if (words.length >= 3) {
+        terms.push(words.slice(0, 2).join(' '))
+      }
+    }
+  }
+
+  const id = (payerId || '').trim()
+  if (id) terms.push(id)
+
+  return uniqueStrings(terms)
+}
+
+/**
+ * Distinctive tokens that should appear in the selected Availity payer option.
+ * Derived from the CRM payer name so any practice/payer works.
+ */
+export function expectedPayerTokens(payerName: string): string[] {
+  const words = payerWordTokens(payerName)
+  if (!words.length) {
+    const fallback = payerName.trim().split(/\s+/)[0]
+    return fallback && fallback.length >= 3 ? [fallback.toLowerCase()] : []
+  }
+
+  const compounds: string[] = []
+  const rawWords = payerName
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+  for (let i = 0; i < rawWords.length - 1; i++) {
+    compounds.push(`${rawWords[i]}${rawWords[i + 1]}`)
+  }
+
+  // Prefer longer compound (e.g. healthspring) then distinctive words (e.g. cigna, spring).
+  const ranked = uniqueStrings([...compounds.filter((c) => c.length >= 6), ...words]).sort(
+    (a, b) => b.length - a.length
+  )
+  return ranked.slice(0, 3)
+}
+
+/** Whether an Availity option/label matches the expected payer (dynamic token check). */
+export function payerLabelMatches(label: string, payerName: string): boolean {
+  const compact = label.toLowerCase().replace(/[^a-z0-9]/g, '')
+  if (!compact) return false
+  const tokens = expectedPayerTokens(payerName).map((t) => t.replace(/[^a-z0-9]/g, ''))
+  if (!tokens.length) return false
+
+  const strong = tokens.filter((t) => t.length >= 6)
+  if (strong.some((t) => compact.includes(t))) return true
+
+  // Require all shorter distinctive tokens (brand + key word) so we don't accept a sticky wrong payer.
+  const weak = tokens.filter((t) => t.length < 6)
+  if (weak.length >= 1 && weak.every((t) => compact.includes(t))) return true
+
+  // Single-token payer names (e.g. "Aetna")
+  if (tokens.length === 1 && compact.includes(tokens[0])) return true
+
+  return false
+}
+
+/**
+ * Interpret Availity Eligibility & Benefits result text.
+ * Prefer explicit AAA/rejection copy over benefit heuristics — results pages often
+ * still include the inquiry form ("Submit another patient", "Benefits", etc.).
+ */
+export function interpretAvailityEligibilityText(bodyText: string): {
+  eligibilityStatus: ParsedEligibilitySummary['eligibilityStatus']
+  message?: string
+} {
+  const text = bodyText || ''
+  const lower = text.toLowerCase()
+
+  const rejection =
+    text.match(
+      /Invalid\/Missing[^\n.]{0,120}|Please Correct and Resubmit|Subscriber\/Insured ID[^\n.]{0,80}|Member (?:ID )?not found[^\n.]{0,80}|Patient not found[^\n.]{0,80}|No [Ee]ligibility[^\n.]{0,80}|Unable to (?:process|verify|respond)[^\n.]{0,80}|Transaction error[^\n.]{0,80}|Payer (?:does not|not) support[^\n.]{0,80}/
+    )?.[0] ||
+    (/invalid\/missing|please correct and resubmit|subscriber\/insured id|member (?:id )?not found|patient not found|no eligibility (?:data|information)|unable to (?:process|verify|respond)|transaction error/i.test(
+      lower
+    )
+      ? 'Availity rejected the eligibility inquiry'
+      : null)
+
+  if (rejection) {
+    return { eligibilityStatus: 'error', message: rejection.trim() }
+  }
+
+  if (
+    /not eligible|inactive|terminated|coverage.*(ended|terminated)|patient is not/i.test(lower)
+  ) {
+    return { eligibilityStatus: 'inactive' }
+  }
+
+  if (
+    /coverage status\s*[:\-]?\s*active|\bactive coverage\b|\beligible\b|patient is eligible|status\s*[:\-]?\s*active|\bactive\b/i.test(
+      lower
+    ) &&
+    /coverage|eligib|benefit|plan/i.test(lower)
+  ) {
+    return { eligibilityStatus: 'active' }
+  }
+
+  // Results view with benefit amounts (do not exclude "Submit another patient" —
+  // Availity keeps that CTA on the results screen).
+  if (/benefit details|plan coverage|copay|coinsurance|deductible|out of pocket/i.test(lower)) {
+    return {
+      eligibilityStatus: /inactive|terminated|not eligible/i.test(lower) ? 'inactive' : 'active',
+    }
+  }
+
+  return { eligibilityStatus: 'unknown' }
+}
+
 function mockSummary(ctx: PlaybookContext): ParsedEligibilitySummary {
   const payerName = asString(ctx.input.payerName) || 'Mock Payer'
   const formMode = formModeForAppointmentType(asString(ctx.input.appointmentType) || undefined)
@@ -76,8 +253,12 @@ async function typeInto(
 function looksLikeLoginPage(text: string, url: string): boolean {
   const lower = text.toLowerCase()
   const u = url.toLowerCase()
-  // Post-login shells also live under onboarding-ui paths — rely on page copy, not that path alone.
-  if (/logout|log out|sign out|saqib's account|my favorites|payer spaces|patient registration/.test(lower)) {
+  // Post-login shells also live under onboarding-ui paths — rely on page copy, not account names.
+  if (
+    /logout|log out|sign out|my favorites|payer spaces|patient registration|claims & payments|'s account/.test(
+      lower
+    )
+  ) {
     return false
   }
   return (
@@ -375,6 +556,169 @@ async function clickFirstMatch(
   return false
 }
 
+async function findInputBySelectors(
+  ctx: PlaybookContext,
+  selectors: string[]
+): Promise<BrowserLocator | null> {
+  if (!ctx.session) return null
+  const page = ctx.session.page
+  for (const sel of selectors) {
+    const across = await ctx.session.findLocator?.(sel, 2_000)
+    if (across) return across
+    const el = page.locator(sel).first()
+    if ((await el.count()) > 0) return el
+  }
+  return null
+}
+
+async function selectTypeaheadOption(
+  ctx: PlaybookContext,
+  params: {
+    fieldSelectors: string[]
+    searchTerms: string[]
+    matches: (label: string) => boolean
+    fieldLabel: string
+  }
+): Promise<{ ok: boolean; selectedLabel?: string; errorMessage?: string }> {
+  if (!ctx.session) return { ok: false, errorMessage: 'No browser session' }
+  const page = () => ctx.session!.page
+
+  const readSelected = async (): Promise<string> => {
+    const input = await findInputBySelectors(ctx, params.fieldSelectors)
+    if (!input) return ''
+    const value = (await input.inputValue?.().catch(() => '')) || ''
+    if (value.trim()) return value.trim()
+    return ((await input.innerText?.().catch(() => '')) || '').trim()
+  }
+
+  for (const term of params.searchTerms) {
+    if (!term) continue
+    const input = await findInputBySelectors(ctx, params.fieldSelectors)
+    if (!input) break
+
+    await input.click({ timeout: 10_000 }).catch(() => undefined)
+    await input.fill('').catch(() => undefined)
+    await input.fill(term)
+    await page().waitForTimeout(1200)
+
+    const optionRegex = new RegExp(
+      term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*'),
+      'i'
+    )
+    const optionCandidates: BrowserLocator[] = [
+      page().getByRole('option', { name: optionRegex }).first(),
+    ]
+    const roleOptions = page().locator('[role="option"]')
+    if (roleOptions.filter) {
+      optionCandidates.push(roleOptions.filter({ hasText: optionRegex }).first())
+    }
+    const cssOptions = page().locator(
+      '.dropdown-item, li[role="option"], .av-select__option, [class*="option"]'
+    )
+    if (cssOptions.filter) {
+      optionCandidates.push(cssOptions.filter({ hasText: optionRegex }).first())
+    }
+
+    let clicked = false
+    for (const opt of optionCandidates) {
+      if ((await opt.count()) > 0) {
+        const optText = ((await opt.innerText().catch(() => '')) || '').trim()
+        // Never click an unrelated first hit — require dynamic match when we can read the label.
+        if (optText && !params.matches(optText)) continue
+        await opt.click({ timeout: 10_000 }).catch(() => undefined)
+        clicked = true
+        break
+      }
+    }
+
+    if (!clicked) continue
+    await page().waitForTimeout(800)
+    const selected = await readSelected()
+    if (selected && params.matches(selected)) {
+      ctx.log(`Selected Availity ${params.fieldLabel}`, { term, selected })
+      return { ok: true, selectedLabel: selected }
+    }
+    if (!selected && clicked) {
+      // Some selects don't mirror the label into the input value.
+      return { ok: true, selectedLabel: term }
+    }
+  }
+
+  const leftover = await readSelected()
+  return {
+    ok: false,
+    errorMessage: leftover
+      ? `Availity ${params.fieldLabel} still set to "${leftover}"`
+      : `Could not find Availity ${params.fieldLabel} matching search terms`,
+    selectedLabel: leftover || undefined,
+  }
+}
+
+/** Select payer from dynamic CRM payerName / payerId — never assumes a specific payer. */
+async function selectAvailityPayer(
+  ctx: PlaybookContext,
+  payerName: string,
+  payerId?: string
+): Promise<{ ok: boolean; selectedLabel?: string; errorMessage?: string }> {
+  const result = await selectTypeaheadOption(ctx, {
+    fieldLabel: 'payer',
+    fieldSelectors: [
+      'input[name="payer"]',
+      'input[id*="payer" i]',
+      'input[placeholder*="Payer" i]',
+      'input[aria-label*="Payer" i]',
+      '[data-testid*="payer" i] input',
+    ],
+    searchTerms: payerSearchTerms(payerName, payerId),
+    matches: (label) => payerLabelMatches(label, payerName),
+  })
+  if (!result.ok && payerName) {
+    return {
+      ...result,
+      errorMessage: result.selectedLabel
+        ? `Availity payer still set to "${result.selectedLabel}" (wanted "${payerName}")`
+        : `Could not find Availity payer matching "${payerName}"`,
+    }
+  }
+  return result
+}
+
+/** Select organization when the Availity user has multiple orgs (practice name from CRM). */
+async function selectAvailityOrganization(
+  ctx: PlaybookContext,
+  organizationName: string
+): Promise<{ ok: boolean; selectedLabel?: string; errorMessage?: string }> {
+  if (!organizationName.trim()) return { ok: true }
+  const tokens = organizationName
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length >= 3 && !PAYER_STOP_WORDS.has(w))
+  const terms = uniqueStrings([
+    organizationName.trim(),
+    organizationName.trim().split(/\s+/).slice(0, 3).join(' '),
+    tokens[0] || '',
+  ])
+
+  return selectTypeaheadOption(ctx, {
+    fieldLabel: 'organization',
+    fieldSelectors: [
+      'input[name="organization"]',
+      'input[id*="organization" i]',
+      'input[placeholder*="Organization" i]',
+      'input[aria-label*="Organization" i]',
+      '[data-testid*="organization" i] input',
+    ],
+    searchTerms: terms,
+    matches: (label) => {
+      const compact = label.toLowerCase().replace(/[^a-z0-9]/g, '')
+      if (!tokens.length) return compact.includes(organizationName.toLowerCase().replace(/[^a-z0-9]/g, ''))
+      // Any distinctive org token is enough (practices vary widely).
+      return tokens.some((t) => compact.includes(t.replace(/[^a-z0-9]/g, '')))
+    },
+  })
+}
+
 const MEMBER_FIELD_SELECTOR =
   'input[name="memberId"], input[id*="member" i], input[placeholder*="Member" i], input[aria-label*="Member" i], input[placeholder*="Patient ID" i], input[aria-label*="Patient ID" i], input[name*="patientId" i]'
 
@@ -479,10 +823,14 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
 
   const memberId = asString(ctx.input.memberId)
   const payerName = asString(ctx.input.payerName)
+  const payerId = asString(ctx.input.payerId)
   const firstName = asString(ctx.input.patientFirstName)
   const lastName = asString(ctx.input.patientLastName)
   const dob = asString(ctx.input.patientDob)
   const npi = asString(ctx.input.providerNpi)
+  const providerTaxId = asString(ctx.input.providerTaxId)
+  const organizationName = asString(ctx.input.organizationName)
+  const serviceType = asString(ctx.input.serviceType) || '30'
 
   const fillFirst = async (selectors: string[], value: string) => {
     if (!value) return false
@@ -513,6 +861,22 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
     return false
   }
 
+  // DOB often MM/DD/YYYY in Availity UI
+  const dobUi = dob
+    ? (() => {
+        const [y, m, d] = dob.split('-')
+        return m && d && y ? `${m}/${d}/${y}` : dob
+      })()
+    : ''
+
+  // Clear sticky prior inquiry (Availity often leaves the last payer/org selected).
+  await clickFirstMatch(page(), [
+    page().getByRole('button', { name: /new request/i }).first(),
+    page().locator('button:has-text("New Request")').first(),
+    page().locator('a:has-text("New Request")').first(),
+  ])
+  await page().waitForTimeout(1000)
+
   const filledMember = await fillFirst(
     [
       'input[name="memberId"]',
@@ -533,11 +897,6 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
     ['input[name="patientLastName"]', 'input[id*="lastName" i]', 'input[placeholder*="Last" i]'],
     lastName
   )
-  // DOB often MM/DD/YYYY in Availity UI
-  const dobUi = dob ? (() => {
-    const [y, m, d] = dob.split('-')
-    return m && d && y ? `${m}/${d}/${y}` : dob
-  })() : ''
   await fillFirst(
     [
       'input[name="patientBirthDate"]',
@@ -550,37 +909,85 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
     ],
     dobUi
   )
-  await fillFirst(
+  const filledNpi = await fillFirst(
     ['input[name="providerNpi"]', 'input[id*="npi" i]', 'input[placeholder*="NPI" i]'],
     npi
   )
+  const filledTaxId = await fillFirst(
+    [
+      'input[name="providerTaxId"]',
+      'input[id*="tax" i]',
+      'input[placeholder*="Tax ID" i]',
+      'input[aria-label*="Tax ID" i]',
+    ],
+    providerTaxId
+  )
 
-  if (payerName) {
-    const payerFilled = await fillFirst(
-      [
-        'input[name="payer"]',
-        'input[id*="payer" i]',
-        'input[placeholder*="Payer" i]',
-        'input[aria-label*="Payer" i]',
-      ],
-      payerName
-    )
-    if (payerFilled) {
-      await page().waitForTimeout(1000)
-      await clickFirstMatch(page(), [
-        page().getByRole('option', { name: new RegExp(payerName.slice(0, 12), 'i') }).first(),
-        page().locator('[role="option"]').first(),
-        page().locator('.dropdown-item, li[role="option"], .av-select__option').first(),
-      ])
+  if (organizationName) {
+    const orgSelected = await selectAvailityOrganization(ctx, organizationName)
+    if (!orgSelected.ok) {
+      ctx.log('Organization select soft-failed; continuing if Availity has a default', {
+        organizationName,
+        error: orgSelected.errorMessage,
+      })
     }
+  }
+
+  let selectedPayerLabel = ''
+  if (payerName || payerId) {
+    const payerSelected = await selectAvailityPayer(ctx, payerName || payerId, payerId || undefined)
+    if (!payerSelected.ok) {
+      if (ctx.session.screenshotDataUrl) {
+        artifacts.push(await ctx.session.screenshotDataUrl())
+      }
+      return {
+        ok: false,
+        errorMessage:
+          payerSelected.errorMessage ||
+          `Could not select Availity payer for "${payerName || payerId}"`,
+        escalateToVoice: true,
+        artifactUrls: artifacts,
+        output: {
+          pageSnippet: ((await ctx.session.collectTextAcrossFrames?.()) || '').slice(0, 2500),
+          url: page().url(),
+          filledMember,
+          filledNpi,
+          filledTaxId,
+          payerName,
+          payerId,
+          organizationName,
+        },
+      }
+    }
+    selectedPayerLabel = payerSelected.selectedLabel || ''
+  }
+
+  // Benefit / service type when provided (defaults to 30 — Health Benefit Plan Coverage).
+  if (serviceType && serviceType !== '30') {
+    await fillFirst(
+      [
+        'input[name="serviceType"]',
+        'input[id*="serviceType" i]',
+        'input[placeholder*="Service Type" i]',
+        'input[aria-label*="Benefit / Service Type" i]',
+      ],
+      serviceType
+    )
   }
 
   ctx.log('Filled eligibility form fields', {
     filledMember,
+    filledNpi,
+    filledTaxId,
     payerName,
+    payerId,
+    selectedPayerLabel,
+    organizationName,
     memberId: Boolean(memberId),
+    patientName: [firstName, lastName].filter(Boolean).join(' '),
     dob: Boolean(dobUi),
     npi: Boolean(npi),
+    serviceType,
   })
 
   // Availity keeps Submit disabled while the eligibility iframe finishes loading / validating.
@@ -629,13 +1036,13 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
   const resultDeadline = Date.now() + 90_000
   let bodyText = ''
   let eligibilityStatus: ParsedEligibilitySummary['eligibilityStatus'] = 'unknown'
+  let resultMessage: string | undefined
   while (Date.now() < resultDeadline) {
     await page().waitForTimeout(2000)
     bodyText =
       (await ctx.session.collectTextAcrossFrames?.()) ||
       (await page().locator('body').innerText().catch(() => '')) ||
       ''
-    const lower = bodyText.toLowerCase()
 
     if (looksLikeLoginPage(bodyText, page().url())) {
       if (ctx.session.screenshotDataUrl) {
@@ -650,31 +1057,10 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
       }
     }
 
-    // Prefer explicit result signals — the inquiry form itself contains the word "Benefits".
-    if (
-      /not eligible|inactive|terminated|coverage.*(ended|terminated)|patient is not/i.test(lower)
-    ) {
-      eligibilityStatus = 'inactive'
-      break
-    }
-    if (
-      /coverage status\s*[:\-]?\s*active|\bactive coverage\b|\beligible\b|patient is eligible|status\s*[:\-]?\s*active/i.test(
-        lower
-      )
-    ) {
-      eligibilityStatus = 'active'
-      break
-    }
-    if (/unable to (process|verify|respond)|transaction error|no response from payer/i.test(lower)) {
-      eligibilityStatus = 'error'
-      break
-    }
-    // Results view often replaces the form or shows a results section
-    if (
-      /benefit details|plan coverage|copay|coinsurance|deductible|out of pocket/i.test(lower) &&
-      !/submit another patient/i.test(lower)
-    ) {
-      eligibilityStatus = /inactive|terminated|not eligible/i.test(lower) ? 'inactive' : 'active'
+    const interpreted = interpretAvailityEligibilityText(bodyText)
+    if (interpreted.eligibilityStatus !== 'unknown') {
+      eligibilityStatus = interpreted.eligibilityStatus
+      resultMessage = interpreted.message
       break
     }
   }
@@ -689,7 +1075,37 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
       errorMessage: 'Could not parse Availity eligibility result page',
       escalateToVoice: true,
       artifactUrls: artifacts,
-      output: { pageSnippet: bodyText.slice(0, 2500), url: page().url(), filledMember },
+      output: {
+        pageSnippet: bodyText.slice(0, 2500),
+        url: page().url(),
+        filledMember,
+        filledNpi,
+        selectedPayerLabel,
+      },
+    }
+  }
+
+  if (eligibilityStatus === 'error') {
+    return {
+      ok: false,
+      errorMessage: resultMessage || 'Availity returned an eligibility error',
+      escalateToVoice: true,
+      artifactUrls: artifacts,
+      output: {
+        summary: {
+          eligibilityStatus: 'error',
+          payerName: selectedPayerLabel || payerName || undefined,
+          payerId: asString(ctx.input.payerId) || undefined,
+          validationMessages: resultMessage ? [resultMessage] : [],
+          benefits: [],
+          rawPlanCount: 0,
+        } satisfies ParsedEligibilitySummary,
+        pageSnippet: bodyText.slice(0, 2500),
+        url: page().url(),
+        filledMember,
+        filledNpi,
+        selectedPayerLabel,
+      },
     }
   }
 
@@ -699,7 +1115,7 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
 
   const summary: ParsedEligibilitySummary = {
     eligibilityStatus,
-    payerName: payerName || undefined,
+    payerName: selectedPayerLabel || payerName || undefined,
     payerId: asString(ctx.input.payerId) || undefined,
     groupNumber: asString(ctx.input.groupNumber) || undefined,
     planType: rheum.planType,
@@ -716,6 +1132,7 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
       source: 'availity_rpa',
       pageSnippet: bodyText.slice(0, 2500),
       url: page().url(),
+      selectedPayerLabel,
     },
     artifactUrls: artifacts,
   }
