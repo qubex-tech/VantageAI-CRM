@@ -34,7 +34,65 @@ const PAYER_STOP_WORDS = new Set([
   'services',
   'service',
   'associates',
+  'all',
+  'states',
 ])
+
+/** US state / territory tokens used to keep geo-specific payers from matching generic brands. */
+const GEO_REGION_TOKENS = new Set([
+  'alabama',
+  'alaska',
+  'arizona',
+  'arkansas',
+  'california',
+  'colorado',
+  'connecticut',
+  'delaware',
+  'florida',
+  'georgia',
+  'hawaii',
+  'idaho',
+  'illinois',
+  'indiana',
+  'iowa',
+  'kansas',
+  'kentucky',
+  'louisiana',
+  'maine',
+  'maryland',
+  'massachusetts',
+  'michigan',
+  'minnesota',
+  'mississippi',
+  'missouri',
+  'montana',
+  'nebraska',
+  'nevada',
+  'hampshire',
+  'jersey',
+  'mexico',
+  'york',
+  'carolina',
+  'dakota',
+  'ohio',
+  'oklahoma',
+  'oregon',
+  'pennsylvania',
+  'rhode',
+  'tennessee',
+  'texas',
+  'utah',
+  'vermont',
+  'virginia',
+  'washington',
+  'wisconsin',
+  'wyoming',
+  'district',
+  'columbia',
+])
+
+/** Trailing CRM noise that rarely appears in Availity dropdown labels. */
+const PAYER_TRAILING_NOISE = /\bof\s+all\s+states\b/gi
 
 function uniqueStrings(values: string[]): string[] {
   const seen = new Set<string>()
@@ -49,9 +107,38 @@ function uniqueStrings(values: string[]): string[] {
     })
 }
 
+function compactPayerText(value: string): string {
+  return normalizePayerText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+}
+
+/**
+ * Normalize payer labels for matching/search.
+ * Collapses spacing and "health care" → "healthcare" (Availity's common spelling).
+ */
+export function normalizePayerText(value: string): string {
+  return value
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/\bhealth\s+care\b/gi, 'Healthcare')
+    .replace(PAYER_TRAILING_NOISE, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** Geo/region tokens present in a CRM payer name (e.g. texas). */
+export function payerGeoTokens(payerName: string): string[] {
+  return normalizePayerText(payerName)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => GEO_REGION_TOKENS.has(w))
+}
+
 /** Significant word tokens from any payer label (practice-agnostic). */
 export function payerWordTokens(payerName: string): string[] {
-  return payerName
+  return normalizePayerText(payerName)
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
@@ -64,27 +151,28 @@ export function payerWordTokens(payerName: string): string[] {
  */
 export function payerSearchTerms(payerName: string, payerId?: string): string[] {
   const raw = payerName.trim()
+  const normalized = normalizePayerText(raw)
   const terms: string[] = []
-  if (raw) {
-    terms.push(raw)
-    const collapsed = raw.replace(/\s+/g, ' ')
-    if (collapsed !== raw) terms.push(collapsed)
+  const id = (payerId || '').trim()
+  // Prefer Availity payer id / canonical spelling first when available.
+  if (id) terms.push(id)
+  if (normalized) terms.push(normalized)
+  if (raw && raw.toLowerCase() !== normalized.toLowerCase()) terms.push(raw)
 
-    const words = collapsed.split(/\s+/).filter(Boolean)
+  for (const base of uniqueStrings([normalized, raw])) {
+    const words = base.split(/\s+/).filter(Boolean)
     if (words.length >= 2) {
       // "Foo Health spring" → "Foo Healthspring" and "Healthspring"
       terms.push([...words.slice(0, -2), words.slice(-2).join('')].join(' ').trim())
       terms.push(words.slice(-2).join(''))
-      // Primary brand / first word often works in Availity typeahead
-      terms.push(words[0])
       if (words.length >= 3) {
+        terms.push(words.slice(0, 3).join(' '))
         terms.push(words.slice(0, 2).join(' '))
       }
+      // Brand-only last: short terms flood Availity with unrelated hits.
+      terms.push(words[0])
     }
   }
-
-  const id = (payerId || '').trim()
-  if (id) terms.push(id)
 
   return uniqueStrings(terms)
 }
@@ -94,14 +182,15 @@ export function payerSearchTerms(payerName: string, payerId?: string): string[] 
  * Derived from the CRM payer name so any practice/payer works.
  */
 export function expectedPayerTokens(payerName: string): string[] {
-  const words = payerWordTokens(payerName)
+  const normalized = normalizePayerText(payerName)
+  const words = payerWordTokens(normalized)
   if (!words.length) {
-    const fallback = payerName.trim().split(/\s+/)[0]
+    const fallback = normalized.split(/\s+/)[0]
     return fallback && fallback.length >= 3 ? [fallback.toLowerCase()] : []
   }
 
   const compounds: string[] = []
-  const rawWords = payerName
+  const rawWords = normalized
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
@@ -110,17 +199,23 @@ export function expectedPayerTokens(payerName: string): string[] {
     compounds.push(`${rawWords[i]}${rawWords[i + 1]}`)
   }
 
-  // Prefer longer compound (e.g. healthspring) then distinctive words (e.g. cigna, spring).
+  // Prefer longer compound (e.g. unitedhealthcare / healthspring) then distinctive words.
   const ranked = uniqueStrings([...compounds.filter((c) => c.length >= 6), ...words]).sort(
     (a, b) => b.length - a.length
   )
-  return ranked.slice(0, 3)
+  return ranked.slice(0, 4)
 }
 
 /** Whether an Availity option/label matches the expected payer (dynamic token check). */
 export function payerLabelMatches(label: string, payerName: string): boolean {
-  const compact = label.toLowerCase().replace(/[^a-z0-9]/g, '')
+  const compact = compactPayerText(label)
   if (!compact) return false
+
+  const geo = payerGeoTokens(payerName)
+  if (geo.length > 0 && !geo.every((g) => compact.includes(g))) {
+    return false
+  }
+
   const tokens = expectedPayerTokens(payerName).map((t) => t.replace(/[^a-z0-9]/g, ''))
   if (!tokens.length) return false
 
@@ -128,13 +223,57 @@ export function payerLabelMatches(label: string, payerName: string): boolean {
   if (strong.some((t) => compact.includes(t))) return true
 
   // Require all shorter distinctive tokens (brand + key word) so we don't accept a sticky wrong payer.
-  const weak = tokens.filter((t) => t.length < 6)
+  const weak = tokens.filter((t) => t.length < 6 && !GEO_REGION_TOKENS.has(t))
   if (weak.length >= 1 && weak.every((t) => compact.includes(t))) return true
 
   // Single-token payer names (e.g. "Aetna")
   if (tokens.length === 1 && compact.includes(tokens[0])) return true
 
   return false
+}
+
+/**
+ * Score an Availity dropdown label against the CRM payer name.
+ * Higher is better; null means not a match. Prefers exact/normalized equality,
+ * then shorter brand labels over longer plan variants.
+ */
+export function scorePayerLabel(label: string, payerName: string): number | null {
+  if (!payerLabelMatches(label, payerName)) return null
+
+  const compactLabel = compactPayerText(label)
+  const compactName = compactPayerText(payerName)
+  const normLabel = normalizePayerText(label).toLowerCase()
+  const normName = normalizePayerText(payerName).toLowerCase()
+
+  let score = 1000
+  if (compactLabel === compactName || normLabel === normName) {
+    score += 500
+  } else if (compactName.startsWith(compactLabel) || compactLabel === compactName.slice(0, compactLabel.length)) {
+    // Brand-level Availity label contained in CRM name (UNITED HEALTHCARE ⊂ United Healthcare Of …)
+    score += 400 - Math.min(compactLabel.length, 200)
+  } else if (compactLabel.includes(compactName) || compactName.includes(compactLabel)) {
+    score += 250 - Math.min(compactLabel.length, 200)
+  } else {
+    score += 100 - Math.min(compactLabel.length, 80)
+  }
+
+  // Prefer the shortest strong match so base "UNITED HEALTHCARE" beats plan variants.
+  score += Math.max(0, 80 - compactLabel.length)
+
+  return score
+}
+
+/** Pick the best Availity payer label from a list of candidates. */
+export function pickBestPayerLabel(labels: string[], payerName: string): string | null {
+  let best: { label: string; score: number } | null = null
+  for (const label of labels) {
+    const trimmed = label.trim()
+    if (!trimmed) continue
+    const score = scorePayerLabel(trimmed, payerName)
+    if (score == null) continue
+    if (!best || score > best.score) best = { label: trimmed, score }
+  }
+  return best?.label ?? null
 }
 
 /**
@@ -571,13 +710,104 @@ async function findInputBySelectors(
   return null
 }
 
+async function collectTypeaheadCandidates(
+  page: NonNullable<PlaybookContext['session']>['page']
+): Promise<Array<{ label: string; locator: BrowserLocator }>> {
+  const found: Array<{ label: string; locator: BrowserLocator }> = []
+  const seen = new Set<string>()
+
+  const pushUnique = (label: string, locator: BrowserLocator) => {
+    const trimmed = label
+      .replace(/\s+/g, ' ')
+      .replace(/\bEssentials Plus\b/gi, '')
+      .trim()
+    if (!trimmed || trimmed.length < 2 || trimmed.length > 120) return
+    // Skip chrome / form labels that show up near the payer widget.
+    if (/^(other payers|payer|organization|provider|submit|clear section|need help)/i.test(trimmed)) {
+      return
+    }
+    const key = compactPayerText(trimmed)
+    if (!key || seen.has(key)) return
+    seen.add(key)
+    found.push({ label: trimmed, locator })
+  }
+
+  const optionSelectors = [
+    '[role="option"]',
+    '.dropdown-item',
+    'li[role="option"]',
+    '.av-select__option',
+    '[class*="Menu"] [class*="option"]',
+    '[class*="option"]',
+  ]
+
+  for (const sel of optionSelectors) {
+    const list = page.locator(sel)
+    const count = await list.count().catch(() => 0)
+    for (let i = 0; i < Math.min(count, 40); i++) {
+      const loc = list.nth?.(i) ?? (i === 0 ? list.first() : null)
+      if (!loc) break
+      const text = ((await loc.innerText().catch(() => '')) || '').trim()
+      if (text) pushUnique(text, loc)
+    }
+  }
+
+  // Availity also surfaces recent/favorite payers under "Other Payers".
+  const otherPayers = page.getByText?.(/other payers/i)
+  if (otherPayers) {
+    // Sibling/nearby clickable payer names — collect via role=option already; also try links/buttons.
+    const nearby = page.locator(
+      'text=/Other Payers/i >> xpath=following::*[self::button or self::a or self::li or self::div][position()<=20]'
+    )
+    const nearbyCount = await nearby.count().catch(() => 0)
+    for (let i = 0; i < Math.min(nearbyCount, 20); i++) {
+      const loc = nearby.nth?.(i) ?? (i === 0 ? nearby.first() : null)
+      if (!loc) break
+      const text = ((await loc.innerText().catch(() => '')) || '').trim()
+      // Keep single-line payer-like labels only.
+      if (text && !text.includes('\n') && text.length <= 80) pushUnique(text, loc)
+    }
+  }
+
+  return found
+}
+
+async function clickLabelAnywhere(
+  page: NonNullable<PlaybookContext['session']>['page'],
+  label: string
+): Promise<boolean> {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const exact = new RegExp(`^\\s*${escaped}\\s*$`, 'i')
+  const candidates: BrowserLocator[] = [
+    page.getByRole('option', { name: exact }).first(),
+    page.locator(`[role="option"]:has-text("${label.replace(/"/g, '\\"')}")`).first(),
+    page.locator(`.dropdown-item:has-text("${label.replace(/"/g, '\\"')}")`).first(),
+    page.locator(`.av-select__option:has-text("${label.replace(/"/g, '\\"')}")`).first(),
+  ]
+  if (page.getByText) {
+    candidates.push(page.getByText(exact).first())
+    candidates.push(page.getByText(label, { exact: true }).first())
+  }
+  for (const el of candidates) {
+    if ((await el.count().catch(() => 0)) > 0) {
+      await el.scrollIntoViewIfNeeded?.().catch(() => undefined)
+      await el.click({ timeout: 10_000 }).catch(() => undefined)
+      return true
+    }
+  }
+  return false
+}
+
 async function selectTypeaheadOption(
   ctx: PlaybookContext,
   params: {
     fieldSelectors: string[]
     searchTerms: string[]
     matches: (label: string) => boolean
+    score?: (label: string) => number | null
     fieldLabel: string
+    /** When set, also try clicking this exact expected label via getByText (Other Payers). */
+    preferredLabels?: string[]
   }
 ): Promise<{ ok: boolean; selectedLabel?: string; errorMessage?: string }> {
   if (!ctx.session) return { ok: false, errorMessage: 'No browser session' }
@@ -591,6 +821,58 @@ async function selectTypeaheadOption(
     return ((await input.innerText?.().catch(() => '')) || '').trim()
   }
 
+  const pickBest = (labels: string[]): string | null => {
+    if (params.score) {
+      let best: { label: string; score: number } | null = null
+      for (const label of labels) {
+        const score = params.score(label)
+        if (score == null) continue
+        if (!best || score > best.score) best = { label, score }
+      }
+      return best?.label ?? null
+    }
+    return labels.find((l) => params.matches(l)) || null
+  }
+
+  const confirmSelection = async (
+    clickedLabel: string,
+    term: string
+  ): Promise<{ ok: true; selectedLabel: string } | null> => {
+    await page().waitForTimeout(800)
+    const selected = await readSelected()
+    if (selected && params.matches(selected)) {
+      ctx.log(`Selected Availity ${params.fieldLabel}`, { term, selected, clickedLabel })
+      return { ok: true, selectedLabel: selected }
+    }
+    // Some Availity selects commit the option as a chip and clear/alter the input.
+    if (params.matches(clickedLabel)) {
+      ctx.log(`Selected Availity ${params.fieldLabel} (by clicked label)`, {
+        term,
+        clickedLabel,
+        selected,
+      })
+      return { ok: true, selectedLabel: clickedLabel }
+    }
+    return null
+  }
+
+  // Try preferred/canonical labels first (from API resolve or normalized CRM name).
+  for (const preferred of params.preferredLabels || []) {
+    if (!preferred) continue
+    const input = await findInputBySelectors(ctx, params.fieldSelectors)
+    if (input) {
+      await input.click({ timeout: 10_000 }).catch(() => undefined)
+      await input.fill('').catch(() => undefined)
+      await input.fill(preferred)
+      await page().waitForTimeout(1000)
+    }
+    const clicked = await clickLabelAnywhere(page(), preferred)
+    if (clicked) {
+      const confirmed = await confirmSelection(preferred, preferred)
+      if (confirmed) return confirmed
+    }
+  }
+
   for (const term of params.searchTerms) {
     if (!term) continue
     const input = await findInputBySelectors(ctx, params.fieldSelectors)
@@ -601,50 +883,46 @@ async function selectTypeaheadOption(
     await input.fill(term)
     await page().waitForTimeout(1200)
 
-    const optionRegex = new RegExp(
-      term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*'),
-      'i'
-    )
-    const optionCandidates: BrowserLocator[] = [
-      page().getByRole('option', { name: optionRegex }).first(),
-    ]
-    const roleOptions = page().locator('[role="option"]')
-    if (roleOptions.filter) {
-      optionCandidates.push(roleOptions.filter({ hasText: optionRegex }).first())
-    }
-    const cssOptions = page().locator(
-      '.dropdown-item, li[role="option"], .av-select__option, [class*="option"]'
-    )
-    if (cssOptions.filter) {
-      optionCandidates.push(cssOptions.filter({ hasText: optionRegex }).first())
-    }
+    const candidates = await collectTypeaheadCandidates(page())
+    const bestLabel = pickBest(candidates.map((c) => c.label))
+    if (!bestLabel) continue
 
+    const bestCandidate = candidates.find(
+      (c) => compactPayerText(c.label) === compactPayerText(bestLabel)
+    )
     let clicked = false
-    for (const opt of optionCandidates) {
-      if ((await opt.count()) > 0) {
-        const optText = ((await opt.innerText().catch(() => '')) || '').trim()
-        // Never click an unrelated first hit — require dynamic match when we can read the label.
-        if (optText && !params.matches(optText)) continue
-        await opt.click({ timeout: 10_000 }).catch(() => undefined)
-        clicked = true
-        break
-      }
+    if (bestCandidate) {
+      await bestCandidate.locator.scrollIntoViewIfNeeded?.().catch(() => undefined)
+      await bestCandidate.locator.click({ timeout: 10_000 }).catch(() => undefined)
+      clicked = true
     }
-
+    if (!clicked) {
+      clicked = await clickLabelAnywhere(page(), bestLabel)
+    }
     if (!clicked) continue
-    await page().waitForTimeout(800)
-    const selected = await readSelected()
-    if (selected && params.matches(selected)) {
-      ctx.log(`Selected Availity ${params.fieldLabel}`, { term, selected })
-      return { ok: true, selectedLabel: selected }
+
+    const confirmed = await confirmSelection(bestLabel, term)
+    if (confirmed) return confirmed
+  }
+
+  // Last attempt: scan Other Payers / visible options without retyping.
+  const visible = await collectTypeaheadCandidates(page())
+  const bestVisible = pickBest(visible.map((c) => c.label))
+  if (bestVisible) {
+    const hit = visible.find((c) => compactPayerText(c.label) === compactPayerText(bestVisible))
+    if (hit) {
+      await hit.locator.click({ timeout: 10_000 }).catch(() => undefined)
+      const confirmed = await confirmSelection(bestVisible, bestVisible)
+      if (confirmed) return confirmed
     }
-    if (!selected && clicked) {
-      // Some selects don't mirror the label into the input value.
-      return { ok: true, selectedLabel: term }
+    if (await clickLabelAnywhere(page(), bestVisible)) {
+      const confirmed = await confirmSelection(bestVisible, bestVisible)
+      if (confirmed) return confirmed
     }
   }
 
   const leftover = await readSelected()
+  // Never treat uncommitted typed leftover as success — even if it fuzzy-matches.
   return {
     ok: false,
     errorMessage: leftover
@@ -660,6 +938,7 @@ async function selectAvailityPayer(
   payerName: string,
   payerId?: string
 ): Promise<{ ok: boolean; selectedLabel?: string; errorMessage?: string }> {
+  const normalized = normalizePayerText(payerName)
   const result = await selectTypeaheadOption(ctx, {
     fieldLabel: 'payer',
     fieldSelectors: [
@@ -671,6 +950,8 @@ async function selectAvailityPayer(
     ],
     searchTerms: payerSearchTerms(payerName, payerId),
     matches: (label) => payerLabelMatches(label, payerName),
+    score: (label) => scorePayerLabel(label, payerName),
+    preferredLabels: uniqueStrings([normalized, payerName, payerId || '']),
   })
   if (!result.ok && payerName) {
     return {

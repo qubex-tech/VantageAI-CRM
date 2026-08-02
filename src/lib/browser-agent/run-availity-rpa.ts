@@ -1,6 +1,15 @@
 import { prisma } from '@/lib/db'
 import type { ParsedEligibilitySummary } from '@/lib/availity'
+import {
+  getAvailityIntegrationConfig,
+  searchAvailityPayers,
+} from '@/lib/availity'
 import { markEligibilityCheckFailed } from '@/lib/eligibility/finalize-check'
+import {
+  normalizePayerText,
+  pickBestPayerLabel,
+  scorePayerLabel,
+} from './playbooks/availity-eligibility'
 import {
   extractSummaryFromPlaybookOutput,
   finalizeRpaEligibilityCheck,
@@ -32,6 +41,85 @@ export interface RunAvailityRpaResult {
 function formatDob(dob: Date | null | undefined): string {
   if (!dob) return ''
   return dob.toISOString().slice(0, 10)
+}
+
+/**
+ * When Availity Coverages API credentials are active, resolve CRM payer name →
+ * canonical Availity payer id/display name for portal RPA selection.
+ * Silent no-op when API is inactive/unconfigured (common for portal-only practices).
+ */
+export async function resolveAvailityPayerForRpa(params: {
+  practiceId: string
+  payerNameRaw: string | null | undefined
+  availityPayerId: string | null | undefined
+}): Promise<{ payerName: string; payerId: string }> {
+  const crmName = (params.payerNameRaw || '').trim()
+  const existingId = (params.availityPayerId || '').trim()
+  const fallback = {
+    payerName: crmName,
+    payerId: existingId,
+  }
+
+  try {
+    const integration = await prisma.availityIntegration.findUnique({
+      where: { practiceId: params.practiceId },
+      select: { isActive: true },
+    })
+    if (!integration?.isActive) return fallback
+
+    const config = await getAvailityIntegrationConfig(params.practiceId)
+    const query = existingId || normalizePayerText(crmName) || crmName
+    if (!query) return fallback
+
+    let payers = await searchAvailityPayers(config, query)
+    if (!payers.length && crmName && query !== crmName) {
+      // Retry with raw CRM label if normalized query missed.
+      payers = await searchAvailityPayers(config, crmName)
+    }
+    if (!payers.length) return fallback
+
+    if (existingId) {
+      const byId = payers.find((p) => p.payerId?.toLowerCase() === existingId.toLowerCase())
+      if (byId) {
+        return {
+          payerId: byId.payerId,
+          payerName: byId.displayName || byId.name || crmName,
+        }
+      }
+    }
+
+    const labels = payers.map((p) => p.displayName || p.name || p.payerId).filter(Boolean)
+    const bestLabel = pickBestPayerLabel(labels, crmName || query)
+    if (!bestLabel) {
+      // Fall back to highest score against display names, else first hit.
+      let best: { payerId: string; payerName: string; score: number } | null = null
+      for (const p of payers) {
+        const label = p.displayName || p.name || ''
+        const score = label ? scorePayerLabel(label, crmName || query) : null
+        if (score == null) continue
+        if (!best || score > best.score) {
+          best = { payerId: p.payerId, payerName: label, score }
+        }
+      }
+      if (best) return { payerId: best.payerId, payerName: best.payerName }
+      const first = payers[0]
+      return {
+        payerId: first.payerId || existingId,
+        payerName: first.displayName || first.name || crmName,
+      }
+    }
+
+    const matched = payers.find((p) => {
+      const label = p.displayName || p.name || ''
+      return label.trim().toLowerCase() === bestLabel.toLowerCase()
+    })
+    return {
+      payerId: matched?.payerId || existingId,
+      payerName: bestLabel,
+    }
+  } catch {
+    return fallback
+  }
 }
 
 export async function isAvailityRpaAvailable(practiceId: string): Promise<{
@@ -103,6 +191,12 @@ export async function runAvailityRpaEligibility(
     }),
   ])
 
+  const resolvedPayer = await resolveAvailityPayerForRpa({
+    practiceId: input.practiceId,
+    payerNameRaw: policy.payerNameRaw,
+    availityPayerId: policy.availityPayerId,
+  })
+
   let checkId = input.eligibilityCheckId
   if (checkId) {
     await prisma.eligibilityCheck.update({
@@ -123,8 +217,8 @@ export async function runAvailityRpaEligibility(
         status: 'in_progress',
         requestPayload: {
           memberId: policy.memberId,
-          payerName: policy.payerNameRaw,
-          payerId: policy.availityPayerId,
+          payerName: resolvedPayer.payerName || policy.payerNameRaw,
+          payerId: resolvedPayer.payerId || policy.availityPayerId,
           providerNpi: integration?.defaultProviderNpi,
           organizationName: practice?.name,
         },
@@ -134,11 +228,12 @@ export async function runAvailityRpaEligibility(
   }
 
   // All patient/payer/practice values come from CRM records — playbook must not hardcode them.
+  // Prefer Availity-resolved payer label/id when the Coverages API mapping is available.
   const playbookInput = {
     memberId: policy.memberId,
     groupNumber: policy.groupNumber || '',
-    payerName: policy.payerNameRaw || '',
-    payerId: policy.availityPayerId || '',
+    payerName: resolvedPayer.payerName || policy.payerNameRaw || '',
+    payerId: resolvedPayer.payerId || policy.availityPayerId || '',
     patientFirstName: patient.firstName || patient.name.split(/\s+/)[0] || '',
     patientLastName:
       patient.lastName || patient.name.split(/\s+/).slice(1).join(' ') || '',

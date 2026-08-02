@@ -16,6 +16,7 @@ export interface BrowserPage {
 
 export interface BrowserLocator {
   first: () => BrowserLocator
+  nth?: (index: number) => BrowserLocator
   count: () => Promise<number>
   fill: (value: string) => Promise<void>
   click: (options?: Record<string, unknown>) => Promise<void>

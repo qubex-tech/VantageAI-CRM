@@ -2,9 +2,18 @@ import { describe, expect, it } from 'vitest'
 import {
   expectedPayerTokens,
   interpretAvailityEligibilityText,
+  normalizePayerText,
   payerLabelMatches,
   payerSearchTerms,
+  pickBestPayerLabel,
+  scorePayerLabel,
 } from '../playbooks/availity-eligibility'
+
+describe('normalizePayerText', () => {
+  it('collapses health care → Healthcare and strips Of All States noise', () => {
+    expect(normalizePayerText('United Health Care Of All States')).toBe('United Healthcare')
+  })
+})
 
 describe('payerSearchTerms', () => {
   it('derives typeahead variants from any payer label (no hardcoded payer list)', () => {
@@ -14,14 +23,22 @@ describe('payerSearchTerms', () => {
     expect(terms).toContain('Cigna')
   })
 
-  it('includes payer id when provided', () => {
-    expect(payerSearchTerms('Acme Care', 'ABC123')).toContain('ABC123')
+  it('includes payer id when provided (preferred first)', () => {
+    const terms = payerSearchTerms('Acme Care', 'ABC123')
+    expect(terms[0]).toBe('ABC123')
+    expect(terms).toContain('ABC123')
   })
 
   it('works for unrelated commercial payers', () => {
     const terms = payerSearchTerms('Humana Gold Plus')
     expect(terms[0]).toBe('Humana Gold Plus')
     expect(terms).toContain('Humana')
+  })
+
+  it('emits United Healthcare variant for messy CRM UHC labels', () => {
+    const terms = payerSearchTerms('United Health Care Of All States')
+    expect(terms).toContain('United Healthcare')
+    expect(terms.some((t) => /united\s+healthcare/i.test(t))).toBe(true)
   })
 })
 
@@ -37,6 +54,52 @@ describe('expectedPayerTokens / payerLabelMatches', () => {
   it('matches single-word payers dynamically', () => {
     expect(expectedPayerTokens('Aetna').length).toBeGreaterThan(0)
     expect(payerLabelMatches('AETNA (COMMERCIAL & MEDICARE)', 'Aetna')).toBe(true)
+  })
+
+  it('matches UNITED HEALTHCARE for United Health Care Of All States', () => {
+    expect(payerLabelMatches('UNITED HEALTHCARE', 'United Health Care Of All States')).toBe(true)
+    expect(payerLabelMatches('United Healthcare', 'United Health Care Of All States')).toBe(true)
+  })
+
+  it('matches Texas BCBS and rejects generic / non-Texas Blue Cross labels', () => {
+    const crm = 'Blue Cross and Blue Shield of Texas'
+    expect(payerLabelMatches('BLUE CROSS BLUE SHIELD OF TEXAS', crm)).toBe(true)
+    expect(payerLabelMatches('Blue Cross and Blue Shield of Texas', crm)).toBe(true)
+    expect(payerLabelMatches('Blue Cross', crm)).toBe(false)
+    expect(payerLabelMatches('BLUE CROSS MEDICARE ADVANTAGE', crm)).toBe(false)
+    expect(payerLabelMatches('BLUE CROSS OF WASHINGTON AND ALASKA (PREMERA)', crm)).toBe(false)
+  })
+})
+
+describe('scorePayerLabel / pickBestPayerLabel', () => {
+  it('prefers base UNITED HEALTHCARE over plan variants', () => {
+    const crm = 'United Health Care Of All States'
+    const best = pickBestPayerLabel(
+      [
+        'UNITED HEALTHCARE COMMUNITY PLAN TN',
+        'UNITED HEALTHCARE',
+        'UNITED HEALTHCARE OVATIONS(AARP)',
+        'UNITED HEALTHCARE OXFORD',
+      ],
+      crm
+    )
+    expect(best?.toUpperCase()).toBe('UNITED HEALTHCARE')
+    expect(scorePayerLabel('UNITED HEALTHCARE', crm)!).toBeGreaterThan(
+      scorePayerLabel('UNITED HEALTHCARE COMMUNITY PLAN TN', crm)!
+    )
+  })
+
+  it('prefers Texas BCBS over generic Blue Cross labels', () => {
+    const crm = 'Blue Cross and Blue Shield of Texas'
+    const best = pickBestPayerLabel(
+      [
+        'BLUE CROSS MEDICARE ADVANTAGE',
+        'BLUE CROSS BLUE SHIELD OF TEXAS',
+        'Blue Cross',
+      ],
+      crm
+    )
+    expect(best?.toUpperCase()).toContain('TEXAS')
   })
 })
 
