@@ -17,6 +17,7 @@ export interface RunEligibilityCheckInput {
   patientId: string
   policyId?: string
   skipInngest?: boolean
+  appointmentType?: string
 }
 
 export interface RunEligibilityCheckResult {
@@ -96,7 +97,10 @@ export async function runEligibilityCheck(
       policyId: policy.id,
       source: 'availity_api',
       status: 'pending',
-      requestPayload: redactCoverageRequest(request),
+      requestPayload: {
+        ...redactCoverageRequest(request),
+        appointmentType: input.appointmentType || null,
+      },
     },
   })
 
@@ -123,6 +127,7 @@ export async function runEligibilityCheck(
       const result = await finalizeEligibilityCheck({
         eligibilityCheckId: check.id,
         coverage: submission,
+        appointmentType: input.appointmentType,
       })
       return {
         eligibilityCheckId: check.id,
@@ -141,6 +146,7 @@ export async function runEligibilityCheck(
           userId,
           eligibilityCheckId: check.id,
           coverageId,
+          appointmentType: input.appointmentType || null,
         },
       })
     }
@@ -174,6 +180,7 @@ export async function pollAndFinalizeEligibilityCheck(params: {
   eligibilityCheckId: string
   coverageId: string
   userId?: string
+  appointmentType?: string
   triggerVoiceFallback?: (checkId: string, reason: string) => Promise<void>
 }) {
   const config = await getAvailityIntegrationConfig(params.practiceId)
@@ -196,6 +203,7 @@ export async function pollAndFinalizeEligibilityCheck(params: {
     eligibilityCheckId: params.eligibilityCheckId,
     coverage,
     triggerVoiceFallback: params.triggerVoiceFallback,
+    appointmentType: params.appointmentType,
   })
 
   return { done: true as const, result, coverage }

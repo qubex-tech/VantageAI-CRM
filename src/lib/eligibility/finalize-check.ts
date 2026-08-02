@@ -11,6 +11,7 @@ import {
   type AvailityCoverageRecord,
   type ParsedEligibilitySummary,
 } from '@/lib/availity'
+import { applyCallRequiredFlag } from './lsr-gates'
 
 async function getOrCreateAutomationUserId(practiceId: string): Promise<string> {
   const email = `automation+${practiceId}@getvantage.tech`
@@ -35,6 +36,7 @@ export async function finalizeEligibilityCheck(params: {
   eligibilityCheckId: string
   coverage: AvailityCoverageRecord
   triggerVoiceFallback?: (checkId: string, reason: string) => Promise<void>
+  appointmentType?: string
 }): Promise<{
   status: 'complete' | 'failed' | 'fallback_voice'
   summary?: ParsedEligibilitySummary
@@ -52,6 +54,9 @@ export async function finalizeEligibilityCheck(params: {
   }
 
   const summary = parseEligibilityResponse(params.coverage)
+  if (summary.rheum && params.appointmentType) {
+    summary.rheum = applyCallRequiredFlag(summary.rheum, params.appointmentType)
+  }
   const statusCode = String(params.coverage.statusCode ?? '')
   const isTerminalError =
     statusCode === '19' ||

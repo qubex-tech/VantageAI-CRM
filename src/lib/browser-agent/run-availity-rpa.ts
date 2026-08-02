@@ -15,6 +15,8 @@ export interface RunAvailityRpaInput {
   /** When provided, reuse this EligibilityCheck instead of creating a new one */
   eligibilityCheckId?: string
   sync?: boolean
+  /** Lonestar appointment type for form mode + call-required flags */
+  appointmentType?: string
 }
 
 export interface RunAvailityRpaResult {
@@ -135,6 +137,7 @@ export async function runAvailityRpaEligibility(
     patientDob: formatDob(patient.dateOfBirth),
     providerNpi: integration?.defaultProviderNpi || '',
     serviceType: integration?.defaultServiceType || '30',
+    appointmentType: input.appointmentType || '',
   }
 
   const started = await startBrowserAgentRun({
@@ -155,6 +158,7 @@ export async function runAvailityRpaEligibility(
           summary,
           rawOutput: started.result.output,
           browserAgentRunId: started.runId,
+          appointmentType: input.appointmentType,
         })
         return {
           started: true,
@@ -201,11 +205,13 @@ export async function applyBrowserRunToEligibilityCheck(runId: string): Promise<
       await markEligibilityCheckFailed(run.eligibilityCheckId, 'RPA completed without parseable summary')
       return { handled: true, escalateToVoice: true, status: 'failed' }
     }
+    const runInput = (run.input as { appointmentType?: string } | null) || null
     const finalized = await finalizeRpaEligibilityCheck({
       eligibilityCheckId: run.eligibilityCheckId,
       summary,
       rawOutput: (run.output as Record<string, unknown>) || undefined,
       browserAgentRunId: run.id,
+      appointmentType: runInput?.appointmentType,
     })
     return { handled: true, status: finalized.status, escalateToVoice: finalized.status === 'failed' }
   }

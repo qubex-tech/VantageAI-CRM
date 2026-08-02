@@ -32,6 +32,18 @@ function buildCompleteCoverage(request?: Partial<CoverageInquiryRequest>): Avail
         coverageStartDate: '2024-01-01T00:00:00.000+0000',
         benefits: [
           {
+            name: 'Specialist Office Visit',
+            type: '98',
+            status: 'Active Coverage',
+            statusCode: '1',
+            amounts: {
+              coPayment: { amount: '40.00', currency: 'USD' },
+              deductible: { amount: '500.00', currency: 'USD', remaining: '250.00', met: '250.00' },
+              coInsurance: { amount: '20', currency: 'USD' },
+              outOfPocket: { amount: '3000.00', currency: 'USD', remaining: '2100.00' },
+            },
+          },
+          {
             name: 'Health Benefit Plan Coverage',
             type: '30',
             status: 'Active Coverage',

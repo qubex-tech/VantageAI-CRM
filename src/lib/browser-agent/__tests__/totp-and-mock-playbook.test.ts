@@ -29,7 +29,7 @@ describe('playbooks mock mode', () => {
     expect(result.output?.mock).toBe(true)
   })
 
-  it('availity eligibility playbook returns active mock summary', async () => {
+  it('availity eligibility playbook returns active mock summary with rheum packet', async () => {
     const result = await availityEligibilityPlaybook.run({
       practiceId: 'p1',
       runId: 'r1',
@@ -38,13 +38,18 @@ describe('playbooks mock mode', () => {
       input: {
         payerName: 'Aetna',
         memberId: 'M123',
+        appointmentType: 'NP',
       },
       session: null,
       log: () => undefined,
     })
     expect(result.ok).toBe(true)
-    expect((result.output?.summary as { eligibilityStatus: string }).eligibilityStatus).toBe(
-      'active'
-    )
+    const summary = result.output?.summary as {
+      eligibilityStatus: string
+      rheum?: { specialistCopay?: string; formMode?: string }
+    }
+    expect(summary.eligibilityStatus).toBe('active')
+    expect(summary.rheum?.formMode).toBe('office_visit')
+    expect(summary.rheum?.specialistCopay).toBe('$40.00')
   })
 })

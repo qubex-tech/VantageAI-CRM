@@ -9,6 +9,9 @@ const bodySchema = z.object({
   policyId: z.string().uuid().optional(),
   insurerPhone: z.string().optional(),
   agentId: z.string().optional(),
+  appointmentType: z.string().optional(),
+  formMode: z.enum(['office_visit', 'ultrasound', 'cimzia', 'injectable_bone']).optional(),
+  medicareTxNonPar: z.boolean().optional(),
 })
 
 export async function POST(req: NextRequest) {
@@ -34,6 +37,9 @@ export async function POST(req: NextRequest) {
       policyId: parsed.data.policyId,
       insurerPhone: parsed.data.insurerPhone,
       agentId: parsed.data.agentId,
+      appointmentType: parsed.data.appointmentType,
+      formMode: parsed.data.formMode,
+      medicareTxNonPar: parsed.data.medicareTxNonPar,
       source: 'api',
     })
 

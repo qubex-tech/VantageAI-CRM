@@ -13,11 +13,12 @@ export const pollAvailityCoverage = inngest.createFunction(
   },
   { event: 'availity/coverage.submitted' },
   async ({ event, step }) => {
-    const { practiceId, userId, eligibilityCheckId, coverageId } = event.data as {
+    const { practiceId, userId, eligibilityCheckId, coverageId, appointmentType } = event.data as {
       practiceId: string
       userId?: string
       eligibilityCheckId: string
       coverageId: string
+      appointmentType?: string | null
     }
 
     if (!practiceId || !eligibilityCheckId || !coverageId) {
@@ -33,10 +34,17 @@ export const pollAvailityCoverage = inngest.createFunction(
         const check = await import('@/lib/db').then((m) =>
           m.prisma.eligibilityCheck.findUnique({
             where: { id: eligibilityCheckId },
-            select: { patientId: true, policyId: true },
+            select: { patientId: true, policyId: true, requestPayload: true },
           })
         )
         if (!check) return { done: true as const, error: 'check_not_found' }
+
+        const payloadAppt =
+          check.requestPayload &&
+          typeof check.requestPayload === 'object' &&
+          typeof (check.requestPayload as { appointmentType?: unknown }).appointmentType === 'string'
+            ? (check.requestPayload as { appointmentType?: string }).appointmentType
+            : undefined
 
         const handler = await createVoiceFallbackHandler({
           practiceId,
@@ -44,6 +52,7 @@ export const pollAvailityCoverage = inngest.createFunction(
           patientId: check.patientId,
           policyId: check.policyId,
           source: 'api',
+          appointmentType: appointmentType || payloadAppt,
         })
 
         return pollAndFinalizeEligibilityCheck({
@@ -51,6 +60,7 @@ export const pollAvailityCoverage = inngest.createFunction(
           eligibilityCheckId,
           coverageId,
           userId,
+          appointmentType: appointmentType || payloadAppt,
           triggerVoiceFallback: handler,
         })
       })

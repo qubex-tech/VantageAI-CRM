@@ -1,3 +1,5 @@
+import { buildRheumPacketFromAvailityPlans } from '@/lib/eligibility/parse-availity-amounts'
+import { formatRheumPacketNoteSection } from '@/lib/eligibility/rheum-packet'
 import type { AvailityCoverageRecord, ParsedEligibilitySummary } from './types'
 
 function normalizeActiveStatus(value?: string): boolean | null {
@@ -34,6 +36,11 @@ export function parseEligibilityResponse(record: AvailityCoverageRecord): Parsed
     }))
   )
 
+  const rheum =
+    eligibilityStatus === 'error'
+      ? undefined
+      : buildRheumPacketFromAvailityPlans(plans, { formMode: 'office_visit', source: 'availity_api' })
+
   return {
     eligibilityStatus,
     planStatus: primaryPlan?.status,
@@ -41,6 +48,7 @@ export function parseEligibilityResponse(record: AvailityCoverageRecord): Parsed
     payerId: record.payer?.payerId || record.payer?.responsePayerId,
     groupNumber: primaryPlan?.groupNumber,
     planName: primaryPlan?.description || primaryPlan?.groupName,
+    planType: rheum?.planType || primaryPlan?.insuranceType,
     coverageStartDate: primaryPlan?.coverageStartDate,
     coverageEndDate: primaryPlan?.coverageEndDate,
     eligibilityStartDate: primaryPlan?.eligibilityStartDate,
@@ -48,6 +56,7 @@ export function parseEligibilityResponse(record: AvailityCoverageRecord): Parsed
     benefits,
     validationMessages,
     rawPlanCount: plans.length,
+    rheum,
   }
 }
 
@@ -67,11 +76,16 @@ export function formatEligibilityNoteContent(params: {
     lines.push(`Payer: ${summary.payerName || payerNameRaw}`)
   }
   if (summary.planName) lines.push(`Plan: ${summary.planName}`)
+  if (summary.planType) lines.push(`Plan type: ${summary.planType}`)
   if (summary.groupNumber) lines.push(`Group #: ${summary.groupNumber}`)
   if (summary.coverageStartDate || summary.coverageEndDate) {
     lines.push(
       `Coverage period: ${[summary.coverageStartDate, summary.coverageEndDate].filter(Boolean).join(' – ')}`
     )
+  }
+
+  if (summary.rheum) {
+    lines.push(formatRheumPacketNoteSection(summary.rheum))
   }
 
   if (summary.benefits.length > 0) {

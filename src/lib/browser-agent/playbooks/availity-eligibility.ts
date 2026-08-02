@@ -1,4 +1,6 @@
 import type { ParsedEligibilitySummary } from '@/lib/availity'
+import { applyCallRequiredFlag, formModeForAppointmentType } from '@/lib/eligibility/lsr-gates'
+import { scrapeRheumPacketFromPortalText } from '@/lib/eligibility/scrape-rpa-benefits'
 import { generateTotpFresh } from '../totp'
 import { markBrowserCredentialLogin } from '../credentials'
 import type { BrowserLocator, BrowserPlaybook, PlaybookContext, PlaybookResult } from '../types'
@@ -12,6 +14,25 @@ function asString(value: unknown): string {
 
 function mockSummary(ctx: PlaybookContext): ParsedEligibilitySummary {
   const payerName = asString(ctx.input.payerName) || 'Mock Payer'
+  const formMode = formModeForAppointmentType(asString(ctx.input.appointmentType) || undefined)
+  let rheum = scrapeRheumPacketFromPortalText(
+    [
+      'Active Coverage',
+      'Plan Type PPO',
+      'In-Network',
+      'Specialist Copay: $40.00',
+      'Deductible: $500.00',
+      'Deductible Remaining: $250.00',
+      'Coinsurance: 20%',
+      'Out of Pocket Max: $3000.00',
+      'Out of Pocket Remaining: $2100.00',
+      'Referral not required',
+      'Prior authorization not required',
+      'Telehealth covered',
+    ].join('\n'),
+    { formMode, source: 'availity_rpa' }
+  )
+  rheum = applyCallRequiredFlag(rheum, asString(ctx.input.appointmentType) || undefined)
   return {
     eligibilityStatus: 'active',
     planStatus: 'Active',
@@ -19,12 +40,14 @@ function mockSummary(ctx: PlaybookContext): ParsedEligibilitySummary {
     payerId: asString(ctx.input.payerId) || undefined,
     groupNumber: asString(ctx.input.groupNumber) || undefined,
     planName: 'Mock PPO Plan',
+    planType: rheum.planType,
     benefits: [
       { name: 'Office Visit', status: 'Covered', detail: 'mock' },
       { name: 'Specialist', status: 'Covered', detail: 'mock' },
     ],
     validationMessages: [],
     rawPlanCount: 1,
+    rheum,
   }
 }
 
@@ -670,14 +693,20 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
     }
   }
 
+  const formMode = formModeForAppointmentType(asString(ctx.input.appointmentType) || undefined)
+  let rheum = scrapeRheumPacketFromPortalText(bodyText, { formMode, source: 'availity_rpa' })
+  rheum = applyCallRequiredFlag(rheum, asString(ctx.input.appointmentType) || undefined)
+
   const summary: ParsedEligibilitySummary = {
     eligibilityStatus,
     payerName: payerName || undefined,
     payerId: asString(ctx.input.payerId) || undefined,
     groupNumber: asString(ctx.input.groupNumber) || undefined,
+    planType: rheum.planType,
     benefits: [],
     validationMessages: [],
     rawPlanCount: 0,
+    rheum,
   }
 
   return {

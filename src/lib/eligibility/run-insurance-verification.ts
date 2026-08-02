@@ -1,7 +1,20 @@
+import { prisma } from '@/lib/db'
 import { initiateInsuranceOutboundCall } from '@/lib/outbound-insurance-call'
 import { runAvailityRpaEligibility } from '@/lib/browser-agent'
+import type { ParsedEligibilitySummary } from '@/lib/availity'
+import { formatEligibilityNoteContent } from '@/lib/availity'
 import { linkVoiceFallbackToCheck } from './finalize-check'
 import { runEligibilityCheck, type RunEligibilityCheckResult } from './run-eligibility-check'
+import {
+  applyCallRequiredFlag,
+  buildMedicareTxNonParPacket,
+  formModeForAppointmentType,
+  isMedicareOfTexasPayer,
+  requiresCallConfirmation,
+  shouldRunEligibilityForAppointmentType,
+  structuredVoiceFallbackPrompt,
+} from './lsr-gates'
+import { listUnknownRheumFields, type EligibilityFormMode } from './rheum-packet'
 
 export interface RunInsuranceVerificationInput {
   practiceId: string
@@ -11,10 +24,28 @@ export interface RunInsuranceVerificationInput {
   insurerPhone?: string
   agentId?: string
   source?: 'api' | 'healix' | 'ui'
+  /** Lonestar appointment type code (NP, TVNP, FUV, US, …) */
+  appointmentType?: string
+  /** Override form mode; defaults from appointment type */
+  formMode?: EligibilityFormMode
+  /**
+   * When true (or when LSR_MEDICARE_TX_NONPAR=1 and payer matches),
+   * skip Availity and use Medicare of Texas NON-PAR fixed copays.
+   */
+  medicareTxNonPar?: boolean
+  /** When true, force structured voice fallback after EB if callRequired or unknown fields */
+  preferStructuredVoiceFallback?: boolean
 }
 
 export interface RunInsuranceVerificationResult {
-  path: 'availity' | 'availity_rpa' | 'availity_rpa_in_progress' | 'voice' | 'availity_in_progress'
+  path:
+    | 'availity'
+    | 'availity_rpa'
+    | 'availity_rpa_in_progress'
+    | 'voice'
+    | 'availity_in_progress'
+    | 'skipped'
+    | 'medicare_tx_nonpar'
   eligibility?: RunEligibilityCheckResult
   voice?: {
     callId: string | null
@@ -23,6 +54,20 @@ export interface RunInsuranceVerificationResult {
   }
   message: string
   browserAgentRunId?: string
+  callRequired?: boolean
+  structuredVoicePrompt?: string
+}
+
+function attachAppointmentFlags(
+  summary: ParsedEligibilitySummary | undefined,
+  appointmentType?: string
+): ParsedEligibilitySummary | undefined {
+  if (!summary) return summary
+  if (!summary.rheum) return summary
+  return {
+    ...summary,
+    rheum: applyCallRequiredFlag(summary.rheum, appointmentType),
+  }
 }
 
 async function triggerVoiceFallback(params: {
@@ -65,6 +110,7 @@ async function tryRpaThenVoice(params: {
   source: 'api' | 'healix' | 'ui'
   eligibilityCheckId?: string
   reason: string
+  appointmentType?: string
 }): Promise<RunInsuranceVerificationResult> {
   console.info('[runInsuranceVerification] Trying Availity portal RPA', {
     practiceId: params.practiceId,
@@ -78,18 +124,33 @@ async function tryRpaThenVoice(params: {
     patientId: params.patientId,
     policyId: params.policyId,
     eligibilityCheckId: params.eligibilityCheckId,
+    appointmentType: params.appointmentType,
   })
 
   if (rpa.started && rpa.status === 'complete') {
+    const summary = attachAppointmentFlags(rpa.summary, params.appointmentType)
+    const call = requiresCallConfirmation(params.appointmentType)
+    const unknown = summary?.rheum ? listUnknownRheumFields(summary.rheum) : []
     return {
       path: 'availity_rpa',
       browserAgentRunId: rpa.browserAgentRunId,
       eligibility: {
         eligibilityCheckId: rpa.eligibilityCheckId || '',
         status: 'complete',
-        summary: rpa.summary as Record<string, unknown> | undefined,
+        summary: summary as Record<string, unknown> | undefined,
       },
-      message: `Eligibility verified via Availity portal (${rpa.summary?.eligibilityStatus || 'complete'})`,
+      callRequired: call.required || Boolean(summary?.rheum?.callRequired),
+      structuredVoicePrompt:
+        call.required || unknown.length
+          ? structuredVoiceFallbackPrompt({
+              formMode: formModeForAppointmentType(params.appointmentType),
+              missingFields: unknown,
+              appointmentType: params.appointmentType,
+            })
+          : undefined,
+      message: `Eligibility verified via Availity portal (${summary?.eligibilityStatus || 'complete'})${
+        call.required ? ' — SOP requires call confirmation' : ''
+      }`,
     }
   }
 
@@ -105,7 +166,6 @@ async function tryRpaThenVoice(params: {
     }
   }
 
-  // RPA unavailable or failed → voice
   const voice = await initiateInsuranceOutboundCall({
     practiceId: params.practiceId,
     userId: params.userId,
@@ -132,9 +192,104 @@ async function tryRpaThenVoice(params: {
       conversationId: voice.conversationId,
       insurerPhone: voice.insurerPhone,
     },
+    callRequired: true,
+    structuredVoicePrompt: structuredVoiceFallbackPrompt({
+      formMode: formModeForAppointmentType(params.appointmentType),
+      missingFields: [],
+      appointmentType: params.appointmentType,
+    }),
     message: rpa.started
       ? `Availity portal RPA failed; started voice verification (${rpa.reason || params.reason})`
       : `Started insurer voice verification call (${params.reason})`,
+  }
+}
+
+async function runMedicareTxNonParShortCircuit(params: {
+  practiceId: string
+  userId: string
+  patientId: string
+  policyId?: string
+  appointmentType?: string
+}): Promise<RunInsuranceVerificationResult> {
+  const policy = params.policyId
+    ? await prisma.insurancePolicy.findFirst({
+        where: {
+          id: params.policyId,
+          practiceId: params.practiceId,
+          patientId: params.patientId,
+        },
+      })
+    : await prisma.insurancePolicy.findFirst({
+        where: { practiceId: params.practiceId, patientId: params.patientId },
+        orderBy: [{ isPrimary: 'desc' }, { updatedAt: 'desc' }],
+      })
+
+  if (!policy) {
+    throw new Error('No insurance policy found for patient')
+  }
+
+  const rheum = buildMedicareTxNonParPacket({ appointmentType: params.appointmentType })
+  const summary: ParsedEligibilitySummary = {
+    eligibilityStatus: 'active',
+    planStatus: 'Medicare TX NON-PAR schedule',
+    payerName: policy.payerNameRaw,
+    planType: 'Medicare',
+    benefits: [],
+    validationMessages: [],
+    rawPlanCount: 0,
+    rheum,
+  }
+
+  const now = new Date()
+  const check = await prisma.eligibilityCheck.create({
+    data: {
+      practiceId: params.practiceId,
+      patientId: params.patientId,
+      policyId: policy.id,
+      source: 'availity_api',
+      status: 'complete',
+      parsedSummary: summary as object,
+      requestPayload: {
+        shortCircuit: 'medicare_tx_nonpar',
+        appointmentType: params.appointmentType || null,
+      },
+      completedAt: now,
+    },
+  })
+
+  await prisma.insurancePolicy.update({
+    where: { id: policy.id },
+    data: {
+      eligibilityStatus: 'active',
+      lastEligibilityCheckedAt: now,
+    },
+  })
+
+  const noteContent = formatEligibilityNoteContent({
+    summary,
+    payerNameRaw: policy.payerNameRaw,
+    checkedAt: now,
+  }).replace('Insurance Eligibility (Availity)', 'Insurance Eligibility (Medicare TX NON-PAR)')
+
+  await prisma.patientNote.create({
+    data: {
+      patientId: params.patientId,
+      practiceId: params.practiceId,
+      userId: params.userId,
+      type: 'insurance',
+      content: noteContent,
+    },
+  })
+
+  return {
+    path: 'medicare_tx_nonpar',
+    eligibility: {
+      eligibilityCheckId: check.id,
+      status: 'complete',
+      summary: summary as unknown as Record<string, unknown>,
+    },
+    callRequired: Boolean(rheum.callRequired),
+    message: `Medicare of Texas NON-PAR schedule applied (specialist copay ${rheum.specialistCopay})`,
   }
 }
 
@@ -143,19 +298,80 @@ export async function runInsuranceVerification(
 ): Promise<RunInsuranceVerificationResult> {
   const source = input.source || 'api'
 
+  const gate = shouldRunEligibilityForAppointmentType(input.appointmentType)
+  if (!gate.run) {
+    return {
+      path: 'skipped',
+      message: gate.reason,
+    }
+  }
+
+  // Resolve policy early for Medicare TX short-circuit
+  const policy = input.policyId
+    ? await prisma.insurancePolicy.findFirst({
+        where: {
+          id: input.policyId,
+          practiceId: input.practiceId,
+          patientId: input.patientId,
+        },
+      })
+    : await prisma.insurancePolicy.findFirst({
+        where: { practiceId: input.practiceId, patientId: input.patientId },
+        orderBy: [{ isPrimary: 'desc' }, { updatedAt: 'desc' }],
+      })
+
+  const medicareEnv = process.env.LSR_MEDICARE_TX_NONPAR === '1'
+  const medicareShortCircuit =
+    (input.medicareTxNonPar === true || (medicareEnv && input.medicareTxNonPar !== false)) &&
+    isMedicareOfTexasPayer(policy?.payerNameRaw)
+
+  if (medicareShortCircuit) {
+    return runMedicareTxNonParShortCircuit({
+      practiceId: input.practiceId,
+      userId: input.userId,
+      patientId: input.patientId,
+      policyId: policy?.id,
+      appointmentType: input.appointmentType,
+    })
+  }
+
   try {
     const eligibility = await runEligibilityCheck({
       practiceId: input.practiceId,
       userId: input.userId,
       patientId: input.patientId,
       policyId: input.policyId,
+      appointmentType: input.appointmentType,
     })
 
     if (eligibility.status === 'complete') {
+      const summary = attachAppointmentFlags(
+        eligibility.summary as ParsedEligibilitySummary | undefined,
+        input.appointmentType
+      )
+      if (summary && eligibility.eligibilityCheckId) {
+        await prisma.eligibilityCheck.update({
+          where: { id: eligibility.eligibilityCheckId },
+          data: { parsedSummary: summary as object },
+        })
+      }
+      const call = requiresCallConfirmation(input.appointmentType)
+      const unknown = summary?.rheum ? listUnknownRheumFields(summary.rheum) : []
       return {
         path: 'availity',
-        eligibility,
-        message: `Eligibility verified via Availity (${eligibility.summary?.eligibilityStatus || 'complete'})`,
+        eligibility: { ...eligibility, summary: summary as Record<string, unknown> | undefined },
+        callRequired: call.required || Boolean(summary?.rheum?.callRequired),
+        structuredVoicePrompt:
+          call.required || unknown.length
+            ? structuredVoiceFallbackPrompt({
+                formMode: input.formMode || formModeForAppointmentType(input.appointmentType),
+                missingFields: unknown,
+                appointmentType: input.appointmentType,
+              })
+            : undefined,
+        message: `Eligibility verified via Availity (${summary?.eligibilityStatus || 'complete'})${
+          call.required ? ' — SOP requires call confirmation' : ''
+        }`,
       }
     }
 
@@ -167,7 +383,6 @@ export async function runInsuranceVerification(
       }
     }
 
-    // API failed or prerequisites missing → RPA → voice
     return tryRpaThenVoice({
       practiceId: input.practiceId,
       userId: input.userId,
@@ -178,6 +393,7 @@ export async function runInsuranceVerification(
       source,
       eligibilityCheckId: eligibility.eligibilityCheckId || undefined,
       reason: eligibility.errorMessage || 'Availity API eligibility failed',
+      appointmentType: input.appointmentType,
     })
   } catch (error) {
     const reason = error instanceof Error ? error.message : 'Availity check failed'
@@ -196,6 +412,7 @@ export async function runInsuranceVerification(
       agentId: input.agentId,
       source,
       reason,
+      appointmentType: input.appointmentType,
     })
   }
 }
@@ -238,6 +455,7 @@ export async function createVoiceFallbackHandler(params: {
   agentId?: string
   source?: 'api' | 'healix' | 'ui'
   skipRpa?: boolean
+  appointmentType?: string
 }) {
   if (params.skipRpa) {
     return createDirectVoiceFallbackHandler(params)
@@ -256,6 +474,7 @@ export async function createVoiceFallbackHandler(params: {
       patientId: params.patientId,
       policyId: params.policyId,
       eligibilityCheckId: checkId,
+      appointmentType: params.appointmentType,
     })
 
     if (rpa.started && (rpa.status === 'complete' || rpa.status === 'in_progress' || rpa.status === 'pending')) {

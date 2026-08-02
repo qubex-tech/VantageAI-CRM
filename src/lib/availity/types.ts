@@ -1,3 +1,5 @@
+import type { RheumEligibilityPacket } from '@/lib/eligibility/rheum-packet'
+
 export type AvailityEnvironment = 'demo' | 'production'
 
 export interface AvailityIntegrationConfig {
@@ -82,6 +84,8 @@ export interface ParsedEligibilitySummary {
   payerId?: string
   groupNumber?: string
   planName?: string
+  /** Insurance type string from payer when available (e.g. PPO / HMO). */
+  planType?: string
   coverageStartDate?: string
   coverageEndDate?: string
   eligibilityStartDate?: string
@@ -89,6 +93,8 @@ export interface ParsedEligibilitySummary {
   benefits: Array<{ name: string; status?: string; detail?: string }>
   validationMessages: string[]
   rawPlanCount: number
+  /** Lonestar-shaped OV / specialty verification packet */
+  rheum?: RheumEligibilityPacket
 }
 
 export const TERMINAL_COMPLETE_STATUS_CODES = new Set(['3', '4'])

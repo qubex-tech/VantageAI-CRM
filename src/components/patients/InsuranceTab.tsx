@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { computeInsuranceCompleteness, maskMemberId } from '@/lib/insurance-completeness'
+import type { RheumEligibilityPacket } from '@/lib/eligibility/rheum-packet'
+import { EligibilityOvPanel } from './EligibilityOvPanel'
 import { InsurancePolicyFormModal } from './InsurancePolicyFormModal'
 import { Shield, Plus, Pencil, Trash2, User, UserCircle, RefreshCw, CheckCircle2 } from 'lucide-react'
 
@@ -36,9 +38,13 @@ type EligibilityCheckSummary = {
   id: string
   status: string
   errorMessage?: string | null
-  parsedSummary?: { eligibilityStatus?: string } | null
+  parsedSummary?: {
+    eligibilityStatus?: string
+    planType?: string
+    rheum?: RheumEligibilityPacket
+  } | null
   createdAt: string
-  policy?: { payerNameRaw?: string }
+  policy?: { payerNameRaw?: string; id?: string }
 }
 
 type Patient = {
@@ -115,6 +121,7 @@ export function InsuranceTab({
   const [checkingPolicyId, setCheckingPolicyId] = useState<string | null>(null)
   const [checkMessage, setCheckMessage] = useState<string | null>(null)
   const [recentChecks, setRecentChecks] = useState<EligibilityCheckSummary[]>([])
+  const [appointmentType, setAppointmentType] = useState('NP')
   const autoSyncAttempted = useRef(false)
 
   const loadRecentChecks = useCallback(async () => {
@@ -192,13 +199,28 @@ export function InsuranceTab({
       const res = await fetch('/api/insurance/eligibility-check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ patientId, policyId: policy.id }),
+        body: JSON.stringify({
+          patientId,
+          policyId: policy.id,
+          appointmentType: appointmentType || undefined,
+          medicareTxNonPar: /medicare/i.test(policy.payerNameRaw || '')
+            ? /texas/i.test(policy.payerNameRaw || '')
+            : undefined,
+        }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         throw new Error(data?.error || 'Eligibility check failed')
       }
-      setCheckMessage(data.message || 'Eligibility check started')
+      setCheckMessage(
+        [
+          data.message || 'Eligibility check started',
+          data.callRequired ? 'Call confirmation recommended.' : null,
+          data.structuredVoicePrompt ? `Voice script: ${data.structuredVoicePrompt}` : null,
+        ]
+          .filter(Boolean)
+          .join(' ')
+      )
       await loadRecentChecks()
       onRefresh()
 
@@ -240,6 +262,23 @@ export function InsuranceTab({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold text-gray-900">Insurance</h2>
         <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-1.5 text-xs text-gray-600">
+            Appt type
+            <select
+              className="rounded border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900"
+              value={appointmentType}
+              onChange={(e) => setAppointmentType(e.target.value)}
+            >
+              <option value="NP">NP</option>
+              <option value="TVNP">TVNP</option>
+              <option value="FUV">FUV</option>
+              <option value="2nd FU">2nd FU</option>
+              <option value="TV FU">TV FU</option>
+              <option value="US">US</option>
+              <option value="S-NP">S-NP (skip)</option>
+              <option value="Infusion">Infusion (skip)</option>
+            </select>
+          </label>
           {externalEhrId?.trim() && (
             <Button
               variant="outline"
@@ -345,6 +384,20 @@ export function InsuranceTab({
                         Recommended: {completeness.warnings.join(', ')}
                       </div>
                     )}
+                    {(() => {
+                      const latest = recentChecks.find(
+                        (c) =>
+                          c.policy?.id === policy.id ||
+                          (c.policy?.payerNameRaw === policy.payerNameRaw && c.parsedSummary?.rheum)
+                      )
+                      return latest?.parsedSummary?.rheum ? (
+                        <EligibilityOvPanel
+                          compact
+                          packet={latest.parsedSummary.rheum}
+                          eligibilityStatus={latest.parsedSummary.eligibilityStatus}
+                        />
+                      ) : null
+                    })()}
                   </div>
                   <div className="flex items-center gap-2">
                     <Button
@@ -386,15 +439,24 @@ export function InsuranceTab({
       {recentChecks.length > 0 && (
         <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-4">
           <h3 className="text-sm font-semibold text-gray-900">Recent eligibility checks</h3>
-          <ul className="mt-2 space-y-2">
+          <ul className="mt-2 space-y-3">
             {recentChecks.slice(0, 5).map((check) => (
               <li key={check.id} className="text-sm text-gray-600">
-                {new Date(check.createdAt).toLocaleString()} — {check.policy?.payerNameRaw || 'Policy'}:{' '}
-                {check.status}
-                {check.parsedSummary?.eligibilityStatus
-                  ? ` (${check.parsedSummary.eligibilityStatus})`
-                  : ''}
-                {check.errorMessage ? ` — ${check.errorMessage}` : ''}
+                <div>
+                  {new Date(check.createdAt).toLocaleString()} — {check.policy?.payerNameRaw || 'Policy'}:{' '}
+                  {check.status}
+                  {check.parsedSummary?.eligibilityStatus
+                    ? ` (${check.parsedSummary.eligibilityStatus})`
+                    : ''}
+                  {check.errorMessage ? ` — ${check.errorMessage}` : ''}
+                </div>
+                {check.parsedSummary?.rheum && (
+                  <EligibilityOvPanel
+                    compact
+                    packet={check.parsedSummary.rheum}
+                    eligibilityStatus={check.parsedSummary.eligibilityStatus}
+                  />
+                )}
               </li>
             ))}
           </ul>

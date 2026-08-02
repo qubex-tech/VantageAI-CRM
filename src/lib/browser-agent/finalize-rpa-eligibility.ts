@@ -9,6 +9,7 @@ import {
   formatEligibilityNoteContent,
   type ParsedEligibilitySummary,
 } from '@/lib/availity'
+import { applyCallRequiredFlag } from '@/lib/eligibility/lsr-gates'
 
 async function getOrCreateAutomationUserId(practiceId: string): Promise<string> {
   const email = `automation+${practiceId}@getvantage.tech`
@@ -40,12 +41,25 @@ export async function finalizeRpaEligibilityCheck(params: {
   summary: ParsedEligibilitySummary
   rawOutput?: Record<string, unknown>
   browserAgentRunId?: string
+  appointmentType?: string
 }): Promise<{ status: 'complete' | 'failed'; summary: ParsedEligibilitySummary }> {
   const check = await prisma.eligibilityCheck.findUnique({
     where: { id: params.eligibilityCheckId },
     include: { policy: true, patient: true },
   })
   if (!check) throw new Error('Eligibility check not found')
+
+  if (params.summary.rheum) {
+    const appt =
+      params.appointmentType ||
+      (typeof (params.rawOutput as { appointmentType?: string } | undefined)?.appointmentType ===
+      'string'
+        ? (params.rawOutput as { appointmentType?: string }).appointmentType
+        : undefined)
+    if (appt) {
+      params.summary.rheum = applyCallRequiredFlag(params.summary.rheum, appt)
+    }
+  }
 
   if (params.summary.eligibilityStatus === 'error') {
     await prisma.eligibilityCheck.update({
