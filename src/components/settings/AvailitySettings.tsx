@@ -25,8 +25,10 @@ interface AvailitySettingsProps {
     submitterId?: string | null
     submitterStateCode?: string | null
     useMockResponses?: boolean
+    eligibilityApiEnabled?: boolean
     portalRpaEnabled?: boolean
     portalRpaUseMock?: boolean
+    eligibilityVoiceEnabled?: boolean
     isActive?: boolean
     hasClientSecret?: boolean
   } | null
@@ -48,7 +50,9 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
     initialIntegration?.environment === 'production' ? 'production' : 'demo'
   )
   const [apiBaseUrl, setApiBaseUrl] = useState(initialIntegration?.apiBaseUrl || '')
-  const [defaultProviderNpi, setDefaultProviderNpi] = useState(initialIntegration?.defaultProviderNpi || '')
+  const [defaultProviderNpi, setDefaultProviderNpi] = useState(
+    initialIntegration?.defaultProviderNpi || ''
+  )
   const [defaultProviderTaxId, setDefaultProviderTaxId] = useState(
     initialIntegration?.defaultProviderTaxId || ''
   )
@@ -62,13 +66,18 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
   const [useMockResponses, setUseMockResponses] = useState(
     initialIntegration?.useMockResponses ?? true
   )
+  const [eligibilityApiEnabled, setEligibilityApiEnabled] = useState(
+    initialIntegration?.eligibilityApiEnabled ?? initialIntegration?.isActive ?? true
+  )
   const [portalRpaEnabled, setPortalRpaEnabled] = useState(
     initialIntegration?.portalRpaEnabled ?? false
   )
   const [portalRpaUseMock, setPortalRpaUseMock] = useState(
     initialIntegration?.portalRpaUseMock ?? true
   )
-  const [isActive, setIsActive] = useState(initialIntegration?.isActive ?? true)
+  const [eligibilityVoiceEnabled, setEligibilityVoiceEnabled] = useState(
+    initialIntegration?.eligibilityVoiceEnabled ?? true
+  )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -93,9 +102,12 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
     setSubmitterId(initialIntegration?.submitterId || '')
     setSubmitterStateCode(initialIntegration?.submitterStateCode || '')
     setUseMockResponses(initialIntegration?.useMockResponses ?? true)
+    setEligibilityApiEnabled(
+      initialIntegration?.eligibilityApiEnabled ?? initialIntegration?.isActive ?? true
+    )
     setPortalRpaEnabled(initialIntegration?.portalRpaEnabled ?? false)
     setPortalRpaUseMock(initialIntegration?.portalRpaUseMock ?? true)
-    setIsActive(initialIntegration?.isActive ?? true)
+    setEligibilityVoiceEnabled(initialIntegration?.eligibilityVoiceEnabled ?? true)
   }, [initialIntegration])
 
   useEffect(() => {
@@ -141,17 +153,18 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
           submitterId,
           submitterStateCode,
           useMockResponses,
+          eligibilityApiEnabled,
           portalRpaEnabled,
           portalRpaUseMock,
-          isActive,
+          eligibilityVoiceEnabled,
         }),
       })
       const data = await response.json()
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to save Availity settings')
+        throw new Error(data.error || 'Failed to save settings')
       }
       setClientSecret('')
-      setSuccess('Availity settings saved')
+      setSuccess('Insurance Eligibility Agent settings saved')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save')
     } finally {
@@ -201,19 +214,64 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
   return (
     <Card className="border border-gray-200">
       <CardHeader>
-        <CardTitle className="text-base font-semibold text-gray-900">Availity Eligibility</CardTitle>
+        <CardTitle className="text-base font-semibold text-gray-900">
+          Insurance Eligibility Agent
+        </CardTitle>
         <CardDescription className="text-sm text-gray-500">
-          Configure Availity Coverages API (270/271) for real-time insurance eligibility checks.
-          Optionally enable portal automation as a fallback when the API fails.
+          Choose which verification methods this practice uses. Enabled methods run in order: API →
+          portal RPA → call to insurance.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex items-center justify-between rounded-lg border border-gray-200 p-4">
+        <div className="rounded-lg border border-gray-200 p-4 space-y-4">
           <div>
-            <Label className="font-medium">Enable Availity integration</Label>
-            <p className="text-sm text-gray-500 mt-1">Required for API eligibility checks</p>
+            <h3 className="text-sm font-semibold text-gray-900">Verification methods</h3>
+            <p className="text-sm text-gray-500 mt-1">
+              Toggle each path on or off. Disabled methods are skipped in the cascade.
+            </p>
           </div>
-          <Switch checked={isActive} onCheckedChange={setIsActive} disabled={loading} />
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="font-medium">Availity API</Label>
+              <p className="text-sm text-gray-500 mt-1">
+                Coverages API (270/271) real-time eligibility inquiry
+              </p>
+            </div>
+            <Switch
+              checked={eligibilityApiEnabled}
+              onCheckedChange={setEligibilityApiEnabled}
+              disabled={loading}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="font-medium">Availity portal RPA</Label>
+              <p className="text-sm text-gray-500 mt-1">
+                Browser automation of Availity Eligibility &amp; Benefits
+              </p>
+            </div>
+            <Switch
+              checked={portalRpaEnabled}
+              onCheckedChange={setPortalRpaEnabled}
+              disabled={loading}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="font-medium">Call to insurance</Label>
+              <p className="text-sm text-gray-500 mt-1">
+                Outbound voice agent call when earlier methods fail or are disabled
+              </p>
+            </div>
+            <Switch
+              checked={eligibilityVoiceEnabled}
+              onCheckedChange={setEligibilityVoiceEnabled}
+              disabled={loading}
+            />
+          </div>
         </div>
 
         <div className="flex items-center justify-between rounded-lg border border-gray-200 p-4">
@@ -223,7 +281,11 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
               Returns demo eligibility data without live Availity API credentials
             </p>
           </div>
-          <Switch checked={useMockResponses} onCheckedChange={setUseMockResponses} disabled={loading} />
+          <Switch
+            checked={useMockResponses}
+            onCheckedChange={setUseMockResponses}
+            disabled={loading || !eligibilityApiEnabled}
+          />
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -235,6 +297,7 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
               onChange={(e) => setClientId(e.target.value)}
               placeholder="From Availity developer portal"
               className="mt-1"
+              disabled={!eligibilityApiEnabled}
             />
           </div>
           <div>
@@ -246,11 +309,16 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
               onChange={(e) => setClientSecret(e.target.value)}
               placeholder={hasClientSecret ? 'Saved (enter to replace)' : 'Client secret'}
               className="mt-1"
+              disabled={!eligibilityApiEnabled}
             />
           </div>
           <div>
             <Label>Environment</Label>
-            <Select value={environment} onValueChange={(v) => setEnvironment(v as 'demo' | 'production')}>
+            <Select
+              value={environment}
+              onValueChange={(v) => setEnvironment(v as 'demo' | 'production')}
+              disabled={!eligibilityApiEnabled}
+            >
               <SelectTrigger className="mt-1">
                 <SelectValue />
               </SelectTrigger>
@@ -298,6 +366,7 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
               onChange={(e) => setSubmitterId(e.target.value)}
               placeholder="Payer-specific if required"
               className="mt-1"
+              disabled={!eligibilityApiEnabled}
             />
           </div>
           <div>
@@ -308,6 +377,7 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
               onChange={(e) => setSubmitterStateCode(e.target.value)}
               placeholder="e.g. FL"
               className="mt-1"
+              disabled={!eligibilityApiEnabled}
             />
           </div>
           <div className="sm:col-span-2">
@@ -318,31 +388,18 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
               onChange={(e) => setApiBaseUrl(e.target.value)}
               placeholder="https://api.availity.com/availity/v1"
               className="mt-1"
+              disabled={!eligibilityApiEnabled}
             />
           </div>
         </div>
 
         <div className="rounded-lg border border-gray-200 p-4 space-y-4">
           <div>
-            <h3 className="text-sm font-semibold text-gray-900">Portal automation (RPA)</h3>
+            <h3 className="text-sm font-semibold text-gray-900">Portal automation credentials</h3>
             <p className="text-sm text-gray-500 mt-1">
-              Fallback path: API → Availity website login → voice. Requires Browserbase for live
-              browsers, or mock mode for dry runs.
+              Used when portal RPA is enabled. Requires Browserbase for live browsers, or mock mode
+              for dry runs.
             </p>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div>
-              <Label className="font-medium">Enable Availity portal automation</Label>
-              <p className="text-sm text-gray-500 mt-1">
-                Used when the Coverages API fails or is unsupported
-              </p>
-            </div>
-            <Switch
-              checked={portalRpaEnabled}
-              onCheckedChange={setPortalRpaEnabled}
-              disabled={loading}
-            />
           </div>
 
           <div className="flex items-center justify-between">
@@ -355,7 +412,7 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
             <Switch
               checked={portalRpaUseMock}
               onCheckedChange={setPortalRpaUseMock}
-              disabled={loading}
+              disabled={loading || !portalRpaEnabled}
             />
           </div>
 
@@ -369,6 +426,7 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
                 placeholder="Availity login"
                 className="mt-1"
                 autoComplete="off"
+                disabled={!portalRpaEnabled}
               />
             </div>
             <div>
@@ -381,6 +439,7 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
                 placeholder={hasPortalPassword ? 'Saved (enter to replace)' : 'Portal password'}
                 className="mt-1"
                 autoComplete="new-password"
+                disabled={!portalRpaEnabled}
               />
             </div>
             <div className="sm:col-span-2">
@@ -393,6 +452,7 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
                 placeholder={hasPortalTotp ? 'Saved (enter to replace)' : 'Base32 authenticator secret'}
                 className="mt-1"
                 autoComplete="off"
+                disabled={!portalRpaEnabled}
               />
             </div>
           </div>
@@ -401,7 +461,7 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
             type="button"
             variant="outline"
             onClick={handleSavePortalCredentials}
-            disabled={portalCredLoading}
+            disabled={portalCredLoading || !portalRpaEnabled}
           >
             {portalCredLoading ? 'Saving…' : 'Save portal credentials'}
           </Button>
@@ -411,7 +471,7 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
         {success && <p className="text-sm text-green-600">{success}</p>}
 
         <Button onClick={handleSave} disabled={loading}>
-          {loading ? 'Saving…' : 'Save Availity settings'}
+          {loading ? 'Saving…' : 'Save Insurance Eligibility Agent'}
         </Button>
       </CardContent>
     </Card>

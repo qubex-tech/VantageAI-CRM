@@ -340,10 +340,14 @@ model AvailityIntegration {
   submitterId           String?
   submitterStateCode    String?
   useMockResponses      Boolean  @default(true)
+  /// When true, eligibility cascade may use Availity Coverages API
+  eligibilityApiEnabled Boolean  @default(true)
   /// When true, failed/unsupported API checks may fall back to Availity portal RPA
   portalRpaEnabled      Boolean  @default(false)
   /// When true, portal RPA returns synthetic results without a live browser session
   portalRpaUseMock      Boolean  @default(true)
+  /// When true, eligibility cascade may place an insurer voice call as last resort
+  eligibilityVoiceEnabled Boolean @default(true)
   isActive              Boolean  @default(true)
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt

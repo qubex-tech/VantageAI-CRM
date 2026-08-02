@@ -17,8 +17,10 @@ const availitySettingsSchema = z.object({
   submitterId: z.string().optional().or(z.literal('')),
   submitterStateCode: z.string().optional().or(z.literal('')),
   useMockResponses: z.boolean().optional(),
+  eligibilityApiEnabled: z.boolean().optional(),
   portalRpaEnabled: z.boolean().optional(),
   portalRpaUseMock: z.boolean().optional(),
+  eligibilityVoiceEnabled: z.boolean().optional(),
   isActive: z.boolean().optional(),
 })
 
@@ -99,9 +101,19 @@ export async function POST(req: NextRequest) {
     if (parsed.submitterId !== undefined) data.submitterId = parsed.submitterId || null
     if (parsed.submitterStateCode !== undefined) data.submitterStateCode = parsed.submitterStateCode || null
     if (parsed.useMockResponses !== undefined) data.useMockResponses = parsed.useMockResponses
+    if (parsed.eligibilityApiEnabled !== undefined) {
+      data.eligibilityApiEnabled = parsed.eligibilityApiEnabled
+      // Keep legacy isActive aligned with API path so Coverages config helpers stay consistent
+      data.isActive = parsed.eligibilityApiEnabled
+    }
     if (parsed.portalRpaEnabled !== undefined) data.portalRpaEnabled = parsed.portalRpaEnabled
     if (parsed.portalRpaUseMock !== undefined) data.portalRpaUseMock = parsed.portalRpaUseMock
-    if (parsed.isActive !== undefined) data.isActive = parsed.isActive
+    if (parsed.eligibilityVoiceEnabled !== undefined) {
+      data.eligibilityVoiceEnabled = parsed.eligibilityVoiceEnabled
+    }
+    if (parsed.isActive !== undefined && parsed.eligibilityApiEnabled === undefined) {
+      data.isActive = parsed.isActive
+    }
 
     const integration = await prisma.availityIntegration.update({
       where: { practiceId },

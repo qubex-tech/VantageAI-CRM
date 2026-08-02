@@ -65,6 +65,8 @@ export async function getOrCreateAvailityIntegration(practiceId: string) {
       practiceId,
       useMockResponses: true,
       isActive: true,
+      eligibilityApiEnabled: true,
+      eligibilityVoiceEnabled: true,
       environment: 'demo',
     },
     update: {},

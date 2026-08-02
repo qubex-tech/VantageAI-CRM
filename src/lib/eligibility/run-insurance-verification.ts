@@ -5,6 +5,7 @@ import type { ParsedEligibilitySummary } from '@/lib/availity'
 import { formatEligibilityNoteContent } from '@/lib/availity'
 import { linkVoiceFallbackToCheck } from './finalize-check'
 import { runEligibilityCheck, type RunEligibilityCheckResult } from './run-eligibility-check'
+import { getEligibilityPathFlags, type EligibilityPathFlags } from './path-flags'
 import {
   applyCallRequiredFlag,
   buildMedicareTxNonParPacket,
@@ -111,58 +112,89 @@ async function tryRpaThenVoice(params: {
   eligibilityCheckId?: string
   reason: string
   appointmentType?: string
+  flags: EligibilityPathFlags
 }): Promise<RunInsuranceVerificationResult> {
-  console.info('[runInsuranceVerification] Trying Availity portal RPA', {
-    practiceId: params.practiceId,
-    patientId: params.patientId,
-    reason: params.reason,
-  })
+  let browserAgentRunId: string | undefined
+  let eligibilityCheckId = params.eligibilityCheckId
+  let rpaStarted = false
+  let rpaReason = params.reason
 
-  const rpa = await runAvailityRpaEligibility({
-    practiceId: params.practiceId,
-    userId: params.userId,
-    patientId: params.patientId,
-    policyId: params.policyId,
-    eligibilityCheckId: params.eligibilityCheckId,
-    appointmentType: params.appointmentType,
-  })
+  if (params.flags.rpaEnabled) {
+    console.info('[runInsuranceVerification] Trying Availity portal RPA', {
+      practiceId: params.practiceId,
+      patientId: params.patientId,
+      reason: params.reason,
+    })
 
-  if (rpa.started && rpa.status === 'complete') {
-    const summary = attachAppointmentFlags(rpa.summary, params.appointmentType)
-    const call = requiresCallConfirmation(params.appointmentType)
-    const unknown = summary?.rheum ? listUnknownRheumFields(summary.rheum) : []
-    return {
-      path: 'availity_rpa',
-      browserAgentRunId: rpa.browserAgentRunId,
-      eligibility: {
-        eligibilityCheckId: rpa.eligibilityCheckId || '',
-        status: 'complete',
-        summary: summary as Record<string, unknown> | undefined,
-      },
-      callRequired: call.required || Boolean(summary?.rheum?.callRequired),
-      structuredVoicePrompt:
-        call.required || unknown.length
-          ? structuredVoiceFallbackPrompt({
-              formMode: formModeForAppointmentType(params.appointmentType),
-              missingFields: unknown,
-              appointmentType: params.appointmentType,
-            })
-          : undefined,
-      message: `Eligibility verified via Availity portal (${summary?.eligibilityStatus || 'complete'})${
-        call.required ? ' — SOP requires call confirmation' : ''
-      }`,
+    const rpa = await runAvailityRpaEligibility({
+      practiceId: params.practiceId,
+      userId: params.userId,
+      patientId: params.patientId,
+      policyId: params.policyId,
+      eligibilityCheckId: params.eligibilityCheckId,
+      appointmentType: params.appointmentType,
+    })
+
+    browserAgentRunId = rpa.browserAgentRunId
+    eligibilityCheckId = rpa.eligibilityCheckId || eligibilityCheckId
+    rpaStarted = rpa.started
+    rpaReason = rpa.reason || params.reason
+
+    if (rpa.started && rpa.status === 'complete') {
+      const summary = attachAppointmentFlags(rpa.summary, params.appointmentType)
+      const call = requiresCallConfirmation(params.appointmentType)
+      const unknown = summary?.rheum ? listUnknownRheumFields(summary.rheum) : []
+      return {
+        path: 'availity_rpa',
+        browserAgentRunId: rpa.browserAgentRunId,
+        eligibility: {
+          eligibilityCheckId: rpa.eligibilityCheckId || '',
+          status: 'complete',
+          summary: summary as Record<string, unknown> | undefined,
+        },
+        callRequired: call.required || Boolean(summary?.rheum?.callRequired),
+        structuredVoicePrompt:
+          call.required || unknown.length
+            ? structuredVoiceFallbackPrompt({
+                formMode: formModeForAppointmentType(params.appointmentType),
+                missingFields: unknown,
+                appointmentType: params.appointmentType,
+              })
+            : undefined,
+        message: `Eligibility verified via Availity portal (${summary?.eligibilityStatus || 'complete'})${
+          call.required ? ' — SOP requires call confirmation' : ''
+        }`,
+      }
     }
+
+    if (rpa.started && (rpa.status === 'in_progress' || rpa.status === 'pending')) {
+      return {
+        path: 'availity_rpa_in_progress',
+        browserAgentRunId: rpa.browserAgentRunId,
+        eligibility: {
+          eligibilityCheckId: rpa.eligibilityCheckId || '',
+          status: 'in_progress',
+        },
+        message: 'Availity portal eligibility check in progress',
+      }
+    }
+  } else {
+    console.info('[runInsuranceVerification] Skipping RPA (disabled in settings)', {
+      practiceId: params.practiceId,
+      patientId: params.patientId,
+    })
   }
 
-  if (rpa.started && (rpa.status === 'in_progress' || rpa.status === 'pending')) {
+  if (!params.flags.voiceEnabled) {
     return {
-      path: 'availity_rpa_in_progress',
-      browserAgentRunId: rpa.browserAgentRunId,
-      eligibility: {
-        eligibilityCheckId: rpa.eligibilityCheckId || '',
-        status: 'in_progress',
-      },
-      message: 'Availity portal eligibility check in progress',
+      path: 'skipped',
+      browserAgentRunId,
+      eligibility: eligibilityCheckId
+        ? { eligibilityCheckId, status: 'failed', errorMessage: rpaReason }
+        : undefined,
+      message: rpaStarted
+        ? `Availity portal RPA failed and call-to-insurance is disabled (${rpaReason})`
+        : `No remaining eligibility methods enabled (${rpaReason})`,
     }
   }
 
@@ -176,9 +208,9 @@ async function tryRpaThenVoice(params: {
     source: params.source === 'healix' ? 'healix' : 'api',
   })
 
-  if (rpa.eligibilityCheckId) {
+  if (eligibilityCheckId) {
     await linkVoiceFallbackToCheck({
-      checkId: rpa.eligibilityCheckId,
+      checkId: eligibilityCheckId,
       callId: voice.callId,
       conversationId: voice.conversationId,
     })
@@ -186,7 +218,7 @@ async function tryRpaThenVoice(params: {
 
   return {
     path: 'voice',
-    browserAgentRunId: rpa.browserAgentRunId,
+    browserAgentRunId,
     voice: {
       callId: voice.callId,
       conversationId: voice.conversationId,
@@ -198,9 +230,9 @@ async function tryRpaThenVoice(params: {
       missingFields: [],
       appointmentType: params.appointmentType,
     }),
-    message: rpa.started
-      ? `Availity portal RPA failed; started voice verification (${rpa.reason || params.reason})`
-      : `Started insurer voice verification call (${params.reason})`,
+    message: rpaStarted
+      ? `Availity portal RPA failed; started voice verification (${rpaReason})`
+      : `Started insurer voice verification call (${rpaReason})`,
   }
 }
 
@@ -306,6 +338,15 @@ export async function runInsuranceVerification(
     }
   }
 
+  const flags = await getEligibilityPathFlags(input.practiceId)
+  if (!flags.apiEnabled && !flags.rpaEnabled && !flags.voiceEnabled) {
+    return {
+      path: 'skipped',
+      message:
+        'All eligibility verification methods are disabled. Enable API, portal RPA, and/or call to insurance in Settings.',
+    }
+  }
+
   // Resolve policy early for Medicare TX short-circuit
   const policy = input.policyId
     ? await prisma.insurancePolicy.findFirst({
@@ -333,6 +374,29 @@ export async function runInsuranceVerification(
       policyId: policy?.id,
       appointmentType: input.appointmentType,
     })
+  }
+
+  const fallback = (reason: string, eligibilityCheckId?: string) =>
+    tryRpaThenVoice({
+      practiceId: input.practiceId,
+      userId: input.userId,
+      patientId: input.patientId,
+      policyId: input.policyId,
+      insurerPhone: input.insurerPhone,
+      agentId: input.agentId,
+      source,
+      eligibilityCheckId,
+      reason,
+      appointmentType: input.appointmentType,
+      flags,
+    })
+
+  if (!flags.apiEnabled) {
+    console.info('[runInsuranceVerification] Skipping API (disabled in settings)', {
+      practiceId: input.practiceId,
+      patientId: input.patientId,
+    })
+    return fallback('Availity API disabled in settings')
   }
 
   try {
@@ -383,37 +447,19 @@ export async function runInsuranceVerification(
       }
     }
 
-    return tryRpaThenVoice({
-      practiceId: input.practiceId,
-      userId: input.userId,
-      patientId: input.patientId,
-      policyId: input.policyId,
-      insurerPhone: input.insurerPhone,
-      agentId: input.agentId,
-      source,
-      eligibilityCheckId: eligibility.eligibilityCheckId || undefined,
-      reason: eligibility.errorMessage || 'Availity API eligibility failed',
-      appointmentType: input.appointmentType,
-    })
+    return fallback(
+      eligibility.errorMessage || 'Availity API eligibility failed',
+      eligibility.eligibilityCheckId || undefined
+    )
   } catch (error) {
     const reason = error instanceof Error ? error.message : 'Availity check failed'
-    console.warn('[runInsuranceVerification] Availity API threw, trying RPA then voice', {
+    console.warn('[runInsuranceVerification] Availity API threw, trying next enabled methods', {
       practiceId: input.practiceId,
       patientId: input.patientId,
       reason,
     })
 
-    return tryRpaThenVoice({
-      practiceId: input.practiceId,
-      userId: input.userId,
-      patientId: input.patientId,
-      policyId: input.policyId,
-      insurerPhone: input.insurerPhone,
-      agentId: input.agentId,
-      source,
-      reason,
-      appointmentType: input.appointmentType,
-    })
+    return fallback(reason)
   }
 }
 
@@ -428,6 +474,15 @@ export async function createDirectVoiceFallbackHandler(params: {
   source?: 'api' | 'healix' | 'ui'
 }) {
   return async (checkId: string, reason: string) => {
+    const flags = await getEligibilityPathFlags(params.practiceId)
+    if (!flags.voiceEnabled) {
+      console.info('[EligibilityCheck] Skipping voice fallback (disabled in settings)', {
+        checkId,
+        reason,
+        patientId: params.patientId,
+      })
+      return
+    }
     console.info('[EligibilityCheck] Triggering direct voice fallback', {
       checkId,
       reason,
@@ -462,26 +517,43 @@ export async function createVoiceFallbackHandler(params: {
   }
 
   return async (checkId: string, reason: string) => {
-    console.info('[EligibilityCheck] Triggering voice fallback (after RPA attempt)', {
+    const flags = await getEligibilityPathFlags(params.practiceId)
+
+    console.info('[EligibilityCheck] Triggering cascade fallback after API polling', {
       checkId,
       reason,
       patientId: params.patientId,
+      rpaEnabled: flags.rpaEnabled,
+      voiceEnabled: flags.voiceEnabled,
     })
 
-    const rpa = await runAvailityRpaEligibility({
-      practiceId: params.practiceId,
-      userId: params.userId,
-      patientId: params.patientId,
-      policyId: params.policyId,
-      eligibilityCheckId: checkId,
-      appointmentType: params.appointmentType,
-    })
+    if (flags.rpaEnabled) {
+      const rpa = await runAvailityRpaEligibility({
+        practiceId: params.practiceId,
+        userId: params.userId,
+        patientId: params.patientId,
+        policyId: params.policyId,
+        eligibilityCheckId: checkId,
+        appointmentType: params.appointmentType,
+      })
 
-    if (rpa.started && (rpa.status === 'complete' || rpa.status === 'in_progress' || rpa.status === 'pending')) {
-      console.info('[EligibilityCheck] RPA started instead of immediate voice', {
+      if (
+        rpa.started &&
+        (rpa.status === 'complete' || rpa.status === 'in_progress' || rpa.status === 'pending')
+      ) {
+        console.info('[EligibilityCheck] RPA started instead of immediate voice', {
+          checkId,
+          status: rpa.status,
+          browserAgentRunId: rpa.browserAgentRunId,
+        })
+        return
+      }
+    }
+
+    if (!flags.voiceEnabled) {
+      console.info('[EligibilityCheck] Skipping voice fallback (disabled in settings)', {
         checkId,
-        status: rpa.status,
-        browserAgentRunId: rpa.browserAgentRunId,
+        reason,
       })
       return
     }
