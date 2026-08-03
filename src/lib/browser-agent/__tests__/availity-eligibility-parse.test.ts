@@ -136,4 +136,42 @@ Submit another patient
         .eligibilityStatus
     ).toBe('inactive')
   })
+
+  it('does not treat another patient Active Coverage as success for this member', () => {
+    const snippet = `
+CORREA, KATHRYN Q
+Member Status
+Active Coverage
+Member ID: 964461385
+ZGP814392947
+Health Benefit Plan Coverage
+Invalid/Missing Subscriber/Insured ID - Please Correct and Resubmit
+`
+    expect(
+      interpretAvailityEligibilityText(snippet, { memberId: 'ZGP814392947' }).eligibilityStatus
+    ).toBe('error')
+  })
+
+  it('requires member-scoped Active Coverage when memberId is provided', () => {
+    const stickyHistory = `
+CORREA, KATHRYN Q
+Member Status
+Active Coverage
+Member ID: 964461385
+Get Started
+Patient ID
+`
+    expect(
+      interpretAvailityEligibilityText(stickyHistory, { memberId: 'ZGP814392947' })
+        .eligibilityStatus
+    ).toBe('unknown')
+  })
+
+  it('rejects Medicare Advantage for commercial BCBS Texas scoring', () => {
+    const crm = 'Blue Cross and Blue Shield of Texas'
+    expect(payerLabelMatches('BLUE CROSS MEDICARE ADVANTAGE', crm)).toBe(false)
+    expect(pickBestPayerLabel(['BLUE CROSS MEDICARE ADVANTAGE', 'BLUE CROSS BLUE SHIELD OF TEXAS'], crm)).toBe(
+      'BLUE CROSS BLUE SHIELD OF TEXAS'
+    )
+  })
 })

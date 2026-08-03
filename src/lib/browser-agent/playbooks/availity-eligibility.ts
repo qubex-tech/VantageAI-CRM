@@ -266,6 +266,11 @@ export function scorePayerLabel(label: string, payerName: string): number | null
   // Prefer the shortest strong match so base "UNITED HEALTHCARE" beats plan variants.
   score += Math.max(0, 80 - compactLabel.length)
 
+  // Don't let Medicare Advantage / Medicaid product lines win for commercial CRM labels.
+  const crmHasMedicare = /medicare|advantage|medicaid|dual/.test(normName)
+  const labelHasMedicare = /medicare|advantage|medicaid|dual/.test(normLabel)
+  if (labelHasMedicare && !crmHasMedicare) score -= 600
+
   return score
 }
 
@@ -285,9 +290,13 @@ export function pickBestPayerLabel(labels: string[], payerName: string): string 
 /**
  * Interpret Availity Eligibility & Benefits result text.
  * Prefer explicit AAA/rejection copy over benefit heuristics — results pages often
- * still include the inquiry form ("Submit another patient", "Benefits", etc.).
+ * still include the inquiry form ("Submit another patient", "Benefits", etc.) and
+ * prior patients' "Active Coverage" in the left history rail.
  */
-export function interpretAvailityEligibilityText(bodyText: string): {
+export function interpretAvailityEligibilityText(
+  bodyText: string,
+  opts?: { memberId?: string; patientLastName?: string }
+): {
   eligibilityStatus: ParsedEligibilitySummary['eligibilityStatus']
   message?: string
 } {
@@ -296,7 +305,7 @@ export function interpretAvailityEligibilityText(bodyText: string): {
 
   const rejection =
     text.match(
-      /Invalid\/Missing[^\n.]{0,120}|Please Correct and Resubmit|Subscriber\/Insured ID[^\n.]{0,80}|Member (?:ID )?not found[^\n.]{0,80}|Patient not found[^\n.]{0,80}|No [Ee]ligibility[^\n.]{0,80}|Unable to (?:process|verify|respond)[^\n.]{0,80}|Transaction error[^\n.]{0,80}|Payer (?:does not|not) support[^\n.]{0,80}/
+      /Invalid\/Missing[^\n.]{0,160}|Please Correct and Resubmit|Subscriber\/Insured ID[^\n.]{0,80}|Member (?:ID )?not found[^\n.]{0,80}|Patient not found[^\n.]{0,80}|No [Ee]ligibility[^\n.]{0,80}|Unable to (?:process|verify|respond)[^\n.]{0,80}|Transaction error[^\n.]{0,80}|Payer (?:does not|not) support[^\n.]{0,80}/
     )?.[0] ||
     (/invalid\/missing|please correct and resubmit|subscriber\/insured id|member (?:id )?not found|patient not found|no eligibility (?:data|information)|unable to (?:process|verify|respond)|transaction error/i.test(
       lower
@@ -314,8 +323,34 @@ export function interpretAvailityEligibilityText(bodyText: string): {
     return { eligibilityStatus: 'inactive' }
   }
 
+  const memberId = (opts?.memberId || '').trim()
+  const lastName = (opts?.patientLastName || '').trim()
+  if (memberId) {
+    const memberRe = memberId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const scopedActive = new RegExp(
+      `(?:${memberRe}[\\s\\S]{0,1200}(?:member status\\s*)?active coverage)|(?:(?:member status\\s*)?active coverage[\\s\\S]{0,1200}${memberRe})`,
+      'i'
+    )
+    if (scopedActive.test(text)) {
+      return { eligibilityStatus: 'active' }
+    }
+    // History rail often shows another patient's Active Coverage — keep waiting.
+    if (/\bactive coverage\b/i.test(text)) {
+      return { eligibilityStatus: 'unknown' }
+    }
+  } else if (lastName) {
+    const nameRe = lastName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const scopedActive = new RegExp(
+      `${nameRe}[\\s\\S]{0,1200}(?:member status\\s*)?active coverage`,
+      'i'
+    )
+    if (scopedActive.test(text)) {
+      return { eligibilityStatus: 'active' }
+    }
+  }
+
   if (
-    /coverage status\s*[:\-]?\s*active|\bactive coverage\b|\beligible\b|patient is eligible|status\s*[:\-]?\s*active|\bactive\b/i.test(
+    /coverage status\s*[:\-]?\s*active|\bmember status\s*active coverage\b|\bactive coverage\b/i.test(
       lower
     ) &&
     /coverage|eligib|benefit|plan/i.test(lower)
@@ -326,6 +361,9 @@ export function interpretAvailityEligibilityText(bodyText: string): {
   // Results view with benefit amounts (do not exclude "Submit another patient" —
   // Availity keeps that CTA on the results screen).
   if (/benefit details|plan coverage|copay|coinsurance|deductible|out of pocket/i.test(lower)) {
+    // Without a member-scoped Active Coverage hit, amounts alone are not enough
+    // (sidebar history / prior inquiries can include dollar rows).
+    if (memberId) return { eligibilityStatus: 'unknown' }
     return {
       eligibilityStatus: /inactive|terminated|not eligible/i.test(lower) ? 'inactive' : 'active',
     }
@@ -881,21 +919,8 @@ async function selectTypeaheadOption(
       return { ok: true, selectedLabel: clickedLabel }
     }
 
-    if (
-      selected &&
-      params.matches(clickedLabel) &&
-      selectedCompact !== termCompact &&
-      (selectedCompact.includes(compactPayerText(clickedLabel).slice(0, 8)) ||
-        compactPayerText(clickedLabel).includes(selectedCompact.slice(0, 8)))
-    ) {
-      ctx.log(`Selected Availity ${params.fieldLabel} (committed near click)`, {
-        term,
-        selected,
-        clickedLabel,
-      })
-      return { ok: true, selectedLabel: selected }
-    }
-
+    // Never accept a committed value that does not itself match the CRM payer
+    // (e.g. clicked BCBS Texas but field stuck on BLUE CROSS MEDICARE ADVANTAGE).
     return null
   }
 
@@ -1411,6 +1436,9 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
   ctx.log('Clicked Availity eligibility Submit')
 
   // Wait for results inside the eligibility iframe (parent shell text is just the nav chrome).
+  // Scope interpretation to this member so a prior patient's "Active Coverage" in the
+  // history rail cannot mark the run successful.
+  const interpretOpts = { memberId, patientLastName: lastName }
   const resultDeadline = Date.now() + 90_000
   let bodyText = ''
   let eligibilityStatus: ParsedEligibilitySummary['eligibilityStatus'] = 'unknown'
@@ -1435,10 +1463,21 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
       }
     }
 
-    const interpreted = interpretAvailityEligibilityText(bodyText)
+    const interpreted = interpretAvailityEligibilityText(bodyText, interpretOpts)
     if (interpreted.eligibilityStatus !== 'unknown') {
       eligibilityStatus = interpreted.eligibilityStatus
       resultMessage = interpreted.message
+      // On apparent active, wait one extra beat for AAA rejection text to arrive.
+      if (eligibilityStatus === 'active') {
+        await page().waitForTimeout(2500)
+        bodyText =
+          (await ctx.session.collectTextAcrossFrames?.()) ||
+          (await page().locator('body').innerText().catch(() => '')) ||
+          bodyText
+        const again = interpretAvailityEligibilityText(bodyText, interpretOpts)
+        eligibilityStatus = again.eligibilityStatus
+        resultMessage = again.message
+      }
       break
     }
   }
@@ -1446,6 +1485,10 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
   // Results header alone is not enough — Plan Maximums / copay rows are below the fold.
   if (eligibilityStatus === 'active' || eligibilityStatus === 'inactive') {
     bodyText = await enrichAvailityResultText(ctx, bodyText)
+    // Re-check after enrichment — AAA errors / member-scoped status may only be clear then.
+    const afterEnrich = interpretAvailityEligibilityText(bodyText, interpretOpts)
+    eligibilityStatus = afterEnrich.eligibilityStatus
+    resultMessage = afterEnrich.message || resultMessage
   }
 
   if (ctx.session.screenshotDataUrl) {
