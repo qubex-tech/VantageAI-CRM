@@ -18,9 +18,10 @@ describe('normalizePayerText', () => {
 describe('payerSearchTerms', () => {
   it('derives typeahead variants from any payer label (no hardcoded payer list)', () => {
     const terms = payerSearchTerms('Cigna Health spring')
-    expect(terms[0]).toBe('Cigna Health spring')
+    // Short brand first — matches manual Availity typeahead usage.
+    expect(terms[0]).toBe('Cigna')
     expect(terms.some((t) => /healthspring/i.test(t))).toBe(true)
-    expect(terms).toContain('Cigna')
+    expect(terms).toContain('Cigna Health spring')
   })
 
   it('includes payer id when provided (preferred first)', () => {
@@ -31,12 +32,13 @@ describe('payerSearchTerms', () => {
 
   it('works for unrelated commercial payers', () => {
     const terms = payerSearchTerms('Humana Gold Plus')
-    expect(terms[0]).toBe('Humana Gold Plus')
-    expect(terms).toContain('Humana')
+    expect(terms[0]).toBe('Humana')
+    expect(terms).toContain('Humana Gold Plus')
   })
 
-  it('emits United Healthcare variant for messy CRM UHC labels', () => {
+  it('emits short brand then United Healthcare for messy CRM UHC labels', () => {
     const terms = payerSearchTerms('United Health Care Of All States')
+    expect(terms[0]).toBe('United')
     expect(terms).toContain('United Healthcare')
     expect(terms.some((t) => /united\s+healthcare/i.test(t))).toBe(true)
   })

@@ -11,7 +11,10 @@ export interface BrowserPage {
   waitForLoadState: (state?: string, options?: Record<string, unknown>) => Promise<unknown>
   waitForTimeout: (ms: number) => Promise<void>
   screenshot: (options?: Record<string, unknown>) => Promise<Buffer>
-  keyboard?: { type: (text: string, options?: { delay?: number }) => Promise<void> }
+  keyboard?: {
+    type: (text: string, options?: { delay?: number }) => Promise<void>
+    press?: (key: string) => Promise<void>
+  }
 }
 
 export interface BrowserLocator {
@@ -43,6 +46,14 @@ export interface BrowserSessionHandle {
   focusPageWithSelector?: (selector: string, timeoutMs?: number) => Promise<boolean>
   /** Locate an element across all open tabs and frames (Availity apps are often iframe-hosted). */
   findLocator?: (selector: string, timeoutMs?: number) => Promise<BrowserLocator | null>
+  /**
+   * Collect matching locators across all open tabs/frames (for typeahead option lists
+   * that live inside Availity's eligibility iframe, not the parent shell).
+   */
+  locateAllAcrossFrames?: (
+    selector: string,
+    opts?: { limit?: number }
+  ) => Promise<BrowserLocator[]>
   /** Concatenate visible text from every frame (parent shell text alone is usually useless). */
   collectTextAcrossFrames?: () => Promise<string>
   close: () => Promise<void>

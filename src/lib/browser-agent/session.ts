@@ -93,6 +93,29 @@ export async function createBrowserSession(params?: {
       return Boolean(found)
     },
     findLocator: async (selector: string, timeoutMs = 5_000) => findLocatorAcross(selector, timeoutMs),
+    locateAllAcrossFrames: async (selector: string, opts) => {
+      const limit = opts?.limit ?? 40
+      const found: import('./types').BrowserLocator[] = []
+      for (const p of context.pages()) {
+        try {
+          for (const frame of p.frames()) {
+            try {
+              const list = frame.locator(selector)
+              const count = await list.count()
+              for (let i = 0; i < Math.min(count, limit - found.length); i++) {
+                found.push(list.nth(i) as unknown as import('./types').BrowserLocator)
+              }
+              if (found.length >= limit) return found
+            } catch {
+              // cross-origin / detached frame
+            }
+          }
+        } catch {
+          // page may be closed
+        }
+      }
+      return found
+    },
     collectTextAcrossFrames: async () => {
       const chunks: string[] = []
       for (const p of context.pages()) {

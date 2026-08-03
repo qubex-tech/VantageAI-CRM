@@ -154,8 +154,17 @@ export function payerSearchTerms(payerName: string, payerId?: string): string[] 
   const normalized = normalizePayerText(raw)
   const terms: string[] = []
   const id = (payerId || '').trim()
-  // Prefer Availity payer id / canonical spelling first when available.
+  // Prefer Availity payer id when available.
   if (id) terms.push(id)
+
+  // Recording-validated order: short brand query first (e.g. "united"), then
+  // normalized full label, then longer CRM variants. Availity typeahead ranks
+  // best on short brand tokens; long CRM names often leave uncommitted leftover text.
+  for (const base of uniqueStrings([normalized, raw])) {
+    const words = base.split(/\s+/).filter(Boolean)
+    if (words[0]) terms.push(words[0])
+    if (words.length >= 2) terms.push(words.slice(0, 2).join(' '))
+  }
   if (normalized) terms.push(normalized)
   if (raw && raw.toLowerCase() !== normalized.toLowerCase()) terms.push(raw)
 
@@ -167,10 +176,7 @@ export function payerSearchTerms(payerName: string, payerId?: string): string[] 
       terms.push(words.slice(-2).join(''))
       if (words.length >= 3) {
         terms.push(words.slice(0, 3).join(' '))
-        terms.push(words.slice(0, 2).join(' '))
       }
-      // Brand-only last: short terms flood Availity with unrelated hits.
-      terms.push(words[0])
     }
   }
 
@@ -711,10 +717,12 @@ async function findInputBySelectors(
 }
 
 async function collectTypeaheadCandidates(
-  page: NonNullable<PlaybookContext['session']>['page']
+  ctx: PlaybookContext
 ): Promise<Array<{ label: string; locator: BrowserLocator }>> {
   const found: Array<{ label: string; locator: BrowserLocator }> = []
   const seen = new Set<string>()
+  const page = ctx.session?.page
+  if (!page) return found
 
   const pushUnique = (label: string, locator: BrowserLocator) => {
     const trimmed = label
@@ -741,7 +749,16 @@ async function collectTypeaheadCandidates(
     '[class*="option"]',
   ]
 
+  // Availity Eligibility runs inside an iframe — query every frame, not just the shell.
   for (const sel of optionSelectors) {
+    const across = (await ctx.session?.locateAllAcrossFrames?.(sel, { limit: 40 })) || []
+    if (across.length) {
+      for (const loc of across) {
+        const text = ((await loc.innerText().catch(() => '')) || '').trim()
+        if (text) pushUnique(text, loc)
+      }
+      continue
+    }
     const list = page.locator(sel)
     const count = await list.count().catch(() => 0)
     for (let i = 0; i < Math.min(count, 40); i++) {
@@ -752,37 +769,39 @@ async function collectTypeaheadCandidates(
     }
   }
 
-  // Availity also surfaces recent/favorite payers under "Other Payers".
-  const otherPayers = page.getByText?.(/other payers/i)
-  if (otherPayers) {
-    // Sibling/nearby clickable payer names — collect via role=option already; also try links/buttons.
-    const nearby = page.locator(
-      'text=/Other Payers/i >> xpath=following::*[self::button or self::a or self::li or self::div][position()<=20]'
-    )
-    const nearbyCount = await nearby.count().catch(() => 0)
-    for (let i = 0; i < Math.min(nearbyCount, 20); i++) {
-      const loc = nearby.nth?.(i) ?? (i === 0 ? nearby.first() : null)
-      if (!loc) break
-      const text = ((await loc.innerText().catch(() => '')) || '').trim()
-      // Keep single-line payer-like labels only.
-      if (text && !text.includes('\n') && text.length <= 80) pushUnique(text, loc)
-    }
-  }
-
   return found
 }
 
-async function clickLabelAnywhere(
-  page: NonNullable<PlaybookContext['session']>['page'],
-  label: string
-): Promise<boolean> {
+async function clickLabelAnywhere(ctx: PlaybookContext, label: string): Promise<boolean> {
+  const page = ctx.session?.page
+  if (!page) return false
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const exact = new RegExp(`^\\s*${escaped}\\s*$`, 'i')
+  const quoted = label.replace(/"/g, '\\"')
+
+  // Prefer frame-aware lookups — dropdown options live in the eligibility iframe.
+  const frameSelectors = [
+    `[role="option"]:has-text("${quoted}")`,
+    `.dropdown-item:has-text("${quoted}")`,
+    `.av-select__option:has-text("${quoted}")`,
+    `li:has-text("${quoted}")`,
+    `button:has-text("${quoted}")`,
+    `div[class*="option"]:has-text("${quoted}")`,
+  ]
+  for (const sel of frameSelectors) {
+    const loc = await ctx.session?.findLocator?.(sel, 2_500)
+    if (loc) {
+      await loc.scrollIntoViewIfNeeded?.().catch(() => undefined)
+      await loc.click({ timeout: 10_000 }).catch(() => undefined)
+      return true
+    }
+  }
+
   const candidates: BrowserLocator[] = [
     page.getByRole('option', { name: exact }).first(),
-    page.locator(`[role="option"]:has-text("${label.replace(/"/g, '\\"')}")`).first(),
-    page.locator(`.dropdown-item:has-text("${label.replace(/"/g, '\\"')}")`).first(),
-    page.locator(`.av-select__option:has-text("${label.replace(/"/g, '\\"')}")`).first(),
+    page.locator(`[role="option"]:has-text("${quoted}")`).first(),
+    page.locator(`.dropdown-item:has-text("${quoted}")`).first(),
+    page.locator(`.av-select__option:has-text("${quoted}")`).first(),
   ]
   if (page.getByText) {
     candidates.push(page.getByText(exact).first())
@@ -838,40 +857,73 @@ async function selectTypeaheadOption(
     clickedLabel: string,
     term: string
   ): Promise<{ ok: true; selectedLabel: string } | null> => {
-    await page().waitForTimeout(800)
+    await page().waitForTimeout(900)
     const selected = await readSelected()
+    const selectedCompact = compactPayerText(selected)
+    const termCompact = compactPayerText(term)
+
+    // Still showing exactly what we typed → dropdown never committed.
+    if (selected && termCompact && selectedCompact === termCompact) {
+      return null
+    }
+
     if (selected && params.matches(selected)) {
       ctx.log(`Selected Availity ${params.fieldLabel}`, { term, selected, clickedLabel })
       return { ok: true, selectedLabel: selected }
     }
-    // Some Availity selects commit the option as a chip and clear/alter the input.
-    if (params.matches(clickedLabel)) {
-      ctx.log(`Selected Availity ${params.fieldLabel} (by clicked label)`, {
+
+    // Chip/cleared input after a real option click — accept clicked label only then.
+    if (!selected && params.matches(clickedLabel)) {
+      ctx.log(`Selected Availity ${params.fieldLabel} (chip/cleared input)`, {
         term,
         clickedLabel,
-        selected,
       })
       return { ok: true, selectedLabel: clickedLabel }
+    }
+
+    if (
+      selected &&
+      params.matches(clickedLabel) &&
+      selectedCompact !== termCompact &&
+      (selectedCompact.includes(compactPayerText(clickedLabel).slice(0, 8)) ||
+        compactPayerText(clickedLabel).includes(selectedCompact.slice(0, 8)))
+    ) {
+      ctx.log(`Selected Availity ${params.fieldLabel} (committed near click)`, {
+        term,
+        selected,
+        clickedLabel,
+      })
+      return { ok: true, selectedLabel: selected }
+    }
+
+    return null
+  }
+
+  const tryCommitWithKeyboard = async (
+    bestLabel: string,
+    term: string
+  ): Promise<{ ok: true; selectedLabel: string } | null> => {
+    // Focus is on the typeahead input; ArrowDown+Enter matches the manual recording path.
+    const kb = page().keyboard
+    if (!kb?.press) return null
+    const input = await findInputBySelectors(ctx, params.fieldSelectors)
+    if (!input) return null
+    await input.click({ timeout: 5_000 }).catch(() => undefined)
+    await kb.press('ArrowDown').catch(() => undefined)
+    await page().waitForTimeout(250)
+    await kb.press('Enter').catch(() => undefined)
+    const confirmed = await confirmSelection(bestLabel, term)
+    if (confirmed) return confirmed
+    // If keyboard selected something else that still matches, accept it.
+    const selected = await readSelected()
+    if (selected && params.matches(selected) && compactPayerText(selected) !== compactPayerText(term)) {
+      return { ok: true, selectedLabel: selected }
     }
     return null
   }
 
-  // Try preferred/canonical labels first (from API resolve or normalized CRM name).
-  for (const preferred of params.preferredLabels || []) {
-    if (!preferred) continue
-    const input = await findInputBySelectors(ctx, params.fieldSelectors)
-    if (input) {
-      await input.click({ timeout: 10_000 }).catch(() => undefined)
-      await input.fill('').catch(() => undefined)
-      await input.fill(preferred)
-      await page().waitForTimeout(1000)
-    }
-    const clicked = await clickLabelAnywhere(page(), preferred)
-    if (clicked) {
-      const confirmed = await confirmSelection(preferred, preferred)
-      if (confirmed) return confirmed
-    }
-  }
+  // Preferred labels: try as click targets after a short brand search, not as typed full strings.
+  // (Typing the full normalized name often fails to open a useful Availity list.)
 
   for (const term of params.searchTerms) {
     if (!term) continue
@@ -881,11 +933,29 @@ async function selectTypeaheadOption(
     await input.click({ timeout: 10_000 }).catch(() => undefined)
     await input.fill('').catch(() => undefined)
     await input.fill(term)
-    await page().waitForTimeout(1200)
+    await page().waitForTimeout(1400)
 
-    const candidates = await collectTypeaheadCandidates(page())
-    const bestLabel = pickBest(candidates.map((c) => c.label))
-    if (!bestLabel) continue
+    const candidates = await collectTypeaheadCandidates(ctx)
+    ctx.log(`Availity ${params.fieldLabel} candidates`, {
+      term,
+      count: candidates.length,
+      labels: candidates.slice(0, 8).map((c) => c.label),
+    })
+
+    const preferredHit = (params.preferredLabels || [])
+      .map((p) => pickBest([p, ...candidates.map((c) => c.label)].filter(Boolean)))
+      .find(Boolean)
+    const bestLabel =
+      pickBest(candidates.map((c) => c.label)) ||
+      preferredHit ||
+      (params.preferredLabels || []).find((p) => params.matches(p)) ||
+      null
+    if (!bestLabel) {
+      // Keyboard select first highlighted option when list is open but unreadable.
+      const viaKeys = await tryCommitWithKeyboard(term, term)
+      if (viaKeys && params.matches(viaKeys.selectedLabel)) return viaKeys
+      continue
+    }
 
     const bestCandidate = candidates.find(
       (c) => compactPayerText(c.label) === compactPayerText(bestLabel)
@@ -897,16 +967,20 @@ async function selectTypeaheadOption(
       clicked = true
     }
     if (!clicked) {
-      clicked = await clickLabelAnywhere(page(), bestLabel)
+      clicked = await clickLabelAnywhere(ctx, bestLabel)
     }
-    if (!clicked) continue
 
-    const confirmed = await confirmSelection(bestLabel, term)
-    if (confirmed) return confirmed
+    if (clicked) {
+      const confirmed = await confirmSelection(bestLabel, term)
+      if (confirmed) return confirmed
+    }
+
+    const viaKeys = await tryCommitWithKeyboard(bestLabel, term)
+    if (viaKeys) return viaKeys
   }
 
-  // Last attempt: scan Other Payers / visible options without retyping.
-  const visible = await collectTypeaheadCandidates(page())
+  // Last attempt: scan currently visible options (Other Payers / open list) without retyping.
+  const visible = await collectTypeaheadCandidates(ctx)
   const bestVisible = pickBest(visible.map((c) => c.label))
   if (bestVisible) {
     const hit = visible.find((c) => compactPayerText(c.label) === compactPayerText(bestVisible))
@@ -915,7 +989,7 @@ async function selectTypeaheadOption(
       const confirmed = await confirmSelection(bestVisible, bestVisible)
       if (confirmed) return confirmed
     }
-    if (await clickLabelAnywhere(page(), bestVisible)) {
+    if (await clickLabelAnywhere(ctx, bestVisible)) {
       const confirmed = await confirmSelection(bestVisible, bestVisible)
       if (confirmed) return confirmed
     }
@@ -1151,11 +1225,20 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
     : ''
 
   // Clear sticky prior inquiry (Availity often leaves the last payer/org selected).
-  await clickFirstMatch(page(), [
-    page().getByRole('button', { name: /new request/i }).first(),
-    page().locator('button:has-text("New Request")').first(),
-    page().locator('a:has-text("New Request")').first(),
-  ])
+  const newRequest =
+    (await ctx.session!.findLocator?.(
+      'button:has-text("New Request"), a:has-text("New Request"), [role="button"]:has-text("New Request")',
+      3_000
+    )) || null
+  if (newRequest) {
+    await newRequest.click({ timeout: 10_000 }).catch(() => undefined)
+  } else {
+    await clickFirstMatch(page(), [
+      page().getByRole('button', { name: /new request/i }).first(),
+      page().locator('button:has-text("New Request")').first(),
+      page().locator('a:has-text("New Request")').first(),
+    ])
+  }
   await page().waitForTimeout(1000)
 
   const filledMember = await fillFirst(
@@ -1194,6 +1277,20 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
     ['input[name="providerNpi"]', 'input[id*="npi" i]', 'input[placeholder*="NPI" i]'],
     npi
   )
+  // Availity often shows an NPI suggestion chip under the field — click to commit it.
+  if (filledNpi && npi) {
+    const npiChip =
+      (await ctx.session!.findLocator?.(
+        `[role="option"]:has-text("${npi}"), .dropdown-item:has-text("${npi}"), button:has-text("${npi}"), [class*="option"]:has-text("${npi}")`,
+        2_000
+      )) || null
+    if (npiChip) {
+      await npiChip.click({ timeout: 5_000 }).catch(() => undefined)
+      ctx.log('Confirmed Availity provider NPI chip', { npi })
+    } else if (page().keyboard?.press) {
+      await page().keyboard!.press!('Enter').catch(() => undefined)
+    }
+  }
   const filledTaxId = await fillFirst(
     [
       'input[name="providerTaxId"]',
