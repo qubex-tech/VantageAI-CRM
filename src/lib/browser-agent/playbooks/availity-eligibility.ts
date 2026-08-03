@@ -1431,7 +1431,7 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
         errorMessage: 'Session lost — still on Availity Sign In while submitting eligibility',
         escalateToVoice: true,
         artifactUrls: artifacts,
-        output: { pageSnippet: bodyText.slice(0, 2500), url: page().url() },
+        output: { pageSnippet: bodyText.slice(0, 12_000), url: page().url() },
       }
     }
 
@@ -1441,6 +1441,11 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
       resultMessage = interpreted.message
       break
     }
+  }
+
+  // Results header alone is not enough — Plan Maximums / copay rows are below the fold.
+  if (eligibilityStatus === 'active' || eligibilityStatus === 'inactive') {
+    bodyText = await enrichAvailityResultText(ctx, bodyText)
   }
 
   if (ctx.session.screenshotDataUrl) {
@@ -1454,7 +1459,7 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
       escalateToVoice: true,
       artifactUrls: artifacts,
       output: {
-        pageSnippet: bodyText.slice(0, 2500),
+        pageSnippet: bodyText.slice(0, 12_000),
         url: page().url(),
         filledMember,
         filledNpi,
@@ -1478,7 +1483,7 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
           benefits: [],
           rawPlanCount: 0,
         } satisfies ParsedEligibilitySummary,
-        pageSnippet: bodyText.slice(0, 2500),
+        pageSnippet: bodyText.slice(0, 12_000),
         url: page().url(),
         filledMember,
         filledNpi,
@@ -1490,6 +1495,16 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
   const formMode = formModeForAppointmentType(asString(ctx.input.appointmentType) || undefined)
   let rheum = scrapeRheumPacketFromPortalText(bodyText, { formMode, source: 'availity_rpa' })
   rheum = applyCallRequiredFlag(rheum, asString(ctx.input.appointmentType) || undefined)
+  ctx.log('Scraped Availity rheum packet', {
+    planType: rheum.planType,
+    networkStatus: rheum.networkStatus,
+    specialistCopay: rheum.specialistCopay,
+    deductible: rheum.deductible,
+    coinsurance: rheum.coinsurance,
+    oop: rheum.oop,
+    authRequired: rheum.authRequired,
+    unknownFields: rheum.unknownFields,
+  })
 
   const summary: ParsedEligibilitySummary = {
     eligibilityStatus,
@@ -1508,12 +1523,97 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
     output: {
       summary,
       source: 'availity_rpa',
-      pageSnippet: bodyText.slice(0, 2500),
+      pageSnippet: bodyText.slice(0, 12_000),
       url: page().url(),
       selectedPayerLabel,
     },
     artifactUrls: artifacts,
   }
+}
+
+/**
+ * After Active/Inactive status appears, click network filter + scroll so Plan Maximums,
+ * deductible/OOP rows, and specialist benefits are included in collected text.
+ */
+async function enrichAvailityResultText(
+  ctx: PlaybookContext,
+  initialText: string
+): Promise<string> {
+  if (!ctx.session) return initialText
+  const page = () => ctx.session!.page
+  let best = initialText
+
+  const clickFilter = async (label: string) => {
+    const loc =
+      (await ctx.session!.findLocator?.(
+        `button:has-text("${label}"), [role="button"]:has-text("${label}"), [role="tab"]:has-text("${label}"), label:has-text("${label}")`,
+        2_000
+      )) || null
+    if (!loc) return false
+    await loc.click({ timeout: 5_000 }).catch(() => undefined)
+    await page().waitForTimeout(1200)
+    return true
+  }
+
+  // Prefer In-Network amounts for OV financials; networkStatus still inferred from provider copy.
+  const clickedInn = await clickFilter('In Network')
+  if (!clickedInn) await clickFilter('In-Network')
+
+  // Jump toward the amounts section when the heading is present.
+  const planMax =
+    (await ctx.session.findLocator?.(
+      'text=/Plan Maximums and Deductibles/i, text=/Annual Deductible/i, text=/Specialist/i',
+      2_000
+    )) || null
+  if (planMax) {
+    await planMax.scrollIntoViewIfNeeded?.().catch(() => undefined)
+    await planMax.click({ timeout: 3_000 }).catch(() => undefined)
+  }
+
+  for (let i = 0; i < 6; i++) {
+    await page().keyboard?.press?.('PageDown').catch(() => undefined)
+    await page().waitForTimeout(500)
+    const text =
+      (await ctx.session.collectTextAcrossFrames?.()) ||
+      (await page().locator('body').innerText().catch(() => '')) ||
+      ''
+    if (text.length > best.length) best = text
+    // Stop early once we see Individual deductible/OOP dollars.
+    if (
+      /annual\s+deductible/i.test(text) &&
+      /\$\s*[\d,]+(?:\.\d{2})?/.test(text) &&
+      /is\s+remaining|out[- ]of[- ]pocket/i.test(text)
+    ) {
+      best = text
+      break
+    }
+  }
+
+  // Also try expanding common benefit accordions / specialist rows if present.
+  for (const label of ['Specialist', 'Office Visit', 'Professional (Physician) Visit - Office']) {
+    const row =
+      (await ctx.session.findLocator?.(
+        `button:has-text("${label}"), [role="button"]:has-text("${label}"), text=/${label}/i`,
+        1_500
+      )) || null
+    if (!row) continue
+    await row.click({ timeout: 3_000 }).catch(() => undefined)
+    await page().waitForTimeout(600)
+    const text =
+      (await ctx.session.collectTextAcrossFrames?.()) ||
+      (await page().locator('body').innerText().catch(() => '')) ||
+      ''
+    if (text.length > best.length) best = text
+  }
+
+  ctx.log('Enriched Availity result text', {
+    initialLen: initialText.length,
+    enrichedLen: best.length,
+    hasAnnualDeductible: /annual\s+deductible/i.test(best),
+    hasOop: /out[- ]of[- ]pocket/i.test(best),
+    hasSpecialist: /specialist/i.test(best),
+  })
+  return best
 }
 
 export const availityEligibilityPlaybook: BrowserPlaybook = {

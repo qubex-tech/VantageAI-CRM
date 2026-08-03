@@ -77,6 +77,39 @@ describe('scrapeRheumPacketFromPortalText', () => {
     expect(packet.referralRequired).toBe(false)
     expect(packet.telehealthAllowed).toBe(true)
   })
+
+  it('parses Availity Plan Maximums table copy (UHC Choice Plus style)', () => {
+    const packet = scrapeRheumPacketFromPortalText(
+      `
+      Member Status Active Coverage
+      Plan / Product: UNITEDHEALTHCARE CHOICE PLUS
+      PROVIDER IS OUT NETWORK FOR MEMBER
+      Auth Required
+      A PRIOR AUTHORIZATION OR NOTIFICATION INQUIRY REQUEST MAY BE SUBMITTED
+      Insurance Type: Commercial
+      Plan Maximums and Deductibles
+      Annual Deductible (In-Network)
+      Individual: $3,200 total per calendar year. $2,553.13 is remaining. $646.87 has been applied Year to Date
+      Family: $6,400 total per calendar year. $5,028.35 is remaining.
+      Out of Pocket (In-Network)
+      Individual: $5,500 total per calendar year. $4,446.04 is remaining.
+      Family: $10,000 total per calendar year. $7,705.61 is remaining.
+      Specialist Office Visit Copay: $40.00
+      Coinsurance: 20%
+      `,
+      { source: 'availity_rpa' }
+    )
+    expect(packet.planType).toBe('Commercial')
+    expect(packet.networkStatus).toBe('onn')
+    expect(packet.authRequired).toBe(true)
+    expect(packet.deductible?.total).toBe('$3200')
+    expect(packet.deductible?.remaining).toBe('$2553.13')
+    expect(packet.deductible?.met).toBe('$646.87')
+    expect(packet.oop?.max).toBe('$5500')
+    expect(packet.oop?.remaining).toBe('$4446.04')
+    expect(packet.specialistCopay).toBe('$40.00')
+    expect(packet.coinsurance).toBe('20%')
+  })
 })
 
 describe('LSR gates', () => {
