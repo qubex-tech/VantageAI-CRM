@@ -110,6 +110,70 @@ describe('scrapeRheumPacketFromPortalText', () => {
     expect(packet.specialistCopay).toBe('$40.00')
     expect(packet.coinsurance).toBe('20%')
   })
+
+  it('parses Availity calendar-year Remaining table rows from live portal text', () => {
+    const packet = scrapeRheumPacketFromPortalText(
+      `
+      PROVIDER IS OUT NETWORK FOR MEMBER
+      Auth Required
+      Plan Maximums and Deductibles
+      Annual Deductible
+      In Network
+      HIGHEST BENEFIT
+      100%
+      $0 / Calendar Year(s)
+      -$0 Year to Date
+      $0 Remaining
+      100%
+      $0 / Calendar Year(s)
+      -$0 Year to Date
+      $0 Remaining
+      In Network
+      20%
+      $3,200 / Calendar Year(s)
+      -$646.87 Year to Date
+      $2,553.13 Remaining
+      21%
+      $6,400 / Calendar Year(s)
+      -$1,371.65 Year to Date
+      $5,028.35 Remaining
+      Out Of Pocket
+      In Network
+      Insurance Type: Commercial
+      HIGHEST BENEFIT
+      100%
+      $0 / Calendar Year(s)
+      -$0 Year to Date
+      $0 Remaining
+      In Network
+      Insurance Type: Commercial
+      19%
+      $5,500 / Calendar Year(s)
+      -$1,053.96 Year to Date
+      $4,446.04 Remaining
+      23%
+      $10,000 / Calendar Year(s)
+      -$2,294.39 Year to Date
+      $7,705.61 Remaining
+      Benefit Information
+      Professional (Physician) Visit - Office - 98
+      Specialist Office Visit Copay: $40.00
+      `,
+      { source: 'availity_rpa' }
+    )
+    expect(packet.networkStatus).toBe('onn')
+    expect(packet.authRequired).toBe(true)
+    expect(packet.deductible).toEqual({
+      total: '$3200',
+      met: '$646.87',
+      remaining: '$2553.13',
+    })
+    expect(packet.oop).toEqual({
+      max: '$5500',
+      remaining: '$4446.04',
+    })
+    expect(packet.specialistCopay).toBe('$40.00')
+  })
 })
 
 describe('LSR gates', () => {

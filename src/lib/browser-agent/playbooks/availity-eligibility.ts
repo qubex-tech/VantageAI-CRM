@@ -1589,16 +1589,28 @@ async function enrichAvailityResultText(
     }
   }
 
-  // Also try expanding common benefit accordions / specialist rows if present.
-  for (const label of ['Specialist', 'Office Visit', 'Professional (Physician) Visit - Office']) {
+  // Expand Benefit Information accordion, then specialist / office-visit rows for copay.
+  for (const label of [
+    'Benefit Information',
+    'Expand',
+    'Professional (Physician) Visit - Office',
+    'Professional (Physician) Visit - Office - 98',
+    'Professional (Physician) - 96',
+    'Specialist',
+    'Office Visit',
+  ]) {
     const row =
       (await ctx.session.findLocator?.(
-        `button:has-text("${label}"), [role="button"]:has-text("${label}"), text=/${label}/i`,
+        `button:has-text("${label}"), [role="button"]:has-text("${label}"), a:has-text("${label}"), text=/${label.replace(
+          /[.*+?^${}()|[\]\\]/g,
+          '\\$&'
+        )}/i`,
         1_500
       )) || null
     if (!row) continue
+    await row.scrollIntoViewIfNeeded?.().catch(() => undefined)
     await row.click({ timeout: 3_000 }).catch(() => undefined)
-    await page().waitForTimeout(600)
+    await page().waitForTimeout(800)
     const text =
       (await ctx.session.collectTextAcrossFrames?.()) ||
       (await page().locator('body').innerText().catch(() => '')) ||

@@ -12,6 +12,11 @@ function money(value: string | undefined): string | undefined {
   return `$${value.replace(/,/g, '')}`
 }
 
+function parseAmount(value: string | undefined): number {
+  if (!value) return NaN
+  return Number(value.replace(/,/g, ''))
+}
+
 function captureMoney(text: string, patterns: RegExp[]): string | undefined {
   for (const re of patterns) {
     const m = text.match(re)
@@ -20,15 +25,37 @@ function captureMoney(text: string, patterns: RegExp[]): string | undefined {
   return undefined
 }
 
-/** Prefer Individual column amounts from Availity Plan Maximums tables. */
-function captureIndividualSectionMoney(
-  text: string,
-  sectionPattern: RegExp,
-  amountPatterns: RegExp[]
-): string | undefined {
-  const section = text.match(sectionPattern)?.[0]
-  if (!section) return captureMoney(text, amountPatterns)
-  return captureMoney(section, amountPatterns)
+type CalendarBucket = { total?: string; met?: string; remaining?: string }
+
+/**
+ * Availity Plan Maximums rows look like:
+ *   $3,200 / Calendar Year(s)
+ *   -$646.87 Year to Date
+ *   $2,553.13 Remaining
+ */
+function extractCalendarYearBuckets(section: string): CalendarBucket[] {
+  const buckets: CalendarBucket[] = []
+  const re =
+    /\$\s*([\d,]+(?:\.\d{2})?)\s*\/\s*Calendar Year[\s\S]{0,160}?-\$?\s*([\d,]+(?:\.\d{2})?)\s*Year to Date[\s\S]{0,160}?\$\s*([\d,]+(?:\.\d{2})?)\s*Remaining/gi
+  let m: RegExpExecArray | null
+  while ((m = re.exec(section))) {
+    buckets.push({ total: m[1], met: m[2], remaining: m[3] })
+  }
+  return buckets
+}
+
+/** Prefer first non-zero Individual-style bucket (skip Availity "HIGHEST BENEFIT" $0 rows). */
+function pickPrimaryBucket(buckets: CalendarBucket[]): CalendarBucket | undefined {
+  const nonZero = buckets.filter((b) => parseAmount(b.total) > 0)
+  return nonZero[0] || buckets[0]
+}
+
+function sectionBetween(text: string, start: RegExp, end: RegExp): string {
+  const startMatch = text.search(start)
+  if (startMatch < 0) return ''
+  const from = text.slice(startMatch)
+  const endMatch = from.search(end)
+  return endMatch > 0 ? from.slice(0, endMatch) : from.slice(0, 4000)
 }
 
 function inferPlanTypeFromText(text: string): string | undefined {
@@ -46,7 +73,6 @@ function inferPlanTypeFromText(text: string): string | undefined {
 
 function inferNetwork(text: string): EligibilityNetworkStatus {
   const lower = text.toLowerCase()
-  // Availity often states provider network explicitly even when the INN filter is selected.
   if (
     /provider is out[- ](?:of[- ]?)?network|out[- ](?:of[- ]?)?network for member|\bonn\b|non[- ]participating/.test(
       lower
@@ -61,8 +87,10 @@ function inferNetwork(text: string): EligibilityNetworkStatus {
   ) {
     return 'inn'
   }
-  // Prefer explicit benefit-network phrasing over filter chip labels like "(In-Network)".
-  if (/in[- ](?:of[- ]?)?network\s+benefits|\bin[- ]network\b(?!\s*\))/.test(lower) && !/out[- ](?:of[- ]?)?network/.test(lower)) {
+  if (
+    /in[- ](?:of[- ]?)?network\s+benefits|\bin[- ]network\b(?!\s*\))/.test(lower) &&
+    !/out[- ](?:of[- ]?)?network/.test(lower)
+  ) {
     return 'inn'
   }
   if (/out[- ](?:of[- ]?)?network\s+benefits|\bout[- ]of[- ]network\b(?!\s*\))/.test(lower)) {
@@ -73,7 +101,8 @@ function inferNetwork(text: string): EligibilityNetworkStatus {
 
 /**
  * Best-effort scrape of Availity Eligibility & Benefits result text into a rheum packet.
- * Handles both simple labeled fields and Availity "Plan Maximums and Deductibles" copy.
+ * Handles labeled fields and Availity Plan Maximums table copy
+ * ("$3,200 / Calendar Year(s) … $2,553.13 Remaining").
  */
 export function scrapeRheumPacketFromPortalText(
   pageText: string,
@@ -91,43 +120,38 @@ export function scrapeRheumPacketFromPortalText(
 
   const copay = captureMoney(text, [
     /specialist\s*(?:office\s*)?(?:visit\s*)?co-?pay(?:ment)?\s*[:\-]?\s*\$?\s*([\d,]+(?:\.\d{2})?)/i,
+    /(?:physician|professional).*?office.*?co-?pay(?:ment)?\s*[:\-]?\s*\$?\s*([\d,]+(?:\.\d{2})?)/i,
     /office\s*visit\s*co-?pay(?:ment)?\s*[:\-]?\s*\$?\s*([\d,]+(?:\.\d{2})?)/i,
     /co-?pay(?:ment)?\s*[:\-]?\s*\$\s*([\d,]+(?:\.\d{2})?)/i,
   ])
   if (copay) packet.specialistCopay = money(copay)
 
-  // Availity Plan Maximums: "Annual Deductible ... Individual: $3,200 ... $2,553.13 is remaining"
-  const deductibleSection =
-    /annual\s+deductible[\s\S]{0,900}?(?=out\s*of\s*pocket|highest\s+benefit|co-?insurance|specialist|messages\b|$)/i
+  const deductibleSection = sectionBetween(
+    text,
+    /annual\s+deductible/i,
+    /out\s*of\s*pocket|benefit information|messages\b|$/i
+  )
+  const dedBucket = pickPrimaryBucket(extractCalendarYearBuckets(deductibleSection))
   const dedTotal =
-    captureIndividualSectionMoney(text, deductibleSection, [
-      /individual[^$]{0,80}\$\s*([\d,]+(?:\.\d{2})?)/i,
-      /(?:individual\s+)?deductible[^$]{0,40}\$\s*([\d,]+(?:\.\d{2})?)/i,
-      /deductible\s*(?:total|amount|limit)?\s*[:\-]?\s*\$\s*([\d,]+(?:\.\d{2})?)/i,
-    ]) ||
+    dedBucket?.total ||
     captureMoney(text, [
       /(?:individual\s+)?deductible\s*(?:total|amount|limit)?\s*[:\-]?\s*\$\s*([\d,]+(?:\.\d{2})?)/i,
       /deductible\s*[:\-]?\s*\$\s*([\d,]+(?:\.\d{2})?)/i,
+      /individual[^$]{0,80}\$\s*([\d,]+(?:\.\d{2})?)\s*(?:total|\/\s*calendar)/i,
     ])
-
   const dedRemaining =
-    captureIndividualSectionMoney(text, deductibleSection, [
-      /\$\s*([\d,]+(?:\.\d{2})?)\s+is\s+remaining/i,
-      /remaining[^$]{0,20}\$\s*([\d,]+(?:\.\d{2})?)/i,
-      /deductible\s+remaining\s*[:\-]?\s*\$\s*([\d,]+(?:\.\d{2})?)/i,
-    ]) ||
+    dedBucket?.remaining ||
     captureMoney(text, [
       /deductible\s+remaining\s*[:\-]?\s*\$\s*([\d,]+(?:\.\d{2})?)/i,
       /\$\s*([\d,]+(?:\.\d{2})?)\s+is\s+remaining/i,
+      /\$\s*([\d,]+(?:\.\d{2})?)\s+remaining/i,
     ])
-
   const dedMet =
-    captureIndividualSectionMoney(text, deductibleSection, [
+    dedBucket?.met ||
+    captureMoney(deductibleSection || text, [
       /\$\s*([\d,]+(?:\.\d{2})?)\s+has\s+been\s+applied/i,
-      /(?:met|ytd|accumulated)[^$]{0,20}\$\s*([\d,]+(?:\.\d{2})?)/i,
-    ]) ||
-    captureMoney(text, [
       /(?:deductible\s*)?(?:met|ytd|accumulated)\s*[:\-]?\s*\$\s*([\d,]+(?:\.\d{2})?)/i,
+      /-\$?\s*([\d,]+(?:\.\d{2})?)\s*year to date/i,
     ])
 
   if (dedTotal || dedRemaining || dedMet) {
@@ -138,29 +162,31 @@ export function scrapeRheumPacketFromPortalText(
     }
   }
 
+  // Only accept explicit percent coinsurance labels — Availity progress bars ("20%") are not coinsurance.
   const coins = captureMoney(text, [
     /co-?insurance\s*[:\-]?\s*([\d,]+(?:\.\d{1,2})?)\s*%/i,
     /co-?insurance\s*[:\-]?\s*([\d,]+(?:\.\d{1,2})?)\s*(?:percent|%)/i,
   ])
   if (coins) packet.coinsurance = `${coins.replace(/,/g, '')}%`
 
-  const oopSection =
-    /out[- ]of[- ]pocket[\s\S]{0,900}?(?=annual\s+deductible|highest\s+benefit|co-?insurance|specialist|messages\b|$)/i
+  const oopSection = sectionBetween(
+    text,
+    /out\s*of\s*pocket/i,
+    /benefit information|annual\s+deductible|messages\b|$/i
+  )
+  const oopBucket = pickPrimaryBucket(extractCalendarYearBuckets(oopSection))
   const oopMax =
-    captureIndividualSectionMoney(text, oopSection, [
+    oopBucket?.total ||
+    captureMoney(oopSection || text, [
       /individual[^$]{0,80}\$\s*([\d,]+(?:\.\d{2})?)/i,
-      /(?:max(?:imum)?|limit)[^$]{0,20}\$\s*([\d,]+(?:\.\d{2})?)/i,
-    ]) ||
-    captureMoney(text, [
-      /out[- ]of[- ]pocket\s*(?:max(?:imum)?|limit)\s*[:\-]?\s*\$\s*([\d,]+(?:\.\d{2})?)/i,
+      /out[- ]of[- ]pocket\s*(?:max(?:imum)?|limit)?\s*[:\-]?\s*\$\s*([\d,]+(?:\.\d{2})?)/i,
       /oop\s*(?:max)?\s*[:\-]?\s*\$\s*([\d,]+(?:\.\d{2})?)/i,
     ])
   const oopRem =
-    captureIndividualSectionMoney(text, oopSection, [
+    oopBucket?.remaining ||
+    captureMoney(oopSection || text, [
       /\$\s*([\d,]+(?:\.\d{2})?)\s+is\s+remaining/i,
-      /remaining[^$]{0,20}\$\s*([\d,]+(?:\.\d{2})?)/i,
-    ]) ||
-    captureMoney(text, [
+      /\$\s*([\d,]+(?:\.\d{2})?)\s+remaining/i,
       /(?:oop|out[- ]of[- ]pocket)\s*remaining\s*[:\-]?\s*\$\s*([\d,]+(?:\.\d{2})?)/i,
     ])
   if (oopMax || oopRem) {
