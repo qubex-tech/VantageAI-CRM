@@ -283,13 +283,47 @@ export async function runAriaSessionPipeline(params: {
     },
   })
 
-  const { soap, meta } = await generateAriaSoapNote({
-    transcript,
-    patientName: context.patientName,
-    visitType: context.visitType,
-    reason: context.reason,
-    contextSnippets: context.snippets,
-  })
+  let soap
+  let meta: Record<string, unknown>
+  try {
+    ;({ soap, meta } = await generateAriaSoapNote({
+      transcript,
+      patientName: context.patientName,
+      visitType: context.visitType,
+      reason: context.reason,
+      contextSnippets: context.snippets,
+    }))
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'SOAP generation failed'
+    const rawPreview =
+      err && typeof err === 'object' && 'rawContent' in err
+        ? String((err as { rawContent?: string }).rawContent || '').slice(0, 2000)
+        : undefined
+    const existingMeta =
+      session.rawModelMeta && typeof session.rawModelMeta === 'object'
+        ? (session.rawModelMeta as Record<string, unknown>)
+        : {}
+    await prisma.scribeSession.update({
+      where: { id: sessionId },
+      data: {
+        status: 'failed',
+        error: message,
+        rawModelMeta: {
+          ...existingMeta,
+          asr: asrMeta,
+          generation: {
+            error: message,
+            rawContentPreview: rawPreview,
+          },
+          timings: {
+            asrMs: asrDoneAt - pipelineStarted,
+            totalMs: Date.now() - pipelineStarted,
+          },
+        } as Prisma.InputJsonValue,
+      },
+    })
+    throw err instanceof Error ? err : new Error(message)
+  }
 
   const existingMeta =
     session.rawModelMeta && typeof session.rawModelMeta === 'object'

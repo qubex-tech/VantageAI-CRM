@@ -11,6 +11,90 @@ export interface AriaContextSnippet {
   text: string
 }
 
+function coerceSoapField(value: unknown): string {
+  if (typeof value === 'string') return value.trim()
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => coerceSoapField(item))
+      .filter(Boolean)
+      .join('\n')
+      .trim()
+  }
+  if (value && typeof value === 'object') {
+    const obj = value as Record<string, unknown>
+    for (const key of ['text', 'content', 'value', 'summary', 'note']) {
+      const nested = coerceSoapField(obj[key])
+      if (nested) return nested
+    }
+    // Join stringy leaf values if the model nested bullets/objects
+    const parts = Object.values(obj)
+      .map((v) => coerceSoapField(v))
+      .filter(Boolean)
+    if (parts.length) return parts.join('\n').trim()
+  }
+  return ''
+}
+
+function pickSoapField(source: Record<string, unknown>, keys: string[]): string {
+  const lowerMap = new Map<string, unknown>()
+  for (const [k, v] of Object.entries(source)) {
+    lowerMap.set(k.toLowerCase().replace(/[\s_-]+/g, ''), v)
+  }
+  for (const key of keys) {
+    const normalized = key.toLowerCase().replace(/[\s_-]+/g, '')
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
+      const text = coerceSoapField(source[key])
+      if (text) return text
+    }
+    if (lowerMap.has(normalized)) {
+      const text = coerceSoapField(lowerMap.get(normalized))
+      if (text) return text
+    }
+  }
+  return ''
+}
+
+/** Normalize model JSON into Aria SOAP fields (handles nested/cased variants). */
+export function extractSoapFromModelJson(raw: unknown): AriaSoapNote {
+  const empty = emptySoapNote()
+  if (!raw || typeof raw !== 'object') return empty
+  const root = raw as Record<string, unknown>
+
+  const candidates: Record<string, unknown>[] = [root]
+  for (const wrapKey of ['soap', 'note', 'soapNote', 'draft', 'document', 'result']) {
+    const nested = root[wrapKey]
+    if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+      candidates.push(nested as Record<string, unknown>)
+    }
+  }
+
+  for (const source of candidates) {
+    const soap: AriaSoapNote = {
+      subjective: pickSoapField(source, ['subjective', 'S', 'subj']),
+      objective: pickSoapField(source, ['objective', 'O', 'obj']),
+      assessment: pickSoapField(source, ['assessment', 'A', 'assess']),
+      plan: pickSoapField(source, ['plan', 'P']),
+      addendum: pickSoapField(source, ['addendum', 'dictation', 'addendumNote']),
+    }
+    if (soap.subjective || soap.objective || soap.assessment || soap.plan || soap.addendum) {
+      return soap
+    }
+  }
+
+  return empty
+}
+
+export function soapHasContent(soap: AriaSoapNote): boolean {
+  return Boolean(
+    soap.subjective.trim() ||
+      soap.objective.trim() ||
+      soap.assessment.trim() ||
+      soap.plan.trim() ||
+      (soap.addendum || '').trim()
+  )
+}
+
 export async function generateAriaSoapNote(params: {
   transcript: string
   patientName: string
@@ -42,8 +126,10 @@ export async function generateAriaSoapNote(params: {
           '- Do not invent diagnoses, meds, vitals, or exam findings.',
           '- If a section lacks support, write a brief placeholder like "Not discussed."',
           '- Write concise clinical prose suitable for clinician review.',
-          '- Return strict JSON with keys: subjective, objective, assessment, plan, addendum.',
-          '- Put post-visit clinician dictation content in addendum when clearly marked as such; otherwise leave addendum empty.',
+          '- Return a flat JSON object only (no nested soap/note wrappers).',
+          '- Every value must be a plain string.',
+          '- Required string keys exactly: subjective, objective, assessment, plan, addendum.',
+          '- Put post-visit clinician dictation content in addendum when clearly marked as such; otherwise set addendum to an empty string.',
         ].join('\n'),
       },
       {
@@ -61,20 +147,24 @@ export async function generateAriaSoapNote(params: {
   })
 
   const raw = completion.choices[0]?.message?.content ?? '{}'
-  let parsed: Record<string, unknown> = {}
+  let parsed: unknown = {}
   try {
-    parsed = JSON.parse(raw) as Record<string, unknown>
+    parsed = JSON.parse(raw)
   } catch {
-    parsed = {}
+    // Strip accidental markdown fences then retry
+    const fenced = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '')
+    try {
+      parsed = JSON.parse(fenced)
+    } catch {
+      parsed = {}
+    }
   }
 
-  const soap: AriaSoapNote = {
-    ...emptySoapNote(),
-    subjective: typeof parsed.subjective === 'string' ? parsed.subjective : '',
-    objective: typeof parsed.objective === 'string' ? parsed.objective : '',
-    assessment: typeof parsed.assessment === 'string' ? parsed.assessment : '',
-    plan: typeof parsed.plan === 'string' ? parsed.plan : '',
-    addendum: typeof parsed.addendum === 'string' ? parsed.addendum : '',
+  const soap = extractSoapFromModelJson(parsed)
+  if (!soapHasContent(soap)) {
+    const err = new Error('SOAP generation returned empty sections')
+    ;(err as Error & { rawContent?: string }).rawContent = raw.slice(0, 2000)
+    throw err
   }
 
   return {
@@ -85,6 +175,7 @@ export async function generateAriaSoapNote(params: {
       latencyMs: Date.now() - started,
       promptTokens: completion.usage?.prompt_tokens,
       completionTokens: completion.usage?.completion_tokens,
+      rawContentPreview: raw.slice(0, 500),
     },
   }
 }

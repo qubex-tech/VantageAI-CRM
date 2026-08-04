@@ -29,10 +29,17 @@ export async function signAriaSession(params: {
   }
 
   const soap = parseSoapJson(session.soapJson)
-  const content = formatSoapAsText(soap)
-  if (!content.replace(/[—\s]/g, '').length) {
-    throw new Error('Note is empty')
+  const hasBody = Boolean(
+    soap.subjective.trim() ||
+      soap.objective.trim() ||
+      soap.assessment.trim() ||
+      soap.plan.trim() ||
+      (soap.addendum || '').trim()
+  )
+  if (!hasBody) {
+    throw new Error('Note is empty — regenerate the draft before signing')
   }
+  const content = formatSoapAsText(soap)
 
   const note = await prisma.patientNote.create({
     data: {

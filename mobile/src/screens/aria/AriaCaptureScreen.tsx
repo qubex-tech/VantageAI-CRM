@@ -82,7 +82,7 @@ export function AriaCaptureScreen() {
 
   useEffect(() => {
     if (!remoteStatus) return
-    if (remoteStatus === 'ready_for_review' || remoteStatus === 'failed') {
+    if (remoteStatus === 'ready_for_review') {
       navigation.replace('AriaReview', { sessionId })
     }
   }, [remoteStatus, navigation, sessionId])
@@ -168,8 +168,14 @@ export function AriaCaptureScreen() {
         kind: 'ambient',
         durationMs: last.durationMs,
       })
-      if (session.status === 'ready_for_review' || session.status === 'failed') {
+      if (session.status === 'ready_for_review') {
         navigation.replace('AriaReview', { sessionId })
+        return
+      }
+      if (session.status === 'failed') {
+        setPhase('idle')
+        Alert.alert('Aria', session.error || 'Note generation failed. Please try again.')
+        return
       }
     } catch (err) {
       setError(getApiErrorMessage(err, 'Processing failed'))
