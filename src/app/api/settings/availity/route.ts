@@ -5,6 +5,10 @@ import { requireAuth } from '@/lib/middleware'
 import { isVantageAdmin } from '@/lib/permissions'
 import { encryptString } from '@/lib/integrations/ehr/crypto'
 import { getOrCreateAvailityIntegration } from '@/lib/availity/config'
+import {
+  AVAILITY_ELIGIBILITY_PLAYBOOK_KEY,
+  getOrCreatePracticePlaybook,
+} from '@/lib/browser-agent/practice-playbook'
 
 const availitySettingsSchema = z.object({
   clientId: z.string().optional().or(z.literal('')),
@@ -119,6 +123,11 @@ export async function POST(req: NextRequest) {
       where: { practiceId },
       data,
     })
+
+    // Enabling portal RPA ensures a practice-scoped Availity eligibility playbook exists.
+    if (parsed.portalRpaEnabled === true) {
+      await getOrCreatePracticePlaybook(practiceId, AVAILITY_ELIGIBILITY_PLAYBOOK_KEY)
+    }
 
     return NextResponse.json({ integration: redactIntegration(integration) })
   } catch (error) {

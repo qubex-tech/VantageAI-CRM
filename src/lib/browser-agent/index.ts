@@ -16,6 +16,15 @@ export { isBrowserbaseConfigured } from './session'
 export { startBrowserAgentRun, executeBrowserAgentRun } from './runner'
 export { getPlaybook, listPlaybooks } from './playbooks'
 export {
+  AVAILITY_ELIGIBILITY_PLAYBOOK_KEY,
+  getDefaultAvailityEligibilityConfig,
+  getOrCreatePracticePlaybook,
+  getPracticePlaybook,
+  normalizeAvailityEligibilityConfig,
+  updatePracticePlaybookConfig,
+} from './practice-playbook'
+export type { AvailityEligibilityPlaybookConfig, PracticePlaybookRecord } from './practice-playbook'
+export {
   runAvailityRpaEligibility,
   isAvailityRpaAvailable,
   applyBrowserRunToEligibilityCheck,

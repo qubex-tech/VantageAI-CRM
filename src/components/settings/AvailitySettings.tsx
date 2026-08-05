@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 
 interface AvailitySettingsProps {
   initialIntegration: {
@@ -89,6 +90,17 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
   const [hasPortalTotp, setHasPortalTotp] = useState(false)
   const [portalCredLoading, setPortalCredLoading] = useState(false)
 
+  const [playbookActive, setPlaybookActive] = useState(false)
+  const [playbookUpdatedAt, setPlaybookUpdatedAt] = useState<string | null>(null)
+  const [expandLabelsText, setExpandLabelsText] = useState('')
+  const [networkFilter, setNetworkFilter] = useState<'In Network' | 'Out of Network' | 'All Networks'>(
+    'In Network'
+  )
+  const [playbookNotes, setPlaybookNotes] = useState('')
+  const [sourceVideoUrl, setSourceVideoUrl] = useState('')
+  const [playbookLoading, setPlaybookLoading] = useState(false)
+  const [playbookSaveLoading, setPlaybookSaveLoading] = useState(false)
+
   const hasClientSecret = Boolean(initialIntegration?.hasClientSecret)
 
   useEffect(() => {
@@ -133,6 +145,41 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [practiceId])
 
+  useEffect(() => {
+    if (!portalRpaEnabled) return
+    let cancelled = false
+    ;(async () => {
+      setPlaybookLoading(true)
+      try {
+        const res = await fetch(
+          apiUrl('/api/settings/practice-playbooks?playbookKey=availity.eligibility&create=1')
+        )
+        if (!res.ok) return
+        const data = await res.json()
+        const pb = data.playbook
+        if (cancelled || !pb) return
+        setPlaybookActive(Boolean(pb.isActive))
+        setPlaybookUpdatedAt(pb.updatedAt ? String(pb.updatedAt) : null)
+        const labels = pb.config?.resultCapture?.expandLabels
+        setExpandLabelsText(Array.isArray(labels) ? labels.join('\n') : '')
+        const filter = pb.config?.resultCapture?.networkFilter
+        if (filter === 'Out of Network' || filter === 'All Networks' || filter === 'In Network') {
+          setNetworkFilter(filter)
+        }
+        setPlaybookNotes(pb.notes || '')
+        setSourceVideoUrl(pb.sourceVideoUrl || '')
+      } catch {
+        // ignore
+      } finally {
+        if (!cancelled) setPlaybookLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [practiceId, portalRpaEnabled])
+
   const handleSave = async () => {
     setLoading(true)
     setError('')
@@ -169,6 +216,49 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
       setError(err instanceof Error ? err.message : 'Failed to save')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleSavePlaybook = async () => {
+    setPlaybookSaveLoading(true)
+    setError('')
+    setSuccess('')
+    try {
+      const expandLabels = expandLabelsText
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+      const response = await fetch(apiUrl('/api/settings/practice-playbooks'), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          practiceId,
+          playbookKey: 'availity.eligibility',
+          sourceVideoUrl: sourceVideoUrl.trim() || null,
+          notes: playbookNotes.trim() || null,
+          config: {
+            version: 1,
+            resultCapture: {
+              networkFilter,
+              expandLabels,
+            },
+          },
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to save practice playbook')
+      }
+      const pb = data.playbook
+      setPlaybookActive(Boolean(pb?.isActive))
+      setPlaybookUpdatedAt(pb?.updatedAt ? String(pb.updatedAt) : null)
+      const labels = pb?.config?.resultCapture?.expandLabels
+      if (Array.isArray(labels)) setExpandLabelsText(labels.join('\n'))
+      setSuccess('Availity practice playbook saved')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save practice playbook')
+    } finally {
+      setPlaybookSaveLoading(false)
     }
   }
 
@@ -464,6 +554,97 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
             disabled={portalCredLoading || !portalRpaEnabled}
           >
             {portalCredLoading ? 'Saving…' : 'Save portal credentials'}
+          </Button>
+        </div>
+
+        <div className="rounded-lg border border-gray-200 p-4 space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900">Availity eligibility playbook</h3>
+            <p className="text-sm text-gray-500 mt-1">
+              Practice-scoped capture settings for portal RPA. The shared Playwright engine stays in
+              code; expand labels and network filter are owned by this practice.
+            </p>
+            {portalRpaEnabled && (
+              <p className="text-xs text-gray-500 mt-2">
+                Status:{' '}
+                {playbookLoading
+                  ? 'Loading…'
+                  : playbookActive
+                    ? 'Active'
+                    : 'Inactive / not created'}
+                {playbookUpdatedAt
+                  ? ` · Updated ${new Date(playbookUpdatedAt).toLocaleString()}`
+                  : ''}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <Label>Network filter</Label>
+            <Select
+              value={networkFilter}
+              onValueChange={(v) =>
+                setNetworkFilter(v as 'In Network' | 'Out of Network' | 'All Networks')
+              }
+              disabled={!portalRpaEnabled || playbookLoading}
+            >
+              <SelectTrigger className="mt-1">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="In Network">In Network</SelectItem>
+                <SelectItem value="Out of Network">Out of Network</SelectItem>
+                <SelectItem value="All Networks">All Networks</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label htmlFor="expandLabels">Benefit sections to expand</Label>
+            <p className="text-xs text-gray-500 mt-1 mb-1">One label per line</p>
+            <Textarea
+              id="expandLabels"
+              value={expandLabelsText}
+              onChange={(e) => setExpandLabelsText(e.target.value)}
+              rows={8}
+              className="mt-1 font-mono text-sm"
+              disabled={!portalRpaEnabled || playbookLoading}
+              placeholder="Benefit Information&#10;Specialist&#10;Medical Care - 1"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="sourceVideoUrl">Source video URL (optional)</Label>
+            <Input
+              id="sourceVideoUrl"
+              value={sourceVideoUrl}
+              onChange={(e) => setSourceVideoUrl(e.target.value)}
+              placeholder="https://…"
+              className="mt-1"
+              disabled={!portalRpaEnabled || playbookLoading}
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="playbookNotes">Notes (optional)</Label>
+            <Textarea
+              id="playbookNotes"
+              value={playbookNotes}
+              onChange={(e) => setPlaybookNotes(e.target.value)}
+              rows={3}
+              className="mt-1"
+              disabled={!portalRpaEnabled || playbookLoading}
+              placeholder="Practice-specific portal quirks, payer notes, etc."
+            />
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleSavePlaybook}
+            disabled={playbookSaveLoading || !portalRpaEnabled || playbookLoading}
+          >
+            {playbookSaveLoading ? 'Saving…' : 'Save practice playbook'}
           </Button>
         </div>
 

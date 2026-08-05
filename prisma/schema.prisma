@@ -37,6 +37,7 @@ model Practice {
   eligibilityChecks          EligibilityCheck[]
   browserCredentials         BrowserCredential[]
   browserAgentRuns           BrowserAgentRun[]
+  practicePlaybooks          PracticePlaybook[]
   sendgridIntegrations       SendgridIntegration[]
   twilioIntegrations         TwilioIntegration[]
   telnyxIntegrations         TelnyxIntegration[]
@@ -381,10 +382,35 @@ model BrowserCredential {
   @@map("browser_credentials")
 }
 
+/// Practice-scoped browser-agent playbook definition (config drives shared engine).
+model PracticePlaybook {
+  id             String   @id @default(uuid())
+  practiceId     String
+  /// Engine key, e.g. availity.eligibility
+  playbookKey    String
+  name           String
+  site           String
+  isActive       Boolean  @default(true)
+  config         Json
+  sourceVideoUrl String?
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@unique([practiceId, playbookKey])
+  @@index([practiceId])
+  @@index([site])
+  @@index([playbookKey])
+  @@map("practice_playbooks")
+}
+
 /// Audited browser-agent playbook execution
 model BrowserAgentRun {
   id                 String    @id @default(uuid())
   practiceId         String
+  /// PracticePlaybook.id when practice-scoped; legacy rows may store engine key
   playbookId         String
   site               String
   status             String    @default("pending") // pending | running | complete | failed | cancelled

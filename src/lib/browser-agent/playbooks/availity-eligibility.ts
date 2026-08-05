@@ -3,6 +3,10 @@ import { applyCallRequiredFlag, formModeForAppointmentType } from '@/lib/eligibi
 import { scrapeRheumPacketFromPortalText } from '@/lib/eligibility/scrape-rpa-benefits'
 import { generateTotpFresh } from '../totp'
 import { markBrowserCredentialLogin } from '../credentials'
+import {
+  practicePlaybookConfigFromInput,
+  type AvailityEligibilityPlaybookConfig,
+} from '../practice-playbook'
 import type { BrowserLocator, BrowserPlaybook, PlaybookContext, PlaybookResult } from '../types'
 
 const AVAILITY_LOGIN_URL =
@@ -107,10 +111,27 @@ function uniqueStrings(values: string[]): string[] {
     })
 }
 
-function compactPayerText(value: string): string {
+export function compactPayerText(value: string): string {
   return normalizePayerText(value)
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '')
+}
+
+/**
+ * Distinguish uncommitted typeahead leftover ("united" still in the box) from a
+ * real commit where the Availity label equals the typed brand (e.g. CIGNA).
+ * Typed leftover only counts while the dropdown is still open.
+ */
+export function isUncommittedTypeaheadValue(params: {
+  selected: string
+  typedTerm: string
+  dropdownStillOpen: boolean
+}): boolean {
+  const selectedCompact = compactPayerText(params.selected)
+  const termCompact = compactPayerText(params.typedTerm)
+  if (!selectedCompact || !termCompact) return false
+  if (selectedCompact !== termCompact) return false
+  return params.dropdownStillOpen
 }
 
 /**
@@ -220,6 +241,26 @@ export function payerLabelMatches(label: string, payerName: string): boolean {
   const geo = payerGeoTokens(payerName)
   if (geo.length > 0 && !geo.every((g) => compact.includes(g))) {
     return false
+  }
+
+  const compactName = compactPayerText(payerName)
+  // Brand-level Availity labels (Frequently Used: "CIGNA") for CRM "Cigna" / "Cigna PPO".
+  // Require a meaningful brand length so tiny prefixes don't match unrelated payers.
+  if (
+    compact.length >= 4 &&
+    (compactName === compact ||
+      compactName.startsWith(compact) ||
+      // Allow Availity "CIGNA" ↔ CRM first token only when label is exactly that brand.
+      payerWordTokens(payerName)[0] === compact)
+  ) {
+    // Reject Medicare/Medicaid product lines unless CRM also says so.
+    const crmHasMedicare = /medicare|advantage|medicaid|dual/.test(compactName)
+    const labelHasMedicare = /medicare|advantage|medicaid|dual/.test(compact)
+    if (labelHasMedicare && !crmHasMedicare) {
+      // fall through to token checks (usually fail for HEALTHSPRING vs commercial Cigna)
+    } else {
+      return true
+    }
   }
 
   const tokens = expectedPayerTokens(payerName).map((t) => t.replace(/[^a-z0-9]/g, ''))
@@ -769,7 +810,11 @@ async function collectTypeaheadCandidates(
       .trim()
     if (!trimmed || trimmed.length < 2 || trimmed.length > 120) return
     // Skip chrome / form labels that show up near the payer widget.
-    if (/^(other payers|payer|organization|provider|submit|clear section|need help)/i.test(trimmed)) {
+    if (
+      /^(other payers|frequently used payers|payer|organization|provider|submit|clear section|need help)/i.test(
+        trimmed
+      )
+    ) {
       return
     }
     const key = compactPayerText(trimmed)
@@ -891,36 +936,68 @@ async function selectTypeaheadOption(
     return labels.find((l) => params.matches(l)) || null
   }
 
+  const dropdownStillOpen = async (): Promise<boolean> => {
+    const candidates = await collectTypeaheadCandidates(ctx)
+    return candidates.length > 0
+  }
+
   const confirmSelection = async (
     clickedLabel: string,
     term: string
   ): Promise<{ ok: true; selectedLabel: string } | null> => {
-    await page().waitForTimeout(900)
-    const selected = await readSelected()
-    const selectedCompact = compactPayerText(selected)
-    const termCompact = compactPayerText(term)
+    // Poll briefly: Availity may leave the menu open for a beat after click/Enter.
+    // Brand-equals-label payers (CIGNA) look identical to typed leftover until the menu closes.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      await page().waitForTimeout(attempt === 0 ? 700 : 350)
+      const selected = await readSelected()
+      const menuOpen = await dropdownStillOpen()
 
-    // Still showing exactly what we typed → dropdown never committed.
-    if (selected && termCompact && selectedCompact === termCompact) {
-      return null
+      if (
+        selected &&
+        params.matches(selected) &&
+        !isUncommittedTypeaheadValue({
+          selected,
+          typedTerm: term,
+          dropdownStillOpen: menuOpen,
+        })
+      ) {
+        ctx.log(`Selected Availity ${params.fieldLabel}`, {
+          term,
+          selected,
+          clickedLabel,
+          menuOpen,
+        })
+        return { ok: true, selectedLabel: selected }
+      }
+
+      // Chip/cleared input after a real option click — accept clicked label only then.
+      if (!selected && !menuOpen && params.matches(clickedLabel)) {
+        ctx.log(`Selected Availity ${params.fieldLabel} (chip/cleared input)`, {
+          term,
+          clickedLabel,
+        })
+        return { ok: true, selectedLabel: clickedLabel }
+      }
+
+      // Menu still open with typed leftover — keep waiting for commit animation.
+      if (
+        selected &&
+        isUncommittedTypeaheadValue({
+          selected,
+          typedTerm: term,
+          dropdownStillOpen: menuOpen,
+        })
+      ) {
+        continue
+      }
+
+      // Never accept a committed value that does not itself match the CRM payer
+      // (e.g. clicked BCBS Texas but field stuck on BLUE CROSS MEDICARE ADVANTAGE).
+      if (selected && !params.matches(selected) && !menuOpen) {
+        return null
+      }
     }
 
-    if (selected && params.matches(selected)) {
-      ctx.log(`Selected Availity ${params.fieldLabel}`, { term, selected, clickedLabel })
-      return { ok: true, selectedLabel: selected }
-    }
-
-    // Chip/cleared input after a real option click — accept clicked label only then.
-    if (!selected && params.matches(clickedLabel)) {
-      ctx.log(`Selected Availity ${params.fieldLabel} (chip/cleared input)`, {
-        term,
-        clickedLabel,
-      })
-      return { ok: true, selectedLabel: clickedLabel }
-    }
-
-    // Never accept a committed value that does not itself match the CRM payer
-    // (e.g. clicked BCBS Texas but field stuck on BLUE CROSS MEDICARE ADVANTAGE).
     return null
   }
 
@@ -928,7 +1005,8 @@ async function selectTypeaheadOption(
     bestLabel: string,
     term: string
   ): Promise<{ ok: true; selectedLabel: string } | null> => {
-    // Focus is on the typeahead input; ArrowDown+Enter matches the manual recording path.
+    // Focus is on the typeahead input; ArrowDown+Enter matches the manual recording path
+    // (type CIGNA → Frequently Used Payers → Enter).
     const kb = page().keyboard
     if (!kb?.press) return null
     const input = await findInputBySelectors(ctx, params.fieldSelectors)
@@ -939,9 +1017,18 @@ async function selectTypeaheadOption(
     await kb.press('Enter').catch(() => undefined)
     const confirmed = await confirmSelection(bestLabel, term)
     if (confirmed) return confirmed
-    // If keyboard selected something else that still matches, accept it.
+    // Keyboard may commit a matching label even when candidate scraping missed it.
     const selected = await readSelected()
-    if (selected && params.matches(selected) && compactPayerText(selected) !== compactPayerText(term)) {
+    const menuOpen = await dropdownStillOpen()
+    if (
+      selected &&
+      params.matches(selected) &&
+      !isUncommittedTypeaheadValue({
+        selected,
+        typedTerm: term,
+        dropdownStillOpen: menuOpen,
+      })
+    ) {
       return { ok: true, selectedLabel: selected }
     }
     return null
@@ -1577,6 +1664,7 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
 /**
  * After Active/Inactive status appears, click network filter + scroll so Plan Maximums,
  * deductible/OOP rows, and specialist benefits are included in collected text.
+ * Expand targets / network filter come from the practice-level playbook config.
  */
 async function enrichAvailityResultText(
   ctx: PlaybookContext,
@@ -1585,6 +1673,15 @@ async function enrichAvailityResultText(
   if (!ctx.session) return initialText
   const page = () => ctx.session!.page
   let best = initialText
+  const config: AvailityEligibilityPlaybookConfig = practicePlaybookConfigFromInput(ctx.input)
+  const capture = config.resultCapture
+
+  ctx.log('Using practice playbook resultCapture', {
+    version: config.version,
+    networkFilter: capture.networkFilter,
+    scrollPasses: capture.scrollPasses,
+    expandLabels: capture.expandLabels,
+  })
 
   const clickFilter = async (label: string) => {
     const loc =
@@ -1598,9 +1695,11 @@ async function enrichAvailityResultText(
     return true
   }
 
-  // Prefer In-Network amounts for OV financials; networkStatus still inferred from provider copy.
-  const clickedInn = await clickFilter('In Network')
-  if (!clickedInn) await clickFilter('In-Network')
+  const networkFilter = capture.networkFilter || 'In Network'
+  const clickedFilter = await clickFilter(networkFilter)
+  if (!clickedFilter && networkFilter === 'In Network') {
+    await clickFilter('In-Network')
+  }
 
   // Jump toward the amounts section when the heading is present.
   const planMax =
@@ -1613,7 +1712,8 @@ async function enrichAvailityResultText(
     await planMax.click({ timeout: 3_000 }).catch(() => undefined)
   }
 
-  for (let i = 0; i < 6; i++) {
+  const scrollPasses = capture.scrollPasses || 6
+  for (let i = 0; i < scrollPasses; i++) {
     await page().keyboard?.press?.('PageDown').catch(() => undefined)
     await page().waitForTimeout(500)
     const text =
@@ -1625,29 +1725,22 @@ async function enrichAvailityResultText(
     if (
       /annual\s+deductible/i.test(text) &&
       /\$\s*[\d,]+(?:\.\d{2})?/.test(text) &&
-      /is\s+remaining|out[- ]of[- ]pocket/i.test(text)
+      /is\s+remaining|out[- ]of[- ]pocket|\$[\d,.]+\s+remaining/i.test(text)
     ) {
       best = text
       break
     }
   }
 
-  // Expand Benefit Information accordion, then specialist / office-visit rows for copay.
-  for (const label of [
-    'Benefit Information',
-    'Expand',
-    'Professional (Physician) Visit - Office',
-    'Professional (Physician) Visit - Office - 98',
-    'Professional (Physician) - 96',
-    'Specialist',
-    'Office Visit',
-  ]) {
+  // Expand practice-configured Benefit Information tabs/rows for copay and coinsurance.
+  for (const label of capture.expandLabels) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const row =
       (await ctx.session.findLocator?.(
-        `button:has-text("${label}"), [role="button"]:has-text("${label}"), a:has-text("${label}"), text=/${label.replace(
-          /[.*+?^${}()|[\]\\]/g,
-          '\\$&'
-        )}/i`,
+        `button:has-text("${label.replace(/"/g, '\\"')}"), [role="button"]:has-text("${label.replace(
+          /"/g,
+          '\\"'
+        )}"), a:has-text("${label.replace(/"/g, '\\"')}"), text=/${escaped}/i`,
         1_500
       )) || null
     if (!row) continue
@@ -1667,6 +1760,7 @@ async function enrichAvailityResultText(
     hasAnnualDeductible: /annual\s+deductible/i.test(best),
     hasOop: /out[- ]of[- ]pocket/i.test(best),
     hasSpecialist: /specialist/i.test(best),
+    expandLabelCount: capture.expandLabels.length,
   })
   return best
 }

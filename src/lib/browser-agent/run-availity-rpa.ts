@@ -11,6 +11,10 @@ import {
   scorePayerLabel,
 } from './playbooks/availity-eligibility'
 import {
+  AVAILITY_ELIGIBILITY_PLAYBOOK_KEY,
+  getOrCreatePracticePlaybook,
+} from './practice-playbook'
+import {
   extractSummaryFromPlaybookOutput,
   finalizeRpaEligibilityCheck,
 } from './finalize-rpa-eligibility'
@@ -227,6 +231,11 @@ export async function runAvailityRpaEligibility(
     checkId = check.id
   }
 
+  const practicePlaybook = await getOrCreatePracticePlaybook(
+    input.practiceId,
+    AVAILITY_ELIGIBILITY_PLAYBOOK_KEY
+  )
+
   // All patient/payer/practice values come from CRM records — playbook must not hardcode them.
   // Prefer Availity-resolved payer label/id when the Coverages API mapping is available.
   const playbookInput = {
@@ -243,11 +252,17 @@ export async function runAvailityRpaEligibility(
     organizationName: practice?.name || '',
     serviceType: integration?.defaultServiceType || '30',
     appointmentType: input.appointmentType || '',
+    playbookKey: AVAILITY_ELIGIBILITY_PLAYBOOK_KEY,
+    practicePlaybook: {
+      id: practicePlaybook.id,
+      playbookKey: practicePlaybook.playbookKey,
+      config: practicePlaybook.config,
+    },
   }
 
   const started = await startBrowserAgentRun({
     practiceId: input.practiceId,
-    playbookId: 'availity.eligibility',
+    playbookId: practicePlaybook.id,
     input: playbookInput,
     eligibilityCheckId: checkId,
     useMock: availability.useMock,

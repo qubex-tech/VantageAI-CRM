@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   expectedPayerTokens,
   interpretAvailityEligibilityText,
+  isUncommittedTypeaheadValue,
   normalizePayerText,
   payerLabelMatches,
   payerSearchTerms,
@@ -70,6 +71,36 @@ describe('expectedPayerTokens / payerLabelMatches', () => {
     expect(payerLabelMatches('Blue Cross', crm)).toBe(false)
     expect(payerLabelMatches('BLUE CROSS MEDICARE ADVANTAGE', crm)).toBe(false)
     expect(payerLabelMatches('BLUE CROSS OF WASHINGTON AND ALASKA (PREMERA)', crm)).toBe(false)
+  })
+})
+
+describe('isUncommittedTypeaheadValue', () => {
+  it('treats CIGNA typed+committed as committed once dropdown closes', () => {
+    expect(
+      isUncommittedTypeaheadValue({
+        selected: 'CIGNA',
+        typedTerm: 'Cigna',
+        dropdownStillOpen: false,
+      })
+    ).toBe(false)
+  })
+
+  it('treats short brand leftover as uncommitted while dropdown is open', () => {
+    expect(
+      isUncommittedTypeaheadValue({
+        selected: 'united',
+        typedTerm: 'united',
+        dropdownStillOpen: true,
+      })
+    ).toBe(true)
+  })
+})
+
+describe('CIGNA Availity label matching', () => {
+  it('matches Frequently Used Payers label CIGNA from CRM Cigna', () => {
+    expect(payerLabelMatches('CIGNA', 'Cigna')).toBe(true)
+    expect(payerLabelMatches('CIGNA', 'Cigna PPO')).toBe(true)
+    expect(pickBestPayerLabel(['CIGNA', 'HEALTHSPRING'], 'Cigna')?.toUpperCase()).toBe('CIGNA')
   })
 })
 

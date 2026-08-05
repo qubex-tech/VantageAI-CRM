@@ -3,31 +3,72 @@ import { prisma } from '@/lib/db'
 import { inngest } from '@/inngest/client'
 import { getBrowserCredential } from './credentials'
 import { getPlaybook } from './playbooks'
+import {
+  normalizeAvailityEligibilityConfig,
+  type PracticePlaybookRecord,
+} from './practice-playbook'
 import { createBrowserSession, isBrowserbaseConfigured } from './session'
 import type { BrowserPlaybook, PlaybookResult, StartBrowserAgentRunInput } from './types'
 
 const PRACTICE_CONCURRENCY = 2
 
+async function resolveEnginePlaybook(playbookId: string): Promise<{
+  engine: BrowserPlaybook
+  practicePlaybook: PracticePlaybookRecord | null
+  runPlaybookId: string
+} | null> {
+  const byEngine = getPlaybook(playbookId)
+  if (byEngine) {
+    return { engine: byEngine, practicePlaybook: null, runPlaybookId: byEngine.id }
+  }
+
+  const row = await prisma.practicePlaybook.findUnique({ where: { id: playbookId } })
+  if (!row) return null
+  const engine = getPlaybook(row.playbookKey)
+  if (!engine) return null
+  return {
+    engine,
+    practicePlaybook: {
+      ...row,
+      config: normalizeAvailityEligibilityConfig(row.config),
+    },
+    runPlaybookId: row.id,
+  }
+}
+
 export async function startBrowserAgentRun(
   input: StartBrowserAgentRunInput
 ): Promise<{ runId: string; status: string; result?: PlaybookResult }> {
-  const playbook = getPlaybook(input.playbookId)
-  if (!playbook) {
+  const resolved = await resolveEnginePlaybook(input.playbookId)
+  if (!resolved) {
     throw new Error(`Unknown playbook: ${input.playbookId}`)
   }
+  const { engine: playbook, practicePlaybook, runPlaybookId } = resolved
 
   const useMock =
     input.useMock === true ||
     process.env.BROWSER_AGENT_USE_MOCK === '1' ||
     (!isBrowserbaseConfigured() && input.useMock !== false)
 
+  const mergedInput: Record<string, unknown> = {
+    ...(input.input || {}),
+    playbookKey: playbook.id,
+  }
+  if (practicePlaybook) {
+    mergedInput.practicePlaybook = {
+      id: practicePlaybook.id,
+      playbookKey: practicePlaybook.playbookKey,
+      config: practicePlaybook.config,
+    }
+  }
+
   const run = await prisma.browserAgentRun.create({
     data: {
       practiceId: input.practiceId,
-      playbookId: playbook.id,
+      playbookId: runPlaybookId,
       site: playbook.site,
       status: 'pending',
-      input: input.input as Prisma.InputJsonValue,
+      input: mergedInput as Prisma.InputJsonValue,
       eligibilityCheckId: input.eligibilityCheckId || null,
     },
   })
@@ -42,7 +83,8 @@ export async function startBrowserAgentRun(
     data: {
       practiceId: input.practiceId,
       runId: run.id,
-      playbookId: playbook.id,
+      playbookId: runPlaybookId,
+      playbookKey: playbook.id,
     },
   })
 
@@ -58,11 +100,36 @@ export async function executeBrowserAgentRun(
     return { ok: false, errorMessage: 'Browser agent run not found' }
   }
 
-  const playbook = getPlaybook(run.playbookId)
-  if (!playbook) {
-    await failRun(runId, `Unknown playbook: ${run.playbookId}`)
-    return { ok: false, errorMessage: `Unknown playbook: ${run.playbookId}` }
+  const resolved = await resolveEnginePlaybook(run.playbookId)
+  if (!resolved) {
+    // Legacy / input fallback: engine key may live on input.playbookKey
+    const inputKey =
+      typeof (run.input as { playbookKey?: unknown } | null)?.playbookKey === 'string'
+        ? (run.input as { playbookKey: string }).playbookKey
+        : null
+    const fallback = inputKey ? getPlaybook(inputKey) : null
+    if (!fallback) {
+      await failRun(runId, `Unknown playbook: ${run.playbookId}`)
+      return { ok: false, errorMessage: `Unknown playbook: ${run.playbookId}` }
+    }
+    return executeWithEngine(run, fallback, opts)
   }
+
+  return executeWithEngine(run, resolved.engine, opts, resolved.practicePlaybook)
+}
+
+async function executeWithEngine(
+  run: {
+    id: string
+    practiceId: string
+    playbookId: string
+    input: Prisma.JsonValue
+  },
+  playbook: BrowserPlaybook,
+  opts?: { forceMock?: boolean },
+  practicePlaybook?: PracticePlaybookRecord | null
+): Promise<PlaybookResult> {
+  const runId = run.id
 
   const activeCount = await prisma.browserAgentRun.count({
     where: {
@@ -114,18 +181,32 @@ export async function executeBrowserAgentRun(
       })
     }
 
+    const baseInput = ((run.input as Record<string, unknown>) || {}) as Record<string, unknown>
+    const runInput: Record<string, unknown> = {
+      ...baseInput,
+      playbookKey: playbook.id,
+    }
+    if (practicePlaybook) {
+      runInput.practicePlaybook = {
+        id: practicePlaybook.id,
+        playbookKey: practicePlaybook.playbookKey,
+        config: practicePlaybook.config,
+      }
+    }
+
     const result = await playbook.run({
       practiceId: run.practiceId,
       runId,
       credential,
       useMock,
-      input: (run.input as Record<string, unknown>) || {},
+      input: runInput,
       session,
       log: (message, meta) => {
         logs.push(message)
         console.info(`[browser-agent:${playbook.id}] ${message}`, {
           runId,
           practiceId: run.practiceId,
+          practicePlaybookId: practicePlaybook?.id,
           ...meta,
         })
       },
