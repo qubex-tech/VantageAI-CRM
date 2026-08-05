@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   expectedPayerTokens,
+  expandPayerNameAliases,
   interpretAvailityEligibilityText,
   isUncommittedTypeaheadValue,
   normalizePayerText,
@@ -71,6 +72,33 @@ describe('expectedPayerTokens / payerLabelMatches', () => {
     expect(payerLabelMatches('Blue Cross', crm)).toBe(false)
     expect(payerLabelMatches('BLUE CROSS MEDICARE ADVANTAGE', crm)).toBe(false)
     expect(payerLabelMatches('BLUE CROSS OF WASHINGTON AND ALASKA (PREMERA)', crm)).toBe(false)
+  })
+
+  it('expands BCBSTX to Blue Cross and Blue Shield of Texas for Availity', () => {
+    const aliases = expandPayerNameAliases('BCBSTX')
+    expect(aliases.some((a) => /blue cross/i.test(a) && /texas/i.test(a))).toBe(true)
+    expect(aliases.some((a) => /^bcbs texas$/i.test(a))).toBe(true)
+
+    const terms = payerSearchTerms('BCBSTX')
+    expect(terms.some((t) => /bcbs texas/i.test(t))).toBe(true)
+    expect(terms[0].toLowerCase()).toMatch(/bcbs/)
+
+    expect(payerLabelMatches('BLUE CROSS BLUE SHIELD OF TEXAS', 'BCBSTX')).toBe(true)
+    expect(payerLabelMatches('BCBS TEXAS', 'BCBSTX')).toBe(true)
+    expect(payerLabelMatches('BCBS MISSISSIPPI', 'BCBSTX')).toBe(false)
+    expect(payerLabelMatches('BLUE CROSS MEDICARE ADVANTAGE', 'BCBSTX')).toBe(false)
+
+    expect(
+      pickBestPayerLabel(
+        [
+          'BCBS MISSISSIPPI',
+          'BLUE CROSS MEDICARE ADVANTAGE',
+          'BLUE CROSS BLUE SHIELD OF TEXAS',
+          'BCBS TEXAS',
+        ],
+        'BCBSTX'
+      )
+    ).toMatch(/texas/i)
   })
 })
 

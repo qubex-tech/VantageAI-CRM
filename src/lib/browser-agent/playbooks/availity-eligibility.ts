@@ -98,6 +98,29 @@ const GEO_REGION_TOKENS = new Set([
 /** Trailing CRM noise that rarely appears in Availity dropdown labels. */
 const PAYER_TRAILING_NOISE = /\bof\s+all\s+states\b/gi
 
+/**
+ * Compact CRM payer codes → Availity typeahead labels.
+ * Industry abbreviations only (not practice-specific nicknames).
+ */
+const CRM_PAYER_ALIAS_EXPANSIONS: Record<string, string[]> = {
+  bcbstx: [
+    'BCBS Texas',
+    'Blue Cross Blue Shield of Texas',
+    'Blue Cross and Blue Shield of Texas',
+    'BCBS TX',
+  ],
+  bcbstexas: [
+    'BCBS Texas',
+    'Blue Cross Blue Shield of Texas',
+    'Blue Cross and Blue Shield of Texas',
+  ],
+  bcbstxcommercial: [
+    'BCBS Texas',
+    'Blue Cross Blue Shield of Texas',
+    'Blue Cross and Blue Shield of Texas',
+  ],
+}
+
 function uniqueStrings(values: string[]): string[] {
   const seen = new Set<string>()
   return values
@@ -109,6 +132,15 @@ function uniqueStrings(values: string[]): string[] {
       seen.add(key)
       return true
     })
+}
+
+/** Expand CRM abbreviations (e.g. BCBSTX) into Availity-searchable payer names. */
+export function expandPayerNameAliases(payerName: string): string[] {
+  const raw = payerName.trim()
+  if (!raw) return []
+  const compact = raw.toLowerCase().replace(/[^a-z0-9]/g, '')
+  const expansions = CRM_PAYER_ALIAS_EXPANSIONS[compact] || []
+  return uniqueStrings([raw, ...expansions])
 }
 
 export function compactPayerText(value: string): string {
@@ -150,11 +182,16 @@ export function normalizePayerText(value: string): string {
 
 /** Geo/region tokens present in a CRM payer name (e.g. texas). */
 export function payerGeoTokens(payerName: string): string[] {
-  return normalizePayerText(payerName)
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .filter((w) => GEO_REGION_TOKENS.has(w))
+  const tokens: string[] = []
+  for (const alias of expandPayerNameAliases(payerName)) {
+    for (const w of normalizePayerText(alias)
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)) {
+      if (GEO_REGION_TOKENS.has(w)) tokens.push(w)
+    }
+  }
+  return uniqueStrings(tokens)
 }
 
 /** Significant word tokens from any payer label (practice-agnostic). */
@@ -168,35 +205,42 @@ export function payerWordTokens(payerName: string): string[] {
 
 /**
  * Build Availity payer typeahead queries from whatever CRM payer label we have.
- * All variants are derived from the input — no practice/payer hardcoding.
+ * Expands known CRM abbreviations (BCBSTX → BCBS Texas / Blue Cross … of Texas).
  */
 export function payerSearchTerms(payerName: string, payerId?: string): string[] {
-  const raw = payerName.trim()
-  const normalized = normalizePayerText(raw)
+  const aliases = expandPayerNameAliases(payerName)
   const terms: string[] = []
   const id = (payerId || '').trim()
   // Prefer Availity payer id when available.
   if (id) terms.push(id)
 
+  // Prefer short distinctive expansions first (typeahead works best on these).
+  for (const alias of aliases) {
+    if (/^bcbs\b/i.test(alias)) terms.push(alias)
+  }
+
   // Recording-validated order: short brand query first (e.g. "united"), then
   // normalized full label, then longer CRM variants. Availity typeahead ranks
   // best on short brand tokens; long CRM names often leave uncommitted leftover text.
-  for (const base of uniqueStrings([normalized, raw])) {
-    const words = base.split(/\s+/).filter(Boolean)
-    if (words[0]) terms.push(words[0])
-    if (words.length >= 2) terms.push(words.slice(0, 2).join(' '))
-  }
-  if (normalized) terms.push(normalized)
-  if (raw && raw.toLowerCase() !== normalized.toLowerCase()) terms.push(raw)
+  for (const raw of aliases) {
+    const normalized = normalizePayerText(raw)
+    for (const base of uniqueStrings([normalized, raw])) {
+      const words = base.split(/\s+/).filter(Boolean)
+      if (words[0]) terms.push(words[0])
+      if (words.length >= 2) terms.push(words.slice(0, 2).join(' '))
+    }
+    if (normalized) terms.push(normalized)
+    if (raw && raw.toLowerCase() !== normalized.toLowerCase()) terms.push(raw)
 
-  for (const base of uniqueStrings([normalized, raw])) {
-    const words = base.split(/\s+/).filter(Boolean)
-    if (words.length >= 2) {
-      // "Foo Health spring" → "Foo Healthspring" and "Healthspring"
-      terms.push([...words.slice(0, -2), words.slice(-2).join('')].join(' ').trim())
-      terms.push(words.slice(-2).join(''))
-      if (words.length >= 3) {
-        terms.push(words.slice(0, 3).join(' '))
+    for (const base of uniqueStrings([normalized, raw])) {
+      const words = base.split(/\s+/).filter(Boolean)
+      if (words.length >= 2) {
+        // "Foo Health spring" → "Foo Healthspring" and "Healthspring"
+        terms.push([...words.slice(0, -2), words.slice(-2).join('')].join(' ').trim())
+        terms.push(words.slice(-2).join(''))
+        if (words.length >= 3) {
+          terms.push(words.slice(0, 3).join(' '))
+        }
       }
     }
   }
@@ -233,8 +277,15 @@ export function expectedPayerTokens(payerName: string): string[] {
   return ranked.slice(0, 4)
 }
 
-/** Whether an Availity option/label matches the expected payer (dynamic token check). */
-export function payerLabelMatches(label: string, payerName: string): boolean {
+function isBcbsFamilyCompact(compact: string): boolean {
+  return (
+    compact.startsWith('bcbs') ||
+    compact.includes('bluecross') ||
+    compact.includes('blueshield')
+  )
+}
+
+function payerLabelMatchesAlias(label: string, payerName: string): boolean {
   const compact = compactPayerText(label)
   if (!compact) return false
 
@@ -244,6 +295,19 @@ export function payerLabelMatches(label: string, payerName: string): boolean {
   }
 
   const compactName = compactPayerText(payerName)
+  const crmHasMedicare = /medicare|advantage|medicaid|dual/.test(compactName)
+  const labelHasMedicare = /medicare|advantage|medicaid|dual/.test(compact)
+
+  // BCBSTX ↔ "BCBS TEXAS" / "BLUE CROSS BLUE SHIELD OF TEXAS" (geo already enforced above).
+  if (
+    isBcbsFamilyCompact(compact) &&
+    isBcbsFamilyCompact(compactName) &&
+    geo.length > 0 &&
+    !(labelHasMedicare && !crmHasMedicare)
+  ) {
+    return true
+  }
+
   // Brand-level Availity labels (Frequently Used: "CIGNA") for CRM "Cigna" / "Cigna PPO".
   // Require a meaningful brand length so tiny prefixes don't match unrelated payers.
   if (
@@ -254,8 +318,6 @@ export function payerLabelMatches(label: string, payerName: string): boolean {
       payerWordTokens(payerName)[0] === compact)
   ) {
     // Reject Medicare/Medicaid product lines unless CRM also says so.
-    const crmHasMedicare = /medicare|advantage|medicaid|dual/.test(compactName)
-    const labelHasMedicare = /medicare|advantage|medicaid|dual/.test(compact)
     if (labelHasMedicare && !crmHasMedicare) {
       // fall through to token checks (usually fail for HEALTHSPRING vs commercial Cigna)
     } else {
@@ -276,7 +338,15 @@ export function payerLabelMatches(label: string, payerName: string): boolean {
   // Single-token payer names (e.g. "Aetna")
   if (tokens.length === 1 && compact.includes(tokens[0])) return true
 
+  // Compact abbreviation contained in Availity label (bcbstx ⊂ …) — rare but safe with geo check.
+  if (compactName.length >= 5 && compact.includes(compactName)) return true
+
   return false
+}
+
+/** Whether an Availity option/label matches the expected payer (dynamic token check). */
+export function payerLabelMatches(label: string, payerName: string): boolean {
+  return expandPayerNameAliases(payerName).some((alias) => payerLabelMatchesAlias(label, alias))
 }
 
 /**
@@ -288,31 +358,44 @@ export function scorePayerLabel(label: string, payerName: string): number | null
   if (!payerLabelMatches(label, payerName)) return null
 
   const compactLabel = compactPayerText(label)
-  const compactName = compactPayerText(payerName)
   const normLabel = normalizePayerText(label).toLowerCase()
-  const normName = normalizePayerText(payerName).toLowerCase()
+  let best = -Infinity
 
-  let score = 1000
-  if (compactLabel === compactName || normLabel === normName) {
-    score += 500
-  } else if (compactName.startsWith(compactLabel) || compactLabel === compactName.slice(0, compactLabel.length)) {
-    // Brand-level Availity label contained in CRM name (UNITED HEALTHCARE ⊂ United Healthcare Of …)
-    score += 400 - Math.min(compactLabel.length, 200)
-  } else if (compactLabel.includes(compactName) || compactName.includes(compactLabel)) {
-    score += 250 - Math.min(compactLabel.length, 200)
-  } else {
-    score += 100 - Math.min(compactLabel.length, 80)
+  for (const alias of expandPayerNameAliases(payerName)) {
+    const compactName = compactPayerText(alias)
+    const normName = normalizePayerText(alias).toLowerCase()
+
+    let score = 1000
+    if (compactLabel === compactName || normLabel === normName) {
+      score += 500
+    } else if (
+      compactName.startsWith(compactLabel) ||
+      compactLabel === compactName.slice(0, compactLabel.length)
+    ) {
+      // Brand-level Availity label contained in CRM name (UNITED HEALTHCARE ⊂ United Healthcare Of …)
+      score += 400 - Math.min(compactLabel.length, 200)
+    } else if (compactLabel.includes(compactName) || compactName.includes(compactLabel)) {
+      score += 250 - Math.min(compactLabel.length, 200)
+    } else {
+      score += 100 - Math.min(compactLabel.length, 80)
+    }
+
+    // Prefer the shortest strong match so base "UNITED HEALTHCARE" beats plan variants.
+    score += Math.max(0, 80 - compactLabel.length)
+
+    // Don't let Medicare Advantage / Medicaid product lines win for commercial CRM labels.
+    const crmHasMedicare = /medicare|advantage|medicaid|dual/.test(normName)
+    const labelHasMedicare = /medicare|advantage|medicaid|dual/.test(normLabel)
+    if (labelHasMedicare && !crmHasMedicare) score -= 600
+
+    // Prefer Texas BCBS / geo-complete labels when CRM abbreviation expands to a state plan.
+    const geo = payerGeoTokens(alias)
+    if (geo.length > 0 && geo.every((g) => compactLabel.includes(g))) score += 120
+
+    if (score > best) best = score
   }
 
-  // Prefer the shortest strong match so base "UNITED HEALTHCARE" beats plan variants.
-  score += Math.max(0, 80 - compactLabel.length)
-
-  // Don't let Medicare Advantage / Medicaid product lines win for commercial CRM labels.
-  const crmHasMedicare = /medicare|advantage|medicaid|dual/.test(normName)
-  const labelHasMedicare = /medicare|advantage|medicaid|dual/.test(normLabel)
-  if (labelHasMedicare && !crmHasMedicare) score -= 600
-
-  return score
+  return Number.isFinite(best) ? best : null
 }
 
 /** Pick the best Availity payer label from a list of candidates. */
