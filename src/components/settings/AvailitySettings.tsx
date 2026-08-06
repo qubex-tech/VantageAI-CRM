@@ -96,6 +96,10 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
   const [networkFilter, setNetworkFilter] = useState<'In Network' | 'Out of Network' | 'All Networks'>(
     'In Network'
   )
+  const [benefitServiceType, setBenefitServiceType] = useState(
+    'Professional (Physician) Visit - Office - 98'
+  )
+  const [providerType, setProviderType] = useState('Professional')
   const [playbookNotes, setPlaybookNotes] = useState('')
   const [sourceVideoUrl, setSourceVideoUrl] = useState('')
   const [playbookLoading, setPlaybookLoading] = useState(false)
@@ -166,6 +170,11 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
         if (filter === 'Out of Network' || filter === 'All Networks' || filter === 'In Network') {
           setNetworkFilter(filter)
         }
+        setBenefitServiceType(
+          pb.config?.inquiry?.benefitServiceType ||
+            'Professional (Physician) Visit - Office - 98'
+        )
+        setProviderType(pb.config?.inquiry?.providerType || 'Professional')
         setPlaybookNotes(pb.notes || '')
         setSourceVideoUrl(pb.sourceVideoUrl || '')
       } catch {
@@ -238,6 +247,12 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
           notes: playbookNotes.trim() || null,
           config: {
             version: 1,
+            inquiry: {
+              providerType: providerType.trim() || 'Professional',
+              benefitServiceType:
+                benefitServiceType.trim() ||
+                'Professional (Physician) Visit - Office - 98',
+            },
             resultCapture: {
               networkFilter,
               expandLabels,
@@ -254,6 +269,12 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
       setPlaybookUpdatedAt(pb?.updatedAt ? String(pb.updatedAt) : null)
       const labels = pb?.config?.resultCapture?.expandLabels
       if (Array.isArray(labels)) setExpandLabelsText(labels.join('\n'))
+      if (pb?.config?.inquiry?.benefitServiceType) {
+        setBenefitServiceType(pb.config.inquiry.benefitServiceType)
+      }
+      if (pb?.config?.inquiry?.providerType) {
+        setProviderType(pb.config.inquiry.providerType)
+      }
       setSuccess('Availity practice playbook saved')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save practice playbook')
@@ -597,6 +618,30 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
                 <SelectItem value="All Networks">All Networks</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div>
+            <Label htmlFor="benefitServiceType">Benefit / Service Type</Label>
+            <Input
+              id="benefitServiceType"
+              value={benefitServiceType}
+              onChange={(e) => setBenefitServiceType(e.target.value)}
+              className="mt-1"
+              disabled={!portalRpaEnabled || playbookLoading}
+              placeholder="Professional (Physician) Visit - Office - 98"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="providerType">Provider type</Label>
+            <Input
+              id="providerType"
+              value={providerType}
+              onChange={(e) => setProviderType(e.target.value)}
+              className="mt-1"
+              disabled={!portalRpaEnabled || playbookLoading}
+              placeholder="Professional"
+            />
           </div>
 
           <div>

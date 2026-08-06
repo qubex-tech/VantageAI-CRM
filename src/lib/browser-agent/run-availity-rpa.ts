@@ -238,6 +238,7 @@ export async function runAvailityRpaEligibility(
 
   // All patient/payer/practice values come from CRM records — playbook must not hardcode them.
   // Prefer Availity-resolved payer label/id when the Coverages API mapping is available.
+  // Benefit/service type comes from the practice playbook (Lonestar: Office - 98), not API code 30.
   const playbookInput = {
     memberId: policy.memberId,
     groupNumber: policy.groupNumber || '',
@@ -250,7 +251,9 @@ export async function runAvailityRpaEligibility(
     providerNpi: integration?.defaultProviderNpi || '',
     providerTaxId: integration?.defaultProviderTaxId || '',
     organizationName: practice?.name || '',
-    serviceType: integration?.defaultServiceType || '30',
+    providerType: practicePlaybook.config.inquiry.providerType,
+    benefitServiceType: practicePlaybook.config.inquiry.benefitServiceType,
+    placeOfService: practicePlaybook.config.inquiry.placeOfService || '',
     appointmentType: input.appointmentType || '',
     playbookKey: AVAILITY_ELIGIBILITY_PLAYBOOK_KEY,
     practicePlaybook: {

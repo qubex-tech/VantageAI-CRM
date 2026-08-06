@@ -7,6 +7,17 @@ export type AvailityNetworkFilter = 'In Network' | 'Out of Network' | 'All Netwo
 
 export type AvailityEligibilityPlaybookConfig = {
   version: 1
+  /** Form fields filled before Submit (Lonestar handbook / practice SOP). */
+  inquiry: {
+    /** Always Professional for specialist clinic inquiries (not Hospital). */
+    providerType: string
+    /**
+     * Availity Benefit / Service Type label.
+     * Lonestar: Professional (Physician) Visit - Office - 98
+     */
+    benefitServiceType: string
+    placeOfService?: string
+  }
   resultCapture: {
     networkFilter: AvailityNetworkFilter
     scrollPasses: number
@@ -36,9 +47,16 @@ export type PracticePlaybookRecord = {
   updatedAt: Date
 }
 
+export const DEFAULT_AVAILITY_BENEFIT_SERVICE_TYPE =
+  'Professional (Physician) Visit - Office - 98'
+
 export function getDefaultAvailityEligibilityConfig(): AvailityEligibilityPlaybookConfig {
   return {
     version: 1,
+    inquiry: {
+      providerType: 'Professional',
+      benefitServiceType: DEFAULT_AVAILITY_BENEFIT_SERVICE_TYPE,
+    },
     resultCapture: {
       networkFilter: 'In Network',
       scrollPasses: 6,
@@ -51,6 +69,11 @@ export function getDefaultAvailityEligibilityConfig(): AvailityEligibilityPlaybo
         'Specialist',
         'Office Visit',
         'Medical Care - 1',
+        'Health Benefit Plan Coverage',
+        'Co-Insurance',
+        'Co-Payment',
+        'Authorization',
+        'Limitations',
       ],
     },
     payerSelection: {
@@ -69,6 +92,7 @@ export function normalizeAvailityEligibilityConfig(
   const defaults = getDefaultAvailityEligibilityConfig()
   if (!raw || typeof raw !== 'object') return defaults
   const obj = raw as Record<string, unknown>
+  const inquiry = (obj.inquiry || {}) as Record<string, unknown>
   const resultCapture = (obj.resultCapture || {}) as Record<string, unknown>
   const payerSelection = (obj.payerSelection || {}) as Record<string, unknown>
   const interpretation = (obj.interpretation || {}) as Record<string, unknown>
@@ -91,8 +115,26 @@ export function normalizeAvailityEligibilityConfig(
       ? Math.min(20, Math.floor(resultCapture.scrollPasses))
       : defaults.resultCapture.scrollPasses
 
+  const benefitServiceType =
+    typeof inquiry.benefitServiceType === 'string' && inquiry.benefitServiceType.trim()
+      ? inquiry.benefitServiceType.trim()
+      : defaults.inquiry.benefitServiceType
+  const providerType =
+    typeof inquiry.providerType === 'string' && inquiry.providerType.trim()
+      ? inquiry.providerType.trim()
+      : defaults.inquiry.providerType
+  const placeOfService =
+    typeof inquiry.placeOfService === 'string' && inquiry.placeOfService.trim()
+      ? inquiry.placeOfService.trim()
+      : defaults.inquiry.placeOfService
+
   return {
     version: 1,
+    inquiry: {
+      providerType,
+      benefitServiceType,
+      ...(placeOfService ? { placeOfService } : {}),
+    },
     resultCapture: {
       networkFilter,
       scrollPasses,

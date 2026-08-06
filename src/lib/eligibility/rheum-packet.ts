@@ -30,12 +30,16 @@ export interface RheumCptCheck {
 
 export interface RheumEligibilityPacket {
   formMode: EligibilityFormMode
+  /** Member Status from Availity (e.g. Active Coverage). */
+  memberStatus?: string
   networkStatus?: EligibilityNetworkStatus
   planType?: string
   specialistCopay?: string
   deductible?: RheumMoneyFields
   coinsurance?: string
   oop?: RheumMoneyFields
+  /** Free-text Limitations row under the selected benefit service. */
+  limitations?: string
   referralRequired?: boolean | null
   authRequired?: boolean | null
   precertRequired?: boolean | null
@@ -127,6 +131,7 @@ export function formatRheumPacketNoteSection(packet: RheumEligibilityPacket): st
   const lines: string[] = ['', 'OV Benefit Verification']
   lines.push(`Form mode: ${packet.formMode}`)
   if (packet.source) lines.push(`Source: ${packet.source}`)
+  if (packet.memberStatus) lines.push(`Member status: ${packet.memberStatus}`)
   if (packet.planType) lines.push(`Plan type: ${packet.planType}`)
   if (packet.networkStatus) {
     lines.push(
@@ -143,8 +148,11 @@ export function formatRheumPacketNoteSection(packet: RheumEligibilityPacket): st
   if (packet.coinsurance) lines.push(`Coinsurance: ${packet.coinsurance}`)
   if (packet.oop) {
     const o = packet.oop
-    lines.push(`OOP (max / remaining): ${[o.max, o.remaining].map((v) => v || '—').join(' / ')}`)
+    lines.push(
+      `OOP (max / met / remaining): ${[o.max, o.met, o.remaining].map((v) => v || '—').join(' / ')}`
+    )
   }
+  if (packet.limitations) lines.push(`Limitations: ${packet.limitations}`)
   if (packet.referralRequired != null) {
     lines.push(`Referral required: ${packet.referralRequired ? 'Yes' : 'No'}`)
   }

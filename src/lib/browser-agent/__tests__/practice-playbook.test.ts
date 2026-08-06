@@ -26,6 +26,10 @@ describe('getDefaultAvailityEligibilityConfig', () => {
   it('returns version 1 with expected capture defaults', () => {
     const config = getDefaultAvailityEligibilityConfig()
     expect(config.version).toBe(1)
+    expect(config.inquiry.providerType).toBe('Professional')
+    expect(config.inquiry.benefitServiceType).toBe(
+      'Professional (Physician) Visit - Office - 98'
+    )
     expect(config.resultCapture.networkFilter).toBe('In Network')
     expect(config.resultCapture.scrollPasses).toBe(6)
     expect(config.resultCapture.expandLabels).toContain('Benefit Information')

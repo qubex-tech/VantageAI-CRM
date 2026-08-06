@@ -4,6 +4,7 @@ import { scrapeRheumPacketFromPortalText } from '@/lib/eligibility/scrape-rpa-be
 import { generateTotpFresh } from '../totp'
 import { markBrowserCredentialLogin } from '../credentials'
 import {
+  DEFAULT_AVAILITY_BENEFIT_SERVICE_TYPE,
   practicePlaybookConfigFromInput,
   type AvailityEligibilityPlaybookConfig,
 } from '../practice-playbook'
@@ -1233,6 +1234,83 @@ async function selectAvailityPayer(
   return result
 }
 
+/** Select Benefit / Service Type (Lonestar: Professional (Physician) Visit - Office - 98). */
+async function selectAvailityBenefitServiceType(
+  ctx: PlaybookContext,
+  benefitServiceType: string
+): Promise<{ ok: boolean; selectedLabel?: string; errorMessage?: string }> {
+  const label = benefitServiceType.trim()
+  if (!label) return { ok: true }
+  const shortTerms = uniqueStrings([
+    label,
+    label.replace(/professional\s*\(physician\)\s*/i, '').trim(),
+    'Office - 98',
+    'Physician Visit - Office',
+    '98',
+  ])
+  return selectTypeaheadOption(ctx, {
+    fieldLabel: 'benefit/service type',
+    fieldSelectors: [
+      'input[name="serviceType"]',
+      'input[id*="serviceType" i]',
+      'input[placeholder*="Service Type" i]',
+      'input[aria-label*="Benefit / Service Type" i]',
+      'input[aria-label*="Service Type" i]',
+      '[data-testid*="serviceType" i] input',
+    ],
+    searchTerms: shortTerms,
+    matches: (option) => {
+      const compact = compactPayerText(option)
+      const wanted = compactPayerText(label)
+      if (!compact) return false
+      if (compact === wanted || compact.includes(wanted) || wanted.includes(compact)) return true
+      // Accept Office-98 variants even if punctuation differs.
+      return /office/.test(compact) && /\b98\b/.test(option) && /physician|professional/.test(compact)
+    },
+    preferredLabels: [label, 'Professional (Physician) Visit - Office - 98'],
+  })
+}
+
+async function selectAvailityProviderType(
+  ctx: PlaybookContext,
+  providerType: string
+): Promise<void> {
+  const label = providerType.trim() || 'Professional'
+  if (!ctx.session) return
+  const quoted = label.replace(/"/g, '\\"')
+  const loc =
+    (await ctx.session.findLocator?.(
+      `label:has-text("${quoted}"), [role="radio"][aria-label*="${quoted}" i], button:has-text("${quoted}"), [role="option"]:has-text("${quoted}")`,
+      2_500
+    )) || null
+  if (loc) {
+    await loc.click({ timeout: 5_000 }).catch(() => undefined)
+    ctx.log('Selected Availity provider type', { providerType: label })
+    return
+  }
+  await fillFirstSafe(ctx, [
+    'input[name*="providerType" i]',
+    'input[id*="providerType" i]',
+    'input[aria-label*="Provider Type" i]',
+  ], label)
+}
+
+async function fillFirstSafe(
+  ctx: PlaybookContext,
+  selectors: string[],
+  value: string
+): Promise<boolean> {
+  if (!value || !ctx.session) return false
+  for (const sel of selectors) {
+    const across = await ctx.session.findLocator?.(sel, 2_000)
+    if (across) {
+      await typeInto(ctx.session.page, across, value)
+      return true
+    }
+  }
+  return false
+}
+
 /** Select organization when the Availity user has multiple orgs (practice name from CRM). */
 async function selectAvailityOrganization(
   ctx: PlaybookContext,
@@ -1380,7 +1458,15 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
   const npi = asString(ctx.input.providerNpi)
   const providerTaxId = asString(ctx.input.providerTaxId)
   const organizationName = asString(ctx.input.organizationName)
-  const serviceType = asString(ctx.input.serviceType) || '30'
+  const playbookConfig = practicePlaybookConfigFromInput(ctx.input)
+  const benefitServiceType =
+    asString(ctx.input.benefitServiceType) ||
+    playbookConfig.inquiry.benefitServiceType ||
+    DEFAULT_AVAILITY_BENEFIT_SERVICE_TYPE
+  const providerType =
+    asString(ctx.input.providerType) || playbookConfig.inquiry.providerType || 'Professional'
+  const placeOfService =
+    asString(ctx.input.placeOfService) || playbookConfig.inquiry.placeOfService || ''
 
   const fillFirst = async (selectors: string[], value: string) => {
     if (!value) return false
@@ -1535,17 +1621,49 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
     selectedPayerLabel = payerSelected.selectedLabel || ''
   }
 
-  // Benefit / service type when provided (defaults to 30 — Health Benefit Plan Coverage).
-  if (serviceType && serviceType !== '30') {
-    await fillFirst(
-      [
-        'input[name="serviceType"]',
-        'input[id*="serviceType" i]',
-        'input[placeholder*="Service Type" i]',
-        'input[aria-label*="Benefit / Service Type" i]',
+  await selectAvailityProviderType(ctx, providerType)
+
+  if (placeOfService) {
+    const posSelected = await selectTypeaheadOption(ctx, {
+      fieldLabel: 'place of service',
+      fieldSelectors: [
+        'input[name*="placeOfService" i]',
+        'input[id*="placeOfService" i]',
+        'input[aria-label*="Place of Service" i]',
+        'input[placeholder*="Place of Service" i]',
       ],
-      serviceType
-    )
+      searchTerms: uniqueStrings([placeOfService, placeOfService.split(/\s+/).slice(0, 2).join(' ')]),
+      matches: (option) =>
+        compactPayerText(option).includes(compactPayerText(placeOfService).slice(0, 12)),
+      preferredLabels: [placeOfService],
+    })
+    if (!posSelected.ok) {
+      ctx.log('Place of service select soft-failed; continuing', {
+        placeOfService,
+        error: posSelected.errorMessage,
+      })
+    }
+  }
+
+  const serviceSelected = await selectAvailityBenefitServiceType(ctx, benefitServiceType)
+  if (!serviceSelected.ok) {
+    if (ctx.session.screenshotDataUrl) {
+      artifacts.push(await ctx.session.screenshotDataUrl())
+    }
+    return {
+      ok: false,
+      errorMessage:
+        serviceSelected.errorMessage ||
+        `Could not select Availity Benefit / Service Type "${benefitServiceType}"`,
+      escalateToVoice: true,
+      artifactUrls: artifacts,
+      output: {
+        pageSnippet: ((await ctx.session.collectTextAcrossFrames?.()) || '').slice(0, 2500),
+        url: page().url(),
+        benefitServiceType,
+        selectedPayerLabel,
+      },
+    }
   }
 
   ctx.log('Filled eligibility form fields', {
@@ -1560,7 +1678,10 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
     patientName: [firstName, lastName].filter(Boolean).join(' '),
     dob: Boolean(dobUi),
     npi: Boolean(npi),
-    serviceType,
+    providerType,
+    benefitServiceType,
+    selectedBenefitServiceType: serviceSelected.selectedLabel,
+    placeOfService: placeOfService || undefined,
   })
 
   // Availity keeps Submit disabled while the eligibility iframe finishes loading / validating.

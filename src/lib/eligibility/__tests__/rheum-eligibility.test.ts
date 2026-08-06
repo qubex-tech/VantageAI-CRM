@@ -111,6 +111,52 @@ describe('scrapeRheumPacketFromPortalText', () => {
     expect(packet.coinsurance).toBe('20%')
   })
 
+  it('parses Office-98 Benefit Information rows (copay, coinsurance, auth, limitations, PPO)', () => {
+    const packet = scrapeRheumPacketFromPortalText(
+      `
+      Member Status
+      Active Coverage
+      Health Benefit Plan Coverage
+      Insurance Type: Preferred Provider Organization (PPO)
+      In Network
+      Plan Maximums and Deductibles
+      Annual Deductible
+      $1,500 / Calendar Year(s)
+      -$200.00 Year to Date
+      $1,300.00 Remaining
+      Out Of Pocket
+      $4,000 / Calendar Year(s)
+      -$500.00 Year to Date
+      $3,500.00 Remaining
+      Benefit Information
+      Professional (Physician) Visit - Office - 98
+      Co-Insurance 20%
+      Co-Payment $50.00
+      Benefit Deductible $25.00
+      Limitations Unlimited visits
+      Authorization Not Required
+      `,
+      { source: 'availity_rpa' }
+    )
+    expect(packet.memberStatus).toBe('Active Coverage')
+    expect(packet.planType).toBe('PPO')
+    expect(packet.networkStatus).toBe('inn')
+    expect(packet.specialistCopay).toBe('$50.00')
+    expect(packet.coinsurance).toBe('20%')
+    expect(packet.authRequired).toBe(false)
+    expect(packet.limitations).toMatch(/unlimited/i)
+    expect(packet.deductible).toEqual({
+      total: '$1500',
+      met: '$200.00',
+      remaining: '$1300.00',
+    })
+    expect(packet.oop).toEqual({
+      max: '$4000',
+      met: '$500.00',
+      remaining: '$3500.00',
+    })
+  })
+
   it('parses Availity calendar-year Remaining table rows from live portal text', () => {
     const packet = scrapeRheumPacketFromPortalText(
       `
@@ -170,6 +216,7 @@ describe('scrapeRheumPacketFromPortalText', () => {
     })
     expect(packet.oop).toEqual({
       max: '$5500',
+      met: '$1053.96',
       remaining: '$4446.04',
     })
     expect(packet.specialistCopay).toBe('$40.00')
