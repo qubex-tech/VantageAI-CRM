@@ -893,7 +893,7 @@ async function safeFillInput(el: BrowserLocator, value: string): Promise<boolean
   try {
     await el.click({ timeout: 8_000 }).catch(() => undefined)
     await el.fill('').catch(() => undefined)
-    await el.fill(value, { timeout: 8_000 } as never).catch(async () => {
+    await el.fill(value, { timeout: 8_000 }).catch(async () => {
       // Some Availity controls are contenteditable / custom selects — fall back to typing.
       if (el.pressSequentially) {
         await el.pressSequentially(value, { delay: 20 }).catch(() => undefined)

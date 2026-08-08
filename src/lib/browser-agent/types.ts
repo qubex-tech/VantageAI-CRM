@@ -21,12 +21,14 @@ export interface BrowserLocator {
   first: () => BrowserLocator
   nth?: (index: number) => BrowserLocator
   count: () => Promise<number>
-  fill: (value: string) => Promise<void>
+  fill: (value: string, options?: Record<string, unknown>) => Promise<void>
   click: (options?: Record<string, unknown>) => Promise<void>
   innerText: () => Promise<string>
   inputValue?: () => Promise<string>
   filter?: (options: { hasText?: RegExp | string }) => BrowserLocator
   isEnabled?: () => Promise<boolean>
+  isVisible?: () => Promise<boolean>
+  pressSequentially?: (text: string, options?: { delay?: number }) => Promise<void>
   scrollIntoViewIfNeeded?: () => Promise<void>
 }
 
