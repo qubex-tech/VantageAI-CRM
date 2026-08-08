@@ -553,9 +553,7 @@ async function typeInto(
   el: BrowserLocator,
   value: string
 ) {
-  await el.click({ timeout: 10_000 }).catch(() => undefined)
-  await el.fill('')
-  await el.fill(value)
+  await safeFillInput(el, value)
 }
 
 function looksLikeLoginPage(text: string, url: string): boolean {
@@ -864,6 +862,18 @@ async function clickFirstMatch(
   return false
 }
 
+async function isActionableInput(el: BrowserLocator): Promise<boolean> {
+  try {
+    if ((await el.count().catch(() => 0)) <= 0) return false
+    const visible = el.isVisible ? await el.isVisible().catch(() => true) : true
+    if (!visible) return false
+    const enabled = el.isEnabled ? await el.isEnabled().catch(() => true) : true
+    return enabled
+  } catch {
+    return false
+  }
+}
+
 async function findInputBySelectors(
   ctx: PlaybookContext,
   selectors: string[]
@@ -872,11 +882,27 @@ async function findInputBySelectors(
   const page = ctx.session.page
   for (const sel of selectors) {
     const across = await ctx.session.findLocator?.(sel, 2_000)
-    if (across) return across
+    if (across && (await isActionableInput(across))) return across
     const el = page.locator(sel).first()
-    if ((await el.count()) > 0) return el
+    if (await isActionableInput(el)) return el
   }
   return null
+}
+
+async function safeFillInput(el: BrowserLocator, value: string): Promise<boolean> {
+  try {
+    await el.click({ timeout: 8_000 }).catch(() => undefined)
+    await el.fill('').catch(() => undefined)
+    await el.fill(value, { timeout: 8_000 } as never).catch(async () => {
+      // Some Availity controls are contenteditable / custom selects — fall back to typing.
+      if (el.pressSequentially) {
+        await el.pressSequentially(value, { delay: 20 }).catch(() => undefined)
+      }
+    })
+    return true
+  } catch {
+    return false
+  }
 }
 
 async function collectTypeaheadCandidates(
@@ -1121,14 +1147,26 @@ async function selectTypeaheadOption(
   // Preferred labels: try as click targets after a short brand search, not as typed full strings.
   // (Typing the full normalized name often fails to open a useful Availity list.)
 
+  // If the field already shows a matching committed value, do not retype
+  // (Lonestar Organization often auto-populates and is not a fillable text box).
+  {
+    const already = await readSelected()
+    if (already && params.matches(already)) {
+      ctx.log(`Availity ${params.fieldLabel} already selected`, { selected: already })
+      return { ok: true, selectedLabel: already }
+    }
+  }
+
   for (const term of params.searchTerms) {
     if (!term) continue
     const input = await findInputBySelectors(ctx, params.fieldSelectors)
     if (!input) break
 
-    await input.click({ timeout: 10_000 }).catch(() => undefined)
-    await input.fill('').catch(() => undefined)
-    await input.fill(term)
+    const filled = await safeFillInput(input, term)
+    if (!filled) {
+      ctx.log(`Availity ${params.fieldLabel} input not fillable; trying next term`, { term })
+      continue
+    }
     await page().waitForTimeout(1400)
 
     const candidates = await collectTypeaheadCandidates(ctx)
@@ -1322,29 +1360,74 @@ async function selectAvailityOrganization(
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
     .filter((w) => w.length >= 3 && !PAYER_STOP_WORDS.has(w))
+  const matchesOrg = (label: string) => {
+    const compact = label.toLowerCase().replace(/[^a-z0-9]/g, '')
+    if (!tokens.length) {
+      return compact.includes(organizationName.toLowerCase().replace(/[^a-z0-9]/g, ''))
+    }
+    // Any distinctive org token is enough (practices vary widely).
+    return tokens.some((t) => compact.includes(t.replace(/[^a-z0-9]/g, '')))
+  }
+
+  // Lonestar (and many practices) auto-populate a single org — accept it and skip typing.
+  const orgSelectors = [
+    'input[name="organization"]',
+    'input[id*="organization" i]',
+    'input[placeholder*="Organization" i]',
+    'input[aria-label*="Organization" i]',
+    '[data-testid*="organization" i] input',
+    '[class*="organization" i]',
+    'text=/Lonestar|Lone Star/i',
+  ]
+  try {
+    const existing = await findInputBySelectors(ctx, orgSelectors.slice(0, 5))
+    if (existing) {
+      const value =
+        ((await existing.inputValue?.().catch(() => '')) || '').trim() ||
+        ((await existing.innerText?.().catch(() => '')) || '').trim()
+      if (value && matchesOrg(value)) {
+        ctx.log('Organization already populated', { organizationName, value })
+        return { ok: true, selectedLabel: value }
+      }
+    }
+    // Also accept visible committed org text in the Get Started card.
+    const chip = await ctx.session?.findLocator?.(
+      `text=/Lonestar Rheumatology|Lone Star Rheumatology/i`,
+      2_000
+    )
+    if (chip) {
+      const text = ((await chip.innerText().catch(() => '')) || '').trim()
+      if (text && matchesOrg(text)) {
+        ctx.log('Organization already visible on form', { organizationName, text })
+        return { ok: true, selectedLabel: text }
+      }
+    }
+  } catch (err) {
+    ctx.log('Organization pre-check soft-failed', {
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
+
   const terms = uniqueStrings([
     organizationName.trim(),
     organizationName.trim().split(/\s+/).slice(0, 3).join(' '),
     tokens[0] || '',
   ])
 
-  return selectTypeaheadOption(ctx, {
-    fieldLabel: 'organization',
-    fieldSelectors: [
-      'input[name="organization"]',
-      'input[id*="organization" i]',
-      'input[placeholder*="Organization" i]',
-      'input[aria-label*="Organization" i]',
-      '[data-testid*="organization" i] input',
-    ],
-    searchTerms: terms,
-    matches: (label) => {
-      const compact = label.toLowerCase().replace(/[^a-z0-9]/g, '')
-      if (!tokens.length) return compact.includes(organizationName.toLowerCase().replace(/[^a-z0-9]/g, ''))
-      // Any distinctive org token is enough (practices vary widely).
-      return tokens.some((t) => compact.includes(t.replace(/[^a-z0-9]/g, '')))
-    },
-  })
+  try {
+    return await selectTypeaheadOption(ctx, {
+      fieldLabel: 'organization',
+      fieldSelectors: orgSelectors.slice(0, 5),
+      searchTerms: terms,
+      matches: matchesOrg,
+    })
+  } catch (err) {
+    return {
+      ok: false,
+      errorMessage:
+        err instanceof Error ? err.message : 'Organization select threw unexpectedly',
+    }
+  }
 }
 
 const MEMBER_FIELD_SELECTOR =
