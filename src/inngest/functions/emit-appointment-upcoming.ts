@@ -4,6 +4,7 @@ import { emitEvent } from '@/lib/outbox'
 
 const UPCOMING_WINDOW_HOURS = 48
 const SCHEDULE_CRON = '*/15 * * * *'
+const APPOINTMENT_UPCOMING_EVENT = 'crm/appointment.upcoming'
 
 function toDate(value: Date | string) {
   return value instanceof Date ? value : new Date(value)
@@ -49,6 +50,8 @@ function buildAppointmentReminderPayload(appointment: {
 /**
  * Scheduled function to emit upcoming appointment events
  * Enables workflows like "send reminders when appointment is less than X time away"
+ *
+ * Only runs for practices that have an enabled automation on this trigger.
  */
 export const emitUpcomingAppointmentEvents = inngest.createFunction(
   {
@@ -57,12 +60,34 @@ export const emitUpcomingAppointmentEvents = inngest.createFunction(
   },
   { cron: SCHEDULE_CRON },
   async ({ step }) => {
+    const practiceIds = await step.run('load-practices-with-upcoming-rules', async () => {
+      const rules = await prisma.automationRule.findMany({
+        where: {
+          enabled: true,
+          triggerEvent: APPOINTMENT_UPCOMING_EVENT,
+        },
+        select: {
+          practiceId: true,
+        },
+        distinct: ['practiceId'],
+      })
+
+      return rules.map((rule) => rule.practiceId)
+    })
+
+    if (practiceIds.length === 0) {
+      return { emitted: 0, skipped: true, reason: 'no_enabled_automations' }
+    }
+
     const now = new Date()
     const windowEnd = new Date(now.getTime() + UPCOMING_WINDOW_HOURS * 60 * 60 * 1000)
 
     const appointments = await step.run('fetch-upcoming-appointments', async () => {
       return prisma.appointment.findMany({
         where: {
+          practiceId: {
+            in: practiceIds,
+          },
           startTime: {
             gte: now,
             lte: windowEnd,
@@ -78,14 +103,14 @@ export const emitUpcomingAppointmentEvents = inngest.createFunction(
     })
 
     if (appointments.length === 0) {
-      return { emitted: 0 }
+      return { emitted: 0, practiceCount: practiceIds.length }
     }
 
     await step.run('emit-upcoming-events', async () => {
       for (const appointment of appointments) {
         await emitEvent({
           practiceId: appointment.practiceId,
-          eventName: 'crm/appointment.upcoming',
+          eventName: APPOINTMENT_UPCOMING_EVENT,
           entityType: 'appointment',
           entityId: appointment.id,
           data: buildAppointmentReminderPayload(appointment),
@@ -93,6 +118,9 @@ export const emitUpcomingAppointmentEvents = inngest.createFunction(
       }
     })
 
-    return { emitted: appointments.length }
+    return {
+      emitted: appointments.length,
+      practiceCount: practiceIds.length,
+    }
   }
 )
