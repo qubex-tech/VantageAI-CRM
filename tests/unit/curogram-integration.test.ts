@@ -3,6 +3,7 @@ import {
   buildCurogramIntentTopicWithPatientContext,
   normalizeCurogramAiV2Gender,
   normalizePhoneToE164,
+  resolveCurogramMappingId,
 } from '@/lib/curogram'
 import { shouldTriggerCurogramEscalation } from '@/lib/process-call-data'
 
@@ -115,6 +116,51 @@ describe('curogram integration safeguards', () => {
 
     it('omits unsupported values instead of sending invalid gender', () => {
       expect(normalizeCurogramAiV2Gender('Prefer no answer')).toBeUndefined()
+    })
+  })
+
+  describe('resolveCurogramMappingId', () => {
+    const fhirId = 'W6s8TGka96L4tHbCRoQU8aCUj1sASobCtgwjt6SvNUY'
+    const crmId = 'a18545ca-9728-4dad-bc9f-830131b105b5'
+
+    it('prefers stored MRN over CRM UUID and never uses FHIR id', () => {
+      expect(
+        resolveCurogramMappingId({
+          externalMrn: '9578',
+          fetchedMrn: null,
+          crmPatientId: crmId,
+        })
+      ).toEqual({ mappingId: '9578', source: 'mrn' })
+    })
+
+    it('uses fetched MRN when stored MRN is missing', () => {
+      expect(
+        resolveCurogramMappingId({
+          externalMrn: null,
+          fetchedMrn: '14407',
+          crmPatientId: crmId,
+        })
+      ).toEqual({ mappingId: '14407', source: 'mrn_fetched' })
+    })
+
+    it('falls back to CRM UUID when no MRN is available', () => {
+      expect(
+        resolveCurogramMappingId({
+          externalMrn: null,
+          fetchedMrn: null,
+          crmPatientId: crmId,
+        })
+      ).toEqual({ mappingId: crmId, source: 'crm_id' })
+    })
+
+    it('does not treat a FHIR id argument as mappingId', () => {
+      expect(
+        resolveCurogramMappingId({
+          externalMrn: null,
+          fetchedMrn: null,
+          crmPatientId: fhirId,
+        }).source
+      ).toBe('crm_id')
     })
   })
 })

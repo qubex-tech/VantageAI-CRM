@@ -21,6 +21,7 @@ import {
   sendCurogramEscalation,
   sendCurogramPatientsUpsert,
   trimCurogramIntentTopicForApi,
+  resolveCurogramMappingId,
 } from './curogram'
 import { looksLikePhoneNumber } from './retell-patient-identity'
 import {
@@ -36,6 +37,8 @@ import {
   resolvePostCallPatientMatch,
 } from './patient-identity'
 import { emitEvent } from './outbox'
+import { extractEcwSecondaryMrn } from './integrations/ehr/ecwPatientIds'
+import { createEhrClientForPractice } from './integrations/ehr/scheduleSync'
 
 function metadataObjectFromRow(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -365,6 +368,32 @@ async function emitVoiceConversationEndedEvent(params: {
   }
 }
 
+async function fetchAndCacheEcwMrn(params: {
+  practiceId: string
+  patientId: string
+  externalEhrId: string
+}): Promise<string | null> {
+  try {
+    const ehr = await createEhrClientForPractice(params.practiceId)
+    if (!ehr) return null
+    const fhirPatient = await ehr.client.request(`/Patient/${encodeURIComponent(params.externalEhrId)}`)
+    const mrn = extractEcwSecondaryMrn(fhirPatient as { id?: string; identifier?: Array<{ use?: string; value?: string }> })
+    if (!mrn) return null
+    await prisma.patient.update({
+      where: { id: params.patientId },
+      data: { externalMrn: mrn },
+    })
+    return mrn
+  } catch (error) {
+    console.warn('[Curogram Patient Sync] Failed to fetch eCW MRN', {
+      practiceId: params.practiceId,
+      patientId: params.patientId,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return null
+  }
+}
+
 async function triggerCurogramAfterRetellProcessing(
   practiceId: string,
   call: RetellCall,
@@ -454,6 +483,7 @@ async function triggerCurogramAfterRetellProcessing(
     primaryPhone: string | null
     email: string | null
     externalEhrId: string | null
+    externalMrn: string | null
   } | null = null
 
   if (conversation.patientId) {
@@ -471,6 +501,7 @@ async function triggerCurogramAfterRetellProcessing(
         primaryPhone: true,
         email: true,
         externalEhrId: true,
+        externalMrn: true,
       },
     })
   }
@@ -512,13 +543,26 @@ async function triggerCurogramAfterRetellProcessing(
       metadataUpdate.curogramPatientSyncRequestId = patientRequestId
       patientSyncSucceeded = false
     } else {
+      let fetchedMrn: string | null = null
+      if (!patientRecord?.externalMrn && patientRecord?.externalEhrId) {
+        fetchedMrn = await fetchAndCacheEcwMrn({
+          practiceId,
+          patientId: patientRecord.id,
+          externalEhrId: patientRecord.externalEhrId,
+        })
+      }
+      const mapping = resolveCurogramMappingId({
+        externalMrn: patientRecord?.externalMrn,
+        fetchedMrn,
+        crmPatientId: conversation.patientId || patientRecord?.id || '',
+      })
       const patientItem: CurogramPatientItemPayload = {
         firstName,
         ...(lastName ? { lastName } : {}),
         ...(dob ? { dob } : {}),
         ...(gender ? { gender } : {}),
-        // Stable ID avoids duplicate Curogram patient records across retries/calls.
-        mappingId: patientRecord?.externalEhrId || conversation.patientId || patientRecord?.id || '',
+        // eCW secondary MRN when linked; otherwise CRM UUID. Never the FHIR Patient.id.
+        mappingId: mapping.mappingId,
         ...(language ? { language } : {}),
         ...(uniquePhones.length > 0 ? { phones: uniquePhones } : {}),
         ...(emails.length > 0 ? { emails: Array.from(new Set(emails)) } : {}),
@@ -538,6 +582,7 @@ async function triggerCurogramAfterRetellProcessing(
         hasPhone: Boolean(patientItem.phones?.length),
         hasEmail: Boolean(patientItem.emails?.length),
         hasMappingId: Boolean(patientItem.mappingId),
+        mappingIdSource: mapping.source,
       })
 
       const patientResult = await sendCurogramPatientsUpsert(

@@ -12,6 +12,7 @@ import { logEhrAudit } from '@/lib/integrations/ehr/audit'
 import { createPatient } from '@/lib/integrations/fhir/resources/patient'
 import { formatDateOnlyForInput } from '@/lib/date'
 import { formatFhirPatientDisplayName } from '@/lib/patient-name'
+import { extractEcwSecondaryMrn } from '@/lib/integrations/ehr/ecwPatientIds'
 
 const UPDATE_PROVIDER_ID = 'ecw_write'
 const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.326070'
@@ -119,6 +120,7 @@ function normalizeBareEhrPatientId(value: string | null | undefined): string | n
 
 type FhirPatientRead = {
   id?: string
+  identifier?: Array<{ use?: string; system?: string; value?: string }>
   name?: Array<{ text?: string; family?: string; given?: string[] }>
   birthDate?: string
   gender?: string
@@ -263,11 +265,13 @@ export async function syncPatientDemographicsFromEhr(params: {
   const emailFromFhir =
     fhirPatient.telecom?.find((t) => t.system === 'email')?.value?.trim() || null
   const dateOfBirthFromFhir = fhirPatient.birthDate ? new Date(fhirPatient.birthDate) : null
+  const externalMrn = extractEcwSecondaryMrn(fhirPatient)
 
   await prisma.patient.update({
     where: { id: patientId },
     data: {
       externalEhrId: canonicalId,
+      ...(externalMrn ? { externalMrn } : {}),
       firstName: firstNameFromFhir ?? patient.firstName,
       lastName: lastNameFromFhir ?? patient.lastName,
       name: nameFromFhir ?? patient.name,

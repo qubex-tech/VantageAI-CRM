@@ -21,6 +21,21 @@ export interface CurogramPatientsUpsertPayload {
   items: CurogramPatientItemPayload[]
 }
 
+export type CurogramMappingIdSource = 'mrn' | 'mrn_fetched' | 'crm_id'
+
+/** Prefer eCW secondary MRN; never the opaque FHIR Patient.id. */
+export function resolveCurogramMappingId(params: {
+  externalMrn?: string | null
+  fetchedMrn?: string | null
+  crmPatientId?: string | null
+}): { mappingId: string; source: CurogramMappingIdSource } {
+  const mrn = params.externalMrn?.trim()
+  if (mrn) return { mappingId: mrn, source: 'mrn' }
+  const fetched = params.fetchedMrn?.trim()
+  if (fetched) return { mappingId: fetched, source: 'mrn_fetched' }
+  return { mappingId: params.crmPatientId?.trim() || '', source: 'crm_id' }
+}
+
 export interface CurogramAiCallsToActionPayload {
   firstName: string
   lastName: string

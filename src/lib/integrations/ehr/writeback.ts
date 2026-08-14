@@ -22,6 +22,7 @@ import { Prisma } from '@prisma/client'
 import { randomUUID } from 'crypto'
 import { refreshBackendConnectionIfNeeded } from '@/lib/integrations/ehr/backendTokens'
 import { formatPatientNoteForEhr, isPatientNoteType } from '@/lib/patient-note-types'
+import { extractEcwSecondaryMrn } from '@/lib/integrations/ehr/ecwPatientIds'
 
 const WRITEBACK_PROVIDER_ID = 'ecw_write'
 const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.326070'
@@ -406,12 +407,12 @@ function parseDobToIso(dateText: string | undefined) {
     .padStart(2, '0')}`
 }
 
-async function findEhrPatientId(params: {
+async function findEhrPatientMatch(params: {
   client: FhirClient
   fullName?: string | null
   birthDate?: string | null
   phone?: string | null
-}) {
+}): Promise<{ id: string; mrn: string | null } | null> {
   const { client, fullName, birthDate, phone } = params
   const name = fullName?.trim() || ''
   const normalizedPhone = phone ? phone.replace(/\D/g, '') : ''
@@ -447,9 +448,10 @@ async function findEhrPatientId(params: {
     try {
       const result = (await client.request(query)) as any
       const entry = Array.isArray(result?.entry) ? result.entry[0] : null
-      const id = entry?.resource?.id as string | undefined
+      const resource = entry?.resource as { id?: string; identifier?: Array<{ use?: string; value?: string }> } | undefined
+      const id = resource?.id
       if (id) {
-        return id
+        return { id, mrn: extractEcwSecondaryMrn(resource) }
       }
     } catch (error) {
       console.warn('[EHR Writeback] Patient lookup failed', { query })
@@ -906,18 +908,26 @@ export async function writeBackRetellCallToEhr(params: {
       : null
 
     if (!ehrPatientId && explicitPatientIdentified && (lookupName || lookupPhone)) {
-      const matchedId = await findEhrPatientId({
+      const matched = await findEhrPatientMatch({
         client,
         fullName: lookupName,
         birthDate: lookupBirthDate,
         phone: lookupPhone,
       })
-      if (matchedId) {
-        ehrPatientId = matchedId
-        if (patientRecord && patientRecord.externalEhrId !== matchedId) {
+      if (matched) {
+        ehrPatientId = matched.id
+        if (patientRecord && patientRecord.externalEhrId !== matched.id) {
           await prisma.patient.update({
             where: { id: patientRecord.id },
-            data: { externalEhrId: matchedId },
+            data: {
+              externalEhrId: matched.id,
+              ...(matched.mrn ? { externalMrn: matched.mrn } : {}),
+            },
+          })
+        } else if (patientRecord && matched.mrn && !patientRecord.externalMrn) {
+          await prisma.patient.update({
+            where: { id: patientRecord.id },
+            data: { externalMrn: matched.mrn },
           })
         }
       }
@@ -1035,9 +1045,19 @@ export async function writeBackRetellCallToEhr(params: {
         if (createdId) {
           ehrPatientId = createdId
           ehrPatientCreatedInEcw = true
+          const createdResource = (created as any)?.entry?.[0]?.resource as
+            | { id?: string; identifier?: Array<{ use?: string; value?: string }> }
+            | undefined
+          const createdMrn = extractEcwSecondaryMrn({
+            id: createdId,
+            identifier: createdResource?.identifier,
+          })
           await prisma.patient.update({
             where: { id: patientRecord.id },
-            data: { externalEhrId: createdId },
+            data: {
+              externalEhrId: createdId,
+              ...(createdMrn ? { externalMrn: createdMrn } : {}),
+            },
           })
           await logEhrAudit({
             tenantId: practiceId,

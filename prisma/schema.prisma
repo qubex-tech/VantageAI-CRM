@@ -153,6 +153,7 @@ model Patient {
   name                    String // Legacy field - kept for backward compatibility
   // Basic Information
   externalEhrId           String?
+  externalMrn             String?
   firstName               String?
   lastName                String?
   preferredName           String?
@@ -231,6 +232,7 @@ model Patient {
   @@index([email])
   @@index([deletedAt])
   @@index([externalEhrId])
+  @@index([externalMrn])
   @@index([primaryInsuranceId])
   @@index([secondaryInsuranceId])
   @@map("patients")

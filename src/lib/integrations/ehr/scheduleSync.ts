@@ -19,6 +19,7 @@ import {
 } from '@/lib/integrations/clinical-system/types'
 import { formatFhirPatientDisplayName } from '@/lib/patient-name'
 import { phoneMatchKey } from '@/lib/patient-identity'
+import { extractEcwSecondaryMrn } from '@/lib/integrations/ehr/ecwPatientIds'
 
 const WRITEBACK_PROVIDER_ID = 'ecw_write'
 const STALE_SYNC_WINDOW_MS = 12 * 60 * 60 * 1000
@@ -50,6 +51,7 @@ type FhirBundle<TResource = any> = {
 
 type FhirPatient = {
   id?: string
+  identifier?: Array<{ use?: string; system?: string; value?: string }>
   name?: Array<{ text?: string; family?: string; given?: string[] }>
   birthDate?: string
   gender?: string
@@ -865,6 +867,7 @@ async function upsertPatientFromEhr(params: {
   const email = patient?.telecom?.find((entry) => entry.system === 'email')?.value?.trim() || null
   const birthDate = patient?.birthDate ? new Date(patient.birthDate) : null
   const phoneKey = phoneMatchKey(primaryPhone)
+  const externalMrn = extractEcwSecondaryMrn(patient)
 
   // Before creating a new profile, merge with an existing local patient match and attach EHR ID.
   const mergeOrConditions: Array<Record<string, unknown>> = []
@@ -921,6 +924,7 @@ async function upsertPatientFromEhr(params: {
         where: { id: mergeCandidate.id },
         data: {
           externalEhrId: normalizedPatientId,
+          ...(externalMrn ? { externalMrn } : {}),
           firstName: resolvedFirst,
           lastName: resolvedLast,
           name: displayName,
@@ -942,6 +946,7 @@ async function upsertPatientFromEhr(params: {
     data: {
       practiceId: params.practiceId,
       externalEhrId: normalizedPatientId,
+      ...(externalMrn ? { externalMrn } : {}),
       name: fullName,
       firstName,
       lastName,
