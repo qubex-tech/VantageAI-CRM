@@ -91,25 +91,24 @@ async function notifyNewLead(d: z.infer<typeof leadSchema>): Promise<void> {
 }
 
 /**
- * Best-effort welcome email to the prospect via a published Resend template.
- * No-op unless RESEND_API_KEY and LEADS_WELCOME_TEMPLATE_ID are set.
+ * Best-effort welcome email to the prospect via the published Resend
+ * `personal-outreach` template. No-op unless RESEND_API_KEY is set.
  */
 async function sendWelcomeEmail(d: z.infer<typeof leadSchema>): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY
-  const templateId = process.env.LEADS_WELCOME_TEMPLATE_ID
-  if (!apiKey || !templateId) return
+  if (!apiKey) return
+  const templateId = process.env.LEADS_WELCOME_TEMPLATE_ID || 'personal-outreach'
   const fromEmail =
     process.env.LEADS_WELCOME_FROM || process.env.LEADS_NOTIFY_FROM || 'onboarding@resend.dev'
+  const firstName = d.contactName.trim().split(/\s+/)[0] || d.contactName
   const client = new ResendApiClient(apiKey, fromEmail, 'VantageAI')
   const result = await client.sendTemplateEmail({
     to: d.workEmail,
     templateId,
     variables: {
-      CONTACT_NAME: d.contactName,
-      PRACTICE_NAME: d.practiceName,
-      PRACTICE_TYPE: d.practiceType,
-      PROVIDER_COUNT: d.providerCount,
-      AUTOMATION_FOCUS: d.automationFocus,
+      firstName,
+      practiceName: d.practiceName,
+      automationFocus: d.automationFocus,
     },
   })
   if (!result.success) {
