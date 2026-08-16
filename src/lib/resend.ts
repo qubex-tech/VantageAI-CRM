@@ -15,6 +15,15 @@ export interface SendEmailParams {
   replyTo?: string
 }
 
+export interface SendTemplateEmailParams {
+  to: string
+  templateId: string
+  variables?: Record<string, string | number>
+  fromEmail?: string
+  fromName?: string
+  replyTo?: string
+}
+
 export interface SendEmailResult {
   success: boolean
   messageId?: string
@@ -105,37 +114,9 @@ export class ResendApiClient {
       })
 
       if (!response.ok) {
-        let errorMessage = 'Failed to send email via Resend'
-        const errorBody = await response.text()
-        try {
-          const errorJson = JSON.parse(errorBody)
-          if (errorJson?.message) {
-            const raw = String(errorJson.message)
-            if (response.status === 401 || response.status === 403) {
-              errorMessage = 'Invalid Resend API key or insufficient permissions.'
-            } else if (response.status === 429 || raw.toLowerCase().includes('rate')) {
-              errorMessage = 'Resend rate limit exceeded. Please try again later.'
-            } else if (raw.toLowerCase().includes('from') || raw.toLowerCase().includes('domain')) {
-              errorMessage = 'Sender email/domain is not verified in Resend.'
-            } else {
-              errorMessage = raw
-            }
-          }
-        } catch {
-          if (response.status === 401 || response.status === 403) {
-            errorMessage = 'Invalid Resend API key or insufficient permissions.'
-          } else if (response.status === 429) {
-            errorMessage = 'Resend rate limit exceeded. Please try again later.'
-          } else if (response.status >= 500) {
-            errorMessage = 'Resend service is temporarily unavailable. Please try again later.'
-          } else if (errorBody) {
-            errorMessage = errorBody.length > 200 ? 'Failed to send email via Resend' : errorBody
-          }
-        }
-
         return {
           success: false,
-          error: errorMessage,
+          error: await this.parseError(response),
         }
       }
 
@@ -147,21 +128,106 @@ export class ResendApiClient {
         messageId,
       }
     } catch (error) {
-      console.error('Failed to send email via Resend:', error)
-      let errorMessage = 'Unknown error sending email'
-      
-      if (error instanceof Error) {
-        if (error.message.includes('fetch') || error.message.includes('network') || error.message.includes('ECONNREFUSED')) {
-          errorMessage = 'Unable to connect to Resend. Please check your internet connection and try again.'
-        } else {
-          errorMessage = error.message
+      return this.networkError(error)
+    }
+  }
+
+  /**
+   * Send a published Resend dashboard template. Do not include html/text/subject
+   * — Resend rejects those when `template` is set.
+   */
+  async sendTemplateEmail(params: SendTemplateEmailParams): Promise<SendEmailResult> {
+    try {
+      const fromEmail = params.fromEmail || this.defaultFromEmail
+      const fromName = params.fromName || this.defaultFromName
+      const from = fromName ? `${fromName} <${fromEmail}>` : fromEmail
+
+      const payload: Record<string, unknown> = {
+        from,
+        to: [params.to],
+        template: {
+          id: params.templateId,
+          variables: params.variables || {},
+        },
+      }
+      if (params.replyTo) {
+        payload.reply_to = params.replyTo
+      }
+
+      const response = await fetch(`${this.baseUrl}/emails`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: await this.parseError(response),
         }
       }
-      
+
+      const data = await response.json().catch(() => ({}))
+      const messageId = typeof data?.id === 'string' ? data.id : undefined
+
       return {
-        success: false,
-        error: errorMessage,
+        success: true,
+        messageId,
       }
+    } catch (error) {
+      return this.networkError(error)
+    }
+  }
+
+  private async parseError(response: Response): Promise<string> {
+    let errorMessage = 'Failed to send email via Resend'
+    const errorBody = await response.text()
+    try {
+      const errorJson = JSON.parse(errorBody)
+      if (errorJson?.message) {
+        const raw = String(errorJson.message)
+        if (response.status === 401 || response.status === 403) {
+          errorMessage = 'Invalid Resend API key or insufficient permissions.'
+        } else if (response.status === 429 || raw.toLowerCase().includes('rate')) {
+          errorMessage = 'Resend rate limit exceeded. Please try again later.'
+        } else if (raw.toLowerCase().includes('from') || raw.toLowerCase().includes('domain')) {
+          errorMessage = 'Sender email/domain is not verified in Resend.'
+        } else {
+          errorMessage = raw
+        }
+      }
+    } catch {
+      if (response.status === 401 || response.status === 403) {
+        errorMessage = 'Invalid Resend API key or insufficient permissions.'
+      } else if (response.status === 429) {
+        errorMessage = 'Resend rate limit exceeded. Please try again later.'
+      } else if (response.status >= 500) {
+        errorMessage = 'Resend service is temporarily unavailable. Please try again later.'
+      } else if (errorBody) {
+        errorMessage = errorBody.length > 200 ? 'Failed to send email via Resend' : errorBody
+      }
+    }
+    return errorMessage
+  }
+
+  private networkError(error: unknown): SendEmailResult {
+    console.error('Failed to send email via Resend:', error)
+    let errorMessage = 'Unknown error sending email'
+
+    if (error instanceof Error) {
+      if (error.message.includes('fetch') || error.message.includes('network') || error.message.includes('ECONNREFUSED')) {
+        errorMessage = 'Unable to connect to Resend. Please check your internet connection and try again.'
+      } else {
+        errorMessage = error.message
+      }
+    }
+
+    return {
+      success: false,
+      error: errorMessage,
     }
   }
 }
