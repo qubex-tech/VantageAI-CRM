@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db'
+import { syncLeadToNotion } from '@/lib/notion-leads'
 import { ResendApiClient } from '@/lib/resend'
 
 export const dynamic = 'force-dynamic'
@@ -89,6 +90,33 @@ async function notifyNewLead(d: z.infer<typeof leadSchema>): Promise<void> {
   })
 }
 
+/**
+ * Best-effort welcome email to the prospect via a published Resend template.
+ * No-op unless RESEND_API_KEY and LEADS_WELCOME_TEMPLATE_ID are set.
+ */
+async function sendWelcomeEmail(d: z.infer<typeof leadSchema>): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY
+  const templateId = process.env.LEADS_WELCOME_TEMPLATE_ID
+  if (!apiKey || !templateId) return
+  const fromEmail =
+    process.env.LEADS_WELCOME_FROM || process.env.LEADS_NOTIFY_FROM || 'onboarding@resend.dev'
+  const client = new ResendApiClient(apiKey, fromEmail, 'VantageAI')
+  const result = await client.sendTemplateEmail({
+    to: d.workEmail,
+    templateId,
+    variables: {
+      CONTACT_NAME: d.contactName,
+      PRACTICE_NAME: d.practiceName,
+      PRACTICE_TYPE: d.practiceType,
+      PROVIDER_COUNT: d.providerCount,
+      AUTOMATION_FOCUS: d.automationFocus,
+    },
+  })
+  if (!result.success) {
+    throw new Error(result.error || 'Resend template send failed')
+  }
+}
+
 export async function OPTIONS(req: NextRequest) {
   return new NextResponse(null, { status: 204, headers: corsHeaders(req.headers.get('origin')) })
 }
@@ -135,8 +163,14 @@ export async function POST(req: NextRequest) {
       },
       select: { id: true },
     })
-    // Fire a notification email (best-effort; never blocks the lead save).
-    await notifyNewLead(data).catch((e) => console.error('[leads] notify failed:', e))
+    // Side effects are best-effort and never block the lead save / 201.
+    await Promise.all([
+      notifyNewLead(data).catch((e) => console.error('[leads] notify failed:', e)),
+      syncLeadToNotion({ id: lead.id, ...data }).catch((e) =>
+        console.error('[leads] notion sync failed:', e)
+      ),
+      sendWelcomeEmail(data).catch((e) => console.error('[leads] welcome email failed:', e)),
+    ])
     return NextResponse.json({ ok: true, id: lead.id }, { status: 201, headers })
   } catch (err) {
     console.error('[leads] failed to store lead:', err)
