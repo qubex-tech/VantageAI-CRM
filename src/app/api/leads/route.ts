@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db'
+import { ResendApiClient } from '@/lib/resend'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,6 +57,38 @@ const leadSchema = z.object({
   company: z.string().max(0).optional().or(z.literal('')),
 })
 
+/**
+ * Best-effort new-lead notification via Resend. No-op unless RESEND_API_KEY is
+ * configured. Never throws to the caller (guarded where invoked).
+ */
+async function notifyNewLead(d: z.infer<typeof leadSchema>): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) return
+  const to = process.env.LEADS_NOTIFY_TO || 'support@getvantage.tech'
+  const fromEmail = process.env.LEADS_NOTIFY_FROM || 'onboarding@resend.dev'
+  const client = new ResendApiClient(apiKey, fromEmail, 'VantageAI Leads')
+  const row = (k: string, v?: string) =>
+    `<tr><td style="padding:4px 12px 4px 0;color:#57534e">${k}</td><td style="padding:4px 0;font-weight:600">${v || '—'}</td></tr>`
+  const html = `
+    <h2 style="margin:0 0 12px">New lead from getvantage.tech</h2>
+    <table style="border-collapse:collapse;font-family:sans-serif;font-size:14px">
+      ${row('Practice', d.practiceName)}
+      ${row('Contact', d.contactName)}
+      ${row('Work email', d.workEmail)}
+      ${row('Website', d.practiceWebsite || '')}
+      ${row('Practice type', d.practiceType)}
+      ${row('Providers', d.providerCount)}
+      ${row('Automation focus', d.automationFocus)}
+      ${row('Source', d.source || '')}
+    </table>`
+  await client.sendEmail({
+    to,
+    subject: `New lead: ${d.practiceName} (${d.practiceType})`,
+    htmlContent: html,
+    replyTo: d.workEmail,
+  })
+}
+
 export async function OPTIONS(req: NextRequest) {
   return new NextResponse(null, { status: 204, headers: corsHeaders(req.headers.get('origin')) })
 }
@@ -102,6 +135,8 @@ export async function POST(req: NextRequest) {
       },
       select: { id: true },
     })
+    // Fire a notification email (best-effort; never blocks the lead save).
+    await notifyNewLead(data).catch((e) => console.error('[leads] notify failed:', e))
     return NextResponse.json({ ok: true, id: lead.id }, { status: 201, headers })
   } catch (err) {
     console.error('[leads] failed to store lead:', err)
