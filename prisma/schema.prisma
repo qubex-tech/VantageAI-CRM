@@ -2254,26 +2254,3 @@ model DevicePushToken {
   @@index([userId])
   @@map("device_push_tokens")
 }
-
-/// Inbound marketing leads captured by the getvantage.tech "Contact / Get Started" form.
-/// Public (unauthenticated) capture; not tenant-scoped since the prospect has no Practice yet.
-model MarketingLead {
-  id               String   @id @default(uuid())
-  practiceName     String
-  contactName      String
-  workEmail        String
-  practiceWebsite  String?
-  practiceType     String   // Dental | Primary care | Specialty clinic | Multi-specialty | Other
-  providerCount    String   // 1 | 2-5 | 6-10 | 11+
-  automationFocus  String   // Answering calls | Scheduling & reminders | Follow-ups & reactivation | All of the above
-  source           String?  // which CTA / page the form was opened from
-  referrer         String?
-  userAgent        String?
-  status           String   @default("new") // new | contacted | qualified | disqualified
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  @@index([createdAt])
-  @@index([workEmail])
-  @@index([status])
-}
