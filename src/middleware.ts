@@ -137,6 +137,8 @@ export async function middleware(req: NextRequest) {
       '/api/check-do-not-schedule',
       // Ops probes (auth via Bearer EHR_BACKEND_API_KEY inside the route)
       '/api/internal/browser-agent/probe',
+      // Public marketing lead-capture (getvantage.tech form; CORS + honeypot in the route)
+      '/api/leads',
     ]
     const isPublicPath = publicPaths.some(path => pathname.startsWith(path))
     
