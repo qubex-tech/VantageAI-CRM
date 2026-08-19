@@ -31,6 +31,12 @@ export type AvailityEligibilityPlaybookConfig = {
   interpretation: {
     requireMemberScopedActiveCoverage: boolean
   }
+  /** Hybrid Stagehand LLM assist for brittle Availity UI steps + result extract. */
+  llmAssist: {
+    enabled: boolean
+    /** Stagehand model id, e.g. openai/gpt-4.1-mini */
+    model?: string
+  }
 }
 
 export type PracticePlaybookRecord = {
@@ -83,6 +89,10 @@ export function getDefaultAvailityEligibilityConfig(): AvailityEligibilityPlaybo
     interpretation: {
       requireMemberScopedActiveCoverage: true,
     },
+    llmAssist: {
+      enabled: true,
+      model: 'openai/gpt-4.1-mini',
+    },
   }
 }
 
@@ -96,6 +106,8 @@ export function normalizeAvailityEligibilityConfig(
   const resultCapture = (obj.resultCapture || {}) as Record<string, unknown>
   const payerSelection = (obj.payerSelection || {}) as Record<string, unknown>
   const interpretation = (obj.interpretation || {}) as Record<string, unknown>
+  const llmAssistRaw = (obj.llmAssist || {}) as Record<string, unknown>
+  const hasLlmAssistKey = Object.prototype.hasOwnProperty.call(obj, 'llmAssist')
 
   const networkFilter =
     resultCapture.networkFilter === 'Out of Network' ||
@@ -155,6 +167,18 @@ export function normalizeAvailityEligibilityConfig(
         typeof interpretation.requireMemberScopedActiveCoverage === 'boolean'
           ? interpretation.requireMemberScopedActiveCoverage
           : defaults.interpretation.requireMemberScopedActiveCoverage,
+    },
+    // Existing DB rows without llmAssist stay off until Settings enables them.
+    llmAssist: {
+      enabled: hasLlmAssistKey
+        ? typeof llmAssistRaw.enabled === 'boolean'
+          ? llmAssistRaw.enabled
+          : defaults.llmAssist.enabled
+        : false,
+      model:
+        typeof llmAssistRaw.model === 'string' && llmAssistRaw.model.trim()
+          ? llmAssistRaw.model.trim()
+          : defaults.llmAssist.model,
     },
   }
 }
@@ -255,4 +279,15 @@ export function practicePlaybookConfigFromInput(
     return normalizeAvailityEligibilityConfig(input.practicePlaybookConfig)
   }
   return getDefaultAvailityEligibilityConfig()
+}
+
+/** Whether hybrid Stagehand assist should run for this playbook config / env. */
+export function isLlmAssistEnabled(config: AvailityEligibilityPlaybookConfig): boolean {
+  if (process.env.BROWSER_AGENT_LLM === '0' || process.env.BROWSER_AGENT_LLM === 'false') {
+    return false
+  }
+  if (process.env.BROWSER_AGENT_LLM === '1' || process.env.BROWSER_AGENT_LLM === 'true') {
+    return true
+  }
+  return Boolean(config.llmAssist?.enabled)
 }

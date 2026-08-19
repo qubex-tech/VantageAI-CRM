@@ -4,10 +4,17 @@ import { inngest } from '@/inngest/client'
 import { getBrowserCredential } from './credentials'
 import { getPlaybook } from './playbooks'
 import {
+  isLlmAssistEnabled,
   normalizeAvailityEligibilityConfig,
+  practicePlaybookConfigFromInput,
   type PracticePlaybookRecord,
 } from './practice-playbook'
 import { createBrowserSession, isBrowserbaseConfigured } from './session'
+import {
+  createStagehandAssist,
+  isStagehandConfigured,
+  type StagehandAssistHandle,
+} from './stagehand-session'
 import type { BrowserPlaybook, PlaybookResult, StartBrowserAgentRunInput } from './types'
 
 const PRACTICE_CONCURRENCY = 2
@@ -167,14 +174,45 @@ async function executeWithEngine(
   }
 
   let session: Awaited<ReturnType<typeof createBrowserSession>> | null = null
+  let llmAssist: StagehandAssistHandle | null = null
   const logs: string[] = []
 
   try {
     if (playbook.requiresBrowser && !useMock) {
-      session = await createBrowserSession({
-        practiceId: run.practiceId,
-        playbookId: playbook.id,
-      })
+      const playbookConfig =
+        practicePlaybook?.config ||
+        practicePlaybookConfigFromInput((run.input as Record<string, unknown>) || {})
+      const wantLlm =
+        playbook.id === 'availity.eligibility' &&
+        isLlmAssistEnabled(playbookConfig) &&
+        isStagehandConfigured()
+
+      if (wantLlm) {
+        llmAssist = await createStagehandAssist({
+          practiceId: run.practiceId,
+          playbookId: playbook.id,
+          model: playbookConfig.llmAssist?.model,
+        })
+        session = await createBrowserSession({
+          practiceId: run.practiceId,
+          playbookId: playbook.id,
+          existingSessionId: llmAssist.sessionId,
+        })
+        logs.push('Stagehand LLM assist session started')
+      } else {
+        session = await createBrowserSession({
+          practiceId: run.practiceId,
+          playbookId: playbook.id,
+        })
+        if (
+          playbook.id === 'availity.eligibility' &&
+          isLlmAssistEnabled(playbookConfig) &&
+          !isStagehandConfigured()
+        ) {
+          logs.push('LLM assist enabled but Stagehand not configured; using Playwright only')
+        }
+      }
+
       await prisma.browserAgentRun.update({
         where: { id: runId },
         data: { sessionId: session.sessionId },
@@ -201,6 +239,7 @@ async function executeWithEngine(
       useMock,
       input: runInput,
       session,
+      llmAssist,
       log: (message, meta) => {
         logs.push(message)
         console.info(`[browser-agent:${playbook.id}] ${message}`, {
@@ -221,6 +260,7 @@ async function executeWithEngine(
           ...(result.output || {}),
           logs: logs.slice(-50),
           escalateToVoice: result.escalateToVoice || false,
+          llmAssist: Boolean(llmAssist),
         },
         errorMessage: result.errorMessage || null,
         artifactUrls: result.artifactUrls || undefined,
@@ -237,6 +277,9 @@ async function executeWithEngine(
   } finally {
     if (session) {
       await session.close().catch(() => undefined)
+    }
+    if (llmAssist) {
+      await llmAssist.close().catch(() => undefined)
     }
   }
 }

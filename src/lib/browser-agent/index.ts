@@ -20,6 +20,7 @@ export {
   getDefaultAvailityEligibilityConfig,
   getOrCreatePracticePlaybook,
   getPracticePlaybook,
+  isLlmAssistEnabled,
   normalizeAvailityEligibilityConfig,
   updatePracticePlaybookConfig,
 } from './practice-playbook'

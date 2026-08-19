@@ -4,7 +4,13 @@ import { scrapeRheumPacketFromPortalText } from '@/lib/eligibility/scrape-rpa-be
 import { generateTotpFresh } from '../totp'
 import { markBrowserCredentialLogin } from '../credentials'
 import {
+  AVAILITY_RESULT_EXTRACT_INSTRUCTION,
+  availityResultExtractSchema,
+  mapExtractToRheumPacket,
+} from '../llm-extract'
+import {
   DEFAULT_AVAILITY_BENEFIT_SERVICE_TYPE,
+  isLlmAssistEnabled,
   practicePlaybookConfigFromInput,
   type AvailityEligibilityPlaybookConfig,
 } from '../practice-playbook'
@@ -15,6 +21,60 @@ const AVAILITY_LOGIN_URL =
 
 function asString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function llmAssistActive(ctx: PlaybookContext): boolean {
+  if (!ctx.llmAssist) return false
+  return isLlmAssistEnabled(practicePlaybookConfigFromInput(ctx.input))
+}
+
+async function tryLlmAct(
+  ctx: PlaybookContext,
+  instruction: string,
+  step: string
+): Promise<{ ok: boolean; message?: string }> {
+  if (!llmAssistActive(ctx) || !ctx.llmAssist) {
+    return { ok: false, message: 'llm_assist_unavailable' }
+  }
+  ctx.log(`Stagehand act: ${step}`, { instruction: instruction.slice(0, 400) })
+  const result = await ctx.llmAssist.act(instruction)
+  if (result.ok) {
+    ctx.log(`Stagehand act ok: ${step}`, { message: result.message?.slice(0, 200) })
+    await ctx.session?.page.waitForTimeout(800).catch(() => undefined)
+    return result
+  }
+  ctx.log(`Stagehand act failed: ${step}; falling back to Playwright`, {
+    message: result.message?.slice(0, 300),
+  })
+  if (ctx.session?.screenshotDataUrl) {
+    await ctx.session.screenshotDataUrl().catch(() => undefined)
+  }
+  return result
+}
+
+function buildPayerActInstruction(
+  payerName: string,
+  payerId: string | undefined,
+  playbookConfig: AvailityEligibilityPlaybookConfig | undefined
+): string {
+  const aliases = expandPayerNameAliases(payerName)
+  const searchTerms = payerSearchTerms(payerName, payerId)
+  const rejectMedicare = playbookConfig?.payerSelection.rejectMedicareUnlessCrmSaysSo !== false
+  const crmLooksMedicare = /medicare|advantage|mapd|ma\b/i.test(payerName)
+  return [
+    `In the Availity Eligibility & Benefits inquiry form, select the Payer that matches the CRM payer.`,
+    `CRM payer name: "${payerName}".`,
+    payerId ? `CRM/Availity payer id: "${payerId}".` : '',
+    `Acceptable labels / search terms: ${uniqueStrings([...aliases, ...searchTerms]).join('; ')}.`,
+    `Prefer Frequently Used Payers when the matching brand appears there.`,
+    `Do not invent a different commercial payer.`,
+    rejectMedicare && !crmLooksMedicare
+      ? `Do NOT select Medicare Advantage / Medicare Advantage PPO unless the CRM payer explicitly says Medicare.`
+      : '',
+    `Type into the Payer field, wait for the dropdown, and click the best matching option.`,
+  ]
+    .filter(Boolean)
+    .join(' ')
 }
 
 const PAYER_STOP_WORDS = new Set([
@@ -1244,8 +1304,18 @@ async function selectTypeaheadOption(
 async function selectAvailityPayer(
   ctx: PlaybookContext,
   payerName: string,
-  payerId?: string
+  payerId?: string,
+  playbookConfig?: AvailityEligibilityPlaybookConfig
 ): Promise<{ ok: boolean; selectedLabel?: string; errorMessage?: string }> {
+  const llm = await tryLlmAct(
+    ctx,
+    buildPayerActInstruction(payerName, payerId, playbookConfig),
+    'payer'
+  )
+  if (llm.ok) {
+    return { ok: true, selectedLabel: payerName }
+  }
+
   const normalized = normalizePayerText(payerName)
   const result = await selectTypeaheadOption(ctx, {
     fieldLabel: 'payer',
@@ -1279,6 +1349,21 @@ async function selectAvailityBenefitServiceType(
 ): Promise<{ ok: boolean; selectedLabel?: string; errorMessage?: string }> {
   const label = benefitServiceType.trim()
   if (!label) return { ok: true }
+
+  const llm = await tryLlmAct(
+    ctx,
+    [
+      `In the Availity Eligibility & Benefits inquiry form, set Benefit / Service Type to exactly:`,
+      `"${label}"`,
+      `Open the Benefit / Service Type typeahead, search if needed, and select that exact option (or the closest Office - 98 Professional Physician Visit match).`,
+      `Do not pick Hospital, Facility, or unrelated service types.`,
+    ].join(' '),
+    'benefitServiceType'
+  )
+  if (llm.ok) {
+    return { ok: true, selectedLabel: label }
+  }
+
   const shortTerms = uniqueStrings([
     label,
     label.replace(/professional\s*\(physician\)\s*/i, '').trim(),
@@ -1314,6 +1399,13 @@ async function selectAvailityProviderType(
   providerType: string
 ): Promise<void> {
   const label = providerType.trim() || 'Professional'
+  const llm = await tryLlmAct(
+    ctx,
+    `In the Availity Eligibility inquiry form, select Provider Type "${label}" (Professional, not Hospital).`,
+    'providerType'
+  )
+  if (llm.ok) return
+
   if (!ctx.session) return
   const quoted = label.replace(/"/g, '\\"')
   const loc =
@@ -1413,6 +1505,19 @@ async function selectAvailityOrganization(
     organizationName.trim().split(/\s+/).slice(0, 3).join(' '),
     tokens[0] || '',
   ])
+
+  const llm = await tryLlmAct(
+    ctx,
+    [
+      `In the Availity Eligibility & Benefits inquiry form, select Organization matching "${organizationName}".`,
+      `If Organization is already correctly populated, leave it alone.`,
+      `Otherwise open the Organization field/typeahead and choose the matching practice organization.`,
+    ].join(' '),
+    'organization'
+  )
+  if (llm.ok) {
+    return { ok: true, selectedLabel: organizationName }
+  }
 
   try {
     return await selectTypeaheadOption(ctx, {
@@ -1677,7 +1782,12 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
 
   let selectedPayerLabel = ''
   if (payerName || payerId) {
-    const payerSelected = await selectAvailityPayer(ctx, payerName || payerId, payerId || undefined)
+    const payerSelected = await selectAvailityPayer(
+      ctx,
+      payerName || payerId,
+      payerId || undefined,
+      playbookConfig
+    )
     if (!payerSelected.ok) {
       if (ctx.session.screenshotDataUrl) {
         artifacts.push(await ctx.session.screenshotDataUrl())
@@ -1790,24 +1900,81 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
   }
 
   if (!submitBtn || !submitEnabled) {
-    const bodyText =
-      (await ctx.session.collectTextAcrossFrames?.()) ||
-      (await page().locator('body').innerText().catch(() => '')) ||
-      ''
-    if (ctx.session.screenshotDataUrl) {
-      artifacts.push(await ctx.session.screenshotDataUrl())
+    const llmSubmit = await tryLlmAct(
+      ctx,
+      [
+        'The Availity Eligibility Submit button is disabled or missing.',
+        'Finish any remaining required fields on the inquiry form (payer committed, provider type, benefit/service type, member id, DOB, NPI as needed),',
+        'then click Submit / Check Eligibility when it becomes enabled.',
+        'Do not navigate away from Eligibility & Benefits.',
+      ].join(' '),
+      'submitReady'
+    )
+    if (llmSubmit.ok) {
+      const afterLlm = await ctx.session.findLocator?.(submitAnySelector, 15_000)
+      if (afterLlm) {
+        await afterLlm.scrollIntoViewIfNeeded?.().catch(() => undefined)
+        const enabled = afterLlm.isEnabled
+          ? await afterLlm.isEnabled().catch(() => true)
+          : true
+        if (enabled) {
+          await afterLlm.click({ timeout: 15_000 })
+          ctx.log('Clicked Availity eligibility Submit after Stagehand assist')
+        } else {
+          const bodyText =
+            (await ctx.session.collectTextAcrossFrames?.()) ||
+            (await page().locator('body').innerText().catch(() => '')) ||
+            ''
+          if (ctx.session.screenshotDataUrl) {
+            artifacts.push(await ctx.session.screenshotDataUrl())
+          }
+          return {
+            ok: false,
+            errorMessage:
+              'Availity eligibility Submit stayed disabled (form incomplete or still loading)',
+            escalateToVoice: true,
+            artifactUrls: artifacts,
+            output: { pageSnippet: bodyText.slice(0, 2500), url: page().url(), filledMember },
+          }
+        }
+      } else {
+        const bodyText =
+          (await ctx.session.collectTextAcrossFrames?.()) ||
+          (await page().locator('body').innerText().catch(() => '')) ||
+          ''
+        if (ctx.session.screenshotDataUrl) {
+          artifacts.push(await ctx.session.screenshotDataUrl())
+        }
+        return {
+          ok: false,
+          errorMessage:
+            'Availity eligibility Submit stayed disabled (form incomplete or still loading)',
+          escalateToVoice: true,
+          artifactUrls: artifacts,
+          output: { pageSnippet: bodyText.slice(0, 2500), url: page().url(), filledMember },
+        }
+      }
+    } else {
+      const bodyText =
+        (await ctx.session.collectTextAcrossFrames?.()) ||
+        (await page().locator('body').innerText().catch(() => '')) ||
+        ''
+      if (ctx.session.screenshotDataUrl) {
+        artifacts.push(await ctx.session.screenshotDataUrl())
+      }
+      return {
+        ok: false,
+        errorMessage:
+          'Availity eligibility Submit stayed disabled (form incomplete or still loading)',
+        escalateToVoice: true,
+        artifactUrls: artifacts,
+        output: { pageSnippet: bodyText.slice(0, 2500), url: page().url(), filledMember },
+      }
     }
-    return {
-      ok: false,
-      errorMessage: 'Availity eligibility Submit stayed disabled (form incomplete or still loading)',
-      escalateToVoice: true,
-      artifactUrls: artifacts,
-      output: { pageSnippet: bodyText.slice(0, 2500), url: page().url(), filledMember },
-    }
+  } else {
+    await submitBtn.click({ timeout: 15_000 })
+    ctx.log('Clicked Availity eligibility Submit')
   }
-
-  await submitBtn.click({ timeout: 15_000 })
-  ctx.log('Clicked Availity eligibility Submit')
 
   // Wait for results inside the eligibility iframe (parent shell text is just the nav chrome).
   // Scope interpretation to this member so a prior patient's "Active Coverage" in the
@@ -1910,9 +2077,36 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
   }
 
   const formMode = formModeForAppointmentType(asString(ctx.input.appointmentType) || undefined)
-  let rheum = scrapeRheumPacketFromPortalText(bodyText, { formMode, source: 'availity_rpa' })
+  const heuristic = scrapeRheumPacketFromPortalText(bodyText, { formMode, source: 'availity_rpa' })
+  let rheum = heuristic
+  let llmExtractUsed = false
+
+  if (llmAssistActive(ctx) && ctx.llmAssist) {
+    ctx.log('Stagehand extract: rheum fields', {
+      instruction: AVAILITY_RESULT_EXTRACT_INSTRUCTION.slice(0, 200),
+    })
+    const extracted = await ctx.llmAssist.extract(
+      AVAILITY_RESULT_EXTRACT_INSTRUCTION,
+      availityResultExtractSchema
+    )
+    if (extracted.ok && extracted.data) {
+      llmExtractUsed = true
+      rheum = mapExtractToRheumPacket(extracted.data, { formMode, heuristic })
+      ctx.log('Stagehand extract ok', {
+        memberStatus: extracted.data.memberStatus,
+        networkStatus: extracted.data.networkStatus,
+        planType: extracted.data.planType,
+      })
+    } else {
+      ctx.log('Stagehand extract failed; using heuristic scrape', {
+        error: extracted.error?.slice(0, 300),
+      })
+    }
+  }
+
   rheum = applyCallRequiredFlag(rheum, asString(ctx.input.appointmentType) || undefined)
   ctx.log('Scraped Availity rheum packet', {
+    llmExtractUsed,
     planType: rheum.planType,
     networkStatus: rheum.networkStatus,
     specialistCopay: rheum.specialistCopay,
@@ -1943,6 +2137,7 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
       pageSnippet: bodyText.slice(0, 12_000),
       url: page().url(),
       selectedPayerLabel,
+      llmExtractUsed,
     },
     artifactUrls: artifacts,
   }

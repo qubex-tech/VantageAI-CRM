@@ -79,6 +79,8 @@ export interface PlaybookContext {
   useMock: boolean
   input: Record<string, unknown>
   session: BrowserSessionHandle | null
+  /** Optional Stagehand LLM assist (hybrid Availity path). */
+  llmAssist?: import('./stagehand-session').StagehandAssistHandle | null
   log: (message: string, meta?: Record<string, unknown>) => void
 }
 

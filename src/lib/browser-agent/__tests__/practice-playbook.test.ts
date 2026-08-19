@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const findUnique = vi.fn()
 const create = vi.fn()
@@ -18,6 +18,7 @@ import {
   AVAILITY_ELIGIBILITY_PLAYBOOK_KEY,
   getDefaultAvailityEligibilityConfig,
   getOrCreatePracticePlaybook,
+  isLlmAssistEnabled,
   normalizeAvailityEligibilityConfig,
   practicePlaybookConfigFromInput,
 } from '../practice-playbook'
@@ -58,6 +59,70 @@ describe('normalizeAvailityEligibilityConfig', () => {
     expect(normalized.resultCapture.expandLabels).toEqual(
       getDefaultAvailityEligibilityConfig().resultCapture.expandLabels
     )
+  })
+
+  it('keeps llmAssist disabled for existing rows without the key', () => {
+    const normalized = normalizeAvailityEligibilityConfig({
+      resultCapture: { networkFilter: 'In Network' },
+    })
+    expect(normalized.llmAssist.enabled).toBe(false)
+    expect(normalized.llmAssist.model).toBe('openai/gpt-4.1-mini')
+  })
+
+  it('honors llmAssist.enabled when present', () => {
+    const on = normalizeAvailityEligibilityConfig({
+      llmAssist: { enabled: true, model: 'openai/gpt-4.1' },
+    })
+    expect(on.llmAssist.enabled).toBe(true)
+    expect(on.llmAssist.model).toBe('openai/gpt-4.1')
+
+    const off = normalizeAvailityEligibilityConfig({
+      llmAssist: { enabled: false },
+    })
+    expect(off.llmAssist.enabled).toBe(false)
+  })
+})
+
+describe('getDefaultAvailityEligibilityConfig llmAssist', () => {
+  it('defaults llmAssist enabled for new configs', () => {
+    const config = getDefaultAvailityEligibilityConfig()
+    expect(config.llmAssist.enabled).toBe(true)
+    expect(config.llmAssist.model).toBe('openai/gpt-4.1-mini')
+  })
+})
+
+describe('isLlmAssistEnabled', () => {
+  const prev = process.env.BROWSER_AGENT_LLM
+
+  afterEach(() => {
+    if (prev === undefined) delete process.env.BROWSER_AGENT_LLM
+    else process.env.BROWSER_AGENT_LLM = prev
+  })
+
+  it('respects env force-off even when config enabled', () => {
+    process.env.BROWSER_AGENT_LLM = '0'
+    expect(
+      isLlmAssistEnabled({
+        ...getDefaultAvailityEligibilityConfig(),
+        llmAssist: { enabled: true },
+      })
+    ).toBe(false)
+  })
+
+  it('uses config when env unset', () => {
+    delete process.env.BROWSER_AGENT_LLM
+    expect(
+      isLlmAssistEnabled({
+        ...getDefaultAvailityEligibilityConfig(),
+        llmAssist: { enabled: false },
+      })
+    ).toBe(false)
+    expect(
+      isLlmAssistEnabled({
+        ...getDefaultAvailityEligibilityConfig(),
+        llmAssist: { enabled: true },
+      })
+    ).toBe(true)
   })
 })
 

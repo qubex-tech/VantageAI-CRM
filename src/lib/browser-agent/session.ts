@@ -5,14 +5,23 @@ export function isBrowserbaseConfigured(): boolean {
   return Boolean(process.env.BROWSERBASE_API_KEY?.trim() && process.env.BROWSERBASE_PROJECT_ID?.trim())
 }
 
+type SessionCreateResult = {
+  id: string
+  connectUrl: string
+}
+
 /**
  * Opens a Browserbase session and connects Playwright over CDP.
  * Playwright / Browserbase are loaded dynamically so Next.js webpack does not
  * try to bundle their optional native deps (chromium-bidi, kerberos, etc.).
+ *
+ * When `existingSessionId` is set (Stagehand-owned session), Playwright disconnects
+ * on close but does not release the Browserbase session.
  */
 export async function createBrowserSession(params?: {
   practiceId?: string
   playbookId?: string
+  existingSessionId?: string
 }): Promise<BrowserSessionHandle> {
   if (!isBrowserbaseConfigured()) {
     throw new Error(
@@ -26,16 +35,31 @@ export async function createBrowserSession(params?: {
   ])
 
   const bb = new Browserbase({ apiKey: process.env.BROWSERBASE_API_KEY! })
-  const session = await bb.sessions.create({
-    projectId: process.env.BROWSERBASE_PROJECT_ID!,
-    browserSettings: {
-      viewport: { width: 1440, height: 900 },
-    },
-    userMetadata: {
-      practiceId: params?.practiceId || '',
-      playbookId: params?.playbookId || '',
-    },
-  })
+  const ownedExternally = Boolean(params?.existingSessionId)
+
+  let session: SessionCreateResult
+  if (params?.existingSessionId) {
+    const retrieved = (await bb.sessions.retrieve(params.existingSessionId)) as {
+      id: string
+      connectUrl?: string
+    }
+    if (!retrieved.connectUrl) {
+      throw new Error(`Browserbase session ${params.existingSessionId} has no connectUrl`)
+    }
+    session = { id: retrieved.id, connectUrl: retrieved.connectUrl }
+  } else {
+    const created = await bb.sessions.create({
+      projectId: process.env.BROWSERBASE_PROJECT_ID!,
+      browserSettings: {
+        viewport: { width: 1440, height: 900 },
+      },
+      userMetadata: {
+        practiceId: params?.practiceId || '',
+        playbookId: params?.playbookId || '',
+      },
+    })
+    session = { id: created.id, connectUrl: created.connectUrl }
+  }
 
   const browser: Browser = await chromium.connectOverCDP(session.connectUrl)
   const context: BrowserContext = browser.contexts()[0] || (await browser.newContext())
@@ -140,6 +164,7 @@ export async function createBrowserSession(params?: {
       } catch {
         // ignore
       }
+      if (ownedExternally) return
       try {
         await bb.sessions.update(session.id, { status: 'REQUEST_RELEASE' })
       } catch {

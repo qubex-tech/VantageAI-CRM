@@ -2,12 +2,16 @@
 const nextConfig = {
   reactStrictMode: true,
   // Keep browser automation deps out of the Next server bundle (optional native modules).
-  serverExternalPackages: ['playwright-core', '@browserbasehq/sdk'],
+  serverExternalPackages: ['playwright-core', '@browserbasehq/sdk', '@browserbasehq/stagehand'],
   experimental: {
     serverActions: {
       bodySizeLimit: '2mb',
     },
-    serverComponentsExternalPackages: ['playwright-core', '@browserbasehq/sdk'],
+    serverComponentsExternalPackages: [
+      'playwright-core',
+      '@browserbasehq/sdk',
+      '@browserbasehq/stagehand',
+    ],
     optimizePackageImports: [
       'lucide-react',
       '@radix-ui/react-dialog',
@@ -26,7 +30,7 @@ const nextConfig = {
       }
     }
     if (isServer) {
-      const externals = ['playwright-core', '@browserbasehq/sdk']
+      const externals = ['playwright-core', '@browserbasehq/sdk', '@browserbasehq/stagehand']
       if (Array.isArray(config.externals)) {
         config.externals.push(...externals)
       } else if (typeof config.externals === 'function') {

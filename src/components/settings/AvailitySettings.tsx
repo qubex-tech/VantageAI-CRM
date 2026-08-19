@@ -100,6 +100,8 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
     'Professional (Physician) Visit - Office - 98'
   )
   const [providerType, setProviderType] = useState('Professional')
+  const [llmAssistEnabled, setLlmAssistEnabled] = useState(false)
+  const [llmAssistModel, setLlmAssistModel] = useState('openai/gpt-4.1-mini')
   const [playbookNotes, setPlaybookNotes] = useState('')
   const [sourceVideoUrl, setSourceVideoUrl] = useState('')
   const [playbookLoading, setPlaybookLoading] = useState(false)
@@ -175,6 +177,8 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
             'Professional (Physician) Visit - Office - 98'
         )
         setProviderType(pb.config?.inquiry?.providerType || 'Professional')
+        setLlmAssistEnabled(Boolean(pb.config?.llmAssist?.enabled))
+        setLlmAssistModel(pb.config?.llmAssist?.model || 'openai/gpt-4.1-mini')
         setPlaybookNotes(pb.notes || '')
         setSourceVideoUrl(pb.sourceVideoUrl || '')
       } catch {
@@ -257,6 +261,10 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
               networkFilter,
               expandLabels,
             },
+            llmAssist: {
+              enabled: llmAssistEnabled,
+              model: llmAssistModel.trim() || 'openai/gpt-4.1-mini',
+            },
           },
         }),
       })
@@ -274,6 +282,10 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
       }
       if (pb?.config?.inquiry?.providerType) {
         setProviderType(pb.config.inquiry.providerType)
+      }
+      setLlmAssistEnabled(Boolean(pb?.config?.llmAssist?.enabled))
+      if (pb?.config?.llmAssist?.model) {
+        setLlmAssistModel(pb.config.llmAssist.model)
       }
       setSuccess('Availity practice playbook saved')
     } catch (err) {
@@ -643,6 +655,36 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
               placeholder="Professional"
             />
           </div>
+
+          <div className="flex items-center justify-between gap-4 rounded-md border border-gray-100 bg-gray-50 px-3 py-3">
+            <div>
+              <Label htmlFor="llmAssistEnabled">LLM assist (Stagehand)</Label>
+              <p className="text-xs text-gray-500 mt-1">
+                Use Browserbase Stagehand for brittle payer / service-type steps and result extract.
+                Playwright stays for login and stable field fills. Requires OPENAI_API_KEY.
+              </p>
+            </div>
+            <Switch
+              id="llmAssistEnabled"
+              checked={llmAssistEnabled}
+              onCheckedChange={setLlmAssistEnabled}
+              disabled={!portalRpaEnabled || playbookLoading}
+            />
+          </div>
+
+          {llmAssistEnabled && (
+            <div>
+              <Label htmlFor="llmAssistModel">LLM model</Label>
+              <Input
+                id="llmAssistModel"
+                value={llmAssistModel}
+                onChange={(e) => setLlmAssistModel(e.target.value)}
+                className="mt-1"
+                disabled={!portalRpaEnabled || playbookLoading}
+                placeholder="openai/gpt-4.1-mini"
+              />
+            </div>
+          )}
 
           <div>
             <Label htmlFor="expandLabels">Benefit sections to expand</Label>
