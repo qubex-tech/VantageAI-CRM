@@ -1,5 +1,5 @@
 import type { ParsedEligibilitySummary } from '@/lib/availity'
-import { applyCallRequiredFlag, formModeForAppointmentType } from '@/lib/eligibility/lsr-gates'
+import { applyCallRequiredFlag, formModeForAppointmentType, isTelevisitAppointment } from '@/lib/eligibility/lsr-gates'
 import { scrapeRheumPacketFromPortalText } from '@/lib/eligibility/scrape-rpa-benefits'
 import { generateTotpFresh } from '../totp'
 import { markBrowserCredentialLogin } from '../credentials'
@@ -1433,6 +1433,142 @@ async function selectAvailityProviderType(
   ], label)
 }
 
+const PROVIDER_FIELD_SELECTORS = [
+  'input[name="providerNpi"]',
+  'input[name*="providerNpi" i]',
+  'input[id*="providerNpi" i]',
+  'input[placeholder*="Provider NPI" i]',
+  'input[aria-label*="Provider NPI" i]',
+  'input[placeholder*="Provider" i]',
+  'input[aria-label*="Provider" i]',
+  'input[id*="npi" i]',
+  'input[placeholder*="NPI" i]',
+]
+
+/** Individual clinician rows look like "BOSE, NILANJANA (NPI: …)"; orgs include Tax ID / PLLC. */
+function scoreProviderOption(label: string, npi: string): number {
+  const compact = label.replace(/\s+/g, ' ').trim()
+  if (!compact) return -1000
+  let score = 0
+  if (npi && compact.includes(npi)) score += 100
+  // LAST, FIRST individual pattern
+  if (/^[A-Za-z][A-Za-z'’.\- ]+,\s*[A-Za-z]/.test(compact)) score += 50
+  if (/\bnpi\s*:\s*\d+/i.test(compact) && !/tax\s*id/i.test(compact)) score += 25
+  if (/tax\s*id/i.test(compact)) score -= 90
+  if (/\b(pllc|llc|inc\.?|corp\.?|organization|group)\b/i.test(compact)) score -= 70
+  return score
+}
+
+function isIndividualProviderLabel(label: string): boolean {
+  return scoreProviderOption(label, '') >= 40
+}
+
+/**
+ * Availity Provider typeahead lists both the clinician (BOSE, NILANJANA) and the
+ * practice org (LONESTAR … Tax ID). Prefer the individual NPI match; never use Tax ID
+ * when an NPI is available (Tax ID selects the org).
+ */
+async function commitAvailityProviderFromDropdown(
+  ctx: PlaybookContext,
+  npi: string,
+  providerTaxId?: string
+): Promise<{ ok: boolean; selectedLabel?: string }> {
+  if (!ctx.session) return { ok: false }
+  const searchValue = npi || providerTaxId || ''
+  if (!searchValue) return { ok: true }
+
+  const result = await selectTypeaheadOption(ctx, {
+    fieldLabel: 'provider',
+    fieldSelectors: PROVIDER_FIELD_SELECTORS,
+    searchTerms: uniqueStrings([searchValue, npi, providerTaxId || '']),
+    matches: (label) => {
+      // Never treat the practice org (Tax ID / PLLC) as a hit when we have an individual NPI.
+      if (npi && (/tax\s*id/i.test(label) || /\b(pllc|llc)\b/i.test(label))) return false
+      if (npi && label.includes(npi)) return true
+      // After commit Availity often shows "BOSE, NILANJANA" without the NPI digits.
+      if (npi && isIndividualProviderLabel(label)) return true
+      if (!npi && providerTaxId && label.includes(providerTaxId)) return true
+      return false
+    },
+    score: (label) => {
+      const s = scoreProviderOption(label, npi)
+      return s > 0 ? s : null
+    },
+    preferredLabels: npi
+      ? uniqueStrings([`NPI: ${npi}`, npi])
+      : uniqueStrings([providerTaxId || '']),
+  })
+
+  if (result.ok) {
+    ctx.log('Selected Availity provider', {
+      npi: npi || undefined,
+      selectedLabel: result.selectedLabel,
+      individual: result.selectedLabel ? isIndividualProviderLabel(result.selectedLabel) : undefined,
+    })
+    return { ok: true, selectedLabel: result.selectedLabel }
+  }
+
+  const input = await findInputBySelectors(ctx, PROVIDER_FIELD_SELECTORS)
+  if (input && searchValue) {
+    await safeFillInput(input, searchValue)
+    await ctx.session.page.waitForTimeout(1200)
+    const candidates = await collectTypeaheadCandidates(ctx)
+    const ranked = [...candidates].sort(
+      (a, b) => scoreProviderOption(b.label, npi) - scoreProviderOption(a.label, npi)
+    )
+    const best = ranked[0]
+    if (best && scoreProviderOption(best.label, npi) > 0) {
+      await best.locator.click({ timeout: 8_000 }).catch(() => undefined)
+      ctx.log('Selected Availity provider via ranked dropdown', {
+        npi: npi || undefined,
+        selectedLabel: best.label,
+      })
+      return { ok: true, selectedLabel: best.label }
+    }
+    if (ctx.session.page.keyboard?.press) {
+      await ctx.session.page.keyboard.press('Enter').catch(() => undefined)
+    }
+    return { ok: true, selectedLabel: searchValue }
+  }
+
+  return { ok: false }
+}
+
+async function selectAvailityProvider(
+  ctx: PlaybookContext,
+  npi: string,
+  providerTaxId?: string,
+  opts?: { allowLlm?: boolean }
+): Promise<{ ok: boolean; selectedLabel?: string; usedTaxId?: boolean }> {
+  if (!ctx.session) return { ok: false }
+  if (!npi && !providerTaxId) return { ok: true }
+
+  const preferIndividual = Boolean(npi)
+  if (opts?.allowLlm !== false) {
+    const llm = await tryLlmAct(
+      ctx,
+      [
+        `In the Availity Eligibility Provider Information section, set Provider using NPI "${npi || providerTaxId}".`,
+        preferIndividual
+          ? `Open the Provider dropdown and select the individual clinician option that contains NPI ${npi} (e.g. LASTNAME, FIRSTNAME).`
+          : `Select the provider option matching Tax ID ${providerTaxId}.`,
+        preferIndividual
+          ? `Do NOT select the practice/organization option (PLLC/LLC/Tax ID) even if it also appears.`
+          : '',
+        `Do NOT clear patient identity fields. Do NOT click Submit.`,
+      ]
+        .filter(Boolean)
+        .join(' '),
+      'provider'
+    )
+    if (llm.ok) {
+      return { ok: true, selectedLabel: npi || providerTaxId }
+    }
+  }
+
+  return commitAvailityProviderFromDropdown(ctx, npi, providerTaxId)
+}
+
 async function fillFirstSafe(
   ctx: PlaybookContext,
   selectors: string[],
@@ -1751,21 +1887,10 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
       lastName
     )
     const dobOk = await fillFirst(dobSelectors, dobUi)
-    const npiOk = await fillFirst(
-      ['input[name="providerNpi"]', 'input[id*="npi" i]', 'input[placeholder*="NPI" i]'],
-      npi
-    )
-    if (npiOk && npi) {
-      const npiChip =
-        (await ctx.session!.findLocator?.(
-          `[role="option"]:has-text("${npi}"), .dropdown-item:has-text("${npi}"), button:has-text("${npi}"), [class*="option"]:has-text("${npi}")`,
-          1_500
-        )) || null
-      if (npiChip) {
-        await npiChip.click({ timeout: 5_000 }).catch(() => undefined)
-      } else if (page().keyboard?.press) {
-        await page().keyboard!.press!('Enter').catch(() => undefined)
-      }
+    let npiOk = false
+    if (npi) {
+      const provider = await selectAvailityProvider(ctx, npi, undefined, { allowLlm: false })
+      npiOk = provider.ok
     }
     ctx.log('Re-filled patient identity fields', {
       reason,
@@ -1785,33 +1910,31 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
     lastName
   )
   await fillFirst(dobSelectors, dobUi)
-  const filledNpi = await fillFirst(
-    ['input[name="providerNpi"]', 'input[id*="npi" i]', 'input[placeholder*="NPI" i]'],
-    npi
-  )
-  // Availity often shows an NPI suggestion chip under the field — click to commit it.
-  if (filledNpi && npi) {
-    const npiChip =
-      (await ctx.session!.findLocator?.(
-        `[role="option"]:has-text("${npi}"), .dropdown-item:has-text("${npi}"), button:has-text("${npi}"), [class*="option"]:has-text("${npi}")`,
-        2_000
-      )) || null
-    if (npiChip) {
-      await npiChip.click({ timeout: 5_000 }).catch(() => undefined)
-      ctx.log('Confirmed Availity provider NPI chip', { npi })
-    } else if (page().keyboard?.press) {
-      await page().keyboard!.press!('Enter').catch(() => undefined)
+
+  // Provider Information is one typeahead: NPI vs Tax ID. Prefer individual clinician NPI
+  // (BOSE, NILANJANA) — filling Tax ID afterward selects LONESTAR … PLLC instead.
+  const providerSelected = await selectAvailityProvider(ctx, npi, providerTaxId || undefined)
+  const filledNpi = Boolean(providerSelected.ok && npi)
+  const filledTaxId = Boolean(providerSelected.ok && !npi && providerTaxId)
+  if (!providerSelected.ok && (npi || providerTaxId)) {
+    ctx.log('Provider select soft-failed; retrying raw NPI fill', {
+      npi: Boolean(npi),
+      error: 'provider_select_failed',
+    })
+    const npiOk = await fillFirst(PROVIDER_FIELD_SELECTORS, npi)
+    if (npiOk && npi) {
+      const candidates = await collectTypeaheadCandidates(ctx)
+      const ranked = [...candidates].sort(
+        (a, b) => scoreProviderOption(b.label, npi) - scoreProviderOption(a.label, npi)
+      )
+      const best = ranked[0]
+      if (best && scoreProviderOption(best.label, npi) > 0) {
+        await best.locator.click({ timeout: 8_000 }).catch(() => undefined)
+      } else if (page().keyboard?.press) {
+        await page().keyboard!.press!('Enter').catch(() => undefined)
+      }
     }
   }
-  const filledTaxId = await fillFirst(
-    [
-      'input[name="providerTaxId"]',
-      'input[id*="tax" i]',
-      'input[placeholder*="Tax ID" i]',
-      'input[aria-label*="Tax ID" i]',
-    ],
-    providerTaxId
-  )
 
   if (organizationName) {
     const orgSelected = await selectAvailityOrganization(ctx, organizationName)
@@ -2137,16 +2260,30 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
   }
 
   const formMode = formModeForAppointmentType(asString(ctx.input.appointmentType) || undefined)
-  const heuristic = scrapeRheumPacketFromPortalText(bodyText, { formMode, source: 'availity_rpa' })
+  const preferTelemedicine = isTelevisitAppointment(asString(ctx.input.appointmentType) || undefined)
+  const heuristic = scrapeRheumPacketFromPortalText(bodyText, {
+    formMode,
+    source: 'availity_rpa',
+    preferTelemedicine,
+  })
   let rheum = heuristic
   let llmExtractUsed = false
 
   if (llmAssistActive(ctx) && ctx.llmAssist) {
+    const extractInstruction = preferTelemedicine
+      ? [
+          AVAILITY_RESULT_EXTRACT_INSTRUCTION,
+          'This appointment is a televisit / telemedicine visit.',
+          'For specialistCopay, use the Co-Payment on the Benefit Information row:',
+          '"Telemedicine Specialist Visit,COPAY INCLUDED IN OOP" (not the office visit row).',
+        ].join(' ')
+      : AVAILITY_RESULT_EXTRACT_INSTRUCTION
     ctx.log('Stagehand extract: rheum fields', {
-      instruction: AVAILITY_RESULT_EXTRACT_INSTRUCTION.slice(0, 200),
+      instruction: extractInstruction.slice(0, 280),
+      preferTelemedicine,
     })
     const extracted = await ctx.llmAssist.extract(
-      AVAILITY_RESULT_EXTRACT_INSTRUCTION,
+      extractInstruction,
       availityResultExtractSchema
     )
     if (extracted.ok && extracted.data) {

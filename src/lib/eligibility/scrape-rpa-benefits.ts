@@ -135,19 +135,35 @@ function inferMemberStatus(text: string): string | undefined {
   return undefined
 }
 
+function telemedicineBenefitSection(text: string): string {
+  // Lonestar televisits: "Telemedicine Specialist Visit,COPAY INCLUDED IN OOP"
+  const specific = sectionBetween(
+    text,
+    /telemedicine\s+specialist\s+visit/i,
+    /telemedicine\s|professional\s*\(physician\)|medical care\s*-\s*\d|maximum savings|aetna whole health|health benefit plan coverage|messages\b|$/i
+  )
+  if (specific.trim().length > 20) return specific
+
+  return sectionBetween(
+    text,
+    /telemedicine|telehealth\s+specialist|televisit/i,
+    /professional\s*\(physician\)|medical care\s*-\s*\d|health benefit plan coverage|messages\b|$/i
+  )
+}
+
 function officeVisitBenefitSection(text: string): string {
   // Prefer the Lonestar service row, then broader professional office visit blocks.
   const specific = sectionBetween(
     text,
     /professional\s*\(physician\)\s*visit\s*-\s*office\s*-\s*98/i,
-    /professional\s*\(physician\)|medical care\s*-\s*\d|health benefit plan coverage|messages\b|$/i
+    /professional\s*\(physician\)|medical care\s*-\s*\d|telemedicine|health benefit plan coverage|messages\b|$/i
   )
   if (specific.trim().length > 40) return specific
 
   const office = sectionBetween(
     text,
     /professional\s*\(physician\)\s*visit\s*-\s*office/i,
-    /professional\s*\(physician\)|medical care\s*-\s*\d|health benefit plan coverage|messages\b|$/i
+    /professional\s*\(physician\)|medical care\s*-\s*\d|telemedicine|health benefit plan coverage|messages\b|$/i
   )
   if (office.trim().length > 40) return office
 
@@ -156,6 +172,14 @@ function officeVisitBenefitSection(text: string): string {
     /benefit information/i,
     /plan maximums|health benefit plan coverage|messages\b|$/i
   )
+}
+
+function benefitServiceSection(text: string, preferTelemedicine: boolean): string {
+  if (preferTelemedicine) {
+    const tele = telemedicineBenefitSection(text)
+    if (tele.trim().length > 20) return tele
+  }
+  return officeVisitBenefitSection(text)
 }
 
 function scrapeBenefitServiceRows(section: string): {
@@ -171,6 +195,8 @@ function scrapeBenefitServiceRows(section: string): {
     /co-?payment\s*[:\-]?\s*\$?\s*([\d,]+(?:\.\d{2})?)/i,
     /specialist\s*(?:office\s*)?(?:visit\s*)?co-?pay(?:ment)?\s*[:\-]?\s*\$?\s*([\d,]+(?:\.\d{2})?)/i,
     /(?:physician|professional).*?office.*?co-?pay(?:ment)?\s*[:\-]?\s*\$?\s*([\d,]+(?:\.\d{2})?)/i,
+    // Availity benefit grids often put "$40" in the Co-Payment column beside the service row.
+    /(?:^|[\n,])\s*[—–-]?\s*\$\s*([\d,]+(?:\.\d{2})?)\s*(?:refer to|—|–|-|\n|$)/i,
   ])
   const coinsurance = captureText(section, [
     /co-?insurance\s*[:\-]?\s*([\d,]+(?:\.\d{1,2})?)\s*%/i,
@@ -205,16 +231,20 @@ function scrapeBenefitServiceRows(section: string): {
  * Best-effort scrape of Availity Eligibility & Benefits result text into a rheum packet.
  * Handles labeled fields and Availity Plan Maximums table copy
  * ("$3,200 / Calendar Year(s) … $2,553.13 Remaining"), plus Benefit Information
- * rows for Professional (Physician) Visit - Office - 98.
+ * rows for Professional (Physician) Visit - Office - 98 (or Telemedicine Specialist
+ * Visit when preferTelemedicine / televisit appointment types).
  */
 export function scrapeRheumPacketFromPortalText(
   pageText: string,
   opts?: {
     formMode?: EligibilityFormMode
     source?: RheumEligibilityPacket['source']
+    /** When true (televisit / telemedicine appointments), prefer Telemedicine Specialist Visit rows. */
+    preferTelemedicine?: boolean
   }
 ): RheumEligibilityPacket {
   const formMode = opts?.formMode || 'office_visit'
+  const preferTelemedicine = Boolean(opts?.preferTelemedicine)
   const packet = createEmptyRheumPacket(formMode, opts?.source || 'availity_rpa')
   const text = pageText || ''
 
@@ -222,10 +252,21 @@ export function scrapeRheumPacketFromPortalText(
   packet.planType = inferPlanTypeFromText(text)
   packet.networkStatus = inferNetwork(text)
 
-  const benefitSection = officeVisitBenefitSection(text)
+  const benefitSection = benefitServiceSection(text, preferTelemedicine)
   const benefitRows = scrapeBenefitServiceRows(benefitSection)
 
+  const teleCopay =
+    preferTelemedicine
+      ? money(
+          captureMoney(text, [
+            /telemedicine\s+specialist\s+visit[\s\S]{0,240}?\$\s*([\d,]+(?:\.\d{2})?)/i,
+            /telemedicine[\s\S]{0,120}?co-?pay(?:ment)?\s*(?:included in oop)?[\s\S]{0,80}?\$\s*([\d,]+(?:\.\d{2})?)/i,
+          ])
+        )
+      : undefined
+
   const copay =
+    teleCopay ||
     benefitRows.copay ||
     money(
       captureMoney(text, [
@@ -341,6 +382,13 @@ export function scrapeRheumPacketFromPortalText(
     /telehealth\s*(covered|allowed|yes)|telemedicine\s*(covered|allowed)/i,
     /telehealth\s*(not covered|not allowed|no)|telemedicine\s*(not covered)/i
   )
+  // Presence of a Telemedicine Specialist Visit benefit row implies telehealth is covered.
+  if (
+    packet.telehealthAllowed == null &&
+    (preferTelemedicine || /telemedicine\s+specialist\s+visit/i.test(text))
+  ) {
+    packet.telehealthAllowed = true
+  }
 
   packet.verifiedBy = 'Availity portal'
   return finalizeRheumPacket(packet)

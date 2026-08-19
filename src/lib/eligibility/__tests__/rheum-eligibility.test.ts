@@ -237,6 +237,28 @@ describe('LSR gates', () => {
     expect(requiresCallConfirmation('FUV').required).toBe(false)
   })
 
+  it('parses Telemedicine Specialist Visit copay for televisit appointments', () => {
+    const packet = scrapeRheumPacketFromPortalText(
+      `
+      Member Status
+      Active Coverage
+      In Network
+      Coverage Level: Employee Only
+      Benefit Information
+      MAXIMUM SAVINGS
+      Aetna Whole Health Designated Providers
+      Telemedicine Specialist Visit,COPAY INCLUDED IN OOP
+      — $40 Refer to: Health Benefit Plan Coverage —
+      Professional (Physician) Visit - Office - 98
+      Co-Payment $60.00
+      `,
+      { source: 'availity_rpa', preferTelemedicine: true }
+    )
+    expect(packet.specialistCopay).toBe('$40')
+    expect(packet.telehealthAllowed).toBe(true)
+    expect(packet.networkStatus).toBe('inn')
+  })
+
   it('builds Medicare TX NON-PAR fixed copays', () => {
     const np = buildMedicareTxNonParPacket({ appointmentType: 'NP', isNewPatient: true })
     expect(np.specialistCopay).toBe('$226.76')

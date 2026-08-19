@@ -72,6 +72,8 @@ export function getDefaultAvailityEligibilityConfig(): AvailityEligibilityPlaybo
         'Professional (Physician) Visit - Office',
         'Professional (Physician) Visit - Office - 98',
         'Professional (Physician) - 96',
+        'Telemedicine Specialist Visit',
+        'Telemedicine Specialist Visit,COPAY INCLUDED IN OOP',
         'Specialist',
         'Office Visit',
         'Medical Care - 1',
