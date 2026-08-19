@@ -1344,6 +1344,121 @@ async function selectAvailityPayer(
   return result
 }
 
+const SERVICE_TYPE_FIELD_SELECTORS = [
+  'input[name="serviceType"]',
+  'input[id*="serviceType" i]',
+  'input[placeholder*="Service Type" i]',
+  'input[aria-label*="Benefit / Service Type" i]',
+  'input[aria-label*="Service Type" i]',
+  '[data-testid*="serviceType" i] input',
+]
+
+function serviceTypeMatchesWanted(option: string, wantedLabel: string): boolean {
+  const compact = compactPayerText(option)
+  const wanted = compactPayerText(wantedLabel)
+  if (!compact || !wanted) return false
+  if (compact === wanted || compact.includes(wanted) || wanted.includes(compact)) return true
+  // Lonestar default: Professional (Physician) Visit - Office - 98
+  if (/office/.test(compact) && /\b98\b/.test(option) && /physician|professional/.test(compact)) {
+    return /98/.test(wanted) || /office/.test(wanted)
+  }
+  return false
+}
+
+function isWrongServiceTypeChip(label: string, wantedLabel: string): boolean {
+  if (serviceTypeMatchesWanted(label, wantedLabel)) return false
+  // Leftover / Stagehand mistakes — never keep these when Lonestar wants Office-98.
+  return /psychiatric|inpatient|health benefit plan coverage|hospital|facility|ambulance|emergency/i.test(
+    label
+  )
+}
+
+/** Clear Availity multi-select chips (Benefit / Service Type) before selecting the wanted row. */
+async function clearAvailityServiceTypeChips(
+  ctx: PlaybookContext,
+  wantedLabel: string
+): Promise<void> {
+  if (!ctx.session) return
+  const page = ctx.session.page
+
+  // Clear-all control beside Benefit / Service Type (Availity react-select style).
+  for (const sel of [
+    'label:has-text("Benefit / Service Type") ~ * [class*="indicatorContainer"]',
+    'label:has-text("Benefit / Service Type") ~ * button[aria-label*="clear" i]',
+    '[aria-label*="Benefit / Service Type" i] [aria-label*="clear" i]',
+    '[class*="serviceType"] [aria-label*="clear" i]',
+  ]) {
+    const clearAll = (await ctx.session.findLocator?.(sel, 1_200)) || null
+    if (!clearAll) continue
+    await clearAll.click({ timeout: 3_000 }).catch(() => undefined)
+    await page.waitForTimeout(400)
+    break
+  }
+
+  // Click × on each multi-value chip (Prefer remove buttons that sit inside chips).
+  for (let pass = 0; pass < 10; pass++) {
+    const removeButtons =
+      (await ctx.session.locateAllAcrossFrames?.(
+        [
+          '[class*="multiValue"] [class*="remove"]',
+          '[class*="multi-value"] [class*="remove"]',
+          '[class*="multiValue__remove"]',
+          '[class*="chip"] button[aria-label*="Remove" i]',
+          '[class*="Tag"] button',
+        ].join(', '),
+        { limit: 12 }
+      )) || []
+    if (!removeButtons.length) break
+    // Always remove from the end so indexes stay stable.
+    const btn = removeButtons[removeButtons.length - 1]
+    await btn.click({ timeout: 2_000 }).catch(() => undefined)
+    await page.waitForTimeout(200)
+  }
+
+  // If wrong chip labels are still visible, Backspace on the focused input.
+  const fieldText = await readServiceTypeFieldText(ctx)
+  if (isWrongServiceTypeChip(fieldText, wantedLabel) || /psychiatric|health benefit plan coverage/i.test(fieldText)) {
+    const input = await findInputBySelectors(ctx, SERVICE_TYPE_FIELD_SELECTORS)
+    if (input) {
+      await input.click({ timeout: 3_000 }).catch(() => undefined)
+      for (let i = 0; i < 8; i++) {
+        await page.keyboard?.press?.('Backspace').catch(() => undefined)
+        await page.waitForTimeout(80)
+      }
+    }
+  }
+}
+
+async function readServiceTypeFieldText(ctx: PlaybookContext): Promise<string> {
+  if (!ctx.session) return ''
+  const parts: string[] = []
+  const chips =
+    (await ctx.session.locateAllAcrossFrames?.(
+      '[class*="multiValue"], [class*="chip"], [class*="Tag"]',
+      { limit: 15 }
+    )) || []
+  for (const chip of chips) {
+    const text = ((await chip.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim()
+    if (text && text.length < 120) parts.push(text)
+  }
+  const input = await findInputBySelectors(ctx, SERVICE_TYPE_FIELD_SELECTORS)
+  if (input) {
+    const v =
+      ((await input.inputValue?.().catch(() => '')) || '').trim() ||
+      ((await input.innerText?.().catch(() => '')) || '').trim()
+    if (v) parts.push(v)
+  }
+  const body =
+    (await ctx.session.collectTextAcrossFrames?.()) ||
+    ((await ctx.session.page.locator('body').innerText().catch(() => '')) || '')
+  // Narrow to Benefit / Service Type vicinity when chips aren't classed consistently.
+  const m = body.match(
+    /Benefit\s*\/\s*Service Type[\s\S]{0,400}?(?=As of Date|Place of Service|Submit|Provider Type|$)/i
+  )
+  if (m?.[0]) parts.push(m[0])
+  return parts.join(' | ')
+}
+
 /** Select Benefit / Service Type (Lonestar: Professional (Physician) Visit - Office - 98). */
 async function selectAvailityBenefitServiceType(
   ctx: PlaybookContext,
@@ -1352,50 +1467,75 @@ async function selectAvailityBenefitServiceType(
   const label = benefitServiceType.trim()
   if (!label) return { ok: true }
 
-  const llm = await tryLlmAct(
-    ctx,
-    [
-      `In the Availity Eligibility & Benefits inquiry form, set Benefit / Service Type to exactly:`,
-      `"${label}"`,
-      `Open the Benefit / Service Type typeahead, search if needed, and select that exact option (or the closest Office - 98 Professional Physician Visit match).`,
-      `Do not pick Hospital, Facility, or unrelated service types.`,
-      `Do NOT clear, blank, or edit Patient ID, Member ID, DOB, first name, or last name.`,
-      `Do NOT click New Request, Clear, Clear Section, or Submit.`,
-    ].join(' '),
-    'benefitServiceType'
-  )
-  if (llm.ok) {
-    return { ok: true, selectedLabel: label }
-  }
+  // Stagehand has picked unrelated multi-select chips (e.g. Psychiatric - Inpatient).
+  // Playwright-only: clear chips, then select the exact Lonestar service type.
+  await clearAvailityServiceTypeChips(ctx, label)
 
   const shortTerms = uniqueStrings([
     label,
     label.replace(/professional\s*\(physician\)\s*/i, '').trim(),
     'Office - 98',
     'Physician Visit - Office',
-    '98',
+    'Visit - Office - 98',
   ])
-  return selectTypeaheadOption(ctx, {
+  const selected = await selectTypeaheadOption(ctx, {
     fieldLabel: 'benefit/service type',
-    fieldSelectors: [
-      'input[name="serviceType"]',
-      'input[id*="serviceType" i]',
-      'input[placeholder*="Service Type" i]',
-      'input[aria-label*="Benefit / Service Type" i]',
-      'input[aria-label*="Service Type" i]',
-      '[data-testid*="serviceType" i] input',
-    ],
+    fieldSelectors: SERVICE_TYPE_FIELD_SELECTORS,
     searchTerms: shortTerms,
-    matches: (option) => {
-      const compact = compactPayerText(option)
-      const wanted = compactPayerText(label)
-      if (!compact) return false
-      if (compact === wanted || compact.includes(wanted) || wanted.includes(compact)) return true
-      // Accept Office-98 variants even if punctuation differs.
-      return /office/.test(compact) && /\b98\b/.test(option) && /physician|professional/.test(compact)
+    matches: (option) => serviceTypeMatchesWanted(option, label),
+    score: (option) => {
+      if (!serviceTypeMatchesWanted(option, label)) return null
+      let s = 10
+      if (/\b98\b/.test(option)) s += 50
+      if (/professional/i.test(option)) s += 20
+      if (/office/i.test(option)) s += 20
+      if (/psychiatric|inpatient|hospital|facility|health benefit plan coverage/i.test(option)) {
+        return null
+      }
+      return s
     },
     preferredLabels: [label, 'Professional (Physician) Visit - Office - 98'],
   })
+
+  const fieldText = await readServiceTypeFieldText(ctx)
+  const looksRight = serviceTypeMatchesWanted(fieldText, label) || /office\s*-?\s*98|visit\s*-?\s*office\s*-?\s*98/i.test(fieldText)
+  const looksWrong = /psychiatric|inpatient\s*-\s*a7/i.test(fieldText)
+
+  if (selected.ok && looksRight && !looksWrong) {
+    ctx.log('Selected Availity benefit/service type', {
+      wanted: label,
+      selectedLabel: selected.selectedLabel,
+      fieldText: fieldText.slice(0, 200),
+    })
+    return selected
+  }
+
+  // One more Playwright attempt after forced clear if verification failed.
+  if (looksWrong || !looksRight) {
+    ctx.log('Benefit/service type verification failed; clearing and retrying', {
+      wanted: label,
+      fieldText: fieldText.slice(0, 240),
+    })
+    await clearAvailityServiceTypeChips(ctx, label)
+    const retry = await selectTypeaheadOption(ctx, {
+      fieldLabel: 'benefit/service type',
+      fieldSelectors: SERVICE_TYPE_FIELD_SELECTORS,
+      searchTerms: ['Office - 98', 'Professional (Physician) Visit - Office - 98', label],
+      matches: (option) => serviceTypeMatchesWanted(option, label),
+      preferredLabels: [label, 'Professional (Physician) Visit - Office - 98'],
+    })
+    const after = await readServiceTypeFieldText(ctx)
+    if (retry.ok && (serviceTypeMatchesWanted(after, label) || /office\s*-?\s*98/i.test(after))) {
+      return retry
+    }
+    return {
+      ok: false,
+      errorMessage: `Could not set Benefit / Service Type to "${label}" (field showed: ${after.slice(0, 160) || fieldText.slice(0, 160)})`,
+      selectedLabel: retry.selectedLabel,
+    }
+  }
+
+  return selected
 }
 
 async function selectAvailityProviderType(
@@ -1451,16 +1591,36 @@ function scoreProviderOption(label: string, npi: string): number {
   if (!compact) return -1000
   let score = 0
   if (npi && compact.includes(npi)) score += 100
-  // LAST, FIRST individual pattern
-  if (/^[A-Za-z][A-Za-z'’.\- ]+,\s*[A-Za-z]/.test(compact)) score += 50
+  // LAST, FIRST individual pattern (and not an org name with a comma)
+  if (
+    /^[A-Za-z][A-Za-z'’.\- ]+,\s*[A-Za-z]/.test(compact) &&
+    !/\b(pllc|llc|inc\.?|corp\.?|rheumatology|associates|group|organization)\b/i.test(compact)
+  ) {
+    score += 60
+  }
   if (/\bnpi\s*:\s*\d+/i.test(compact) && !/tax\s*id/i.test(compact)) score += 25
-  if (/tax\s*id/i.test(compact)) score -= 90
-  if (/\b(pllc|llc|inc\.?|corp\.?|organization|group)\b/i.test(compact)) score -= 70
+  if (/tax\s*id/i.test(compact)) score -= 120
+  if (/\b(pllc|llc|inc\.?|corp\.?|organization|group)\b/i.test(compact)) score -= 90
+  if (/lonestar/i.test(compact)) score -= 100
   return score
 }
 
+function isOrgProviderLabel(label: string): boolean {
+  return /tax\s*id|\b(pllc|llc)\b|lonestar\s+rheumatology/i.test(label)
+}
+
 function isIndividualProviderLabel(label: string): boolean {
+  if (isOrgProviderLabel(label)) return false
   return scoreProviderOption(label, '') >= 40
+}
+
+async function readSelectedProviderText(ctx: PlaybookContext): Promise<string> {
+  const input = await findInputBySelectors(ctx, PROVIDER_FIELD_SELECTORS)
+  if (!input) return ''
+  return (
+    ((await input.inputValue?.().catch(() => '')) || '').trim() ||
+    ((await input.innerText?.().catch(() => '')) || '').trim()
+  )
 }
 
 /**
@@ -1477,20 +1637,31 @@ async function commitAvailityProviderFromDropdown(
   const searchValue = npi || providerTaxId || ''
   if (!searchValue) return { ok: true }
 
+  // Clear any sticky org selection first.
+  const existing = await readSelectedProviderText(ctx)
+  if (existing && npi && isOrgProviderLabel(existing)) {
+    const input = await findInputBySelectors(ctx, PROVIDER_FIELD_SELECTORS)
+    if (input) {
+      await safeFillInput(input, '')
+      await ctx.session.page.waitForTimeout(300)
+    }
+  }
+
   const result = await selectTypeaheadOption(ctx, {
     fieldLabel: 'provider',
     fieldSelectors: PROVIDER_FIELD_SELECTORS,
-    searchTerms: uniqueStrings([searchValue, npi, providerTaxId || '']),
+    searchTerms: uniqueStrings([searchValue, npi]),
     matches: (label) => {
-      // Never treat the practice org (Tax ID / PLLC) as a hit when we have an individual NPI.
-      if (npi && (/tax\s*id/i.test(label) || /\b(pllc|llc)\b/i.test(label))) return false
-      if (npi && label.includes(npi)) return true
+      if (npi && isOrgProviderLabel(label)) return false
+      if (npi && label.includes(npi) && isIndividualProviderLabel(label)) return true
+      if (npi && label.includes(npi) && !isOrgProviderLabel(label)) return true
       // After commit Availity often shows "BOSE, NILANJANA" without the NPI digits.
       if (npi && isIndividualProviderLabel(label)) return true
       if (!npi && providerTaxId && label.includes(providerTaxId)) return true
       return false
     },
     score: (label) => {
+      if (npi && isOrgProviderLabel(label)) return null
       const s = scoreProviderOption(label, npi)
       return s > 0 ? s : null
     },
@@ -1499,74 +1670,65 @@ async function commitAvailityProviderFromDropdown(
       : uniqueStrings([providerTaxId || '']),
   })
 
-  if (result.ok) {
+  const selected = result.selectedLabel || (await readSelectedProviderText(ctx))
+  if (result.ok && selected && !(npi && isOrgProviderLabel(selected))) {
     ctx.log('Selected Availity provider', {
       npi: npi || undefined,
-      selectedLabel: result.selectedLabel,
-      individual: result.selectedLabel ? isIndividualProviderLabel(result.selectedLabel) : undefined,
+      selectedLabel: selected,
+      individual: isIndividualProviderLabel(selected),
     })
-    return { ok: true, selectedLabel: result.selectedLabel }
+    return { ok: true, selectedLabel: selected }
   }
 
+  // Explicit ranked pick: type NPI, click highest-scoring non-org option.
   const input = await findInputBySelectors(ctx, PROVIDER_FIELD_SELECTORS)
   if (input && searchValue) {
     await safeFillInput(input, searchValue)
-    await ctx.session.page.waitForTimeout(1200)
+    await ctx.session.page.waitForTimeout(1400)
     const candidates = await collectTypeaheadCandidates(ctx)
-    const ranked = [...candidates].sort(
-      (a, b) => scoreProviderOption(b.label, npi) - scoreProviderOption(a.label, npi)
-    )
+    const ranked = [...candidates]
+      .filter((c) => !(npi && isOrgProviderLabel(c.label)))
+      .sort((a, b) => scoreProviderOption(b.label, npi) - scoreProviderOption(a.label, npi))
     const best = ranked[0]
     if (best && scoreProviderOption(best.label, npi) > 0) {
       await best.locator.click({ timeout: 8_000 }).catch(() => undefined)
+      await ctx.session.page.waitForTimeout(500)
+      const after = await readSelectedProviderText(ctx)
+      if (after && isOrgProviderLabel(after)) {
+        ctx.log('Provider still shows org after click; rejecting', { after, wantedNpi: npi })
+        return { ok: false, selectedLabel: after }
+      }
       ctx.log('Selected Availity provider via ranked dropdown', {
         npi: npi || undefined,
         selectedLabel: best.label,
+        fieldValue: after,
       })
-      return { ok: true, selectedLabel: best.label }
+      return { ok: true, selectedLabel: after || best.label }
     }
-    if (ctx.session.page.keyboard?.press) {
-      await ctx.session.page.keyboard.press('Enter').catch(() => undefined)
-    }
-    return { ok: true, selectedLabel: searchValue }
   }
 
-  return { ok: false }
+  return { ok: false, selectedLabel: selected }
 }
 
 async function selectAvailityProvider(
   ctx: PlaybookContext,
   npi: string,
   providerTaxId?: string,
-  opts?: { allowLlm?: boolean }
+  _opts?: { allowLlm?: boolean }
 ): Promise<{ ok: boolean; selectedLabel?: string; usedTaxId?: boolean }> {
   if (!ctx.session) return { ok: false }
   if (!npi && !providerTaxId) return { ok: true }
 
-  const preferIndividual = Boolean(npi)
-  if (opts?.allowLlm !== false) {
-    const llm = await tryLlmAct(
-      ctx,
-      [
-        `In the Availity Eligibility Provider Information section, set Provider using NPI "${npi || providerTaxId}".`,
-        preferIndividual
-          ? `Open the Provider dropdown and select the individual clinician option that contains NPI ${npi} (e.g. LASTNAME, FIRSTNAME).`
-          : `Select the provider option matching Tax ID ${providerTaxId}.`,
-        preferIndividual
-          ? `Do NOT select the practice/organization option (PLLC/LLC/Tax ID) even if it also appears.`
-          : '',
-        `Do NOT clear patient identity fields. Do NOT click Submit.`,
-      ]
-        .filter(Boolean)
-        .join(' '),
-      'provider'
-    )
-    if (llm.ok) {
-      return { ok: true, selectedLabel: npi || providerTaxId }
-    }
-  }
+  // Never use Stagehand for Provider — it prefers LONESTAR (Tax ID) over BOSE.
+  // Playwright-only selection with org rejection.
+  const committed = await commitAvailityProviderFromDropdown(ctx, npi, providerTaxId)
+  if (committed.ok) return committed
 
-  return commitAvailityProviderFromDropdown(ctx, npi, providerTaxId)
+  // Last resort: if NPI missing, allow Tax ID path (org).
+  if (!npi && providerTaxId) {
+    return commitAvailityProviderFromDropdown(ctx, '', providerTaxId)
+  }
+  return committed
 }
 
 async function fillFirstSafe(
@@ -1912,27 +2074,26 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
   await fillFirst(dobSelectors, dobUi)
 
   // Provider Information is one typeahead: NPI vs Tax ID. Prefer individual clinician NPI
-  // (BOSE, NILANJANA) — filling Tax ID afterward selects LONESTAR … PLLC instead.
-  const providerSelected = await selectAvailityProvider(ctx, npi, providerTaxId || undefined)
+  // (BOSE, NILANJANA) — never commit LONESTAR … PLLC / Tax ID when an NPI is set.
+  const providerSelected = await selectAvailityProvider(ctx, npi, undefined)
   const filledNpi = Boolean(providerSelected.ok && npi)
-  const filledTaxId = Boolean(providerSelected.ok && !npi && providerTaxId)
-  if (!providerSelected.ok && (npi || providerTaxId)) {
-    ctx.log('Provider select soft-failed; retrying raw NPI fill', {
-      npi: Boolean(npi),
-      error: 'provider_select_failed',
-    })
-    const npiOk = await fillFirst(PROVIDER_FIELD_SELECTORS, npi)
-    if (npiOk && npi) {
-      const candidates = await collectTypeaheadCandidates(ctx)
-      const ranked = [...candidates].sort(
-        (a, b) => scoreProviderOption(b.label, npi) - scoreProviderOption(a.label, npi)
-      )
-      const best = ranked[0]
-      if (best && scoreProviderOption(best.label, npi) > 0) {
-        await best.locator.click({ timeout: 8_000 }).catch(() => undefined)
-      } else if (page().keyboard?.press) {
-        await page().keyboard!.press!('Enter').catch(() => undefined)
-      }
+  const filledTaxId = false
+  if (npi && (!providerSelected.ok || (providerSelected.selectedLabel && isOrgProviderLabel(providerSelected.selectedLabel)))) {
+    if (ctx.session.screenshotDataUrl) {
+      artifacts.push(await ctx.session.screenshotDataUrl())
+    }
+    return {
+      ok: false,
+      errorMessage: `Could not select individual provider NPI ${npi} (got: ${providerSelected.selectedLabel || 'none'} — refuse practice/org Tax ID)`,
+      escalateToVoice: true,
+      artifactUrls: artifacts,
+      output: {
+        pageSnippet: ((await ctx.session.collectTextAcrossFrames?.()) || '').slice(0, 2500),
+        url: page().url(),
+        filledMember,
+        providerNpi: npi,
+        selectedProvider: providerSelected.selectedLabel,
+      },
     }
   }
 
