@@ -72,6 +72,8 @@ function buildPayerActInstruction(
       ? `Do NOT select Medicare Advantage / Medicare Advantage PPO unless the CRM payer explicitly says Medicare.`
       : '',
     `Type into the Payer field, wait for the dropdown, and click the best matching option.`,
+    `Do NOT clear, blank, or edit Patient ID, Member ID, DOB, first name, or last name.`,
+    `Do NOT click New Request, Clear, Clear Section, or Submit.`,
   ]
     .filter(Boolean)
     .join(' ')
@@ -1357,6 +1359,8 @@ async function selectAvailityBenefitServiceType(
       `"${label}"`,
       `Open the Benefit / Service Type typeahead, search if needed, and select that exact option (or the closest Office - 98 Professional Physician Visit match).`,
       `Do not pick Hospital, Facility, or unrelated service types.`,
+      `Do NOT clear, blank, or edit Patient ID, Member ID, DOB, first name, or last name.`,
+      `Do NOT click New Request, Clear, Clear Section, or Submit.`,
     ].join(' '),
     'benefitServiceType'
   )
@@ -1401,7 +1405,11 @@ async function selectAvailityProviderType(
   const label = providerType.trim() || 'Professional'
   const llm = await tryLlmAct(
     ctx,
-    `In the Availity Eligibility inquiry form, select Provider Type "${label}" (Professional, not Hospital).`,
+    [
+      `In the Availity Eligibility inquiry form, select Provider Type "${label}" (Professional, not Hospital).`,
+      `Do NOT clear, blank, or edit Patient ID, Member ID, DOB, first name, or last name.`,
+      `Do NOT click New Request, Clear, Clear Section, or Submit.`,
+    ].join(' '),
     'providerType'
   )
   if (llm.ok) return
@@ -1512,6 +1520,8 @@ async function selectAvailityOrganization(
       `In the Availity Eligibility & Benefits inquiry form, select Organization matching "${organizationName}".`,
       `If Organization is already correctly populated, leave it alone.`,
       `Otherwise open the Organization field/typeahead and choose the matching practice organization.`,
+      `Do NOT clear, blank, or edit Patient ID, Member ID, DOB, first name, or last name.`,
+      `Do NOT click New Request, Clear, Clear Section, or Submit.`,
     ].join(' '),
     'organization'
   )
@@ -1710,18 +1720,62 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
   }
   await page().waitForTimeout(1000)
 
-  const filledMember = await fillFirst(
-    [
-      'input[name="memberId"]',
-      'input[name*="patientId" i]',
-      'input[id*="member" i]',
-      'input[id*="patientId" i]',
-      'input[placeholder*="Member" i]',
-      'input[placeholder*="Patient ID" i]',
-      'input[aria-label*="Patient ID" i]',
-    ],
-    memberId
-  )
+  const memberSelectors = [
+    'input[name="memberId"]',
+    'input[name*="patientId" i]',
+    'input[id*="member" i]',
+    'input[id*="patientId" i]',
+    'input[placeholder*="Member" i]',
+    'input[placeholder*="Patient ID" i]',
+    'input[aria-label*="Patient ID" i]',
+  ]
+  const dobSelectors = [
+    'input[name="patientBirthDate"]',
+    'input[name="dob"]',
+    'input[type="date"]',
+    'input[id*="dob" i]',
+    'input[id*="birth" i]',
+    'input[placeholder*="Birth" i]',
+    'input[placeholder*="MM/DD" i]',
+  ]
+
+  /** Stagehand typeaheads / submitReady sometimes wipe identity fields — re-apply before Submit. */
+  const refillPatientIdentity = async (reason: string) => {
+    const memberOk = await fillFirst(memberSelectors, memberId)
+    await fillFirst(
+      ['input[name="patientFirstName"]', 'input[id*="firstName" i]', 'input[placeholder*="First" i]'],
+      firstName
+    )
+    await fillFirst(
+      ['input[name="patientLastName"]', 'input[id*="lastName" i]', 'input[placeholder*="Last" i]'],
+      lastName
+    )
+    const dobOk = await fillFirst(dobSelectors, dobUi)
+    const npiOk = await fillFirst(
+      ['input[name="providerNpi"]', 'input[id*="npi" i]', 'input[placeholder*="NPI" i]'],
+      npi
+    )
+    if (npiOk && npi) {
+      const npiChip =
+        (await ctx.session!.findLocator?.(
+          `[role="option"]:has-text("${npi}"), .dropdown-item:has-text("${npi}"), button:has-text("${npi}"), [class*="option"]:has-text("${npi}")`,
+          1_500
+        )) || null
+      if (npiChip) {
+        await npiChip.click({ timeout: 5_000 }).catch(() => undefined)
+      } else if (page().keyboard?.press) {
+        await page().keyboard!.press!('Enter').catch(() => undefined)
+      }
+    }
+    ctx.log('Re-filled patient identity fields', {
+      reason,
+      memberOk,
+      dobOk,
+      npiOk,
+    })
+  }
+
+  const filledMember = await fillFirst(memberSelectors, memberId)
   await fillFirst(
     ['input[name="patientFirstName"]', 'input[id*="firstName" i]', 'input[placeholder*="First" i]'],
     firstName
@@ -1730,18 +1784,7 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
     ['input[name="patientLastName"]', 'input[id*="lastName" i]', 'input[placeholder*="Last" i]'],
     lastName
   )
-  await fillFirst(
-    [
-      'input[name="patientBirthDate"]',
-      'input[name="dob"]',
-      'input[type="date"]',
-      'input[id*="dob" i]',
-      'input[id*="birth" i]',
-      'input[placeholder*="Birth" i]',
-      'input[placeholder*="MM/DD" i]',
-    ],
-    dobUi
-  )
+  await fillFirst(dobSelectors, dobUi)
   const filledNpi = await fillFirst(
     ['input[name="providerNpi"]', 'input[id*="npi" i]', 'input[placeholder*="NPI" i]'],
     npi
@@ -1877,6 +1920,9 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
     placeOfService: placeOfService || undefined,
   })
 
+  // LLM payer/service-type acts can wipe Patient ID / DOB in Availity — restore before Submit.
+  await refillPatientIdentity('after-llm-form-steps')
+
   // Availity keeps Submit disabled while the eligibility iframe finishes loading / validating.
   const submitAnySelector =
     'button:has-text("Submit"), button:has-text("Check Eligibility"), button:has-text("Request Eligibility"), button[type="submit"]'
@@ -1904,19 +1950,32 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
       ctx,
       [
         'The Availity Eligibility Submit button is disabled or missing.',
-        'Finish any remaining required fields on the inquiry form (payer committed, provider type, benefit/service type, member id, DOB, NPI as needed),',
-        'then click Submit / Check Eligibility when it becomes enabled.',
-        'Do not navigate away from Eligibility & Benefits.',
-      ].join(' '),
+        'Only finish payer / provider type / benefit-service-type commitments if they are incomplete.',
+        `Patient ID / Member ID must remain exactly "${memberId}".`,
+        dobUi ? `Date of birth must remain exactly "${dobUi}".` : '',
+        npi ? `Provider NPI must remain exactly "${npi}".` : '',
+        'Do NOT clear, blank, or overwrite Patient ID, Member ID, DOB, first name, or last name.',
+        'Do NOT click New Request, Clear, or Clear Section.',
+        'Do NOT navigate away from Eligibility & Benefits.',
+        'When Submit / Check Eligibility is enabled, stop — do not click it yourself.',
+      ]
+        .filter(Boolean)
+        .join(' '),
       'submitReady'
     )
+    // Always restore identity after Stagehand — it has cleared these fields before.
+    await refillPatientIdentity('after-submitReady-llm')
     if (llmSubmit.ok) {
       const afterLlm = await ctx.session.findLocator?.(submitAnySelector, 15_000)
       if (afterLlm) {
         await afterLlm.scrollIntoViewIfNeeded?.().catch(() => undefined)
-        const enabled = afterLlm.isEnabled
-          ? await afterLlm.isEnabled().catch(() => true)
-          : true
+        const enableDeadline = Date.now() + 30_000
+        let enabled = false
+        while (Date.now() < enableDeadline) {
+          enabled = afterLlm.isEnabled ? await afterLlm.isEnabled().catch(() => false) : true
+          if (enabled) break
+          await page().waitForTimeout(1000)
+        }
         if (enabled) {
           await afterLlm.click({ timeout: 15_000 })
           ctx.log('Clicked Availity eligibility Submit after Stagehand assist')
@@ -1972,6 +2031,7 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
       }
     }
   } else {
+    await refillPatientIdentity('before-submit-click')
     await submitBtn.click({ timeout: 15_000 })
     ctx.log('Clicked Availity eligibility Submit')
   }
