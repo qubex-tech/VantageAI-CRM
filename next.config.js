@@ -3,6 +3,17 @@ const nextConfig = {
   reactStrictMode: true,
   // Keep browser automation deps out of the Next server bundle (optional native modules).
   serverExternalPackages: ['playwright-core', '@browserbasehq/sdk', '@browserbasehq/stagehand'],
+  // Ensure Stagehand's Browserbase extension zip is present in serverless traces.
+  outputFileTracingIncludes: {
+    '/api/inngest': [
+      './node_modules/@browserbasehq/stagehand/dist/assets/**/*',
+      './node_modules/@browserbasehq/stagehand/dist/extension/**/*',
+    ],
+    '/api/internal/browser-agent/probe': [
+      './node_modules/@browserbasehq/stagehand/dist/assets/**/*',
+      './node_modules/@browserbasehq/stagehand/dist/extension/**/*',
+    ],
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: '2mb',

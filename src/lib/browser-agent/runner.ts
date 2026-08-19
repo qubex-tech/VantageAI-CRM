@@ -188,17 +188,40 @@ async function executeWithEngine(
         isStagehandConfigured()
 
       if (wantLlm) {
-        llmAssist = await createStagehandAssist({
-          practiceId: run.practiceId,
-          playbookId: playbook.id,
-          model: playbookConfig.llmAssist?.model,
-        })
-        session = await createBrowserSession({
-          practiceId: run.practiceId,
-          playbookId: playbook.id,
-          existingSessionId: llmAssist.sessionId,
-        })
-        logs.push('Stagehand LLM assist session started')
+        try {
+          llmAssist = await createStagehandAssist({
+            practiceId: run.practiceId,
+            playbookId: playbook.id,
+            model: playbookConfig.llmAssist?.model,
+          })
+          session = await createBrowserSession({
+            practiceId: run.practiceId,
+            playbookId: playbook.id,
+            existingSessionId: llmAssist.sessionId,
+          })
+          logs.push('Stagehand LLM assist session started')
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          const cause =
+            error instanceof Error && error.cause instanceof Error
+              ? error.cause.message
+              : error instanceof Error && error.cause
+                ? String(error.cause)
+                : undefined
+          logs.push(
+            `Stagehand LLM assist failed (${message}${cause ? `; cause=${cause}` : ''}); falling back to Playwright-only`
+          )
+          console.warn('[browser-agent] Stagehand launch failed; Playwright fallback', {
+            runId,
+            message,
+            cause,
+          })
+          llmAssist = null
+          session = await createBrowserSession({
+            practiceId: run.practiceId,
+            playbookId: playbook.id,
+          })
+        }
       } else {
         session = await createBrowserSession({
           practiceId: run.practiceId,

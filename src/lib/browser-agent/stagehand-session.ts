@@ -46,6 +46,9 @@ export async function createStagehandAssist(params?: {
 
   const apiKey = process.env.BROWSERBASE_API_KEY!
   const projectId = process.env.BROWSERBASE_PROJECT_ID!
+  // Prefer a pre-uploaded extension id on Vercel — serverless bundles often omit the
+  // Stagehand zip, which makes browserbase.extensions.create fail at runtime.
+  const extensionId = process.env.BROWSERBASE_STAGEHAND_EXTENSION_ID?.trim() || undefined
   const modelName = (params?.model ||
     process.env.BROWSER_AGENT_LLM_MODEL ||
     'openai/gpt-4.1-mini') as `openai/${string}`
@@ -53,9 +56,19 @@ export async function createStagehandAssist(params?: {
   const browser = await browserbase.launch({
     apiKey,
     projectId,
-    browserSettings: {
-      viewport: { width: 1440, height: 900 },
-    },
+    ...(extensionId
+      ? {
+          extensionId,
+          browserSettings: {
+            viewport: { width: 1440, height: 900 },
+            extensionId,
+          },
+        }
+      : {
+          browserSettings: {
+            viewport: { width: 1440, height: 900 },
+          },
+        }),
     userMetadata: {
       practiceId: params?.practiceId || '',
       playbookId: params?.playbookId || '',
