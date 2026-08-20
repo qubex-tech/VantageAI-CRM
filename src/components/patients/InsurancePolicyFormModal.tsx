@@ -323,7 +323,9 @@ export function InsurancePolicyFormModal({
                 )}
               </div>
               <div className="sm:col-span-2">
-                <Label htmlFor="clearinghousePayerId">{vendorDisplayName} payer ID</Label>
+                <Label htmlFor="clearinghousePayerId">
+                  {vendorKey === 'stedi' ? 'Payer ID' : `${vendorDisplayName} payer ID`}
+                </Label>
                 <Input
                   id="clearinghousePayerId"
                   value={formValues.clearinghousePayerId ?? ''}
@@ -345,12 +347,12 @@ export function InsurancePolicyFormModal({
                       .catch(() => setPayerHits([]))
                       .finally(() => setPayerSearchLoading(false))
                   }}
-                  placeholder={`Search ${vendorDisplayName} payers`}
+                  placeholder={vendorKey === 'stedi' ? 'Search payers' : `Search ${vendorDisplayName} payers`}
                   className="mt-1"
                 />
                 <p className="mt-1 text-xs text-gray-500">
-                  Required for API eligibility checks. IDs are vendor-specific — an Availity ID will
-                  not work on Stedi.
+                  Required for API eligibility checks. Payer IDs are specific to the selected
+                  eligibility network.
                 </p>
                 {payerSearchLoading && (
                   <p className="mt-1 text-xs text-gray-400">Searching payers…</p>

@@ -28,7 +28,7 @@ export const stediAdapter: ClearinghouseAdapter = {
   async checkEligibility(input: CanonicalEligibilityRequest): Promise<CanonicalEligibilityResult> {
     const config = await getStediIntegrationConfig(input.practiceId)
     if (!config.isActive) {
-      throw new Error('Stedi integration is inactive for this practice')
+      throw new Error('Eligibility is not enabled for this practice')
     }
 
     const request = mapToStediEligibilityRequest(input)
@@ -73,7 +73,7 @@ export const stediAdapter: ClearinghouseAdapter = {
       redactedRequest,
       isTerminalError,
       errorMessage: isTerminalError
-        ? summary.validationMessages.join('; ') || 'Stedi eligibility check failed'
+        ? summary.validationMessages.join('; ') || 'Eligibility check failed'
         : undefined,
     }
   },

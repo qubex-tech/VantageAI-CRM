@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { computeInsuranceCompleteness, maskMemberId } from '@/lib/insurance-completeness'
-import type { RheumEligibilityPacket } from '@/lib/eligibility/rheum-packet'
+import type { ParsedEligibilitySummary } from '@/lib/availity/types'
 import { EligibilityOvPanel } from './EligibilityOvPanel'
 import { InsurancePolicyFormModal } from './InsurancePolicyFormModal'
 import { Shield, Plus, Pencil, Trash2, User, UserCircle, RefreshCw, CheckCircle2 } from 'lucide-react'
@@ -39,11 +39,7 @@ type EligibilityCheckSummary = {
   id: string
   status: string
   errorMessage?: string | null
-  parsedSummary?: {
-    eligibilityStatus?: string
-    planType?: string
-    rheum?: RheumEligibilityPacket
-  } | null
+  parsedSummary?: ParsedEligibilitySummary | null
   createdAt: string
   policy?: { payerNameRaw?: string; id?: string }
 }
@@ -358,14 +354,12 @@ export function InsuranceTab({
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
                       <span>Member ID: {maskMemberId(policy.memberId)}</span>
                       {policy.insurerPhoneRaw && <span>Insurer phone: {policy.insurerPhoneRaw}</span>}
-                      {policy.availityPayerId && <span>Availity payer: {policy.availityPayerId}</span>}
+                      {policy.availityPayerId && <span>Payer ID: {policy.availityPayerId}</span>}
                       {policy.clearinghousePayerIds &&
                         Object.entries(policy.clearinghousePayerIds)
-                          .filter(([vendor]) => vendor !== 'availity')
-                          .map(([vendor, id]) => (
-                            <span key={vendor}>
-                              {vendor} payer: {id}
-                            </span>
+                          .filter(([vendor, id]) => vendor !== 'availity' && Boolean(id))
+                          .map(([, id]) => (
+                            <span key={id}>Payer ID: {id}</span>
                           ))}
                       {policy.groupNumber && (
                         <span>Group #: {policy.groupNumber}</span>
@@ -404,11 +398,10 @@ export function InsuranceTab({
                           c.policy?.id === policy.id ||
                           (c.policy?.payerNameRaw === policy.payerNameRaw && c.parsedSummary?.rheum)
                       )
-                      return latest?.parsedSummary?.rheum ? (
+                      return latest?.parsedSummary?.rheum || latest?.parsedSummary?.coverageDetail ? (
                         <EligibilityOvPanel
                           compact
-                          packet={latest.parsedSummary.rheum}
-                          eligibilityStatus={latest.parsedSummary.eligibilityStatus}
+                          summary={latest.parsedSummary}
                         />
                       ) : null
                     })()}
@@ -464,13 +457,9 @@ export function InsuranceTab({
                     : ''}
                   {check.errorMessage ? ` — ${check.errorMessage}` : ''}
                 </div>
-                {check.parsedSummary?.rheum && (
-                  <EligibilityOvPanel
-                    compact
-                    packet={check.parsedSummary.rheum}
-                    eligibilityStatus={check.parsedSummary.eligibilityStatus}
-                  />
-                )}
+                {check.parsedSummary?.rheum || check.parsedSummary?.coverageDetail ? (
+                  <EligibilityOvPanel compact summary={check.parsedSummary} />
+                ) : null}
               </li>
             ))}
           </ul>

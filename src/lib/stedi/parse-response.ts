@@ -4,7 +4,7 @@ import {
   type EligibilityNetworkStatus,
   type RheumEligibilityPacket,
 } from '@/lib/eligibility/rheum-packet'
-import type { ParsedEligibilitySummary } from '@/lib/availity/types'
+import type { EligibilityCoverageDetail, ParsedEligibilitySummary } from '@/lib/availity/types'
 import { STEDI_PAYER_DOWN_CODES } from './types'
 import type { StediBenefitInformation, StediEligibilityResponse } from './types'
 
@@ -33,8 +33,243 @@ function isInNetwork(benefit: StediBenefitInformation): boolean {
 }
 
 function isRemaining(benefit: StediBenefitInformation): boolean {
-  const q = `${benefit.quantityQualifier || ''} ${benefit.quantityQualifierCode || ''}`.toLowerCase()
-  return q.includes('remain')
+  const q = [
+    benefit.quantityQualifier,
+    benefit.quantityQualifierCode,
+    benefit.timeQualifier,
+    benefit.timeQualifierCode,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+  return q.includes('remain') || String(benefit.timeQualifierCode || '') === '29'
+}
+
+function networkCode(benefit: StediBenefitInformation): 'Y' | 'N' | 'W' | null {
+  const code = String(benefit.inPlanNetworkIndicatorCode || '').toUpperCase()
+  if (code === 'Y' || code === 'N' || code === 'W') return code
+  const text = String(benefit.inPlanNetworkIndicator || '').toLowerCase()
+  if (text === 'yes' || text === 'y') return 'Y'
+  if (text === 'no' || text === 'n') return 'N'
+  if (text.includes('not applicable')) return 'W'
+  return null
+}
+
+function formatPercent(value?: string): string | undefined {
+  if (value == null || value === '') return undefined
+  const n = Number(value)
+  if (Number.isFinite(n) && n <= 1) return `${Math.round(n * 100)}%`
+  return String(value).includes('%') ? String(value) : `${value}%`
+}
+
+function serviceLabel(benefit: StediBenefitInformation): string {
+  const notes = (benefit.additionalInformation || [])
+    .map((row) => row.description?.trim())
+    .filter((value): value is string => Boolean(value))
+  if (notes.length) return uniqueJoin(notes)
+  const types = (benefit.serviceTypes || []).map((s) => s.trim()).filter(Boolean)
+  if (types.length) return uniqueJoin(types)
+  return benefit.name || 'Benefit'
+}
+
+function uniqueJoin(values: string[]): string {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const value of values) {
+    const key = value.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(value)
+  }
+  return out.join(', ')
+}
+
+function prettyCaps(value?: string): string | undefined {
+  if (!value) return undefined
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  if (trimmed.length <= 3 && trimmed === trimmed.toUpperCase()) return trimmed
+  if (trimmed !== trimmed.toUpperCase() || !/[A-Z]/.test(trimmed)) return trimmed
+  return trimmed.toLowerCase().replace(/\b([a-z])/g, (letter) => letter.toUpperCase())
+}
+
+function formatGender(value?: string): string | undefined {
+  if (!value) return undefined
+  const code = value.trim().toUpperCase()
+  if (code === 'F' || code === 'FEMALE') return 'Female'
+  if (code === 'M' || code === 'MALE') return 'Male'
+  if (code === 'U' || code === 'UNK' || code === 'UNKNOWN') return 'Unknown'
+  return prettyCaps(value)
+}
+
+function formatAddress(address?: {
+  address1?: string
+  city?: string
+  state?: string
+  postalCode?: string
+}): string | undefined {
+  if (!address) return undefined
+  const line = [
+    prettyCaps(address.address1),
+    [prettyCaps(address.city), address.state].filter(Boolean).join(', '),
+    address.postalCode,
+  ]
+    .map((part) => part?.trim())
+    .filter(Boolean)
+  return line.length ? line.join(', ') : undefined
+}
+
+function relatedEntity(benefit?: StediBenefitInformation) {
+  if (!benefit) return undefined
+  return benefit.benefitsRelatedEntity || benefit.benefitsRelatedEntities?.[0]
+}
+
+function payerCorrespondence(
+  benefits: StediBenefitInformation[]
+): EligibilityCoverageDetail['payerCorrespondence'] {
+  const row = benefits.find((b) => b.code === 'W' || /other source/i.test(b.name || ''))
+  const entity = relatedEntity(row)
+  if (!entity) return undefined
+  const name = prettyCaps(entity.entityName)
+  const address = formatAddress(entity.address)
+  if (!name && !address) return undefined
+  return { name, address }
+}
+
+function pickNetworkAmount(
+  benefits: StediBenefitInformation[],
+  code: string,
+  network: 'Y' | 'N',
+  remaining: boolean
+): string | undefined {
+  const matches = benefits.filter((b) => b.code === code && networkCode(b) === network)
+  const ranked = [...matches].sort((a, b) => benefitScore(b) - benefitScore(a))
+  const filtered = ranked.filter((b) => isRemaining(b) === remaining)
+  const preferred = filtered[0]
+  if (!preferred) return undefined
+  if (code === 'A') return formatPercent(preferred.benefitPercent)
+  return money(preferred.benefitAmount)
+}
+
+function moneyPair(
+  benefits: StediBenefitInformation[],
+  code: string,
+  network: 'Y' | 'N'
+): { total?: string; remaining?: string } | undefined {
+  const total = pickNetworkAmount(benefits, code, network, false)
+  const remaining = pickNetworkAmount(benefits, code, network, true)
+  if (!total && !remaining) return undefined
+  return { total, remaining }
+}
+
+function groupedCosts(
+  benefits: StediBenefitInformation[],
+  code: 'A' | 'B'
+): Array<{ services: string; amount: string; network: 'INN' | 'OON' }> {
+  const rows: Array<{ services: string; amount: string; network: 'INN' | 'OON' }> = []
+  const seen = new Set<string>()
+  for (const benefit of benefits) {
+    if (benefit.code !== code) continue
+    const net = networkCode(benefit)
+    if (net !== 'Y' && net !== 'N') continue
+    const amount = code === 'A' ? formatPercent(benefit.benefitPercent) : money(benefit.benefitAmount)
+    if (!amount) continue
+    const network = net === 'Y' ? 'INN' : 'OON'
+    const services = serviceLabel(benefit)
+    const key = `${network}|${amount}|${services.toLowerCase()}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    rows.push({ services, amount, network })
+  }
+  return rows
+}
+
+function coveredServices(benefits: StediBenefitInformation[], planStatus: StediEligibilityResponse['planStatus']): string[] {
+  const fromStatus = (planStatus || []).flatMap((row) => row.serviceTypeCodes || [])
+  const fromBenefits = benefits.flatMap((b) => b.serviceTypes || [])
+  const labels = [
+    ...fromBenefits,
+    ...fromStatus.map((code) => SERVICE_TYPE_LABELS[String(code)] || String(code)),
+  ]
+  return uniqueJoin(labels).split(', ').filter(Boolean)
+}
+
+const SERVICE_TYPE_LABELS: Record<string, string> = {
+  '1': 'Medical Care',
+  '30': 'Health Benefit Plan Coverage',
+  '33': 'Chiropractic',
+  '47': 'Hospital',
+  '48': 'Hospital - Inpatient',
+  '50': 'Hospital - Outpatient',
+  '86': 'Emergency Services',
+  '98': 'Office Visit',
+  UC: 'Urgent Care',
+  MH: 'Mental Health',
+  AL: 'Vision',
+}
+
+export function buildCoverageDetail(response: StediEligibilityResponse): EligibilityCoverageDetail {
+  const benefits = response.benefitsInformation || []
+  const active = benefits.find((b) => b.code === '1' && b.planCoverage)
+  const subscriber = response.subscriber
+  const innDeductible = moneyPair(benefits, 'C', 'Y')
+  const oonDeductible = moneyPair(benefits, 'C', 'N')
+  const innOop = moneyPair(benefits, 'G', 'Y')
+  const oonOop = moneyPair(benefits, 'G', 'N')
+  const innOfficeCopay = pickAmount(benefits.filter((b) => networkCode(b) === 'Y'), 'B', { preferOffice: true })
+  const oonOfficeCopay = pickAmount(benefits.filter((b) => networkCode(b) === 'N'), 'B', { preferOffice: true })
+  const innOfficeCoins = pickAmount(benefits.filter((b) => networkCode(b) === 'Y'), 'A', { preferOffice: true })
+  const oonOfficeCoins = pickAmount(benefits.filter((b) => networkCode(b) === 'N'), 'A', { preferOffice: true })
+  const deductibleLevel = benefits.find((b) => b.code === 'C' && b.coverageLevel)?.coverageLevel
+
+  return {
+    payerName: prettyCaps(response.payer?.name || response.payer?.entityName),
+    payerId:
+      response.payer?.payorIdentification ||
+      response.payer?.entityIdentificationValue,
+    planName: response.planStatus?.[0]?.planDetails || active?.planCoverage,
+    planDescription: response.planInformation?.groupDescription,
+    planType: inferPlanType(response),
+    insuranceType: active?.insuranceType,
+    planNumber: response.planInformation?.planNumber || subscriber?.planNumber,
+    groupNumber: response.planInformation?.groupNumber || subscriber?.groupNumber,
+    coverageLevel: active?.coverageLevel || deductibleLevel,
+    memberStatus: response.planStatus?.[0]?.status,
+    coverageStartDate: formatStediDate(response.planDateInformation?.planBegin),
+    coverageEndDate: formatStediDate(response.planDateInformation?.planEnd),
+    eligibilityStartDate: formatStediDate(response.planDateInformation?.eligibilityBegin),
+    eligibilityEndDate: formatStediDate(response.planDateInformation?.eligibilityEnd),
+    serviceDate: formatStediDate(response.planDateInformation?.service),
+    referenceNumber: response.controlNumber,
+    coveredServices: coveredServices(benefits, response.planStatus),
+    subscriber: subscriber
+      ? {
+          firstName: prettyCaps(subscriber.firstName),
+          lastName: prettyCaps(subscriber.lastName),
+          memberId: subscriber.memberId,
+          dateOfBirth: formatStediDate(subscriber.dateOfBirth),
+          gender: formatGender(subscriber.gender),
+          address: formatAddress(subscriber.address),
+          groupNumber: subscriber.groupNumber,
+          planNumber: subscriber.planNumber,
+        }
+      : undefined,
+    payerCorrespondence: payerCorrespondence(benefits),
+    inn: {
+      deductible: innDeductible,
+      oop: innOop,
+      officeCopay: innOfficeCopay,
+      officeCoinsurance: innOfficeCoins,
+    },
+    oon: {
+      deductible: oonDeductible,
+      oop: oonOop,
+      officeCopay: oonOfficeCopay,
+      officeCoinsurance: oonOfficeCoins,
+    },
+    copays: groupedCosts(benefits, 'B'),
+    coinsuranceLines: groupedCosts(benefits, 'A'),
+  }
 }
 
 function benefitScore(benefit: StediBenefitInformation): number {
@@ -101,11 +336,7 @@ function pickAmount(
     : pool[0]
   if (!preferred) return undefined
   if (code === 'A') {
-    const pct = preferred.benefitPercent
-    if (pct == null || pct === '') return undefined
-    const n = Number(pct)
-    if (Number.isFinite(n) && n <= 1) return `${Math.round(n * 100)}%`
-    return String(pct).includes('%') ? String(pct) : `${pct}%`
+    return formatPercent(preferred.benefitPercent)
   }
   return money(preferred.benefitAmount)
 }
@@ -148,7 +379,7 @@ export function buildRheumPacketFromStediResponse(
     packet.oop = { max: oop, remaining: oopRemaining }
   }
   packet.authRequired = authRequired(benefits)
-  packet.verifiedBy = 'Stedi'
+  packet.verifiedBy = 'Eligibility check'
   return finalizeRheumPacket(packet)
 }
 
@@ -184,7 +415,7 @@ export function parseStediEligibilityResponse(
   return {
     eligibilityStatus,
     planStatus: plan?.status,
-    payerName: response.payer?.name || response.payer?.entityName,
+    payerName: prettyCaps(response.payer?.name || response.payer?.entityName),
     payerId:
       response.payer?.payorIdentification ||
       response.payer?.entityIdentificationValue ||
@@ -207,5 +438,6 @@ export function parseStediEligibilityResponse(
     validationMessages: errors,
     rawPlanCount: response.planStatus?.length || 0,
     rheum,
+    coverageDetail: eligibilityStatus === 'error' ? undefined : buildCoverageDetail(response),
   }
 }

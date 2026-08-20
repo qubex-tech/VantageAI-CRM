@@ -38,7 +38,7 @@ export async function finalizeParsedEligibilityCheck(params: {
   rawResponse: Record<string, unknown>
   externalId?: string | null
   statusCode?: string | null
-  sourceLabel?: string
+  sourceLabel?: string | null
   isTerminalError?: boolean
   triggerVoiceFallback?: (checkId: string, reason: string) => Promise<void>
   appointmentType?: string
@@ -63,12 +63,13 @@ export async function finalizeParsedEligibilityCheck(params: {
     summary.rheum = applyCallRequiredFlag(summary.rheum, params.appointmentType)
   }
 
-  const sourceLabel = params.sourceLabel || 'Clearinghouse'
+  const sourceLabel = params.sourceLabel === undefined ? 'Clearinghouse' : params.sourceLabel
   const isTerminalError = Boolean(params.isTerminalError || summary.eligibilityStatus === 'error')
 
   if (isTerminalError) {
     const reason =
-      summary.validationMessages.join('; ') || `${sourceLabel} eligibility check failed`
+      summary.validationMessages.join('; ') ||
+      (sourceLabel ? `${sourceLabel} eligibility check failed` : 'Eligibility check failed')
 
     await prisma.eligibilityCheck.update({
       where: { id: check.id },
@@ -151,7 +152,9 @@ export async function finalizeParsedEligibilityCheck(params: {
   await logPatientActivity({
     patientId: check.patientId,
     type: 'insurance',
-    title: `Insurance eligibility verified (${sourceLabel})`,
+    title: sourceLabel
+      ? `Insurance eligibility verified (${sourceLabel})`
+      : 'Insurance eligibility verified',
     description: `${summary.eligibilityStatus} — ${formatUserFacingDateTime(now, {
       timeZone: practiceTimeZone,
       dateStyle: 'medium',

@@ -35,7 +35,7 @@ export async function stediRequest<T>(params: {
 
   if (!config.apiKey?.trim()) {
     throw new StediApiError({
-      message: 'Stedi API key is not configured for this practice',
+      message: 'Eligibility API key is not configured for this practice',
       statusCode: 401,
     })
   }
@@ -77,7 +77,7 @@ export async function stediRequest<T>(params: {
         nested?.description ||
         nested?.message ||
         json.error ||
-        `Stedi API request failed (${response.status})`,
+        `Eligibility request failed (${response.status})`,
       statusCode: response.status,
       errorCode: json.code || nested?.code,
       retryable: response.status === 429 || response.status >= 500,

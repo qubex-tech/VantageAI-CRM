@@ -95,6 +95,67 @@ export interface ParsedEligibilitySummary {
   rawPlanCount: number
   /** Lonestar-shaped OV / specialty verification packet */
   rheum?: RheumEligibilityPacket
+  /** Full clearinghouse 271 snapshot for the insurance UI */
+  coverageDetail?: EligibilityCoverageDetail
+}
+
+export interface EligibilityMoneyPair {
+  total?: string
+  remaining?: string
+}
+
+export interface EligibilityServiceCost {
+  services: string
+  amount: string
+  network: 'INN' | 'OON'
+}
+
+export interface EligibilityCoverageDetail {
+  payerName?: string
+  payerId?: string
+  planName?: string
+  planDescription?: string
+  planType?: string
+  insuranceType?: string
+  planNumber?: string
+  groupNumber?: string
+  coverageLevel?: string
+  memberStatus?: string
+  coverageStartDate?: string
+  coverageEndDate?: string
+  eligibilityStartDate?: string
+  eligibilityEndDate?: string
+  serviceDate?: string
+  referenceNumber?: string
+  coveredServices?: string[]
+  subscriber?: {
+    firstName?: string
+    lastName?: string
+    memberId?: string
+    dateOfBirth?: string
+    gender?: string
+    address?: string
+    groupNumber?: string
+    planNumber?: string
+  }
+  payerCorrespondence?: {
+    name?: string
+    address?: string
+  }
+  inn?: {
+    deductible?: EligibilityMoneyPair
+    oop?: EligibilityMoneyPair
+    officeCopay?: string
+    officeCoinsurance?: string
+  }
+  oon?: {
+    deductible?: EligibilityMoneyPair
+    oop?: EligibilityMoneyPair
+    officeCopay?: string
+    officeCoinsurance?: string
+  }
+  copays?: EligibilityServiceCost[]
+  coinsuranceLines?: EligibilityServiceCost[]
 }
 
 export const TERMINAL_COMPLETE_STATUS_CODES = new Set(['3', '4'])

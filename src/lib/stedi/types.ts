@@ -58,7 +58,21 @@ export interface StediBenefitInformation {
   inPlanNetworkIndicatorCode?: string
   authOrCertIndicator?: string
   additionalInformation?: Array<{ description?: string }>
+  benefitsRelatedEntity?: StediRelatedEntity
+  benefitsRelatedEntities?: StediRelatedEntity[]
   [key: string]: unknown
+}
+
+export interface StediRelatedEntity {
+  entityName?: string
+  entityType?: string
+  entityIdentifier?: string
+  address?: {
+    address1?: string
+    city?: string
+    state?: string
+    postalCode?: string
+  }
 }
 
 export interface StediEligibilityResponse {
@@ -76,16 +90,27 @@ export interface StediEligibilityResponse {
     lastName?: string
     memberId?: string
     groupNumber?: string
+    planNumber?: string
+    dateOfBirth?: string
+    gender?: string
+    address?: {
+      address1?: string
+      city?: string
+      state?: string
+      postalCode?: string
+    }
   }
   planInformation?: {
     groupNumber?: string
     groupDescription?: string
+    planNumber?: string
   }
   planDateInformation?: {
     planBegin?: string
     planEnd?: string
     eligibilityBegin?: string
     eligibilityEnd?: string
+    service?: string
   }
   planStatus?: Array<{
     status?: string

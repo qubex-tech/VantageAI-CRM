@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/middleware'
 import { runInsuranceVerification } from '@/lib/eligibility/run-insurance-verification'
+import { parseStediEligibilityResponse } from '@/lib/stedi/parse-response'
+import type { ParsedEligibilitySummary } from '@/lib/availity/types'
 
 const bodySchema = z.object({
   patientId: z.string().uuid(),
@@ -81,7 +83,36 @@ export async function GET(req: NextRequest) {
       },
     })
 
-    return NextResponse.json({ checks })
+    const payload = checks.map((check) => {
+      const parsed = { ...((check.parsedSummary || {}) as ParsedEligibilitySummary) }
+      if (check.vendorKey === 'stedi' && check.rawResponse) {
+        try {
+          const rebuilt = parseStediEligibilityResponse(
+            check.rawResponse as Parameters<typeof parseStediEligibilityResponse>[0]
+          )
+          if (rebuilt.coverageDetail) parsed.coverageDetail = rebuilt.coverageDetail
+          if (rebuilt.rheum) {
+            parsed.rheum = parsed.rheum
+              ? {
+                  ...parsed.rheum,
+                  ...rebuilt.rheum,
+                  deductible: rebuilt.rheum.deductible || parsed.rheum.deductible,
+                  oop: rebuilt.rheum.oop || parsed.rheum.oop,
+                }
+              : rebuilt.rheum
+          }
+          if (rebuilt.planName) parsed.planName = rebuilt.planName
+          if (rebuilt.planType) parsed.planType = rebuilt.planType
+          if (rebuilt.groupNumber) parsed.groupNumber = rebuilt.groupNumber
+          if (rebuilt.payerName) parsed.payerName = rebuilt.payerName
+        } catch {
+          // keep stored summary
+        }
+      }
+      return { ...check, parsedSummary: parsed, rawResponse: undefined }
+    })
+
+    return NextResponse.json({ checks: payload })
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to list eligibility checks' },

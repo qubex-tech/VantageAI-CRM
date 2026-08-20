@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { mapToStediEligibilityRequest } from '../map-request'
 import { parseStediEligibilityResponse } from '../parse-response'
+import { formatEligibilityNoteContent } from '@/lib/availity/parse-response'
 import { buildMockStediEligibilityResponse } from '../mock-client'
 import { searchStediPayers } from '../payer-search'
 import { resolvePayerIdFromName } from '@/lib/eligibility/clearinghouse/match-payer-from-name'
@@ -88,6 +89,186 @@ describe('parseStediEligibilityResponse', () => {
     expect(summary.rheum?.oop?.max).toBe('$3000.00')
     expect(summary.rheum?.oop?.remaining).toBe('$2100.00')
     expect(summary.rheum?.networkStatus).toBe('inn')
-    expect(summary.rheum?.verifiedBy).toBe('Stedi')
+    expect(summary.rheum?.verifiedBy).toBe('Eligibility check')
+    expect(summary.coverageDetail?.planType).toBe('PPO')
+    expect(summary.coverageDetail?.inn?.deductible?.total).toBe('$500.00')
+    expect(summary.coverageDetail?.inn?.deductible?.remaining).toBe('$250.00')
+    expect(summary.coverageDetail?.inn?.oop?.total).toBe('$3000.00')
+    expect(summary.coverageDetail?.copays?.length).toBeGreaterThan(0)
+  })
+
+  it('formats the full 271 snapshot including remaining amounts and correspondence', () => {
+    const summary = parseStediEligibilityResponse({
+      controlNumber: '872057204',
+      tradingPartnerServiceId: '60054',
+      payer: { name: 'AETNA INC', payorIdentification: '953402799' },
+      subscriber: {
+        firstName: 'JANE',
+        lastName: 'DOE',
+        memberId: 'AETNA12345',
+        dateOfBirth: '20040404',
+        gender: 'F',
+        groupNumber: '111222333444555',
+        planNumber: '1122334',
+        address: { address1: '101 MAIN ST', city: 'TRENTON', state: 'NJ', postalCode: '08601' },
+      },
+      planInformation: {
+        planNumber: '1122334',
+        groupNumber: '111222333444555',
+        groupDescription: 'New Jersey Plan',
+      },
+      planDateInformation: { service: '20240917', planBegin: '20240401' },
+      planStatus: [
+        { status: 'Active Coverage', statusCode: '1', planDetails: 'Gold Plan', serviceTypeCodes: ['30'] },
+        {
+          status: 'Active Coverage',
+          statusCode: '1',
+          serviceTypeCodes: ['1', '33', '47', '48', '50', '86', '98', 'UC', 'MH', 'AL'],
+        },
+      ],
+      benefitsInformation: [
+        {
+          code: 'W',
+          name: 'Other Source of Data',
+          inPlanNetworkIndicatorCode: 'W',
+          benefitsRelatedEntity: {
+            entityName: 'Aetna',
+            address: { address1: '202 Main St', city: 'El Paso', state: 'TX', postalCode: '79998' },
+          },
+        },
+        {
+          code: '1',
+          name: 'Active Coverage',
+          serviceTypeCodes: ['30'],
+          coverageLevel: 'Employee Only',
+          insuranceType: 'Preferred Provider Organization (PPO)',
+          planCoverage: 'Gold Plan',
+          inPlanNetworkIndicatorCode: 'W',
+        },
+        {
+          code: 'C',
+          name: 'Deductible',
+          benefitAmount: '500',
+          timeQualifier: 'Contract',
+          timeQualifierCode: '25',
+          coverageLevel: 'Individual',
+          serviceTypeCodes: ['30'],
+          inPlanNetworkIndicatorCode: 'Y',
+        },
+        {
+          code: 'C',
+          name: 'Deductible',
+          benefitAmount: '500',
+          timeQualifier: 'Remaining',
+          timeQualifierCode: '29',
+          coverageLevel: 'Individual',
+          serviceTypeCodes: ['30'],
+          inPlanNetworkIndicatorCode: 'Y',
+        },
+        {
+          code: 'G',
+          name: 'Out of Pocket (Stop Loss)',
+          benefitAmount: '7000',
+          timeQualifier: 'Remaining',
+          timeQualifierCode: '29',
+          coverageLevel: 'Individual',
+          serviceTypeCodes: ['30'],
+          inPlanNetworkIndicatorCode: 'Y',
+        },
+        {
+          code: 'C',
+          name: 'Deductible',
+          benefitAmount: '1000',
+          timeQualifier: 'Contract',
+          timeQualifierCode: '25',
+          coverageLevel: 'Individual',
+          serviceTypeCodes: ['30'],
+          inPlanNetworkIndicatorCode: 'N',
+        },
+        {
+          code: 'B',
+          name: 'Co-Payment',
+          benefitAmount: '30',
+          serviceTypeCodes: ['98', 'MH', 'UC'],
+          inPlanNetworkIndicatorCode: 'Y',
+          additionalInformation: [
+            { description: 'Office Visits' },
+            { description: 'Walk in Clinic' },
+            { description: 'Mental Health (outpatient)' },
+          ],
+        },
+        {
+          code: 'B',
+          name: 'Co-Payment',
+          benefitAmount: '25',
+          serviceTypeCodes: ['33'],
+          inPlanNetworkIndicatorCode: 'Y',
+          additionalInformation: [{ description: 'Chiropractic' }],
+        },
+        {
+          code: 'A',
+          name: 'Co-Insurance',
+          benefitPercent: '0',
+          serviceTypeCodes: ['98'],
+          inPlanNetworkIndicatorCode: 'Y',
+          additionalInformation: [{ description: 'Office Visits' }],
+        },
+        {
+          code: 'A',
+          name: 'Co-Insurance',
+          benefitPercent: '0.5',
+          serviceTypeCodes: ['98'],
+          inPlanNetworkIndicatorCode: 'N',
+          additionalInformation: [{ description: 'Office Visits' }],
+        },
+      ],
+    })
+
+    const detail = summary.coverageDetail
+    expect(detail?.payerName).toBe('Aetna Inc')
+    expect(detail?.payerId).toBe('953402799')
+    expect(detail?.planName).toBe('Gold Plan')
+    expect(detail?.planDescription).toBe('New Jersey Plan')
+    expect(detail?.planNumber).toBe('1122334')
+    expect(detail?.groupNumber).toBe('111222333444555')
+    expect(detail?.coverageLevel).toBe('Employee Only')
+    expect(detail?.serviceDate).toBe('2024-09-17')
+    expect(detail?.coverageStartDate).toBe('2024-04-01')
+    expect(detail?.inn?.deductible).toEqual({ total: '$500', remaining: '$500' })
+    expect(detail?.oon?.deductible?.total).toBe('$1000')
+    expect(detail?.inn?.officeCopay).toBe('$30')
+    expect(detail?.inn?.officeCoinsurance).toBe('0%')
+    expect(detail?.oon?.officeCoinsurance).toBe('50%')
+    expect(detail?.copays?.some((row) => row.amount === '$25' && row.services.includes('Chiropractic'))).toBe(true)
+    expect(detail?.subscriber?.firstName).toBe('Jane')
+    expect(detail?.subscriber?.gender).toBe('Female')
+    expect(detail?.subscriber?.address).toContain('Trenton')
+    expect(detail?.payerCorrespondence?.address).toContain('El Paso')
+    expect(detail?.referenceNumber).toBe('872057204')
+    expect(JSON.stringify(detail)).not.toMatch(/stedi/i)
+    expect(summary.rheum?.verifiedBy).toBe('Eligibility check')
+    const note = formatEligibilityNoteContent({ summary, sourceLabel: null })
+    expect(note).toContain('Insurance Eligibility\n')
+    expect(note).toContain('Gold Plan')
+    expect(note).toContain('Walk in Clinic')
+    expect(note).not.toMatch(/stedi/i)
+  })
+
+  it('treats timeQualifier Remaining as remaining deductible', () => {
+    const response = buildMockStediEligibilityResponse()
+    response.benefitsInformation = [
+      {
+        code: 'C',
+        name: 'Deductible',
+        benefitAmount: '500',
+        timeQualifier: 'Remaining',
+        timeQualifierCode: '29',
+        serviceTypeCodes: ['30'],
+        inPlanNetworkIndicatorCode: 'Y',
+      },
+    ]
+    const summary = parseStediEligibilityResponse(response)
+    expect(summary.rheum?.deductible?.remaining).toBe('$500')
+    expect(summary.coverageDetail?.inn?.deductible?.remaining).toBe('$500')
   })
 })

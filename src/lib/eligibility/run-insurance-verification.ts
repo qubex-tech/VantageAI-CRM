@@ -409,7 +409,8 @@ export async function runInsuranceVerification(
       policyId: input.policyId,
       appointmentType: input.appointmentType,
     })
-    const vendorLabel = eligibility.vendorDisplayName || 'clearinghouse'
+    const vendorLabel =
+      eligibility.vendorKey === 'stedi' ? null : eligibility.vendorDisplayName || 'clearinghouse'
 
     if (eligibility.status === 'complete') {
       const summary = attachAppointmentFlags(
@@ -436,7 +437,7 @@ export async function runInsuranceVerification(
                 appointmentType: input.appointmentType,
               })
             : undefined,
-        message: `Eligibility verified via ${vendorLabel} (${summary?.eligibilityStatus || 'complete'})${
+        message: `Eligibility verified${vendorLabel ? ` via ${vendorLabel}` : ''} (${summary?.eligibilityStatus || 'complete'})${
           call.required ? ' — SOP requires call confirmation' : ''
         }`,
       }
@@ -446,12 +447,14 @@ export async function runInsuranceVerification(
       return {
         path: 'clearinghouse_in_progress',
         eligibility,
-        message: `${vendorLabel} eligibility check in progress`,
+        message: vendorLabel
+          ? `${vendorLabel} eligibility check in progress`
+          : 'Eligibility check in progress',
       }
     }
 
     return fallback(
-      eligibility.errorMessage || `${vendorLabel} eligibility failed`,
+      eligibility.errorMessage || (vendorLabel ? `${vendorLabel} eligibility failed` : 'Eligibility check failed'),
       eligibility.eligibilityCheckId || undefined
     )
   } catch (error) {

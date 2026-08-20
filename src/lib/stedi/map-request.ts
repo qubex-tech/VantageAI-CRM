@@ -33,7 +33,7 @@ export function mapToStediEligibilityRequest(
   const organizationName = input.providerOrganizationName?.trim()
   if (!organizationName) {
     throw new Error(
-      'Provider organization name is required for Stedi eligibility checks. Set it in eligibility settings.'
+      'Provider organization name is required for eligibility checks. Set it in eligibility settings.'
     )
   }
 

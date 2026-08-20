@@ -30,7 +30,7 @@ export async function getStediIntegrationConfig(
   })
 
   if (!integration) {
-    throw new Error('Stedi is not configured for this practice. Add an API key in Settings.')
+    throw new Error('Eligibility is not configured for this practice. Add an API key in Settings.')
   }
 
   const environment = integration.environment === 'production' ? 'production' : 'test'

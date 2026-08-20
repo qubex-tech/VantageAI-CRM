@@ -10,6 +10,7 @@ import {
 } from './clearinghouse'
 import { computeEligibilityReadiness } from './readiness'
 import { finalizeParsedEligibilityCheck } from './finalize-check'
+import { customerFacingVendorName } from './vendor-labels'
 
 export interface RunEligibilityCheckInput {
   practiceId: string
@@ -69,10 +70,13 @@ export async function runEligibilityCheck(
   }
 
   const adapter = getClearinghouseAdapter(settings.primaryVendorKey)
+  const vendorLabel = customerFacingVendorName(adapter.vendorKey, adapter.displayName)
   const configured = await adapter.isConfigured(practiceId)
   if (!configured) {
     throw new Error(
-      `${adapter.displayName} is not configured for this practice. Add credentials in Settings.`
+      vendorLabel
+        ? `${vendorLabel} is not configured for this practice. Add credentials in Settings.`
+        : 'Eligibility is not configured for this practice. Add credentials in Settings.'
     )
   }
 
@@ -137,7 +141,7 @@ export async function runEligibilityCheck(
     patient,
     providerNpi,
     payerId,
-    payerIdField: `${adapter.displayName} payer ID`,
+    payerIdField: vendorLabel ? `${vendorLabel} payer ID` : 'Payer ID',
     providerOrganizationName:
       adapter.vendorKey === 'stedi'
         ? settings.defaultProviderOrgName || practice?.name || null
@@ -146,7 +150,7 @@ export async function runEligibilityCheck(
   })
   if (!payerId && policy.payerNameRaw?.trim()) {
     readiness.warnings.push(
-      `Could not uniquely map payer name "${policy.payerNameRaw}" to a ${adapter.displayName} payer ID`
+      `Could not uniquely map payer name "${policy.payerNameRaw}" to a payer ID`
     )
   }
 
@@ -155,7 +159,7 @@ export async function runEligibilityCheck(
       eligibilityCheckId: '',
       status: 'failed',
       vendorKey: adapter.vendorKey,
-      vendorDisplayName: adapter.displayName,
+      vendorDisplayName: vendorLabel || undefined,
       readiness,
       errorMessage: `Missing required fields: ${readiness.missingFields.join(', ')}`,
     }
@@ -230,7 +234,7 @@ export async function runEligibilityCheck(
         rawResponse: result.rawResponse || {},
         externalId: coverageId,
         statusCode: result.statusCode,
-        sourceLabel: adapter.displayName,
+        sourceLabel: vendorLabel,
         isTerminalError: false,
         appointmentType: input.appointmentType,
       })
@@ -239,7 +243,7 @@ export async function runEligibilityCheck(
         status: finalized.status === 'complete' ? 'complete' : 'failed',
         coverageId,
         vendorKey: adapter.vendorKey,
-        vendorDisplayName: adapter.displayName,
+        vendorDisplayName: vendorLabel || undefined,
         readiness,
         summary: finalized.summary as unknown as Record<string, unknown>,
       }
@@ -263,12 +267,12 @@ export async function runEligibilityCheck(
         status: 'in_progress',
         coverageId,
         vendorKey: adapter.vendorKey,
-        vendorDisplayName: adapter.displayName,
+        vendorDisplayName: vendorLabel || undefined,
         readiness,
       }
     }
 
-    const message = result.errorMessage || `${adapter.displayName} eligibility check failed`
+    const message = result.errorMessage || (vendorLabel ? `${vendorLabel} eligibility check failed` : 'Eligibility check failed')
     await prisma.eligibilityCheck.update({
       where: { id: check.id },
       data: {
@@ -289,7 +293,7 @@ export async function runEligibilityCheck(
       status: 'failed',
       coverageId,
       vendorKey: adapter.vendorKey,
-      vendorDisplayName: adapter.displayName,
+      vendorDisplayName: vendorLabel || undefined,
       readiness,
       summary: result.summary as Record<string, unknown> | undefined,
       errorMessage: message,

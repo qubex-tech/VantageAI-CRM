@@ -32,7 +32,7 @@ export async function GET(
       return NextResponse.json({ error: 'Eligibility check not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ check })
+    return NextResponse.json({ check: { ...check, rawResponse: undefined } })
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to fetch eligibility check' },
