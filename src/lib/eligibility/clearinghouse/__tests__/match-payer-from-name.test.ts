@@ -37,6 +37,16 @@ describe('pickConfidentPayerMatch', () => {
     expect(match).toMatchObject({ status: 'matched', payerId: '60054' })
   })
 
+  it('picks commercial Aetna over Aetna Better Health when the CRM name is AETNA', () => {
+    const betterHealth: PayerSearchResult = {
+      payerId: 'ABH',
+      name: 'Aetna Better Health',
+      aliases: ['AETNA', 'Aetna'],
+    }
+    const match = pickConfidentPayerMatch([betterHealth, AETNA], 'AETNA')
+    expect(match).toMatchObject({ status: 'matched', payerId: '60054', name: 'Aetna' })
+  })
+
   it('maps Blue Cross and Blue Shield of Texas, not another BCBS plan', () => {
     const match = pickConfidentPayerMatch(
       [BCBSTX, BCBSIL, BCBSTX_MA],

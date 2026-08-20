@@ -115,6 +115,10 @@ export async function runEligibilityCheck(
           policyId: policy.id,
           payerName: policy.payerNameRaw,
           matchStatus: match.status,
+          candidates:
+            match.status === 'ambiguous'
+              ? match.candidates.map((c) => ({ payerId: c.payerId, name: c.name, score: c.score }))
+              : undefined,
         })
       }
     } catch (error) {

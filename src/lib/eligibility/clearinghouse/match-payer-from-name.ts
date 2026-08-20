@@ -34,11 +34,25 @@ function labelsForHit(hit: PayerSearchResult): string[] {
 function scoreHit(hit: PayerSearchResult, payerName: string): number | null {
   const compactQuery = compactPayerText(payerName)
   let best: number | null = null
+  const compactName = compactPayerText(hit.name)
+  const compactId = compactPayerText(hit.payerId)
+
+  // Exact display name or payer ID beats shared aliases like AETNA on "Aetna Better Health".
+  if (compactQuery.length >= 3 && compactName === compactQuery) {
+    best = Math.max(best ?? 0, 20_000)
+  }
+  if (compactQuery.length >= 3 && compactId === compactQuery) {
+    best = Math.max(best ?? 0, 18_000)
+  }
 
   for (const label of labelsForHit(hit)) {
     const compactLabel = compactPayerText(label)
     if (compactQuery.length >= 3 && compactLabel === compactQuery) {
-      best = Math.max(best ?? 0, 10_000)
+      const extraProductLine =
+        compactName !== compactQuery &&
+        compactName.includes(compactQuery) &&
+        compactName.length > compactQuery.length + 3
+      best = Math.max(best ?? 0, extraProductLine ? 8_000 : 12_000)
     }
     const scored = scorePayerLabel(label, payerName)
     if (scored != null) best = Math.max(best ?? 0, scored)
