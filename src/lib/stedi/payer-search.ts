@@ -37,10 +37,16 @@ export async function searchStediPayers(
     if (!payer) continue
     const payerId = payer.primaryPayerId || payer.stediId
     if (!payerId) continue
+    const aliases = [
+      ...(payer.names || []),
+      ...(payer.aliases || []),
+      payer.stediId,
+      payer.primaryPayerId,
+    ].filter((value): value is string => Boolean(value?.trim()))
     payers.push({
       payerId,
       name: payer.displayName || payer.names?.[0] || payerId,
-      aliases: payer.aliases,
+      aliases,
       eligibilitySupport: payer.transactionSupport?.eligibilityCheck,
     })
   }

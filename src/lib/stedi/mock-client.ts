@@ -153,12 +153,23 @@ export async function handleMockStediRequest<T>(params: {
           transactionSupport: { eligibilityCheck: 'SUPPORTED' },
         },
       },
+      {
+        payer: {
+          stediId: 'HUMANA',
+          displayName: 'Humana',
+          primaryPayerId: '61101',
+          aliases: ['HUMANA'],
+          names: ['Humana'],
+          transactionSupport: { eligibilityCheck: 'SUPPORTED' },
+        },
+      },
     ].filter((item) => {
       if (!q) return true
       const hay = [
         item.payer.displayName,
         item.payer.primaryPayerId,
         item.payer.stediId,
+        ...(item.payer.names || []),
         ...(item.payer.aliases || []),
       ]
         .join(' ')

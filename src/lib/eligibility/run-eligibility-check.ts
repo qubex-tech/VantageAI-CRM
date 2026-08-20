@@ -5,6 +5,8 @@ import {
   getPayerIdForVendor,
   getPracticeEligibilitySettings,
   mapToCanonicalEligibilityRequest,
+  resolvePayerIdFromName,
+  upsertPayerIdMap,
 } from './clearinghouse'
 import { computeEligibilityReadiness } from './readiness'
 import { finalizeParsedEligibilityCheck } from './finalize-check'
@@ -74,7 +76,57 @@ export async function runEligibilityCheck(
     )
   }
 
-  const payerId = getPayerIdForVendor(policy, adapter.vendorKey)
+  let payerId = getPayerIdForVendor(policy, adapter.vendorKey)
+  let resolvedFromName: { payerId: string; name: string } | null = null
+  if (
+    !payerId &&
+    adapter.vendorKey === 'stedi' &&
+    adapter.capabilities.payerSearch &&
+    policy.payerNameRaw?.trim()
+  ) {
+    try {
+      const match = await resolvePayerIdFromName({
+        payerName: policy.payerNameRaw,
+        searchPayers: (query) => adapter.searchPayers(practiceId, query),
+      })
+      if (match.status === 'matched') {
+        payerId = match.payerId
+        resolvedFromName = { payerId: match.payerId, name: match.name }
+        const payerMap = upsertPayerIdMap(
+          policy.clearinghousePayerIds,
+          adapter.vendorKey,
+          match.payerId
+        )
+        await prisma.insurancePolicy.update({
+          where: { id: policy.id },
+          data: { clearinghousePayerIds: payerMap },
+        })
+        policy.clearinghousePayerIds = payerMap
+        console.info('[runEligibilityCheck] Mapped payer name to Stedi ID', {
+          practiceId,
+          policyId: policy.id,
+          payerName: policy.payerNameRaw,
+          payerId: match.payerId,
+          stediName: match.name,
+        })
+      } else {
+        console.info('[runEligibilityCheck] Could not map payer name to Stedi ID', {
+          practiceId,
+          policyId: policy.id,
+          payerName: policy.payerNameRaw,
+          matchStatus: match.status,
+        })
+      }
+    } catch (error) {
+      console.warn('[runEligibilityCheck] Stedi payer name lookup failed', {
+        practiceId,
+        policyId: policy.id,
+        payerName: policy.payerNameRaw,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
   const providerNpi = settings.defaultProviderNpi
   const readiness = computeEligibilityReadiness({
     policy,
@@ -88,6 +140,11 @@ export async function runEligibilityCheck(
         : settings.defaultProviderOrgName,
     requireOrganizationName: adapter.vendorKey === 'stedi',
   })
+  if (!payerId && policy.payerNameRaw?.trim()) {
+    readiness.warnings.push(
+      `Could not uniquely map payer name "${policy.payerNameRaw}" to a ${adapter.displayName} payer ID`
+    )
+  }
 
   if (!readiness.ready) {
     return {
@@ -130,6 +187,8 @@ export async function runEligibilityCheck(
         }),
         vendorKey: adapter.vendorKey,
         appointmentType: input.appointmentType || null,
+        resolvedFromName,
+        payerNameRaw: policy.payerNameRaw,
       },
     },
   })
@@ -154,6 +213,8 @@ export async function runEligibilityCheck(
           ...(result.redactedRequest || {}),
           vendorKey: adapter.vendorKey,
           appointmentType: input.appointmentType || null,
+          resolvedFromName,
+          payerNameRaw: policy.payerNameRaw,
         },
       },
     })

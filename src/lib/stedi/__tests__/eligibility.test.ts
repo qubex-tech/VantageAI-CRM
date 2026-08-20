@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { mapToStediEligibilityRequest } from '../map-request'
 import { parseStediEligibilityResponse } from '../parse-response'
 import { buildMockStediEligibilityResponse } from '../mock-client'
+import { searchStediPayers } from '../payer-search'
+import { resolvePayerIdFromName } from '@/lib/eligibility/clearinghouse/match-payer-from-name'
 import type { CanonicalEligibilityRequest } from '@/lib/eligibility/clearinghouse/types'
 
 function baseInput(overrides?: Partial<CanonicalEligibilityRequest>): CanonicalEligibilityRequest {
@@ -50,6 +52,26 @@ describe('mapToStediEligibilityRequest', () => {
     expect(() =>
       mapToStediEligibilityRequest(baseInput({ providerOrganizationName: null }))
     ).toThrow(/organization name/i)
+  })
+})
+
+describe('searchStediPayers + name resolve', () => {
+  const mockConfig = {
+    practiceId: 'p1',
+    apiKey: 'mock',
+    environment: 'test' as const,
+    apiBaseUrl: 'https://healthcare.us.stedi.com/2024-04-01',
+    useMockResponses: true,
+    isActive: true,
+  }
+
+  it('resolves an eCW payer name through Stedi payer search', async () => {
+    const match = await resolvePayerIdFromName({
+      payerName: 'AETNA',
+      searchPayers: (query) => searchStediPayers(mockConfig, query),
+    })
+    expect(match.status).toBe('matched')
+    if (match.status === 'matched') expect(match.payerId).toBe('60054')
   })
 })
 

@@ -29,6 +29,10 @@ export async function getPracticeClearinghouseAdapter(
 
 export { getPracticeEligibilitySettings, upsertPracticeEligibilitySettings } from './settings'
 export { getPayerIdForVendor, upsertPayerIdMap } from './payer-ids'
+export {
+  pickConfidentPayerMatch,
+  resolvePayerIdFromName,
+} from './match-payer-from-name'
 export { mapToCanonicalEligibilityRequest, redactCanonicalRequest } from './canonical-request'
 export type {
   CanonicalEligibilityRequest,
