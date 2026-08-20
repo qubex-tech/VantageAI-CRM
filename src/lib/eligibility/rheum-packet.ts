@@ -131,7 +131,7 @@ export function finalizeRheumPacket(packet: RheumEligibilityPacket): RheumEligib
 export function formatRheumPacketNoteSection(packet: RheumEligibilityPacket): string {
   const lines: string[] = ['', 'OV Benefit Verification']
   lines.push(`Form mode: ${packet.formMode}`)
-  if (packet.source === 'stedi_api' || packet.source === 'clearinghouse_api') {
+  if (packet.source === 'stedi_api') {
     lines.push('Source: Eligibility check')
   } else if (packet.source) {
     lines.push(`Source: ${packet.source}`)
