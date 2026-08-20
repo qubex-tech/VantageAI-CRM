@@ -5,6 +5,7 @@ import { requireAuth } from '@/lib/middleware'
 import { isVantageAdmin } from '@/lib/permissions'
 import { encryptString } from '@/lib/integrations/ehr/crypto'
 import { getOrCreateAvailityIntegration } from '@/lib/availity/config'
+import { upsertPracticeEligibilitySettings } from '@/lib/eligibility/clearinghouse'
 import {
   AVAILITY_ELIGIBILITY_PLAYBOOK_KEY,
   getOrCreatePracticePlaybook,
@@ -18,6 +19,7 @@ const availitySettingsSchema = z.object({
   defaultProviderNpi: z.string().optional().or(z.literal('')),
   defaultProviderTaxId: z.string().optional().or(z.literal('')),
   defaultServiceType: z.string().optional(),
+  defaultProviderOrgName: z.string().optional().or(z.literal('')),
   submitterId: z.string().optional().or(z.literal('')),
   submitterStateCode: z.string().optional().or(z.literal('')),
   useMockResponses: z.boolean().optional(),
@@ -26,6 +28,7 @@ const availitySettingsSchema = z.object({
   portalRpaUseMock: z.boolean().optional(),
   eligibilityVoiceEnabled: z.boolean().optional(),
   isActive: z.boolean().optional(),
+  primaryVendorKey: z.string().optional(),
 })
 
 function redactIntegration(integration: {
@@ -122,6 +125,29 @@ export async function POST(req: NextRequest) {
     const integration = await prisma.availityIntegration.update({
       where: { practiceId },
       data,
+    })
+
+    await upsertPracticeEligibilitySettings(practiceId, {
+      ...(parsed.primaryVendorKey ? { primaryVendorKey: parsed.primaryVendorKey } : {}),
+      ...(parsed.eligibilityApiEnabled !== undefined
+        ? { apiEnabled: parsed.eligibilityApiEnabled }
+        : {}),
+      ...(parsed.portalRpaEnabled !== undefined ? { rpaEnabled: parsed.portalRpaEnabled } : {}),
+      ...(parsed.eligibilityVoiceEnabled !== undefined
+        ? { voiceEnabled: parsed.eligibilityVoiceEnabled }
+        : {}),
+      ...(parsed.defaultProviderNpi !== undefined
+        ? { defaultProviderNpi: parsed.defaultProviderNpi || null }
+        : {}),
+      ...(parsed.defaultProviderTaxId !== undefined
+        ? { defaultProviderTaxId: parsed.defaultProviderTaxId || null }
+        : {}),
+      ...(parsed.defaultServiceType !== undefined
+        ? { defaultServiceType: parsed.defaultServiceType || '30' }
+        : {}),
+      ...(parsed.defaultProviderOrgName !== undefined
+        ? { defaultProviderOrgName: parsed.defaultProviderOrgName || null }
+        : {}),
     })
 
     // Enabling portal RPA ensures a practice-scoped Availity eligibility playbook exists.

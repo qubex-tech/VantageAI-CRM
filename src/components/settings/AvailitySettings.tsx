@@ -79,6 +79,11 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
   const [eligibilityVoiceEnabled, setEligibilityVoiceEnabled] = useState(
     initialIntegration?.eligibilityVoiceEnabled ?? true
   )
+  const [primaryVendorKey, setPrimaryVendorKey] = useState('availity')
+  const [vendors, setVendors] = useState<Array<{ vendorKey: string; displayName: string }>>([
+    { vendorKey: 'availity', displayName: 'Availity' },
+  ])
+  const [defaultProviderOrgName, setDefaultProviderOrgName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -127,6 +132,33 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
     setPortalRpaUseMock(initialIntegration?.portalRpaUseMock ?? true)
     setEligibilityVoiceEnabled(initialIntegration?.eligibilityVoiceEnabled ?? true)
   }, [initialIntegration])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch(apiUrl('/api/settings/eligibility'))
+        if (!res.ok) return
+        const data = await res.json()
+        if (cancelled) return
+        if (Array.isArray(data.vendors) && data.vendors.length) {
+          setVendors(data.vendors)
+        }
+        if (data.settings?.primaryVendorKey) {
+          setPrimaryVendorKey(data.settings.primaryVendorKey)
+        }
+        if (typeof data.settings?.defaultProviderOrgName === 'string') {
+          setDefaultProviderOrgName(data.settings.defaultProviderOrgName)
+        }
+      } catch {
+        // ignore
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [practiceId])
 
   useEffect(() => {
     let cancelled = false
@@ -217,6 +249,8 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
           portalRpaEnabled,
           portalRpaUseMock,
           eligibilityVoiceEnabled,
+          primaryVendorKey,
+          defaultProviderOrgName,
         }),
       })
       const data = await response.json()
@@ -341,8 +375,9 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
           Insurance Eligibility Agent
         </CardTitle>
         <CardDescription className="text-sm text-gray-500">
-          Choose which verification methods this practice uses. Enabled methods run in order: API →
-          portal RPA → call to insurance.
+          Choose which verification methods this practice uses. Enabled methods run in order:
+          clearinghouse API → portal RPA → call to insurance. Availity and Stedi are per-practice
+          connections — pick the API vendor below.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -354,11 +389,30 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
             </p>
           </div>
 
+          <div>
+            <Label className="font-medium">API clearinghouse</Label>
+            <p className="text-sm text-gray-500 mt-1 mb-2">
+              Which third-party service this practice uses for 270/271 checks
+            </p>
+            <Select value={primaryVendorKey} onValueChange={setPrimaryVendorKey} disabled={loading}>
+              <SelectTrigger className="max-w-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {vendors.map((vendor) => (
+                  <SelectItem key={vendor.vendorKey} value={vendor.vendorKey}>
+                    {vendor.displayName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="flex items-center justify-between">
             <div>
-              <Label className="font-medium">Availity API</Label>
+              <Label className="font-medium">Clearinghouse API</Label>
               <p className="text-sm text-gray-500 mt-1">
-                Coverages API (270/271) real-time eligibility inquiry
+                Real-time eligibility inquiry (270/271) via the selected vendor
               </p>
             </div>
             <Switch
@@ -458,6 +512,16 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
               value={defaultProviderNpi}
               onChange={(e) => setDefaultProviderNpi(e.target.value)}
               placeholder="10-digit NPI"
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <Label htmlFor="defaultProviderOrgName">Provider organization name</Label>
+            <Input
+              id="defaultProviderOrgName"
+              value={defaultProviderOrgName}
+              onChange={(e) => setDefaultProviderOrgName(e.target.value)}
+              placeholder="Required for Stedi"
               className="mt-1"
             />
           </div>

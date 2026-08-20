@@ -5,9 +5,34 @@ import { insurancePolicyFormSchema } from '@/lib/validations'
 import { createAuditLog, createTimelineEntry } from '@/lib/audit'
 import { emitEvent } from '@/lib/outbox'
 import { normalizePhoneForDialing } from '@/lib/phone'
+import {
+  getPracticeEligibilitySettings,
+  upsertPayerIdMap,
+} from '@/lib/eligibility/clearinghouse'
 
-function mapBodyToPolicyData(body: Record<string, unknown>, practiceId: string, patientId: string) {
+async function mapBodyToPolicyData(
+  body: Record<string, unknown>,
+  practiceId: string,
+  patientId: string,
+  existing?: { availityPayerId?: string | null; clearinghousePayerIds?: unknown } | null
+) {
   const validated = insurancePolicyFormSchema.parse(body)
+  const settings = await getPracticeEligibilitySettings(practiceId)
+  let payerMap = upsertPayerIdMap(
+    existing?.clearinghousePayerIds,
+    'availity',
+    existing?.availityPayerId
+  )
+  if (validated.availityPayerId !== undefined) {
+    payerMap = upsertPayerIdMap(payerMap, 'availity', validated.availityPayerId || null)
+  }
+  const clearinghousePayerId =
+    validated.clearinghousePayerId ??
+    (settings.primaryVendorKey === 'availity' ? validated.availityPayerId : undefined)
+  if (clearinghousePayerId !== undefined) {
+    payerMap = upsertPayerIdMap(payerMap, settings.primaryVendorKey, clearinghousePayerId || null)
+  }
+
   return {
     practiceId,
     patientId,
@@ -31,7 +56,8 @@ function mapBodyToPolicyData(body: Record<string, unknown>, practiceId: string, 
     rxGroup: validated.rxGroup || null,
     cardFrontRef: validated.cardFrontRef || null,
     cardBackRef: validated.cardBackRef || null,
-    availityPayerId: validated.availityPayerId || null,
+    availityPayerId: payerMap.availity || null,
+    clearinghousePayerIds: payerMap,
   }
 }
 
@@ -65,7 +91,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Patient not found' }, { status: 404 })
     }
 
-    const data = mapBodyToPolicyData(body, practiceId, patientId)
+    const data = await mapBodyToPolicyData(body, practiceId, patientId)
     const policy = await prisma.insurancePolicy.create({ data })
 
     await createAuditLog({

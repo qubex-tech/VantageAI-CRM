@@ -32,9 +32,14 @@ async function getOrCreateAutomationUserId(practiceId: string): Promise<string> 
   return created.id
 }
 
-export async function finalizeEligibilityCheck(params: {
+export async function finalizeParsedEligibilityCheck(params: {
   eligibilityCheckId: string
-  coverage: AvailityCoverageRecord
+  summary: ParsedEligibilitySummary
+  rawResponse: Record<string, unknown>
+  externalId?: string | null
+  statusCode?: string | null
+  sourceLabel?: string
+  isTerminalError?: boolean
   triggerVoiceFallback?: (checkId: string, reason: string) => Promise<void>
   appointmentType?: string
 }): Promise<{
@@ -53,28 +58,25 @@ export async function finalizeEligibilityCheck(params: {
     throw new Error('Eligibility check not found')
   }
 
-  const summary = parseEligibilityResponse(params.coverage)
+  const summary = { ...params.summary }
   if (summary.rheum && params.appointmentType) {
     summary.rheum = applyCallRequiredFlag(summary.rheum, params.appointmentType)
   }
-  const statusCode = String(params.coverage.statusCode ?? '')
-  const isTerminalError =
-    statusCode === '19' ||
-    ['7', '13', '14', '15'].includes(statusCode) ||
-    summary.eligibilityStatus === 'error'
+
+  const sourceLabel = params.sourceLabel || 'Clearinghouse'
+  const isTerminalError = Boolean(params.isTerminalError || summary.eligibilityStatus === 'error')
 
   if (isTerminalError) {
     const reason =
-      summary.validationMessages.join('; ') ||
-      params.coverage.status ||
-      'Availity eligibility check failed'
+      summary.validationMessages.join('; ') || `${sourceLabel} eligibility check failed`
 
     await prisma.eligibilityCheck.update({
       where: { id: check.id },
       data: {
         status: 'failed',
-        availityStatusCode: statusCode || null,
-        rawResponse: params.coverage as object,
+        availityCoverageId: params.externalId || check.availityCoverageId,
+        availityStatusCode: params.statusCode || null,
+        rawResponse: params.rawResponse as object,
         parsedSummary: summary as object,
         errorMessage: reason,
         completedAt: new Date(),
@@ -95,6 +97,7 @@ export async function finalizeEligibilityCheck(params: {
     summary,
     payerNameRaw: check.policy.payerNameRaw,
     checkedAt: now,
+    sourceLabel,
   })
 
   const automationUserId = await getOrCreateAutomationUserId(check.practiceId)
@@ -121,9 +124,9 @@ export async function finalizeEligibilityCheck(params: {
     where: { id: check.id },
     data: {
       status: 'complete',
-      availityCoverageId: params.coverage.id || check.availityCoverageId,
-      availityStatusCode: statusCode || null,
-      rawResponse: params.coverage as object,
+      availityCoverageId: params.externalId || check.availityCoverageId,
+      availityStatusCode: params.statusCode || null,
+      rawResponse: params.rawResponse as object,
       parsedSummary: summary as object,
       completedAt: now,
     },
@@ -137,7 +140,8 @@ export async function finalizeEligibilityCheck(params: {
     resourceId: check.policyId,
     changes: {
       after: {
-        source: 'availity_eligibility',
+        source: 'clearinghouse_eligibility',
+        vendorKey: check.vendorKey,
         eligibilityCheckId: check.id,
         eligibilityStatus: summary.eligibilityStatus,
       },
@@ -147,7 +151,7 @@ export async function finalizeEligibilityCheck(params: {
   await logPatientActivity({
     patientId: check.patientId,
     type: 'insurance',
-    title: 'Insurance eligibility verified (Availity)',
+    title: `Insurance eligibility verified (${sourceLabel})`,
     description: `${summary.eligibilityStatus} — ${formatUserFacingDateTime(now, {
       timeZone: practiceTimeZone,
       dateStyle: 'medium',
@@ -157,7 +161,8 @@ export async function finalizeEligibilityCheck(params: {
       noteId: note.id,
       eligibilityCheckId: check.id,
       eligibilityStatus: summary.eligibilityStatus,
-      source: 'availity_api',
+      source: 'clearinghouse_api',
+      vendorKey: check.vendorKey,
     },
     userId: automationUserId,
   })
@@ -175,6 +180,35 @@ export async function finalizeEligibilityCheck(params: {
   }
 
   return { status: 'complete', summary }
+}
+
+export async function finalizeEligibilityCheck(params: {
+  eligibilityCheckId: string
+  coverage: AvailityCoverageRecord
+  triggerVoiceFallback?: (checkId: string, reason: string) => Promise<void>
+  appointmentType?: string
+}): Promise<{
+  status: 'complete' | 'failed' | 'fallback_voice'
+  summary?: ParsedEligibilitySummary
+}> {
+  const summary = parseEligibilityResponse(params.coverage)
+  const statusCode = String(params.coverage.statusCode ?? '')
+  const isTerminalError =
+    statusCode === '19' ||
+    ['7', '13', '14', '15'].includes(statusCode) ||
+    summary.eligibilityStatus === 'error'
+
+  return finalizeParsedEligibilityCheck({
+    eligibilityCheckId: params.eligibilityCheckId,
+    summary,
+    rawResponse: params.coverage as Record<string, unknown>,
+    externalId: params.coverage.id || null,
+    statusCode,
+    sourceLabel: 'Availity',
+    isTerminalError,
+    triggerVoiceFallback: params.triggerVoiceFallback,
+    appointmentType: params.appointmentType,
+  })
 }
 
 export async function markEligibilityCheckFailed(checkId: string, reason: string) {

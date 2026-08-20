@@ -30,6 +30,7 @@ type InsurancePolicy = {
   rxPcn?: string | null
   rxGroup?: string | null
   availityPayerId?: string | null
+  clearinghousePayerIds?: Record<string, string> | null
   eligibilityStatus?: string | null
   lastEligibilityCheckedAt?: Date | string | null
 }
@@ -225,7 +226,12 @@ export function InsuranceTab({
       onRefresh()
 
       const checkId = data.eligibility?.eligibilityCheckId
-      if (checkId && (data.path === 'availity_in_progress' || data.eligibility?.status === 'in_progress')) {
+      if (
+        checkId &&
+        (data.path === 'availity_in_progress' ||
+          data.path === 'clearinghouse_in_progress' ||
+          data.eligibility?.status === 'in_progress')
+      ) {
         for (let i = 0; i < 20; i++) {
           await new Promise((r) => setTimeout(r, 3000))
           const poll = await fetch(`/api/insurance/eligibility-check/${checkId}`)
@@ -353,6 +359,14 @@ export function InsuranceTab({
                       <span>Member ID: {maskMemberId(policy.memberId)}</span>
                       {policy.insurerPhoneRaw && <span>Insurer phone: {policy.insurerPhoneRaw}</span>}
                       {policy.availityPayerId && <span>Availity payer: {policy.availityPayerId}</span>}
+                      {policy.clearinghousePayerIds &&
+                        Object.entries(policy.clearinghousePayerIds)
+                          .filter(([vendor]) => vendor !== 'availity')
+                          .map(([vendor, id]) => (
+                            <span key={vendor}>
+                              {vendor} payer: {id}
+                            </span>
+                          ))}
                       {policy.groupNumber && (
                         <span>Group #: {policy.groupNumber}</span>
                       )}

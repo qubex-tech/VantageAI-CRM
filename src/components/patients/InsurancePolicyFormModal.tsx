@@ -53,6 +53,7 @@ type InsurancePolicy = {
   rxPcn?: string | null
   rxGroup?: string | null
   availityPayerId?: string | null
+  clearinghousePayerIds?: Record<string, string> | null
 }
 
 interface InsurancePolicyFormModalProps {
@@ -90,6 +91,7 @@ const defaultValues: InsurancePolicyFormValues = {
   rxPcn: '',
   rxGroup: '',
   availityPayerId: '',
+  clearinghousePayerId: '',
 }
 
 function isBcbsPayer(name: string): boolean {
@@ -111,6 +113,10 @@ export function InsurancePolicyFormModal({
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [uploadingFront, setUploadingFront] = useState(false)
   const [uploadingBack, setUploadingBack] = useState(false)
+  const [vendorKey, setVendorKey] = useState('availity')
+  const [vendorDisplayName, setVendorDisplayName] = useState('Availity')
+  const [payerHits, setPayerHits] = useState<Array<{ payerId: string; name: string; eligibilitySupport?: string }>>([])
+  const [payerSearchLoading, setPayerSearchLoading] = useState(false)
 
   const isEdit = !!policy
 
@@ -145,12 +151,48 @@ export function InsurancePolicyFormModal({
         rxPcn: policy.rxPcn ?? '',
         rxGroup: policy.rxGroup ?? '',
         availityPayerId: policy.availityPayerId ?? '',
+        clearinghousePayerId: policy.availityPayerId ?? '',
       })
     } else {
       setFormValues(defaultValues)
     }
     setErrors({})
   }, [open, policy])
+
+  useEffect(() => {
+    if (!open || !practiceId) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/settings/eligibility?practiceId=${practiceId}`)
+        if (!res.ok) return
+        const data = await res.json()
+        if (cancelled) return
+        const key = data.settings?.primaryVendorKey || 'availity'
+        setVendorKey(key)
+        const match = (data.vendors || []).find((v: { vendorKey: string }) => v.vendorKey === key)
+        setVendorDisplayName(match?.displayName || key)
+      } catch {
+        // ignore
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [open, practiceId])
+
+  useEffect(() => {
+    if (!open || !policy) return
+    const map =
+      policy.clearinghousePayerIds && typeof policy.clearinghousePayerIds === 'object'
+        ? policy.clearinghousePayerIds
+        : {}
+    const fromMap = map[vendorKey]
+    setFormValues((prev) => ({
+      ...prev,
+      clearinghousePayerId: fromMap || (vendorKey === 'availity' ? policy.availityPayerId : '') || prev.clearinghousePayerId,
+    }))
+  }, [open, policy, vendorKey])
 
   const setValue = useCallback(<K extends keyof InsurancePolicyFormValues>(
     key: K,
@@ -281,18 +323,79 @@ export function InsurancePolicyFormModal({
                 )}
               </div>
               <div className="sm:col-span-2">
-                <Label htmlFor="availityPayerId">Availity payer ID</Label>
+                <Label htmlFor="clearinghousePayerId">{vendorDisplayName} payer ID</Label>
                 <Input
-                  id="availityPayerId"
-                  value={formValues.availityPayerId ?? ''}
-                  onChange={(e) => setValue('availityPayerId', e.target.value)}
-                  placeholder="e.g. BCBSF, AETNA"
+                  id="clearinghousePayerId"
+                  value={formValues.clearinghousePayerId ?? ''}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setValue('clearinghousePayerId', value)
+                    if (vendorKey === 'availity') setValue('availityPayerId', value)
+                    const q = value.trim()
+                    if (q.length < 2) {
+                      setPayerHits([])
+                      return
+                    }
+                    setPayerSearchLoading(true)
+                    void fetch(
+                      `/api/eligibility/payers?practiceId=${encodeURIComponent(practiceId)}&q=${encodeURIComponent(q)}`
+                    )
+                      .then((res) => (res.ok ? res.json() : { payers: [] }))
+                      .then((data) => setPayerHits(Array.isArray(data.payers) ? data.payers.slice(0, 8) : []))
+                      .catch(() => setPayerHits([]))
+                      .finally(() => setPayerSearchLoading(false))
+                  }}
+                  placeholder={`Search ${vendorDisplayName} payers`}
                   className="mt-1"
                 />
                 <p className="mt-1 text-xs text-gray-500">
-                  Required for API eligibility checks. Search payers in Settings → Availity.
+                  Required for API eligibility checks. IDs are vendor-specific — an Availity ID will
+                  not work on Stedi.
                 </p>
+                {payerSearchLoading && (
+                  <p className="mt-1 text-xs text-gray-400">Searching payers…</p>
+                )}
+                {payerHits.length > 0 && (
+                  <ul className="mt-2 max-h-40 overflow-auto rounded-md border border-gray-200 bg-white text-sm">
+                    {payerHits.map((hit) => (
+                      <li key={hit.payerId}>
+                        <button
+                          type="button"
+                          className="flex w-full items-start justify-between gap-2 px-3 py-2 text-left hover:bg-gray-50"
+                          onClick={() => {
+                            setValue('clearinghousePayerId', hit.payerId)
+                            if (vendorKey === 'availity') setValue('availityPayerId', hit.payerId)
+                            if (!formValues.payerNameRaw) setValue('payerNameRaw', hit.name)
+                            setPayerHits([])
+                          }}
+                        >
+                          <span>
+                            <span className="font-medium text-gray-900">{hit.name}</span>
+                            <span className="ml-2 text-gray-500">{hit.payerId}</span>
+                          </span>
+                          {hit.eligibilitySupport && (
+                            <span className="shrink-0 text-xs text-gray-400">
+                              {hit.eligibilitySupport}
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
+              {vendorKey !== 'availity' && (
+                <div className="sm:col-span-2">
+                  <Label htmlFor="availityPayerId">Availity payer ID (portal RPA)</Label>
+                  <Input
+                    id="availityPayerId"
+                    value={formValues.availityPayerId ?? ''}
+                    onChange={(e) => setValue('availityPayerId', e.target.value)}
+                    placeholder="Optional — used if portal RPA is enabled"
+                    className="mt-1"
+                  />
+                </div>
+              )}
               <div>
                 <Label htmlFor="insurerPhone">Insurer phone</Label>
                 <Input

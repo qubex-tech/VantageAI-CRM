@@ -5,8 +5,16 @@ import { insurancePolicyFormSchemaPartial } from '@/lib/validations'
 import { createAuditLog } from '@/lib/audit'
 import { emitEvent } from '@/lib/outbox'
 import { normalizePhoneForDialing } from '@/lib/phone'
+import {
+  getPracticeEligibilitySettings,
+  upsertPayerIdMap,
+} from '@/lib/eligibility/clearinghouse'
 
-function mapBodyToUpdateData(body: Record<string, unknown>) {
+async function mapBodyToUpdateData(
+  body: Record<string, unknown>,
+  practiceId: string,
+  existing: { availityPayerId?: string | null; clearinghousePayerIds?: unknown }
+) {
   const validated = insurancePolicyFormSchemaPartial.parse(body)
   const data: Record<string, unknown> = {}
   if (validated.payerNameRaw !== undefined) data.payerNameRaw = validated.payerNameRaw
@@ -31,7 +39,24 @@ function mapBodyToUpdateData(body: Record<string, unknown>) {
   if (validated.rxGroup !== undefined) data.rxGroup = validated.rxGroup || null
   if (validated.cardFrontRef !== undefined) data.cardFrontRef = validated.cardFrontRef || null
   if (validated.cardBackRef !== undefined) data.cardBackRef = validated.cardBackRef || null
-  if (validated.availityPayerId !== undefined) data.availityPayerId = validated.availityPayerId || null
+
+  if (validated.availityPayerId !== undefined || validated.clearinghousePayerId !== undefined) {
+    const settings = await getPracticeEligibilitySettings(practiceId)
+    let payerMap = upsertPayerIdMap(existing.clearinghousePayerIds, 'availity', existing.availityPayerId)
+    if (validated.availityPayerId !== undefined) {
+      payerMap = upsertPayerIdMap(payerMap, 'availity', validated.availityPayerId || null)
+    }
+    if (validated.clearinghousePayerId !== undefined) {
+      payerMap = upsertPayerIdMap(
+        payerMap,
+        settings.primaryVendorKey,
+        validated.clearinghousePayerId || null
+      )
+    }
+    data.clearinghousePayerIds = payerMap
+    data.availityPayerId = payerMap.availity || null
+  }
+
   return data
 }
 
@@ -60,7 +85,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Insurance policy not found' }, { status: 404 })
     }
 
-    const data = mapBodyToUpdateData(body)
+    const data = await mapBodyToUpdateData(body, practiceId, existing)
     const policy = await prisma.insurancePolicy.update({
       where: { id },
       data,

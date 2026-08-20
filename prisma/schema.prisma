@@ -33,8 +33,10 @@ model Practice {
   calIntegrations            CalIntegration[]
   calEventTypeMappings       CalEventTypeMapping[]
   retellIntegrations         RetellIntegration[]
-  availityIntegrations       AvailityIntegration[]
-  eligibilityChecks          EligibilityCheck[]
+  availityIntegrations         AvailityIntegration[]
+  stediIntegration             StediIntegration?
+  practiceEligibilitySettings  PracticeEligibilitySettings?
+  eligibilityChecks            EligibilityCheck[]
   browserCredentials         BrowserCredential[]
   browserAgentRuns           BrowserAgentRun[]
   practicePlaybooks          PracticePlaybook[]
@@ -314,6 +316,8 @@ model InsurancePolicy {
   cardFrontRef           String? // Blob storage ref/URL only
   cardBackRef            String? // Blob storage ref/URL only
   availityPayerId        String? // Availity payer identifier for 270/271
+  /// Vendor-keyed payer IDs, e.g. { "availity": "AETNA", "stedi": "87726" }
+  clearinghousePayerIds  Json?
   eligibilityStatus      String? // active, inactive, unknown, error, pending
   lastEligibilityCheckedAt DateTime?
   createdAt              DateTime  @default(now())
@@ -359,6 +363,46 @@ model AvailityIntegration {
 
   @@index([practiceId])
   @@map("availity_integrations")
+}
+
+/// Practice-level eligibility cascade: which methods run, and which clearinghouse API to use.
+model PracticeEligibilitySettings {
+  id                       String   @id @default(uuid())
+  practiceId               String   @unique
+  /// Registered vendor key (availity, stedi, …). Not a closed enum so new adapters do not need a migration.
+  primaryVendorKey         String   @default("availity")
+  apiEnabled               Boolean  @default(true)
+  rpaEnabled               Boolean  @default(false)
+  voiceEnabled             Boolean  @default(true)
+  defaultProviderNpi       String?
+  defaultProviderTaxId     String?
+  defaultProviderOrgName   String?
+  defaultServiceType       String   @default("30")
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId])
+  @@map("practice_eligibility_settings")
+}
+
+/// Practice-scoped Stedi clearinghouse credentials (API key auth).
+model StediIntegration {
+  id               String   @id @default(uuid())
+  practiceId       String   @unique
+  apiKeyEnc        String?
+  environment      String   @default("test") // test | production
+  apiBaseUrl       String?
+  useMockResponses Boolean  @default(true)
+  isActive         Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId])
+  @@map("stedi_integrations")
 }
 
 /// Practice-scoped portal login for browser-agent playbooks (Availity, payer portals, etc.)
@@ -443,7 +487,9 @@ model EligibilityCheck {
   practiceId          String
   patientId           String
   policyId            String
-  source              String    @default("availity_api") // availity_api | availity_rpa | voice_agent
+  source              String    @default("availity_api") // clearinghouse_api | availity_api | availity_rpa | voice_agent
+  /// Registered clearinghouse vendor key when source is an API check
+  vendorKey           String?
   status              String    @default("pending") // pending | in_progress | complete | failed | fallback_voice
   availityCoverageId  String?
   availityStatusCode  String?

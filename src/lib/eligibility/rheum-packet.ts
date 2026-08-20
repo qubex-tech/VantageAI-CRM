@@ -9,6 +9,7 @@ export type EligibilityNetworkStatus = 'inn' | 'onn' | 'unknown'
 
 export type EligibilityPacketSource =
   | 'availity_api'
+  | 'stedi_api'
   | 'availity_rpa'
   | 'voice'
   | 'manual'

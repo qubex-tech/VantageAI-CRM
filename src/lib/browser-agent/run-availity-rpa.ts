@@ -5,6 +5,7 @@ import {
   searchAvailityPayers,
 } from '@/lib/availity'
 import { markEligibilityCheckFailed } from '@/lib/eligibility/finalize-check'
+import { getPayerIdForVendor } from '@/lib/eligibility/clearinghouse/payer-ids'
 import {
   normalizePayerText,
   pickBestPayerLabel,
@@ -198,7 +199,7 @@ export async function runAvailityRpaEligibility(
   const resolvedPayer = await resolveAvailityPayerForRpa({
     practiceId: input.practiceId,
     payerNameRaw: policy.payerNameRaw,
-    availityPayerId: policy.availityPayerId,
+    availityPayerId: getPayerIdForVendor(policy, 'availity'),
   })
 
   let checkId = input.eligibilityCheckId

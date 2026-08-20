@@ -1,30 +1,24 @@
-import { prisma } from '@/lib/db'
+import { getPracticeEligibilitySettings } from './clearinghouse/settings'
 
 export interface EligibilityPathFlags {
   apiEnabled: boolean
   rpaEnabled: boolean
   voiceEnabled: boolean
+  primaryVendorKey: string
 }
 
 /**
  * Practice-level verification methods for insurance eligibility cascade.
- * Defaults match historical behavior when the integration row is missing.
+ * Defaults match historical behavior when the settings row is missing.
  */
 export async function getEligibilityPathFlags(
   practiceId: string
 ): Promise<EligibilityPathFlags> {
-  const integration = await prisma.availityIntegration.findUnique({
-    where: { practiceId },
-    select: {
-      eligibilityApiEnabled: true,
-      portalRpaEnabled: true,
-      eligibilityVoiceEnabled: true,
-    },
-  })
-
+  const settings = await getPracticeEligibilitySettings(practiceId)
   return {
-    apiEnabled: integration?.eligibilityApiEnabled ?? true,
-    rpaEnabled: integration?.portalRpaEnabled ?? false,
-    voiceEnabled: integration?.eligibilityVoiceEnabled ?? true,
+    apiEnabled: settings.apiEnabled,
+    rpaEnabled: settings.rpaEnabled,
+    voiceEnabled: settings.voiceEnabled,
+    primaryVendorKey: settings.primaryVendorKey,
   }
 }

@@ -40,10 +40,12 @@ export interface RunInsuranceVerificationInput {
 
 export interface RunInsuranceVerificationResult {
   path:
+    | 'clearinghouse'
     | 'availity'
     | 'availity_rpa'
     | 'availity_rpa_in_progress'
     | 'voice'
+    | 'clearinghouse_in_progress'
     | 'availity_in_progress'
     | 'skipped'
     | 'medicare_tx_nonpar'
@@ -396,7 +398,7 @@ export async function runInsuranceVerification(
       practiceId: input.practiceId,
       patientId: input.patientId,
     })
-    return fallback('Availity API disabled in settings')
+    return fallback('Clearinghouse API disabled in settings')
   }
 
   try {
@@ -407,6 +409,7 @@ export async function runInsuranceVerification(
       policyId: input.policyId,
       appointmentType: input.appointmentType,
     })
+    const vendorLabel = eligibility.vendorDisplayName || 'clearinghouse'
 
     if (eligibility.status === 'complete') {
       const summary = attachAppointmentFlags(
@@ -422,7 +425,7 @@ export async function runInsuranceVerification(
       const call = requiresCallConfirmation(input.appointmentType)
       const unknown = summary?.rheum ? listUnknownRheumFields(summary.rheum) : []
       return {
-        path: 'availity',
+        path: 'clearinghouse',
         eligibility: { ...eligibility, summary: summary as Record<string, unknown> | undefined },
         callRequired: call.required || Boolean(summary?.rheum?.callRequired),
         structuredVoicePrompt:
@@ -433,7 +436,7 @@ export async function runInsuranceVerification(
                 appointmentType: input.appointmentType,
               })
             : undefined,
-        message: `Eligibility verified via Availity (${summary?.eligibilityStatus || 'complete'})${
+        message: `Eligibility verified via ${vendorLabel} (${summary?.eligibilityStatus || 'complete'})${
           call.required ? ' — SOP requires call confirmation' : ''
         }`,
       }
@@ -441,19 +444,19 @@ export async function runInsuranceVerification(
 
     if (eligibility.status === 'in_progress' || eligibility.status === 'pending') {
       return {
-        path: 'availity_in_progress',
+        path: 'clearinghouse_in_progress',
         eligibility,
-        message: 'Availity eligibility check in progress',
+        message: `${vendorLabel} eligibility check in progress`,
       }
     }
 
     return fallback(
-      eligibility.errorMessage || 'Availity API eligibility failed',
+      eligibility.errorMessage || `${vendorLabel} eligibility failed`,
       eligibility.eligibilityCheckId || undefined
     )
   } catch (error) {
-    const reason = error instanceof Error ? error.message : 'Availity check failed'
-    console.warn('[runInsuranceVerification] Availity API threw, trying next enabled methods', {
+    const reason = error instanceof Error ? error.message : 'Clearinghouse eligibility check failed'
+    console.warn('[runInsuranceVerification] Clearinghouse API threw, trying next enabled methods', {
       practiceId: input.practiceId,
       patientId: input.patientId,
       reason,

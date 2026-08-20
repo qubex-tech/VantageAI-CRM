@@ -22,6 +22,7 @@ import { ClinicalIntegrationsSettings } from './ClinicalIntegrationsSettings'
 import { OutboundCustomerNotificationsSettings } from './OutboundCustomerNotificationsSettings'
 import { OutboundAgentsSettings } from './OutboundAgentsSettings'
 import { AvailitySettings } from './AvailitySettings'
+import { StediSettings } from './StediSettings'
 import { PreChartTemplateSettings } from './PreChartTemplateSettings'
 import { AriaScribeSettings } from './AriaScribeSettings'
 import { PebbleIndexSettings } from './PebbleIndexSettings'
@@ -56,6 +57,7 @@ export function PracticeAPIConfiguration() {
   const [calIntegration, setCalIntegration] = useState<any>(null)
   const [retellIntegration, setRetellIntegration] = useState<any>(null)
   const [availityIntegration, setAvailityIntegration] = useState<any>(null)
+  const [stediIntegration, setStediIntegration] = useState<any>(null)
   const [resendIntegration, setResendIntegration] = useState<any>(null)
   const [twilioIntegration, setTwilioIntegration] = useState<any>(null)
   const [telnyxIntegration, setTelnyxIntegration] = useState<any>(null)
@@ -87,6 +89,7 @@ export function PracticeAPIConfiguration() {
       setCalIntegration(null)
       setRetellIntegration(null)
       setAvailityIntegration(null)
+      setStediIntegration(null)
       setResendIntegration(null)
       setTwilioIntegration(null)
       setTelnyxIntegration(null)
@@ -122,6 +125,12 @@ export function PracticeAPIConfiguration() {
         if (availityResponse.ok) {
           const availityData = await availityResponse.json()
           setAvailityIntegration(availityData.integration)
+        }
+
+        const stediResponse = await fetch(`/api/settings/stedi?practiceId=${selectedPracticeId}`)
+        if (stediResponse.ok) {
+          const stediData = await stediResponse.json()
+          setStediIntegration(stediData.integration)
         }
 
         // Fetch Resend integration
@@ -256,6 +265,10 @@ export function PracticeAPIConfiguration() {
                   practiceId={selectedPracticeId}
                   initialIntegration={availityIntegration}
                 />
+                <StediSettingsWithPracticeId
+                  practiceId={selectedPracticeId}
+                  initialIntegration={stediIntegration}
+                />
                 <ResendSettingsWithPracticeId
                   practiceId={selectedPracticeId}
                   initialIntegration={resendIntegration}
@@ -352,6 +365,16 @@ function AvailitySettingsWithPracticeId({
   initialIntegration: any
 }) {
   return <AvailitySettings initialIntegration={initialIntegration} practiceId={practiceId} />
+}
+
+function StediSettingsWithPracticeId({
+  practiceId,
+  initialIntegration,
+}: {
+  practiceId: string
+  initialIntegration: any
+}) {
+  return <StediSettings initialIntegration={initialIntegration} practiceId={practiceId} />
 }
 
 function ResendSettingsWithPracticeId({ 

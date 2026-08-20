@@ -64,9 +64,10 @@ export function formatEligibilityNoteContent(params: {
   summary: ParsedEligibilitySummary
   payerNameRaw?: string
   checkedAt?: Date
+  sourceLabel?: string
 }): string {
-  const { summary, payerNameRaw, checkedAt } = params
-  const lines: string[] = ['Insurance Eligibility (Availity)']
+  const { summary, payerNameRaw, checkedAt, sourceLabel = 'Availity' } = params
+  const lines: string[] = [`Insurance Eligibility (${sourceLabel})`]
 
   if (checkedAt) {
     lines.push(`Checked at: ${checkedAt.toLocaleString()}`)
