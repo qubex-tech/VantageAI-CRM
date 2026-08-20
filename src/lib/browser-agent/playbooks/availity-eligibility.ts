@@ -1351,9 +1351,10 @@ const SERVICE_TYPE_FIELD_SELECTORS = [
   'input[aria-label*="Benefit / Service Type" i]',
   'input[aria-label*="Service Type" i]',
   '[data-testid*="serviceType" i] input',
-  // Availity react-select often exposes the combobox, not a bare input name.
   '[id*="serviceType" i] input',
   '[class*="serviceType" i] input',
+  'label:has-text("Benefit / Service Type") ~ * input',
+  'label:has-text("Benefit / Service Type") + * input',
 ]
 
 function isOffice98ServiceType(label: string): boolean {
@@ -1362,46 +1363,62 @@ function isOffice98ServiceType(label: string): boolean {
   if (/psychiatric|inpatient|hospital|facility|ambulance|emergency|health benefit plan coverage/i.test(t)) {
     return false
   }
-  // Lonestar: Professional (Physician) Visit - Office - 98
+  // Require Office-98 — sidebar history shows "Professional (Physician) Visit - Office"
+  // WITHOUT 98 and must never count as selected.
   if (/\b98\b/.test(t) && /office/i.test(t) && /physician|professional|visit/i.test(t)) return true
-  if (/professional\s*\(physician\)\s*visit\s*-\s*office/i.test(t)) return true
+  if (/professional\s*\(physician\)\s*visit\s*-\s*office\s*-\s*98/i.test(t)) return true
   return false
 }
 
 function serviceTypeMatchesWanted(option: string, wantedLabel: string): boolean {
-  if (isOffice98ServiceType(option) && (/98/.test(wantedLabel) || /office/i.test(wantedLabel))) {
-    return true
-  }
+  if (isOffice98ServiceType(option)) return true
   const compact = compactPayerText(option)
   const wanted = compactPayerText(wantedLabel)
   if (!compact || !wanted) return false
-  if (compact === wanted || compact.includes(wanted) || wanted.includes(compact)) {
-    return !/psychiatric|inpatient|health benefit plan coverage/i.test(option)
-  }
-  return false
+  if (!(compact === wanted || compact.includes(wanted) || wanted.includes(compact))) return false
+  if (/psychiatric|inpatient|health benefit plan coverage/i.test(option)) return false
+  if (/\b98\b/.test(wantedLabel) && !/\b98\b/.test(option)) return false
+  return true
 }
 
+function isDefaultHbpcServiceType(label: string): boolean {
+  return /health benefit plan coverage/i.test(label)
+}
+
+/** Read chips only from the Benefit / Service Type control — never the history sidebar. */
 async function readServiceTypeChips(ctx: PlaybookContext): Promise<string[]> {
   if (!ctx.session) return []
   const labels: string[] = []
   const seen = new Set<string>()
-  const chips =
+
+  const scoped =
     (await ctx.session.locateAllAcrossFrames?.(
       [
-        '[class*="multiValue"]',
-        '[class*="multi-value"]',
-        '[class*="ValueContainer"] [class*="multi"]',
-        '[class*="chip"]',
+        'label:has-text("Benefit / Service Type") ~ * [class*="multiValue"]',
+        'label:has-text("Benefit / Service Type") + * [class*="multiValue"]',
+        '[aria-label*="Benefit / Service Type" i] [class*="multiValue"]',
+        '[aria-label*="Service Type" i] [class*="multiValue"]',
+        '[class*="serviceType" i] [class*="multiValue"]',
+        '[id*="serviceType" i] [class*="multiValue"]',
       ].join(', '),
-      { limit: 20 }
+      { limit: 10 }
     )) || []
+
+  const chips =
+    scoped.length > 0
+      ? scoped
+      : ((await ctx.session.locateAllAcrossFrames?.(
+          '[class*="multiValue"], [class*="multi-value"]',
+          { limit: 12 }
+        )) || [])
+
   for (const chip of chips) {
     const text = ((await chip.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim()
     if (!text || text.length < 4 || text.length > 140) continue
-    // Ignore chrome that isn't a service-type chip.
-    if (!/\b\d{1,2}\b|visit|coverage|professional|physician|telemedicine|psychiatric|office/i.test(text)) {
+    if (!/-\s*[A-Z0-9]{1,4}\b/.test(text) && !/health benefit plan coverage|visit\s*-\s*office/i.test(text)) {
       continue
     }
+    if (/rodriguez|rendon|rushing|, [A-Z]\b/i.test(text) && !/-\s*\d{2}\b/.test(text)) continue
     const key = compactPayerText(text)
     if (!key || seen.has(key)) continue
     seen.add(key)
@@ -1410,36 +1427,71 @@ async function readServiceTypeChips(ctx: PlaybookContext): Promise<string[]> {
   return labels
 }
 
-/** Clear Benefit / Service Type multi-select without opening the dropdown forever. */
+async function serviceTypeFieldLooksCorrect(
+  ctx: PlaybookContext,
+  wantedLabel: string
+): Promise<{ ok: boolean; chips: string[] }> {
+  const chips = await readServiceTypeChips(ctx)
+  if (!chips.length) {
+    const body = (await ctx.session?.collectTextAcrossFrames?.()) || ''
+    const section = body.match(
+      /Benefit\s*\/\s*Service Type[\s\S]{0,280}?(?=Submit another|Submit\b|Place of Service|Provider Type|$)/i
+    )
+    const slice = section?.[0] || ''
+    if (isOffice98ServiceType(slice) && !isDefaultHbpcServiceType(slice)) {
+      return { ok: true, chips: ['Professional (Physician) Visit - Office - 98'] }
+    }
+    if (isDefaultHbpcServiceType(slice)) {
+      return { ok: false, chips: ['Health Benefit Plan Coverage - 30'] }
+    }
+    return { ok: false, chips }
+  }
+  const hasGood = chips.some((c) => isOffice98ServiceType(c) || serviceTypeMatchesWanted(c, wantedLabel))
+  const hasBad = chips.some((c) => isDefaultHbpcServiceType(c) || /psychiatric|inpatient/i.test(c))
+  return { ok: hasGood && !hasBad, chips }
+}
+
 async function clearAvailityServiceTypeChips(ctx: PlaybookContext): Promise<void> {
   if (!ctx.session) return
   const page = ctx.session.page
 
-  // Only the clear (×) control — never dropdownIndicator / indicatorContainer (that toggles the menu).
   for (const sel of [
-    '[class*="clearIndicator"]',
-    '[class*="clear-indicator"]',
-    '[aria-label="Clear"]',
-    '[aria-label*="clear all" i]',
-    'div[class*="av-select"] [class*="clearIndicator"]',
-    'label:has-text("Benefit / Service Type") ~ * [class*="clearIndicator"]',
+    '[class*="multiValue"]:has-text("Health Benefit Plan Coverage") [class*="remove"]',
+    '[class*="multiValue"]:has-text("Health Benefit") button',
+    '[class*="multi-value"]:has-text("Health Benefit Plan Coverage") [class*="remove"]',
+    'div:has-text("Health Benefit Plan Coverage - 30") [class*="remove"]',
   ]) {
-    const clearAll = (await ctx.session.findLocator?.(sel, 1_000)) || null
+    const removeHbpc = (await ctx.session.findLocator?.(sel, 1_200)) || null
+    if (removeHbpc) {
+      await removeHbpc.click({ timeout: 2_500 }).catch(() => undefined)
+      await page.waitForTimeout(300)
+      break
+    }
+  }
+
+  for (const sel of [
+    'label:has-text("Benefit / Service Type") ~ * [class*="clearIndicator"]',
+    'label:has-text("Benefit / Service Type") + * [class*="clearIndicator"]',
+    '[aria-label*="Benefit / Service Type" i] [class*="clearIndicator"]',
+    '[class*="serviceType" i] [class*="clearIndicator"]',
+    '[class*="clearIndicator"]',
+    '[aria-label="Clear"]',
+  ]) {
+    const clearAll = (await ctx.session.findLocator?.(sel, 800)) || null
     if (!clearAll) continue
-    await clearAll.click({ timeout: 2_500 }).catch(() => undefined)
-    await page.waitForTimeout(350)
+    await clearAll.click({ timeout: 2_000 }).catch(() => undefined)
+    await page.waitForTimeout(300)
     break
   }
 
-  // Remove remaining chips via their × buttons (max 6 — fail closed, don't loop forever).
   for (let pass = 0; pass < 6; pass++) {
     const removeButtons =
       (await ctx.session.locateAllAcrossFrames?.(
         [
-          '[class*="multiValue"] [class*="remove"]',
-          '[class*="multi-value"] [class*="remove"]',
+          'label:has-text("Benefit / Service Type") ~ * [class*="multiValue"] [class*="remove"]',
+          'label:has-text("Benefit / Service Type") + * [class*="multiValue"] [class*="remove"]',
+          '[class*="serviceType" i] [class*="multiValue"] [class*="remove"]',
           '[class*="multiValue__remove"]',
-          '[class*="css-"][class*="multiValue"] button',
         ].join(', '),
         { limit: 8 }
       )) || []
@@ -1448,14 +1500,34 @@ async function clearAvailityServiceTypeChips(ctx: PlaybookContext): Promise<void
     await page.waitForTimeout(150)
   }
 
-  // Escape closes any menu left open by a mis-click.
   await page.keyboard?.press?.('Escape').catch(() => undefined)
 }
 
+async function typeIntoServiceTypeSearch(
+  ctx: PlaybookContext,
+  input: BrowserLocator,
+  term: string
+): Promise<void> {
+  const page = ctx.session!.page
+  await input.click({ timeout: 5_000 }).catch(() => undefined)
+  await page.waitForTimeout(200)
+  await input.fill('').catch(() => undefined)
+  for (let i = 0; i < 3; i++) {
+    await page.keyboard?.press?.('Backspace').catch(() => undefined)
+  }
+  if (input.pressSequentially) {
+    await input.pressSequentially(term, { delay: 40 }).catch(async () => {
+      await page.keyboard?.type?.(term, { delay: 40 }).catch(() => undefined)
+    })
+  } else if (page.keyboard?.type) {
+    await page.keyboard.type(term, { delay: 40 }).catch(() => undefined)
+  } else {
+    await safeFillInput(input, term)
+  }
+}
+
 /**
- * Availity Benefit / Service Type is a multi-select. Do NOT reuse payer selectTypeaheadOption —
- * empty input + open menu after chip select makes confirmSelection loop / look "stuck",
- * and ArrowDown+Enter often commits Psychiatric / HBPC-30.
+ * Select Lonestar Office-98. Never trust sidebar history text as "already selected".
  */
 async function selectAvailityBenefitServiceType(
   ctx: PlaybookContext,
@@ -1464,44 +1536,80 @@ async function selectAvailityBenefitServiceType(
   const label = benefitServiceType.trim() || DEFAULT_AVAILITY_BENEFIT_SERVICE_TYPE
   if (!ctx.session) return { ok: false, errorMessage: 'No browser session' }
   const page = ctx.session.page
-  const deadline = Date.now() + 45_000
+  const deadline = Date.now() + 40_000
 
   await clearAvailityServiceTypeChips(ctx)
 
-  const already = await readServiceTypeChips(ctx)
-  if (already.some((c) => serviceTypeMatchesWanted(c, label))) {
-    // Still clear wrong companions if Office-98 is already present with junk chips.
-    if (already.some((c) => !serviceTypeMatchesWanted(c, label))) {
-      await clearAvailityServiceTypeChips(ctx)
-    } else {
-      ctx.log('Availity benefit/service type already selected', { selected: already })
-      return { ok: true, selectedLabel: already.find((c) => serviceTypeMatchesWanted(c, label)) }
-    }
+  const pre = await serviceTypeFieldLooksCorrect(ctx, label)
+  if (pre.ok) {
+    ctx.log('Availity benefit/service type already selected', { selected: pre.chips })
+    return { ok: true, selectedLabel: pre.chips.find((c) => isOffice98ServiceType(c)) || pre.chips[0] }
   }
 
   const searchTerms = uniqueStrings([
     'Office - 98',
+    'Visit - Office - 98',
+    'Professional (Physician) Visit - Office - 98',
     '98',
-    'Physician Visit - Office',
-    label.replace(/professional\s*\(physician\)\s*/i, '').trim(),
-  ]).filter((t) => t.length >= 2 && t.length <= 40)
+  ]).filter((t) => t.length >= 2 && t.length <= 60)
 
   let lastCandidates: string[] = []
 
   for (const term of searchTerms) {
     if (Date.now() > deadline) break
 
-    const input = await findInputBySelectors(ctx, SERVICE_TYPE_FIELD_SELECTORS)
+    let input = await findInputBySelectors(ctx, SERVICE_TYPE_FIELD_SELECTORS)
     if (!input) {
-      return {
-        ok: false,
-        errorMessage: 'Benefit / Service Type input not found',
-      }
+      const control =
+        (await ctx.session.findLocator?.(
+          'label:has-text("Benefit / Service Type"), [class*="multiValue"]:has-text("Health Benefit Plan Coverage"), text=/Benefit \\/ Service Type/i',
+          2_000
+        )) || null
+      if (control) await control.click({ timeout: 3_000 }).catch(() => undefined)
+      input = await findInputBySelectors(ctx, SERVICE_TYPE_FIELD_SELECTORS)
+    }
+    if (!input) {
+      return { ok: false, errorMessage: 'Benefit / Service Type input not found' }
     }
 
-    await input.click({ timeout: 5_000 }).catch(() => undefined)
-    await safeFillInput(input, term)
-    await page.waitForTimeout(1100)
+    await clearAvailityServiceTypeChips(ctx)
+    await typeIntoServiceTypeSearch(ctx, input, term)
+    await page.waitForTimeout(1200)
+
+    const directOption =
+      (await ctx.session.findLocator?.(
+        [
+          '[role="option"]:has-text("Visit - Office - 98")',
+          '[role="option"]:has-text("Office - 98")',
+          '[role="option"]:has-text("Professional (Physician) Visit - Office")',
+          '.av-select__option:has-text("Office - 98")',
+          '[class*="option"]:has-text("Visit - Office - 98")',
+          'text=/Professional \\(Physician\\) Visit - Office - 98/i',
+        ].join(', '),
+        3_000
+      )) || null
+
+    if (directOption) {
+      const optText = ((await directOption.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim()
+      if (!optText || isOffice98ServiceType(optText) || /office\s*-\s*98/i.test(optText)) {
+        await directOption.scrollIntoViewIfNeeded?.().catch(() => undefined)
+        await directOption.click({ timeout: 8_000 }).catch(() => undefined)
+        await page.waitForTimeout(500)
+        await page.keyboard?.press?.('Escape').catch(() => undefined)
+        const check = await serviceTypeFieldLooksCorrect(ctx, label)
+        if (check.ok) {
+          ctx.log('Selected Availity benefit/service type via direct option', {
+            term,
+            selectedLabel: check.chips[0],
+            chips: check.chips,
+          })
+          return {
+            ok: true,
+            selectedLabel: check.chips.find((c) => isOffice98ServiceType(c)) || check.chips[0],
+          }
+        }
+      }
+    }
 
     const candidates = await collectTypeaheadCandidates(ctx)
     lastCandidates = candidates.map((c) => c.label).slice(0, 12)
@@ -1515,9 +1623,9 @@ async function selectAvailityBenefitServiceType(
       .map((c) => ({
         ...c,
         score: isOffice98ServiceType(c.label)
-          ? 100 + (/\b98\b/.test(c.label) ? 20 : 0) + (/professional/i.test(c.label) ? 10 : 0)
-          : serviceTypeMatchesWanted(c.label, label)
-            ? 40
+          ? 100
+          : /office\s*-\s*98/i.test(c.label)
+            ? 80
             : -1,
       }))
       .filter((c) => c.score > 0)
@@ -1532,58 +1640,54 @@ async function selectAvailityBenefitServiceType(
     await best.locator.scrollIntoViewIfNeeded?.().catch(() => undefined)
     await best.locator.click({ timeout: 8_000 }).catch(() => undefined)
     await page.waitForTimeout(500)
-    // Close multi-select menu so we don't keep appending random options.
     await page.keyboard?.press?.('Escape').catch(() => undefined)
     await page.waitForTimeout(300)
 
-    const chips = await readServiceTypeChips(ctx)
-    const good = chips.find((c) => serviceTypeMatchesWanted(c, label) || isOffice98ServiceType(c))
-    const bad = chips.filter((c) => !(serviceTypeMatchesWanted(c, label) || isOffice98ServiceType(c)))
-
-    if (good && bad.length === 0) {
+    const check = await serviceTypeFieldLooksCorrect(ctx, label)
+    if (check.ok) {
       ctx.log('Selected Availity benefit/service type', {
         term,
-        selectedLabel: good,
-        chips,
+        selectedLabel: check.chips[0],
+        chips: check.chips,
       })
-      return { ok: true, selectedLabel: good }
-    }
-
-    if (good && bad.length > 0) {
-      ctx.log('Benefit/service type has extra chips; clearing companions', { good, bad })
-      // Remove only non-matching chips via remove buttons, then re-check.
-      await clearAvailityServiceTypeChips(ctx)
-      // Re-select Office-98 once more with the same term.
-      const input2 = await findInputBySelectors(ctx, SERVICE_TYPE_FIELD_SELECTORS)
-      if (input2) {
-        await input2.click({ timeout: 3_000 }).catch(() => undefined)
-        await safeFillInput(input2, 'Office - 98')
-        await page.waitForTimeout(1100)
-        const again = await collectTypeaheadCandidates(ctx)
-        const hit = again.find((c) => isOffice98ServiceType(c.label))
-        if (hit) {
-          await hit.locator.click({ timeout: 8_000 }).catch(() => undefined)
-          await page.keyboard?.press?.('Escape').catch(() => undefined)
-          await page.waitForTimeout(300)
-        }
-      }
-      const chips2 = await readServiceTypeChips(ctx)
-      const good2 = chips2.find((c) => isOffice98ServiceType(c) || serviceTypeMatchesWanted(c, label))
-      if (good2 && chips2.every((c) => isOffice98ServiceType(c) || serviceTypeMatchesWanted(c, label))) {
-        return { ok: true, selectedLabel: good2 }
+      return {
+        ok: true,
+        selectedLabel: check.chips.find((c) => isOffice98ServiceType(c)) || check.chips[0],
       }
     }
 
     await page.keyboard?.press?.('Escape').catch(() => undefined)
   }
 
-  const finalChips = await readServiceTypeChips(ctx)
+  const llm = await tryLlmAct(
+    ctx,
+    [
+      'In Benefit / Service Type, remove "Health Benefit Plan Coverage - 30" if present.',
+      'Select exactly: Professional (Physician) Visit - Office - 98.',
+      'Do not select Psychiatric, Inpatient, Hospital, Facility, or Health Benefit Plan Coverage.',
+      'Do not change Patient ID, Date of Birth, or Provider. Do not click Submit.',
+    ].join(' '),
+    'benefitServiceType'
+  )
+  if (llm.ok) {
+    await page.waitForTimeout(800)
+    const check = await serviceTypeFieldLooksCorrect(ctx, label)
+    if (check.ok) {
+      ctx.log('Selected Availity benefit/service type via Stagehand + verify', { chips: check.chips })
+      return {
+        ok: true,
+        selectedLabel: check.chips.find((c) => isOffice98ServiceType(c)) || check.chips[0],
+      }
+    }
+  }
+
+  const final = await serviceTypeFieldLooksCorrect(ctx, label)
   return {
     ok: false,
     errorMessage: `Could not set Benefit / Service Type to Office-98 (chips: ${
-      finalChips.join('; ') || 'none'
+      final.chips.join('; ') || 'none'
     }; lastCandidates: ${lastCandidates.slice(0, 6).join('; ')})`,
-    selectedLabel: finalChips[0],
+    selectedLabel: final.chips[0],
   }
 }
 
@@ -2069,12 +2173,41 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
   const dobSelectors = [
     'input[name="patientBirthDate"]',
     'input[name="dob"]',
+    'input[name*="birth" i]',
     'input[type="date"]',
     'input[id*="dob" i]',
     'input[id*="birth" i]',
     'input[placeholder*="Birth" i]',
     'input[placeholder*="MM/DD" i]',
+    'input[aria-label*="Date of Birth" i]',
+    'input[aria-label*="Birth" i]',
+    'label:has-text("Date of Birth") ~ * input',
+    'label:has-text("Date of Birth") + input',
   ]
+
+  const fillDob = async (): Promise<boolean> => {
+    if (!dobUi) return false
+    if (await fillFirst(dobSelectors, dobUi)) return true
+    // Label-associated control (Availity Patient ID + DOB search layout).
+    const byLabel =
+      (await ctx.session!.findLocator?.(
+        'label:has-text("Date of Birth") ~ * input, label:has-text("Date of Birth") + * input, [aria-label*="Date of Birth" i], input[placeholder*="MM/DD/YYYY" i]',
+        2_500
+      )) || null
+    if (byLabel) {
+      await typeInto(page(), byLabel, dobUi)
+      return true
+    }
+    const getByLabel = page().getByLabel
+    if (getByLabel) {
+      const loc = getByLabel(/date of birth/i).first()
+      if ((await loc.count().catch(() => 0)) > 0) {
+        await typeInto(page(), loc, dobUi)
+        return true
+      }
+    }
+    return false
+  }
 
   /** Stagehand typeaheads / submitReady sometimes wipe identity fields — re-apply before Submit. */
   const refillPatientIdentity = async (reason: string) => {
@@ -2087,7 +2220,7 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
       ['input[name="patientLastName"]', 'input[id*="lastName" i]', 'input[placeholder*="Last" i]'],
       lastName
     )
-    const dobOk = await fillFirst(dobSelectors, dobUi)
+    const dobOk = await fillDob()
     let npiOk = false
     if (npi) {
       const provider = await selectAvailityProvider(ctx, npi, undefined, { allowLlm: false })
@@ -2110,7 +2243,10 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
     ['input[name="patientLastName"]', 'input[id*="lastName" i]', 'input[placeholder*="Last" i]'],
     lastName
   )
-  await fillFirst(dobSelectors, dobUi)
+  const filledDob = await fillDob()
+  if (dobUi && !filledDob) {
+    ctx.log('DOB fill missed on first pass; will retry before Submit', { dobUi })
+  }
 
   // Provider Information is one typeahead: NPI vs Tax ID. Prefer individual clinician NPI
   // (BOSE, NILANJANA) — never commit LONESTAR … PLLC / Tax ID when an NPI is set.
@@ -2243,8 +2379,52 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
     placeOfService: placeOfService || undefined,
   })
 
-  // LLM payer/service-type acts can wipe Patient ID / DOB in Availity — restore before Submit.
+  // LLM payer acts can wipe Patient ID / DOB — restore before Submit.
   await refillPatientIdentity('after-llm-form-steps')
+
+  // Final gate: never wait on Submit while DOB is empty or HBPC-30 is still selected.
+  const dobReady = await fillDob()
+  const serviceReady = await serviceTypeFieldLooksCorrect(ctx, benefitServiceType)
+  if ((dobUi && !dobReady) || !serviceReady.ok) {
+    if (!serviceReady.ok) {
+      const serviceRecheck = await selectAvailityBenefitServiceType(ctx, benefitServiceType)
+      if (!serviceRecheck.ok) {
+        if (ctx.session.screenshotDataUrl) {
+          artifacts.push(await ctx.session.screenshotDataUrl())
+        }
+        return {
+          ok: false,
+          errorMessage:
+            serviceRecheck.errorMessage ||
+            `Benefit / Service Type still wrong before Submit (chips: ${serviceReady.chips.join('; ') || 'none'})`,
+          escalateToVoice: true,
+          artifactUrls: artifacts,
+          output: {
+            pageSnippet: ((await ctx.session.collectTextAcrossFrames?.()) || '').slice(0, 2500),
+            url: page().url(),
+            chips: serviceReady.chips,
+            dobReady,
+          },
+        }
+      }
+    }
+    if (dobUi && !(await fillDob())) {
+      if (ctx.session.screenshotDataUrl) {
+        artifacts.push(await ctx.session.screenshotDataUrl())
+      }
+      return {
+        ok: false,
+        errorMessage: `Date of Birth was empty before Submit (expected ${dobUi})`,
+        escalateToVoice: true,
+        artifactUrls: artifacts,
+        output: {
+          pageSnippet: ((await ctx.session.collectTextAcrossFrames?.()) || '').slice(0, 2500),
+          url: page().url(),
+          dobUi,
+        },
+      }
+    }
+  }
 
   // Availity keeps Submit disabled while the eligibility iframe finishes loading / validating.
   const submitAnySelector =
@@ -2257,7 +2437,7 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
 
   let submitEnabled = false
   if (submitBtn) {
-    const enableDeadline = Date.now() + 60_000
+    const enableDeadline = Date.now() + 25_000
     while (Date.now() < enableDeadline) {
       const enabled = submitBtn.isEnabled ? await submitBtn.isEnabled().catch(() => false) : true
       if (enabled) {
@@ -2291,11 +2471,8 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
     // Always restore identity after Stagehand — it has cleared these fields before.
     await refillPatientIdentity('after-submitReady-llm')
     // Stagehand sometimes rewrites Benefit / Service Type — force Office-98 again if chips drifted.
-    const chipsAfterLlm = await readServiceTypeChips(ctx)
-    const serviceOk =
-      chipsAfterLlm.some((c) => isOffice98ServiceType(c) || serviceTypeMatchesWanted(c, benefitServiceType)) &&
-      chipsAfterLlm.every((c) => isOffice98ServiceType(c) || serviceTypeMatchesWanted(c, benefitServiceType))
-    if (!serviceOk) {
+    const afterLlmService = await serviceTypeFieldLooksCorrect(ctx, benefitServiceType)
+    if (!afterLlmService.ok) {
       const serviceRecheck = await selectAvailityBenefitServiceType(ctx, benefitServiceType)
       if (!serviceRecheck.ok) {
         if (ctx.session.screenshotDataUrl) {
@@ -2312,7 +2489,7 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
             pageSnippet: ((await ctx.session.collectTextAcrossFrames?.()) || '').slice(0, 2500),
             url: page().url(),
             benefitServiceType,
-            chipsAfterLlm,
+            chipsAfterLlm: afterLlmService.chips,
           },
         }
       }
@@ -2384,6 +2561,25 @@ async function submitEligibilityInquiry(ctx: PlaybookContext): Promise<PlaybookR
     }
   } else {
     await refillPatientIdentity('before-submit-click')
+    const preClickService = await serviceTypeFieldLooksCorrect(ctx, benefitServiceType)
+    if (!preClickService.ok || (dobUi && !(await fillDob()))) {
+      if (ctx.session.screenshotDataUrl) {
+        artifacts.push(await ctx.session.screenshotDataUrl())
+      }
+      return {
+        ok: false,
+        errorMessage: !preClickService.ok
+          ? `Benefit / Service Type still wrong before Submit (chips: ${preClickService.chips.join('; ') || 'none'})`
+          : `Date of Birth was empty before Submit (expected ${dobUi})`,
+        escalateToVoice: true,
+        artifactUrls: artifacts,
+        output: {
+          pageSnippet: ((await ctx.session.collectTextAcrossFrames?.()) || '').slice(0, 2500),
+          url: page().url(),
+          chips: preClickService.chips,
+        },
+      }
+    }
     await submitBtn.click({ timeout: 15_000 })
     ctx.log('Clicked Availity eligibility Submit')
   }
