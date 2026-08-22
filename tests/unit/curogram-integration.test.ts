@@ -120,15 +120,11 @@ describe('curogram integration safeguards', () => {
   })
 
   describe('resolveCurogramMappingId', () => {
-    const fhirId = 'W6s8TGka96L4tHbCRoQU8aCUj1sASobCtgwjt6SvNUY'
-    const crmId = 'a18545ca-9728-4dad-bc9f-830131b105b5'
-
-    it('prefers stored MRN over CRM UUID and never uses FHIR id', () => {
+    it('uses stored MRN when present', () => {
       expect(
         resolveCurogramMappingId({
           externalMrn: '9578',
           fetchedMrn: null,
-          crmPatientId: crmId,
         })
       ).toEqual({ mappingId: '9578', source: 'mrn' })
     })
@@ -138,29 +134,17 @@ describe('curogram integration safeguards', () => {
         resolveCurogramMappingId({
           externalMrn: null,
           fetchedMrn: '14407',
-          crmPatientId: crmId,
         })
       ).toEqual({ mappingId: '14407', source: 'mrn_fetched' })
     })
 
-    it('falls back to CRM UUID when no MRN is available', () => {
+    it('sends a blank mappingId when no account number exists', () => {
       expect(
         resolveCurogramMappingId({
           externalMrn: null,
           fetchedMrn: null,
-          crmPatientId: crmId,
         })
-      ).toEqual({ mappingId: crmId, source: 'crm_id' })
-    })
-
-    it('does not treat a FHIR id argument as mappingId', () => {
-      expect(
-        resolveCurogramMappingId({
-          externalMrn: null,
-          fetchedMrn: null,
-          crmPatientId: fhirId,
-        }).source
-      ).toBe('crm_id')
+      ).toEqual({ mappingId: '', source: 'blank' })
     })
   })
 })

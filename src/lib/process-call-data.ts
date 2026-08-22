@@ -554,14 +554,13 @@ async function triggerCurogramAfterRetellProcessing(
       const mapping = resolveCurogramMappingId({
         externalMrn: patientRecord?.externalMrn,
         fetchedMrn,
-        crmPatientId: conversation.patientId || patientRecord?.id || '',
       })
       const patientItem: CurogramPatientItemPayload = {
         firstName,
         ...(lastName ? { lastName } : {}),
         ...(dob ? { dob } : {}),
         ...(gender ? { gender } : {}),
-        // eCW secondary MRN when linked; otherwise CRM UUID. Never the FHIR Patient.id.
+        // eCW account/MRN when available; blank when there is no account number.
         mappingId: mapping.mappingId,
         ...(language ? { language } : {}),
         ...(uniquePhones.length > 0 ? { phones: uniquePhones } : {}),
