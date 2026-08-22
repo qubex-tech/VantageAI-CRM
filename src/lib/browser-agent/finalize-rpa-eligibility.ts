@@ -2,13 +2,13 @@ import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/db'
 import { createAuditLog } from '@/lib/audit'
 import { logPatientActivity } from '@/lib/patient-activity'
-import { syncPatientNoteToEhr } from '@/lib/integrations/ehr/patientNoteSync'
 import { getPracticeTimeZone } from '@/lib/practice-timezone'
 import { formatUserFacingDateTime } from '@/lib/timezone'
+import { type ParsedEligibilitySummary } from '@/lib/availity'
 import {
-  formatEligibilityNoteContent,
-  type ParsedEligibilitySummary,
-} from '@/lib/availity'
+  formatEligibilityBillingNote,
+  persistEligibilityBillingNote,
+} from '@/lib/eligibility/eligibility-billing-note'
 import { applyCallRequiredFlag } from '@/lib/eligibility/lsr-gates'
 
 async function getOrCreateAutomationUserId(practiceId: string): Promise<string> {
@@ -77,22 +77,23 @@ export async function finalizeRpaEligibilityCheck(params: {
 
   const now = new Date()
   const practiceTimeZone = await getPracticeTimeZone(check.practiceId)
-  const noteContent = formatEligibilityNoteContent({
+  const noteContent = formatEligibilityBillingNote({
     summary: params.summary,
     payerNameRaw: check.policy.payerNameRaw,
     checkedAt: now,
-  }).replace('Insurance Eligibility (Availity)', 'Insurance Eligibility (Availity Portal)')
+    sourceLabel: 'Availity Portal',
+    timeZone: practiceTimeZone,
+    patient: check.patient,
+    policy: check.policy,
+  })
 
   const automationUserId = await getOrCreateAutomationUserId(check.practiceId)
 
-  const note = await prisma.patientNote.create({
-    data: {
-      patientId: check.patientId,
-      practiceId: check.practiceId,
-      userId: automationUserId,
-      type: 'insurance',
-      content: noteContent,
-    },
+  const { noteId } = await persistEligibilityBillingNote({
+    practiceId: check.practiceId,
+    patientId: check.patientId,
+    actorUserId: automationUserId,
+    content: noteContent,
   })
 
   await prisma.insurancePolicy.update({
@@ -139,26 +140,15 @@ export async function finalizeRpaEligibilityCheck(params: {
       timeStyle: 'short',
     })}`,
     metadata: {
-      noteId: note.id,
+      noteId,
       eligibilityCheckId: check.id,
       eligibilityStatus: params.summary.eligibilityStatus,
       source: 'availity_rpa',
       browserAgentRunId: params.browserAgentRunId,
+      noteType: 'billing',
     },
     userId: automationUserId,
   })
-
-  try {
-    await syncPatientNoteToEhr({
-      practiceId: check.practiceId,
-      patientId: check.patientId,
-      noteType: 'insurance',
-      content: noteContent,
-      actorUserId: automationUserId,
-    })
-  } catch (error) {
-    console.error('[EligibilityCheck] EHR sync failed after RPA (note still saved):', error)
-  }
 
   return { status: 'complete', summary: params.summary }
 }

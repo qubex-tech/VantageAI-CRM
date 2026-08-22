@@ -40,9 +40,14 @@ export async function syncPatientNoteToEhr(params: {
   noteType: string
   content: string
   actorUserId: string
+  /**
+   * Override practice note-type settings. Used for eligibility billing notes so
+   * ordinary CRM billing notes stay Vantage-only unless staff enable them.
+   */
+  forceMode?: EhrPatientNoteSyncMode
 }): Promise<PatientNoteEhrSyncResult> {
   const settings = await getEhrSettings(params.practiceId)
-  const mode = resolveModeFromSettings(settings, params.noteType)
+  const mode = params.forceMode ?? resolveModeFromSettings(settings, params.noteType)
 
   if (mode === 'none') {
     return { status: 'skipped', reason: 'sync_disabled_for_type', mode }

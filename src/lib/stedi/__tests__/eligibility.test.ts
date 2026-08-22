@@ -248,9 +248,10 @@ describe('parseStediEligibilityResponse', () => {
     expect(JSON.stringify(detail)).not.toMatch(/stedi/i)
     expect(summary.rheum?.verifiedBy).toBe('Eligibility check')
     const note = formatEligibilityNoteContent({ summary, sourceLabel: null })
-    expect(note).toContain('Insurance Eligibility\n')
+    expect(note).toContain('Eligibility / Billing Note\n')
     expect(note).toContain('Gold Plan')
     expect(note).toContain('Walk in Clinic')
+    expect(note).toContain('Financials')
     expect(note).not.toMatch(/stedi/i)
   })
 

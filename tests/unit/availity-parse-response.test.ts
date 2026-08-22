@@ -54,15 +54,25 @@ describe('parseEligibilityResponse', () => {
 })
 
 describe('formatEligibilityNoteContent', () => {
-  it('formats a readable note', () => {
+  it('formats a readable billing eligibility note', () => {
     const summary = parseEligibilityResponse(activeCoverage)
     const note = formatEligibilityNoteContent({
       summary,
       payerNameRaw: 'BCBS',
       checkedAt: new Date('2026-07-07T12:00:00Z'),
+      timeZone: 'America/Chicago',
+      patientName: 'Jane Doe',
+      memberId: 'ZGP814392947',
+      isPrimary: true,
     })
-    expect(note).toContain('Insurance Eligibility (Availity)')
-    expect(note).toContain('Status: active')
+    expect(note).toContain('Eligibility / Billing Note (Availity)')
+    expect(note).toContain('Status: Active')
+    expect(note).toContain('Patient: Jane Doe')
+    expect(note).toContain('Policy: Primary')
+    expect(note).toContain('Member ID: ZGP814392947')
+    expect(note).toContain('Payer: Florida Blue')
+    expect(note).toContain('Plan: PPO Gold')
     expect(note).toContain('Benefits')
+    expect(note).toContain('Health Benefit Plan Coverage')
   })
 })

@@ -2,15 +2,17 @@ import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/db'
 import { createAuditLog } from '@/lib/audit'
 import { logPatientActivity } from '@/lib/patient-activity'
-import { syncPatientNoteToEhr } from '@/lib/integrations/ehr/patientNoteSync'
 import { getPracticeTimeZone } from '@/lib/practice-timezone'
 import { formatUserFacingDateTime } from '@/lib/timezone'
 import {
-  formatEligibilityNoteContent,
   parseEligibilityResponse,
   type AvailityCoverageRecord,
   type ParsedEligibilitySummary,
 } from '@/lib/availity'
+import {
+  formatEligibilityBillingNote,
+  persistEligibilityBillingNote,
+} from './eligibility-billing-note'
 import { applyCallRequiredFlag } from './lsr-gates'
 
 async function getOrCreateAutomationUserId(practiceId: string): Promise<string> {
@@ -94,23 +96,23 @@ export async function finalizeParsedEligibilityCheck(params: {
 
   const now = new Date()
   const practiceTimeZone = await getPracticeTimeZone(check.practiceId)
-  const noteContent = formatEligibilityNoteContent({
+  const noteContent = formatEligibilityBillingNote({
     summary,
     payerNameRaw: check.policy.payerNameRaw,
     checkedAt: now,
     sourceLabel,
+    timeZone: practiceTimeZone,
+    patient: check.patient,
+    policy: check.policy,
   })
 
   const automationUserId = await getOrCreateAutomationUserId(check.practiceId)
 
-  const note = await prisma.patientNote.create({
-    data: {
-      patientId: check.patientId,
-      practiceId: check.practiceId,
-      userId: automationUserId,
-      type: 'insurance',
-      content: noteContent,
-    },
+  const { noteId } = await persistEligibilityBillingNote({
+    practiceId: check.practiceId,
+    patientId: check.patientId,
+    actorUserId: automationUserId,
+    content: noteContent,
   })
 
   await prisma.insurancePolicy.update({
@@ -161,26 +163,15 @@ export async function finalizeParsedEligibilityCheck(params: {
       timeStyle: 'short',
     })}`,
     metadata: {
-      noteId: note.id,
+      noteId,
       eligibilityCheckId: check.id,
       eligibilityStatus: summary.eligibilityStatus,
       source: 'clearinghouse_api',
       vendorKey: check.vendorKey,
+      noteType: 'billing',
     },
     userId: automationUserId,
   })
-
-  try {
-    await syncPatientNoteToEhr({
-      practiceId: check.practiceId,
-      patientId: check.patientId,
-      noteType: 'insurance',
-      content: noteContent,
-      actorUserId: automationUserId,
-    })
-  } catch (error) {
-    console.error('[EligibilityCheck] EHR sync failed (note still saved in CRM):', error)
-  }
 
   return { status: 'complete', summary }
 }

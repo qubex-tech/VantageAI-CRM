@@ -2,7 +2,8 @@ import { prisma } from '@/lib/db'
 import { initiateInsuranceOutboundCall } from '@/lib/outbound-insurance-call'
 import { runAvailityRpaEligibility } from '@/lib/browser-agent'
 import type { ParsedEligibilitySummary } from '@/lib/availity'
-import { formatEligibilityNoteContent } from '@/lib/availity'
+import { persistEligibilityBillingNote, formatEligibilityBillingNote } from './eligibility-billing-note'
+import { getPracticeTimeZone } from '@/lib/practice-timezone'
 import { linkVoiceFallbackToCheck } from './finalize-check'
 import { runEligibilityCheck, type RunEligibilityCheckResult } from './run-eligibility-check'
 import { getEligibilityPathFlags, type EligibilityPathFlags } from './path-flags'
@@ -299,20 +300,29 @@ async function runMedicareTxNonParShortCircuit(params: {
     },
   })
 
-  const noteContent = formatEligibilityNoteContent({
+  const [patient, practiceTimeZone] = await Promise.all([
+    prisma.patient.findFirst({
+      where: { id: params.patientId, practiceId: params.practiceId, deletedAt: null },
+      select: { name: true, firstName: true, lastName: true, dateOfBirth: true },
+    }),
+    getPracticeTimeZone(params.practiceId),
+  ])
+
+  const noteContent = formatEligibilityBillingNote({
     summary,
     payerNameRaw: policy.payerNameRaw,
     checkedAt: now,
-  }).replace('Insurance Eligibility (Availity)', 'Insurance Eligibility (Medicare TX NON-PAR)')
+    sourceLabel: 'Medicare TX NON-PAR',
+    timeZone: practiceTimeZone,
+    patient,
+    policy,
+  })
 
-  await prisma.patientNote.create({
-    data: {
-      patientId: params.patientId,
-      practiceId: params.practiceId,
-      userId: params.userId,
-      type: 'insurance',
-      content: noteContent,
-    },
+  await persistEligibilityBillingNote({
+    practiceId: params.practiceId,
+    patientId: params.patientId,
+    actorUserId: params.userId,
+    content: noteContent,
   })
 
   return {

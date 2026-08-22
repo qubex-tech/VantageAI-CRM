@@ -1,5 +1,6 @@
 import { buildRheumPacketFromAvailityPlans } from '@/lib/eligibility/parse-availity-amounts'
 import { formatRheumPacketNoteSection } from '@/lib/eligibility/rheum-packet'
+import { formatUserFacingDateTime } from '@/lib/timezone'
 import type { AvailityCoverageRecord, EligibilityCoverageDetail, ParsedEligibilitySummary } from './types'
 
 function normalizeActiveStatus(value?: string): boolean | null {
@@ -60,121 +61,221 @@ export function parseEligibilityResponse(record: AvailityCoverageRecord): Parsed
   }
 }
 
+function titleCaseToken(value: string): string {
+  return value
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ')
+}
+
+function formatNoteDate(
+  value: string | number | Date | null | undefined,
+  timeZone?: string
+): string | undefined {
+  if (value == null || value === '') return undefined
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+    return value.trim()
+  }
+  const formatted = formatUserFacingDateTime(value, {
+    timeZone,
+    dateStyle: 'medium',
+    dateOnly: true,
+  })
+  return formatted === 'Invalid date' ? String(value) : formatted
+}
+
+function noteLine(label: string, value?: string | null): string | undefined {
+  const text = value?.toString().trim()
+  if (!text) return undefined
+  return `${label}: ${text}`
+}
+
+function appendSection(lines: string[], title: string, rows: Array<string | undefined>) {
+  const body = rows.filter((row): row is string => Boolean(row && row.trim()))
+  if (body.length === 0) return
+  if (lines.length > 0) lines.push('')
+  lines.push(title)
+  lines.push(...body)
+}
+
 export function formatEligibilityNoteContent(params: {
   summary: ParsedEligibilitySummary
   payerNameRaw?: string
   checkedAt?: Date
   sourceLabel?: string | null
+  timeZone?: string
+  patientName?: string
+  patientDob?: string | Date | null
+  memberId?: string
+  groupNumber?: string
+  planName?: string
+  planType?: string
+  isPrimary?: boolean
 }): string {
-  const { summary, payerNameRaw, checkedAt, sourceLabel = 'Availity' } = params
+  const { summary, payerNameRaw, checkedAt, sourceLabel = 'Availity', timeZone } = params
   const lines: string[] = [
-    sourceLabel ? `Insurance Eligibility (${sourceLabel})` : 'Insurance Eligibility',
+    sourceLabel ? `Eligibility / Billing Note (${sourceLabel})` : 'Eligibility / Billing Note',
   ]
 
   if (checkedAt) {
-    lines.push(`Checked at: ${checkedAt.toLocaleString()}`)
+    lines.push(
+      `Checked: ${formatUserFacingDateTime(checkedAt, {
+        timeZone,
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      })}`
+    )
   }
-  lines.push(`Status: ${summary.eligibilityStatus}`)
-  if (!summary.coverageDetail) {
-    if (summary.payerName || payerNameRaw) {
-      lines.push(`Payer: ${summary.payerName || payerNameRaw}`)
+  lines.push(`Status: ${titleCaseToken(summary.eligibilityStatus)}`)
+  if (summary.planStatus) lines.push(`Plan status: ${summary.planStatus}`)
+
+  appendSection(lines, 'Patient & policy', [
+    noteLine('Patient', params.patientName),
+    noteLine('Date of birth', formatNoteDate(params.patientDob, timeZone)),
+    noteLine('Policy', params.isPrimary == null ? undefined : params.isPrimary ? 'Primary' : 'Secondary'),
+    noteLine('Member ID', params.memberId),
+    noteLine('Group #', params.groupNumber || summary.groupNumber),
+  ])
+
+  const coverage = summary.coverageDetail
+  if (!coverage) {
+    appendSection(lines, 'Plan', [
+      noteLine('Payer', summary.payerName || payerNameRaw),
+      noteLine('Payer ID', summary.payerId),
+      noteLine('Plan', summary.planName || params.planName),
+      noteLine('Plan type', summary.planType || params.planType),
+      noteLine('Group #', summary.groupNumber && summary.groupNumber !== params.groupNumber ? summary.groupNumber : undefined),
+      noteLine(
+        'Coverage period',
+        [formatNoteDate(summary.coverageStartDate, timeZone), formatNoteDate(summary.coverageEndDate, timeZone)]
+          .filter(Boolean)
+          .join(' – ') || undefined
+      ),
+      noteLine(
+        'Eligibility period',
+        [formatNoteDate(summary.eligibilityStartDate, timeZone), formatNoteDate(summary.eligibilityEndDate, timeZone)]
+          .filter(Boolean)
+          .join(' – ') || undefined
+      ),
+    ])
+  } else if (payerNameRaw && !coverage.payerName) {
+    appendSection(lines, 'Plan', [noteLine('Payer', payerNameRaw)])
+  }
+
+  if (coverage) {
+    const coverageLines = formatCoverageDetailNoteSection(coverage, timeZone)
+    if (coverageLines) {
+      if (lines.length > 0) lines.push('')
+      lines.push(coverageLines)
     }
-    if (summary.planName) lines.push(`Plan: ${summary.planName}`)
-    if (summary.planType) lines.push(`Plan type: ${summary.planType}`)
-    if (summary.groupNumber) lines.push(`Group #: ${summary.groupNumber}`)
-    if (summary.coverageStartDate || summary.coverageEndDate) {
-      lines.push(
-        `Coverage period: ${[summary.coverageStartDate, summary.coverageEndDate].filter(Boolean).join(' – ')}`
+  }
+  if (summary.rheum) {
+    const rheumLines = formatRheumPacketNoteSection(summary.rheum)
+    if (rheumLines) {
+      if (lines.length > 0) lines.push('')
+      lines.push(rheumLines.trimStart())
+    }
+  }
+
+  if (!coverage && summary.benefits.length > 0) {
+    appendSection(
+      lines,
+      'Benefits',
+      summary.benefits.slice(0, 12).map((benefit) =>
+        `- ${benefit.name}${benefit.status ? `: ${benefit.status}` : ''}${
+          benefit.detail && benefit.detail !== benefit.status ? ` (${benefit.detail})` : ''
+        }`
       )
-    }
-  } else if (payerNameRaw && !summary.coverageDetail.payerName) {
-    lines.push(`Payer: ${payerNameRaw}`)
-  }
-
-  if (summary.coverageDetail) {
-    lines.push(formatCoverageDetailNoteSection(summary.coverageDetail))
-  } else if (summary.rheum) {
-    lines.push(formatRheumPacketNoteSection(summary.rheum))
-  }
-
-  if (!summary.coverageDetail && summary.benefits.length > 0) {
-    lines.push('')
-    lines.push('Benefits')
-    for (const benefit of summary.benefits.slice(0, 10)) {
-      lines.push(`- ${benefit.name}${benefit.status ? `: ${benefit.status}` : ''}`)
-    }
+    )
   }
 
   if (summary.validationMessages.length > 0) {
-    lines.push('')
-    lines.push('Payer messages')
-    for (const msg of summary.validationMessages) {
-      lines.push(`- ${msg}`)
-    }
+    appendSection(
+      lines,
+      'Payer messages',
+      summary.validationMessages.map((msg) => `- ${msg}`)
+    )
   }
 
   return lines.join('\n')
 }
 
-function formatCoverageDetailNoteSection(detail: EligibilityCoverageDetail): string {
-  const lines: string[] = ['', 'Benefit verification']
-  const add = (label: string, value?: string | null) => {
-    if (value) lines.push(`${label}: ${value}`)
-  }
-  add('Payer', detail.payerName)
-  add('Payer ID', detail.payerId)
-  add('Plan', detail.planName)
-  add('Plan type', detail.insuranceType || detail.planType)
-  add('Group', detail.groupNumber)
-  add('Plan #', detail.planNumber)
-  add('Coverage level', detail.coverageLevel)
-  add('Member status', detail.memberStatus)
-  add('Plan description', detail.planDescription)
-  add('Coverage start', detail.coverageStartDate)
-  add('Coverage end', detail.coverageEndDate)
-  add('As of', detail.serviceDate)
-  add('Reference #', detail.referenceNumber)
-
+function formatCoverageDetailNoteSection(
+  detail: EligibilityCoverageDetail,
+  timeZone?: string
+): string {
+  const lines: string[] = []
   const money = (pair?: { total?: string; remaining?: string }) => {
     if (!pair?.total && !pair?.remaining) return undefined
     if (pair.total && pair.remaining) return `${pair.total} total / ${pair.remaining} remaining`
     return pair.total || pair.remaining
   }
-  add('INN deductible', money(detail.inn?.deductible))
-  add('OON deductible', money(detail.oon?.deductible))
-  add('INN out-of-pocket', money(detail.inn?.oop))
-  add('OON out-of-pocket', money(detail.oon?.oop))
-  add('INN office copay', detail.inn?.officeCopay)
-  add('OON office copay', detail.oon?.officeCopay)
-  add('INN office coinsurance', detail.inn?.officeCoinsurance)
-  add('OON office coinsurance', detail.oon?.officeCoinsurance)
+
+  appendSection(lines, 'Plan', [
+    noteLine('Payer', detail.payerName),
+    noteLine('Payer ID', detail.payerId),
+    noteLine('Plan', detail.planName),
+    noteLine('Plan type', detail.insuranceType || detail.planType),
+    noteLine('Plan description', detail.planDescription),
+    noteLine('Group #', detail.groupNumber),
+    noteLine('Plan #', detail.planNumber),
+    noteLine('Coverage level', detail.coverageLevel),
+    noteLine('Member status', detail.memberStatus),
+    noteLine('Coverage start', formatNoteDate(detail.coverageStartDate, timeZone)),
+    noteLine('Coverage end', formatNoteDate(detail.coverageEndDate, timeZone)),
+    noteLine('Eligibility start', formatNoteDate(detail.eligibilityStartDate, timeZone)),
+    noteLine('Eligibility end', formatNoteDate(detail.eligibilityEndDate, timeZone)),
+    noteLine('As of', formatNoteDate(detail.serviceDate, timeZone)),
+    noteLine('Reference #', detail.referenceNumber),
+  ])
+
+  appendSection(lines, 'Financials', [
+    noteLine('INN deductible', money(detail.inn?.deductible)),
+    noteLine('OON deductible', money(detail.oon?.deductible)),
+    noteLine('INN out-of-pocket', money(detail.inn?.oop)),
+    noteLine('OON out-of-pocket', money(detail.oon?.oop)),
+    noteLine('INN office copay', detail.inn?.officeCopay),
+    noteLine('OON office copay', detail.oon?.officeCopay),
+    noteLine('INN office coinsurance', detail.inn?.officeCoinsurance),
+    noteLine('OON office coinsurance', detail.oon?.officeCoinsurance),
+  ])
 
   if (detail.copays?.length) {
-    lines.push('Copays:')
-    for (const row of detail.copays) {
-      lines.push(`- ${row.network} ${row.services}: ${row.amount}`)
-    }
+    appendSection(
+      lines,
+      'Copays',
+      detail.copays.map((row) => `- ${row.network} ${row.services}: ${row.amount}`)
+    )
   }
   if (detail.coinsuranceLines?.length) {
-    lines.push('Coinsurance:')
-    for (const row of detail.coinsuranceLines) {
-      lines.push(`- ${row.network} ${row.services}: ${row.amount}`)
-    }
+    appendSection(
+      lines,
+      'Coinsurance',
+      detail.coinsuranceLines.map((row) => `- ${row.network} ${row.services}: ${row.amount}`)
+    )
   }
   if (detail.coveredServices?.length) {
-    lines.push(`Covered services: ${detail.coveredServices.join(', ')}`)
+    appendSection(lines, 'Covered services', [detail.coveredServices.join(', ')])
   }
+
   if (detail.subscriber) {
     const name = [detail.subscriber.firstName, detail.subscriber.lastName].filter(Boolean).join(' ')
-    add('Subscriber', name)
-    add('Subscriber member ID', detail.subscriber.memberId)
-    add('Subscriber DOB', detail.subscriber.dateOfBirth)
-    add('Subscriber gender', detail.subscriber.gender)
-    add('Subscriber address', detail.subscriber.address)
+    appendSection(lines, 'Subscriber', [
+      noteLine('Name', name),
+      noteLine('Member ID', detail.subscriber.memberId),
+      noteLine('Date of birth', formatNoteDate(detail.subscriber.dateOfBirth, timeZone)),
+      noteLine('Gender', detail.subscriber.gender),
+      noteLine('Address', detail.subscriber.address),
+    ])
   }
-  if (detail.payerCorrespondence) {
-    add('Payer correspondence', detail.payerCorrespondence.name)
-    add('Payer correspondence address', detail.payerCorrespondence.address)
+
+  if (detail.payerCorrespondence?.name || detail.payerCorrespondence?.address) {
+    appendSection(lines, 'Payer correspondence', [
+      noteLine('Name', detail.payerCorrespondence.name),
+      noteLine('Address', detail.payerCorrespondence.address),
+    ])
   }
+
   return lines.join('\n')
 }
