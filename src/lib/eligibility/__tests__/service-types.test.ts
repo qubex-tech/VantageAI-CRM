@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeServiceTypeCodes, primaryServiceTypeCode } from '../service-types'
+import {
+  expandRequestedServiceTypeCodes,
+  normalizeServiceTypeCodes,
+  orderServiceTypeCodesForRequest,
+  primaryServiceTypeCode,
+} from '../service-types'
 
 describe('normalizeServiceTypeCodes', () => {
   it('defaults to 30 when empty', () => {
@@ -19,5 +24,19 @@ describe('normalizeServiceTypeCodes', () => {
 
   it('puts general codes first regardless of click order', () => {
     expect(normalizeServiceTypeCodes(['23', '41', '35'])).toEqual(['35', '23', '41'])
+  })
+})
+
+describe('orderServiceTypeCodesForRequest', () => {
+  it('drops 30 when 35 is selected so dental checks are not sent as medical', () => {
+    expect(orderServiceTypeCodesForRequest(['30', '35', '23'])).toEqual(['35', '23'])
+  })
+})
+
+describe('expandRequestedServiceTypeCodes', () => {
+  it('includes dental category codes when 35 is selected', () => {
+    const expanded = expandRequestedServiceTypeCodes(['35'])
+    expect(expanded).toEqual(expect.arrayContaining(['35', '23', '41', '25']))
+    expect(expanded).not.toContain('98')
   })
 })

@@ -34,7 +34,7 @@ export interface StediEligibilityRequest {
     lastName?: string
     dateOfBirth?: string
     gender?: string
-    relationshipToSubscriberCode?: string
+    individualRelationshipCode?: string
   }>
 }
 

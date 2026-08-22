@@ -41,6 +41,13 @@ describe('mapToStediEligibilityRequest', () => {
     expect(request.encounter?.serviceTypeCodes).toEqual(['35', '23', '41'])
   })
 
+  it('drops medical 30 when dental 35 is also selected', () => {
+    const request = mapToStediEligibilityRequest(
+      baseInput({ serviceType: '30', serviceTypeCodes: ['30', '35'] })
+    )
+    expect(request.encounter?.serviceTypeCodes).toEqual(['35'])
+  })
+
   it('puts the patient in dependents when they are not the subscriber', () => {
     const request = mapToStediEligibilityRequest(
       baseInput({
@@ -53,7 +60,7 @@ describe('mapToStediEligibilityRequest', () => {
     )
     expect(request.subscriber.firstName).toBe('John')
     expect(request.dependents?.[0]?.firstName).toBe('Jane')
-    expect(request.dependents?.[0]?.relationshipToSubscriberCode).toBe('01')
+    expect(request.dependents?.[0]?.individualRelationshipCode).toBe('01')
   })
 
   it('requires organization name', () => {
@@ -312,5 +319,28 @@ describe('parseStediEligibilityResponse', () => {
       { services: 'Dental Care', amount: '$25', network: 'INN' },
     ])
     expect(summary.coverageDetail?.coveredServices).toEqual(['Dental Care'])
+  })
+
+  it('keeps dental sibling STCs when the request used general 35', () => {
+    const summary = parseStediEligibilityResponse(
+      {
+        controlNumber: '1',
+        planStatus: [{ status: 'Active Coverage', statusCode: '1', serviceTypeCodes: ['30'] }],
+        benefitsInformation: [
+          {
+            code: 'A',
+            name: 'Co-Insurance',
+            benefitPercent: '20',
+            serviceTypeCodes: ['23'],
+            inPlanNetworkIndicatorCode: 'Y',
+          },
+        ],
+      },
+      { serviceTypeCodes: ['35'] }
+    )
+    expect(summary.coverageDetail?.coinsuranceLines).toEqual([
+      { services: 'Diagnostic Dental', amount: '20%', network: 'INN' },
+    ])
+    expect(summary.coverageDetail?.coveredServices).toContain('Diagnostic Dental')
   })
 })

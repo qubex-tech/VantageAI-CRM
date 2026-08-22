@@ -92,37 +92,42 @@ export async function runEligibilityCheck(
 
   let payerId = getPayerIdForVendor(policy, adapter.vendorKey)
   let resolvedFromName: { payerId: string; name: string } | null = null
-  if (
-    !payerId &&
+  const preferDental = settings.defaultServiceTypeCodes.includes('35')
+  const payerNameLooksDental = /\bdental\b|dentaguard/i.test(policy.payerNameRaw || '')
+  const shouldResolvePayer =
     adapter.vendorKey === 'stedi' &&
     adapter.capabilities.payerSearch &&
-    policy.payerNameRaw?.trim()
-  ) {
+    Boolean(policy.payerNameRaw?.trim()) &&
+    (!payerId || (preferDental && !payerNameLooksDental))
+  if (shouldResolvePayer) {
     try {
       const match = await resolvePayerIdFromName({
         payerName: policy.payerNameRaw,
         searchPayers: (query) => adapter.searchPayers(practiceId, query),
+        preferDental,
       })
       if (match.status === 'matched') {
-        payerId = match.payerId
-        resolvedFromName = { payerId: match.payerId, name: match.name }
-        const payerMap = upsertPayerIdMap(
-          policy.clearinghousePayerIds,
-          adapter.vendorKey,
-          match.payerId
-        )
-        await prisma.insurancePolicy.update({
-          where: { id: policy.id },
-          data: { clearinghousePayerIds: payerMap },
-        })
-        policy.clearinghousePayerIds = payerMap
-        console.info('[runEligibilityCheck] Mapped payer name to Stedi ID', {
-          practiceId,
-          policyId: policy.id,
-          payerName: policy.payerNameRaw,
-          payerId: match.payerId,
-          stediName: match.name,
-        })
+        if (match.payerId !== payerId) {
+          payerId = match.payerId
+          resolvedFromName = { payerId: match.payerId, name: match.name }
+          const payerMap = upsertPayerIdMap(
+            policy.clearinghousePayerIds,
+            adapter.vendorKey,
+            match.payerId
+          )
+          await prisma.insurancePolicy.update({
+            where: { id: policy.id },
+            data: { clearinghousePayerIds: payerMap },
+          })
+          policy.clearinghousePayerIds = payerMap
+          console.info('[runEligibilityCheck] Mapped payer name to Stedi ID', {
+            practiceId,
+            policyId: policy.id,
+            payerName: policy.payerNameRaw,
+            payerId: match.payerId,
+            stediName: match.name,
+          })
+        }
       } else {
         console.info('[runEligibilityCheck] Could not map payer name to Stedi ID', {
           practiceId,

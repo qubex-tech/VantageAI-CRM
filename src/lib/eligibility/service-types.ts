@@ -96,5 +96,32 @@ export function normalizeServiceTypeCodes(
 }
 
 export function primaryServiceTypeCode(codes: string[], fallback = '30'): string {
-  return codes[0] || fallback
+  return orderServiceTypeCodesForRequest(codes)[0] || fallback
+}
+
+/**
+ * Stedi/payers often honor only the first STC. If dental 35 is selected, drop
+ * medical 30 so a dental 270 is not sent as a medical plan check.
+ */
+export function orderServiceTypeCodesForRequest(codes?: string[]): string[] {
+  const normalized = normalizeServiceTypeCodes(codes ?? [])
+  if (normalized.includes('35') && normalized.includes('30')) {
+    return normalized.filter((code) => code !== '30')
+  }
+  return normalized
+}
+
+/** Payers often return sibling STCs (23/41/…) instead of the general 30/35 we requested. */
+export function expandRequestedServiceTypeCodes(codes?: string[]): string[] {
+  if (!codes?.length) return []
+  const requested = normalizeServiceTypeCodes(codes)
+  const expanded = new Set(requested.map((code) => code.toUpperCase()))
+  const includeGroup = (group: ServiceTypeGroup) => {
+    for (const item of ELIGIBILITY_SERVICE_TYPES) {
+      if (item.group === group) expanded.add(item.code.toUpperCase())
+    }
+  }
+  if (expanded.has('30')) includeGroup('medical')
+  if (expanded.has('35')) includeGroup('dental')
+  return [...expanded]
 }

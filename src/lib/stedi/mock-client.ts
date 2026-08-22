@@ -145,6 +145,36 @@ export async function handleMockStediRequest<T>(params: {
       },
       {
         payer: {
+          stediId: 'AETNADEN',
+          displayName: 'Aetna Dental',
+          primaryPayerId: '60054D',
+          aliases: ['AETNA', 'Aetna'],
+          names: ['Aetna Dental'],
+          transactionSupport: { eligibilityCheck: 'SUPPORTED' },
+        },
+      },
+      {
+        payer: {
+          stediId: 'PRINCIPAL',
+          displayName: 'Principal Financial Group',
+          primaryPayerId: '00143MC',
+          aliases: ['PRINCIPAL'],
+          names: ['Principal Financial Group'],
+          transactionSupport: { eligibilityCheck: 'SUPPORTED' },
+        },
+      },
+      {
+        payer: {
+          stediId: 'PRINCIPALD',
+          displayName: 'Principal Dental',
+          primaryPayerId: '61271',
+          aliases: ['PRINCIPAL'],
+          names: ['Principal Dental'],
+          transactionSupport: { eligibilityCheck: 'SUPPORTED' },
+        },
+      },
+      {
+        payer: {
           stediId: 'UHC',
           displayName: 'UnitedHealthcare',
           primaryPayerId: '87726',

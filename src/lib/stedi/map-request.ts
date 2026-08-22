@@ -1,3 +1,4 @@
+import { orderServiceTypeCodesForRequest } from '@/lib/eligibility/service-types'
 import type { CanonicalEligibilityRequest } from '@/lib/eligibility/clearinghouse/types'
 import type { StediEligibilityRequest } from './types'
 
@@ -40,9 +41,9 @@ export function mapToStediEligibilityRequest(
   const request: StediEligibilityRequest = {
     tradingPartnerServiceId: input.payerId,
     encounter: {
-      serviceTypeCodes: input.serviceTypeCodes?.length
-        ? input.serviceTypeCodes
-        : [input.serviceType || '30'],
+      serviceTypeCodes: orderServiceTypeCodesForRequest(
+        input.serviceTypeCodes?.length ? input.serviceTypeCodes : [input.serviceType || '30']
+      ),
     },
     provider: {
       organizationName,
@@ -77,7 +78,7 @@ export function mapToStediEligibilityRequest(
       lastName: input.patientLastName,
       dateOfBirth: toStediDate(input.patientBirthDate),
       gender: mapGender(input.patientGender),
-      relationshipToSubscriberCode: mapRelationship(input.relationshipToPatient),
+      individualRelationshipCode: mapRelationship(input.relationshipToPatient),
     },
   ]
   return request

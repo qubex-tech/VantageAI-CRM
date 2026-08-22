@@ -4,7 +4,7 @@ import {
   type EligibilityNetworkStatus,
   type RheumEligibilityPacket,
 } from '@/lib/eligibility/rheum-packet'
-import { SERVICE_TYPE_LABELS } from '@/lib/eligibility/service-types'
+import { SERVICE_TYPE_LABELS, expandRequestedServiceTypeCodes } from '@/lib/eligibility/service-types'
 import type { EligibilityCoverageDetail, ParsedEligibilitySummary } from '@/lib/availity/types'
 import { STEDI_PAYER_DOWN_CODES } from './types'
 import type { StediBenefitInformation, StediEligibilityResponse } from './types'
@@ -70,6 +70,10 @@ function serviceLabel(benefit: StediBenefitInformation): string {
   if (notes.length) return uniqueJoin(notes)
   const types = (benefit.serviceTypes || []).map((s) => s.trim()).filter(Boolean)
   if (types.length) return uniqueJoin(types)
+  const fromCodes = (benefit.serviceTypeCodes || [])
+    .map((code) => SERVICE_TYPE_LABELS[String(code)] || String(code))
+    .filter(Boolean)
+  if (fromCodes.length) return uniqueJoin(fromCodes)
   return benefit.name || 'Benefit'
 }
 
@@ -186,8 +190,9 @@ function groupedCosts(
 }
 
 function requestedCodeSet(codes?: string[]): Set<string> | null {
-  if (!codes?.length) return null
-  return new Set(codes.map((code) => String(code).trim().toUpperCase()).filter(Boolean))
+  const expanded = expandRequestedServiceTypeCodes(codes)
+  if (!expanded.length) return null
+  return new Set(expanded.map((code) => String(code).trim().toUpperCase()).filter(Boolean))
 }
 
 function benefitMatchesRequested(
@@ -216,7 +221,10 @@ function coveredServices(
   const fromStatus = (planStatus || [])
     .flatMap((row) => row.serviceTypeCodes || [])
     .filter((code) => !requested || requested.has(String(code).trim().toUpperCase()))
-  const fromBenefits = filterBenefits(benefits, requested).flatMap((b) => b.serviceTypes || [])
+  const fromBenefits = filterBenefits(benefits, requested).flatMap((b) => [
+    ...(b.serviceTypes || []),
+    ...(b.serviceTypeCodes || []).map((code) => SERVICE_TYPE_LABELS[String(code)] || String(code)),
+  ])
   const labels = [
     ...fromBenefits,
     ...fromStatus.map((code) => SERVICE_TYPE_LABELS[String(code)] || String(code)),

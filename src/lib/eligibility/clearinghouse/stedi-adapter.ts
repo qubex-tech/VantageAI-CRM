@@ -37,6 +37,17 @@ export const stediAdapter: ClearinghouseAdapter = {
     let response
     try {
       response = await submitStediEligibilityCheck(config, request)
+      if (isStediPayerDown(response) && !config.useMockResponses) {
+        for (const delayMs of [2000, 4000]) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs))
+          const retry = await submitStediEligibilityCheck(config, request)
+          if (!isStediPayerDown(retry)) {
+            response = retry
+            break
+          }
+          response = retry
+        }
+      }
     } catch (error) {
       if (error instanceof StediApiError && error.retryable) {
         return {

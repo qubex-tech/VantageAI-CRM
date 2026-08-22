@@ -47,6 +47,16 @@ describe('pickConfidentPayerMatch', () => {
     expect(match).toMatchObject({ status: 'matched', payerId: '60054', name: 'Aetna' })
   })
 
+  it('prefers Aetna Dental over commercial Aetna when dental STCs are selected', () => {
+    const aetnaDental: PayerSearchResult = {
+      payerId: 'AETNADEN',
+      name: 'Aetna Dental',
+      aliases: ['AETNA', 'Aetna'],
+    }
+    const match = pickConfidentPayerMatch([aetnaDental, AETNA], 'AETNA', { preferDental: true })
+    expect(match).toMatchObject({ status: 'matched', payerId: 'AETNADEN', name: 'Aetna Dental' })
+  })
+
   it('maps Blue Cross and Blue Shield of Texas, not another BCBS plan', () => {
     const match = pickConfidentPayerMatch(
       [BCBSTX, BCBSIL, BCBSTX_MA],

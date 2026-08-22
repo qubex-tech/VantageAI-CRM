@@ -31,7 +31,15 @@ function labelsForHit(hit: PayerSearchResult): string[] {
   return uniqueStrings([hit.name, hit.payerId, ...(hit.aliases || [])])
 }
 
-function scoreHit(hit: PayerSearchResult, payerName: string): number | null {
+function isDentalPayerLabel(value?: string | null): boolean {
+  return /\bdental\b|dentaguard|deltadental|delta dental/i.test(String(value || ''))
+}
+
+function scoreHit(
+  hit: PayerSearchResult,
+  payerName: string,
+  options?: { preferDental?: boolean }
+): number | null {
   const compactQuery = compactPayerText(payerName)
   let best: number | null = null
   const compactName = compactPayerText(hit.name)
@@ -58,19 +66,27 @@ function scoreHit(hit: PayerSearchResult, payerName: string): number | null {
     if (scored != null) best = Math.max(best ?? 0, scored)
   }
 
+  if (best == null) return null
+
+  if (options?.preferDental) {
+    const dental = isDentalPayerLabel(hit.name) || (hit.aliases || []).some(isDentalPayerLabel)
+    best += dental ? 25_000 : -4_000
+  }
+
   return best
 }
 
 export function pickConfidentPayerMatch(
   hits: PayerSearchResult[],
-  payerName: string
+  payerName: string,
+  options?: { preferDental?: boolean }
 ): PayerNameMatch {
   const query = payerName.trim()
   if (!query || hits.length === 0) return { status: 'none' }
 
   const scored = hits
     .map((hit) => {
-      const score = scoreHit(hit, query)
+      const score = scoreHit(hit, query, options)
       if (score == null) return null
       return { payerId: hit.payerId, name: hit.name || hit.payerId, score }
     })
@@ -89,21 +105,31 @@ export function pickConfidentPayerMatch(
   return { status: 'matched', ...top }
 }
 
-export function payerNameSearchQueries(payerName: string): string[] {
+export function payerNameSearchQueries(
+  payerName: string,
+  options?: { preferDental?: boolean }
+): string[] {
   const raw = payerName.trim()
   if (!raw) return []
+  const firstToken = raw.split(/[\s/]+/).find(Boolean) || raw
+  const dentalQueries = options?.preferDental
+    ? [`${firstToken} dental`, `${raw} dental`]
+    : []
   return uniqueStrings([
+    ...dentalQueries,
     raw,
     ...expandPayerNameAliases(raw),
     ...payerSearchTerms(raw).slice(0, 2),
-  ]).slice(0, MAX_SEARCH_QUERIES)
+  ]).slice(0, options?.preferDental ? 4 : MAX_SEARCH_QUERIES)
 }
 
 export async function resolvePayerIdFromName(params: {
   payerName: string
   searchPayers: (query: string) => Promise<PayerSearchResult[]>
+  preferDental?: boolean
 }): Promise<PayerNameMatch> {
-  const queries = payerNameSearchQueries(params.payerName)
+  const options = { preferDental: Boolean(params.preferDental) }
+  const queries = payerNameSearchQueries(params.payerName, options)
   if (queries.length === 0) return { status: 'none' }
 
   const byId = new Map<string, PayerSearchResult>()
@@ -125,9 +151,10 @@ export async function resolvePayerIdFromName(params: {
       })
     }
 
-    lastMatch = pickConfidentPayerMatch([...byId.values()], params.payerName)
+    lastMatch = pickConfidentPayerMatch([...byId.values()], params.payerName, options)
     if (lastMatch.status === 'matched') return lastMatch
   }
 
   return lastMatch
 }
+
