@@ -63,7 +63,9 @@ export const stediAdapter: ClearinghouseAdapter = {
       }
     }
 
-    const summary = parseStediEligibilityResponse(response)
+    const summary = parseStediEligibilityResponse(response, {
+      serviceTypeCodes: input.serviceTypeCodes,
+    })
     const isTerminalError = summary.eligibilityStatus === 'error'
     return {
       status: isTerminalError ? 'failed' : 'complete',

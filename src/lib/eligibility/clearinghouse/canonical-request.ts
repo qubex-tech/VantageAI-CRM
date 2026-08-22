@@ -1,4 +1,5 @@
 import { formatPatientDob } from '@/lib/mcp/verification-fields'
+import { normalizeServiceTypeCodes, primaryServiceTypeCode } from '@/lib/eligibility/service-types'
 import type { CanonicalEligibilityRequest } from './types'
 
 type PatientRecord = {
@@ -42,6 +43,7 @@ export function mapToCanonicalEligibilityRequest(params: {
   payerId: string
   providerNpi: string
   serviceType: string
+  serviceTypeCodes?: string[]
   providerOrganizationName?: string | null
   providerTaxId?: string | null
   asOfDate?: string
@@ -74,7 +76,10 @@ export function mapToCanonicalEligibilityRequest(params: {
     providerNpi: params.providerNpi.trim(),
     providerOrganizationName: params.providerOrganizationName?.trim() || null,
     providerTaxId: params.providerTaxId?.trim() || null,
-    serviceType: params.serviceType || '30',
+    serviceType: primaryServiceTypeCode(
+      normalizeServiceTypeCodes(params.serviceTypeCodes ?? params.serviceType)
+    ),
+    serviceTypeCodes: normalizeServiceTypeCodes(params.serviceTypeCodes ?? params.serviceType),
     groupNumber: params.policy.groupNumber?.trim() || undefined,
     subscriberIsPatient: params.policy.subscriberIsPatient,
     subscriberFirstName: params.policy.subscriberFirstName?.trim() || null,
@@ -98,6 +103,7 @@ export function redactCanonicalRequest(
     patientBirthDate: request.patientBirthDate,
     providerNpi: request.providerNpi,
     serviceType: request.serviceType,
+    serviceTypeCodes: (request.serviceTypeCodes || []).join(','),
     subscriberIsPatient: request.subscriberIsPatient,
     providerOrganizationName: request.providerOrganizationName || null,
   }

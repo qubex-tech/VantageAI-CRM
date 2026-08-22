@@ -172,6 +172,7 @@ export async function runEligibilityCheck(
     payerId: payerId!,
     providerNpi: providerNpi!,
     serviceType: settings.defaultServiceType,
+    serviceTypeCodes: settings.defaultServiceTypeCodes,
     providerOrganizationName: settings.defaultProviderOrgName || practice?.name || null,
     providerTaxId: settings.defaultProviderTaxId,
   })
@@ -192,6 +193,7 @@ export async function runEligibilityCheck(
           patientLastName: `${canonical.patientLastName.slice(0, 1)}***`,
           providerNpi: canonical.providerNpi,
           serviceType: canonical.serviceType,
+          serviceTypeCodes: canonical.serviceTypeCodes,
         }),
         vendorKey: adapter.vendorKey,
         appointmentType: input.appointmentType || null,

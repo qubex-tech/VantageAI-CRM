@@ -19,6 +19,7 @@ const availitySettingsSchema = z.object({
   defaultProviderNpi: z.string().optional().or(z.literal('')),
   defaultProviderTaxId: z.string().optional().or(z.literal('')),
   defaultServiceType: z.string().optional(),
+  defaultServiceTypeCodes: z.array(z.string()).optional(),
   defaultProviderOrgName: z.string().optional().or(z.literal('')),
   submitterId: z.string().optional().or(z.literal('')),
   submitterStateCode: z.string().optional().or(z.literal('')),
@@ -144,6 +145,9 @@ export async function POST(req: NextRequest) {
         : {}),
       ...(parsed.defaultServiceType !== undefined
         ? { defaultServiceType: parsed.defaultServiceType || '30' }
+        : {}),
+      ...(parsed.defaultServiceTypeCodes !== undefined
+        ? { defaultServiceTypeCodes: parsed.defaultServiceTypeCodes }
         : {}),
       ...(parsed.defaultProviderOrgName !== undefined
         ? { defaultProviderOrgName: parsed.defaultProviderOrgName || null }

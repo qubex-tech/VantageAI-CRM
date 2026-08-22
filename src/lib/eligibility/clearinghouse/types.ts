@@ -12,6 +12,8 @@ export interface CanonicalEligibilityRequest {
   providerOrganizationName?: string | null
   providerTaxId?: string | null
   serviceType: string
+  /** When omitted, adapters send `serviceType` only. Stedi uses this list as `encounter.serviceTypeCodes`. */
+  serviceTypeCodes?: string[]
   groupNumber?: string | null
   subscriberIsPatient: boolean
   subscriberFirstName?: string | null
@@ -64,4 +66,5 @@ export interface PracticeEligibilityConfig {
   defaultProviderTaxId: string | null
   defaultProviderOrgName: string | null
   defaultServiceType: string
+  defaultServiceTypeCodes: string[]
 }

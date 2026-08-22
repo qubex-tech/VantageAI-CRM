@@ -14,6 +14,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { ServiceTypeMultiSelect } from '@/components/settings/ServiceTypeMultiSelect'
+import { normalizeServiceTypeCodes } from '@/lib/eligibility/service-types'
 
 interface AvailitySettingsProps {
   initialIntegration: {
@@ -57,8 +59,8 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
   const [defaultProviderTaxId, setDefaultProviderTaxId] = useState(
     initialIntegration?.defaultProviderTaxId || ''
   )
-  const [defaultServiceType, setDefaultServiceType] = useState(
-    initialIntegration?.defaultServiceType || '30'
+  const [defaultServiceTypeCodes, setDefaultServiceTypeCodes] = useState<string[]>(
+    normalizeServiceTypeCodes(initialIntegration?.defaultServiceType)
   )
   const [submitterId, setSubmitterId] = useState(initialIntegration?.submitterId || '')
   const [submitterStateCode, setSubmitterStateCode] = useState(
@@ -121,7 +123,7 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
     setApiBaseUrl(initialIntegration?.apiBaseUrl || '')
     setDefaultProviderNpi(initialIntegration?.defaultProviderNpi || '')
     setDefaultProviderTaxId(initialIntegration?.defaultProviderTaxId || '')
-    setDefaultServiceType(initialIntegration?.defaultServiceType || '30')
+    setDefaultServiceTypeCodes(normalizeServiceTypeCodes(initialIntegration?.defaultServiceType))
     setSubmitterId(initialIntegration?.submitterId || '')
     setSubmitterStateCode(initialIntegration?.submitterStateCode || '')
     setUseMockResponses(initialIntegration?.useMockResponses ?? true)
@@ -149,6 +151,17 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
         }
         if (typeof data.settings?.defaultProviderOrgName === 'string') {
           setDefaultProviderOrgName(data.settings.defaultProviderOrgName)
+        }
+        if (Array.isArray(data.settings?.defaultServiceTypeCodes)) {
+          setDefaultServiceTypeCodes(
+            normalizeServiceTypeCodes(
+              data.settings.defaultServiceTypeCodes.length
+                ? data.settings.defaultServiceTypeCodes
+                : data.settings.defaultServiceType
+            )
+          )
+        } else if (typeof data.settings?.defaultServiceType === 'string') {
+          setDefaultServiceTypeCodes(normalizeServiceTypeCodes(data.settings.defaultServiceType))
         }
       } catch {
         // ignore
@@ -241,7 +254,8 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
           apiBaseUrl,
           defaultProviderNpi,
           defaultProviderTaxId,
-          defaultServiceType,
+          defaultServiceType: normalizeServiceTypeCodes(defaultServiceTypeCodes)[0],
+          defaultServiceTypeCodes: normalizeServiceTypeCodes(defaultServiceTypeCodes),
           submitterId,
           submitterStateCode,
           useMockResponses,
@@ -535,16 +549,11 @@ export function AvailitySettings({ initialIntegration, practiceId }: AvailitySet
               className="mt-1"
             />
           </div>
-          <div>
-            <Label htmlFor="defaultServiceType">Default service type</Label>
-            <Input
-              id="defaultServiceType"
-              value={defaultServiceType}
-              onChange={(e) => setDefaultServiceType(e.target.value)}
-              placeholder="30"
-              className="mt-1"
-            />
-          </div>
+          <ServiceTypeMultiSelect
+            value={defaultServiceTypeCodes}
+            onChange={setDefaultServiceTypeCodes}
+            disabled={loading}
+          />
           <div>
             <Label htmlFor="submitterId">Submitter ID</Label>
             <Input

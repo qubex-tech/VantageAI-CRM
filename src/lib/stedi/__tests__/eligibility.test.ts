@@ -34,6 +34,13 @@ describe('mapToStediEligibilityRequest', () => {
     expect(request.encounter?.serviceTypeCodes).toEqual(['30'])
   })
 
+  it('sends only the selected service type codes', () => {
+    const request = mapToStediEligibilityRequest(
+      baseInput({ serviceType: '35', serviceTypeCodes: ['35', '23', '41'] })
+    )
+    expect(request.encounter?.serviceTypeCodes).toEqual(['35', '23', '41'])
+  })
+
   it('puts the patient in dependents when they are not the subscriber', () => {
     const request = mapToStediEligibilityRequest(
       baseInput({
@@ -271,5 +278,39 @@ describe('parseStediEligibilityResponse', () => {
     const summary = parseStediEligibilityResponse(response)
     expect(summary.rheum?.deductible?.remaining).toBe('$500')
     expect(summary.coverageDetail?.inn?.deductible?.remaining).toBe('$500')
+  })
+
+  it('filters benefit lines to the requested service type codes', () => {
+    const summary = parseStediEligibilityResponse(
+      {
+        controlNumber: '1',
+        planStatus: [
+          { status: 'Active Coverage', statusCode: '1', serviceTypeCodes: ['30', '35', '98'] },
+        ],
+        benefitsInformation: [
+          {
+            code: 'B',
+            name: 'Co-Payment',
+            benefitAmount: '40',
+            serviceTypeCodes: ['98'],
+            serviceTypes: ['Professional (Physician) Visit - Office'],
+            inPlanNetworkIndicatorCode: 'Y',
+          },
+          {
+            code: 'B',
+            name: 'Co-Payment',
+            benefitAmount: '25',
+            serviceTypeCodes: ['35'],
+            serviceTypes: ['Dental Care'],
+            inPlanNetworkIndicatorCode: 'Y',
+          },
+        ],
+      },
+      { serviceTypeCodes: ['35'] }
+    )
+    expect(summary.coverageDetail?.copays).toEqual([
+      { services: 'Dental Care', amount: '$25', network: 'INN' },
+    ])
+    expect(summary.coverageDetail?.coveredServices).toEqual(['Dental Care'])
   })
 })

@@ -91,8 +91,19 @@ export async function GET(req: NextRequest) {
       const parsed = { ...(storedSummary as unknown as ParsedEligibilitySummary) }
       if (check.vendorKey === 'stedi' && check.rawResponse) {
         try {
+          const requestPayload =
+            check.requestPayload && typeof check.requestPayload === 'object'
+              ? (check.requestPayload as { serviceTypeCodes?: string[]; serviceType?: string })
+              : {}
           const rebuilt = parseStediEligibilityResponse(
-            check.rawResponse as unknown as Parameters<typeof parseStediEligibilityResponse>[0]
+            check.rawResponse as unknown as Parameters<typeof parseStediEligibilityResponse>[0],
+            {
+              serviceTypeCodes: Array.isArray(requestPayload.serviceTypeCodes)
+                ? requestPayload.serviceTypeCodes
+                : requestPayload.serviceType
+                  ? [requestPayload.serviceType]
+                  : undefined,
+            }
           )
           if (rebuilt.coverageDetail) parsed.coverageDetail = rebuilt.coverageDetail
           if (rebuilt.rheum) {

@@ -378,6 +378,7 @@ model PracticeEligibilitySettings {
   defaultProviderTaxId     String?
   defaultProviderOrgName   String?
   defaultServiceType       String   @default("30")
+  defaultServiceTypeCodes  String[] @default([])
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 

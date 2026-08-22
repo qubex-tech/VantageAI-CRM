@@ -40,7 +40,9 @@ export function mapToStediEligibilityRequest(
   const request: StediEligibilityRequest = {
     tradingPartnerServiceId: input.payerId,
     encounter: {
-      serviceTypeCodes: [input.serviceType || '30'],
+      serviceTypeCodes: input.serviceTypeCodes?.length
+        ? input.serviceTypeCodes
+        : [input.serviceType || '30'],
     },
     provider: {
       organizationName,

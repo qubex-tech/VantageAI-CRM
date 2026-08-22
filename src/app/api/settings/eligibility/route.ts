@@ -17,6 +17,7 @@ const eligibilitySettingsSchema = z.object({
   defaultProviderTaxId: z.string().optional().or(z.literal('')),
   defaultProviderOrgName: z.string().optional().or(z.literal('')),
   defaultServiceType: z.string().optional(),
+  defaultServiceTypeCodes: z.array(z.string()).optional(),
 })
 
 function resolvePracticeId(

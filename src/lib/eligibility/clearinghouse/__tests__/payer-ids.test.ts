@@ -50,5 +50,21 @@ describe('canonical eligibility request', () => {
     expect(request.subscriberIsPatient).toBe(true)
     expect(request.patientFirstName).toBe('Jane')
     expect(request.patientBirthDate).toBe('1990-01-15')
+    expect(request.serviceTypeCodes).toEqual(['30'])
+  })
+
+  it('keeps multiple selected service type codes', () => {
+    const request = mapToCanonicalEligibilityRequest({
+      practiceId: 'p1',
+      patient: { firstName: 'Jane', lastName: 'Doe', dateOfBirth: '1990-01-15' },
+      policy: { memberId: 'M123456789', subscriberIsPatient: true },
+      payerId: '64246',
+      providerNpi: '1215142500',
+      serviceType: '35',
+      serviceTypeCodes: ['35', '23', '41'],
+      providerOrganizationName: 'Advanced Family Dental',
+    })
+    expect(request.serviceType).toBe('35')
+    expect(request.serviceTypeCodes).toEqual(['35', '23', '41'])
   })
 })

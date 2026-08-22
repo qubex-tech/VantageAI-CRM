@@ -1,5 +1,9 @@
 import { prisma } from '@/lib/db'
 import { getOrCreateAvailityIntegration } from '@/lib/availity/config'
+import {
+  normalizeServiceTypeCodes,
+  primaryServiceTypeCode,
+} from '@/lib/eligibility/service-types'
 import type { PracticeEligibilityConfig } from './types'
 
 export async function getPracticeEligibilitySettings(
@@ -13,6 +17,7 @@ export async function getPracticeEligibilitySettings(
     settings = await seedPracticeEligibilitySettings(practiceId)
   }
 
+  const codes = codesFromSettings(settings)
   return {
     practiceId,
     primaryVendorKey: settings.primaryVendorKey || 'availity',
@@ -22,8 +27,20 @@ export async function getPracticeEligibilitySettings(
     defaultProviderNpi: settings.defaultProviderNpi,
     defaultProviderTaxId: settings.defaultProviderTaxId,
     defaultProviderOrgName: settings.defaultProviderOrgName,
-    defaultServiceType: settings.defaultServiceType || '30',
+    defaultServiceType: primaryServiceTypeCode(codes),
+    defaultServiceTypeCodes: codes,
   }
+}
+
+function codesFromSettings(settings: {
+  defaultServiceType?: string | null
+  defaultServiceTypeCodes?: string[] | null
+}): string[] {
+  return normalizeServiceTypeCodes(
+    settings.defaultServiceTypeCodes?.length
+      ? settings.defaultServiceTypeCodes
+      : settings.defaultServiceType
+  )
 }
 
 async function seedPracticeEligibilitySettings(practiceId: string) {
@@ -42,6 +59,7 @@ async function seedPracticeEligibilitySettings(practiceId: string) {
       defaultProviderNpi: availity?.defaultProviderNpi ?? null,
       defaultProviderTaxId: availity?.defaultProviderTaxId ?? null,
       defaultServiceType: availity?.defaultServiceType || '30',
+      defaultServiceTypeCodes: normalizeServiceTypeCodes(availity?.defaultServiceType),
     },
     update: {},
   })
@@ -58,6 +76,7 @@ export async function upsertPracticeEligibilitySettings(
     defaultProviderTaxId: string | null
     defaultProviderOrgName: string | null
     defaultServiceType: string
+    defaultServiceTypeCodes: string[]
   }>
 ) {
   await getPracticeEligibilitySettings(practiceId)
@@ -76,8 +95,15 @@ export async function upsertPracticeEligibilitySettings(
   if (patch.defaultProviderOrgName !== undefined) {
     data.defaultProviderOrgName = patch.defaultProviderOrgName
   }
-  if (patch.defaultServiceType !== undefined) {
-    data.defaultServiceType = patch.defaultServiceType || '30'
+  if (
+    patch.defaultServiceTypeCodes !== undefined ||
+    patch.defaultServiceType !== undefined
+  ) {
+    const codes = normalizeServiceTypeCodes(
+      patch.defaultServiceTypeCodes ?? patch.defaultServiceType
+    )
+    data.defaultServiceTypeCodes = codes
+    data.defaultServiceType = primaryServiceTypeCode(codes)
   }
 
   const settings = await prisma.practiceEligibilitySettings.update({
@@ -92,7 +118,8 @@ export async function upsertPracticeEligibilitySettings(
     patch.voiceEnabled !== undefined ||
     patch.defaultProviderNpi !== undefined ||
     patch.defaultProviderTaxId !== undefined ||
-    patch.defaultServiceType !== undefined
+    patch.defaultServiceType !== undefined ||
+    patch.defaultServiceTypeCodes !== undefined
   ) {
     await getOrCreateAvailityIntegration(practiceId)
     await prisma.availityIntegration.update({
@@ -111,8 +138,15 @@ export async function upsertPracticeEligibilitySettings(
         ...(patch.defaultProviderTaxId !== undefined
           ? { defaultProviderTaxId: patch.defaultProviderTaxId }
           : {}),
-        ...(patch.defaultServiceType !== undefined
-          ? { defaultServiceType: patch.defaultServiceType || '30' }
+        ...(patch.defaultServiceType !== undefined ||
+        patch.defaultServiceTypeCodes !== undefined
+          ? {
+              defaultServiceType: primaryServiceTypeCode(
+                normalizeServiceTypeCodes(
+                  patch.defaultServiceTypeCodes ?? patch.defaultServiceType
+                )
+              ),
+            }
           : {}),
       },
     })
