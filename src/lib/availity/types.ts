@@ -104,10 +104,35 @@ export interface EligibilityMoneyPair {
   remaining?: string
 }
 
+export type EligibilityNetworkLabel = 'INN' | 'OON' | 'N/A'
+
 export interface EligibilityServiceCost {
   services: string
   amount: string
-  network: 'INN' | 'OON'
+  network: EligibilityNetworkLabel
+}
+
+export interface EligibilityPerson {
+  firstName?: string
+  lastName?: string
+  memberId?: string
+  dateOfBirth?: string
+  gender?: string
+  address?: string
+  groupNumber?: string
+  planNumber?: string
+  relationship?: string
+}
+
+/** One mapped 271 benefit row (copay, coinsurance, limitation, non-covered, etc.). */
+export interface EligibilityBenefitLine {
+  category: string
+  services: string
+  amount?: string
+  network?: EligibilityNetworkLabel
+  coverageLevel?: string
+  period?: string
+  notes?: string
 }
 
 export interface EligibilityCoverageDetail {
@@ -115,10 +140,12 @@ export interface EligibilityCoverageDetail {
   payerId?: string
   planName?: string
   planDescription?: string
+  employer?: string
   planType?: string
   insuranceType?: string
   planNumber?: string
   groupNumber?: string
+  idCardSerialNumber?: string
   coverageLevel?: string
   memberStatus?: string
   coverageStartDate?: string
@@ -126,18 +153,12 @@ export interface EligibilityCoverageDetail {
   eligibilityStartDate?: string
   eligibilityEndDate?: string
   serviceDate?: string
+  latestVisitDate?: string
   referenceNumber?: string
+  annualMaximum?: EligibilityMoneyPair
   coveredServices?: string[]
-  subscriber?: {
-    firstName?: string
-    lastName?: string
-    memberId?: string
-    dateOfBirth?: string
-    gender?: string
-    address?: string
-    groupNumber?: string
-    planNumber?: string
-  }
+  subscriber?: EligibilityPerson
+  dependents?: EligibilityPerson[]
   payerCorrespondence?: {
     name?: string
     address?: string
@@ -156,6 +177,7 @@ export interface EligibilityCoverageDetail {
   }
   copays?: EligibilityServiceCost[]
   coinsuranceLines?: EligibilityServiceCost[]
+  benefitLines?: EligibilityBenefitLine[]
 }
 
 export const TERMINAL_COMPLETE_STATUS_CODES = new Set(['3', '4'])

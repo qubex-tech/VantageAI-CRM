@@ -218,8 +218,10 @@ function formatCoverageDetailNoteSection(
     noteLine('Plan', detail.planName),
     noteLine('Plan type', detail.insuranceType || detail.planType),
     noteLine('Plan description', detail.planDescription),
+    noteLine('Employer', detail.employer && detail.employer !== detail.planDescription ? detail.employer : undefined),
     noteLine('Group #', detail.groupNumber),
     noteLine('Plan #', detail.planNumber),
+    noteLine('ID card #', detail.idCardSerialNumber),
     noteLine('Coverage level', detail.coverageLevel),
     noteLine('Member status', detail.memberStatus),
     noteLine('Coverage start', formatNoteDate(detail.coverageStartDate, timeZone)),
@@ -227,10 +229,12 @@ function formatCoverageDetailNoteSection(
     noteLine('Eligibility start', formatNoteDate(detail.eligibilityStartDate, timeZone)),
     noteLine('Eligibility end', formatNoteDate(detail.eligibilityEndDate, timeZone)),
     noteLine('As of', formatNoteDate(detail.serviceDate, timeZone)),
+    noteLine('Last visit', formatNoteDate(detail.latestVisitDate, timeZone)),
     noteLine('Reference #', detail.referenceNumber),
   ])
 
   appendSection(lines, 'Financials', [
+    noteLine('Annual maximum', money(detail.annualMaximum)),
     noteLine('INN deductible', money(detail.inn?.deductible)),
     noteLine('OON deductible', money(detail.oon?.deductible)),
     noteLine('INN out-of-pocket', money(detail.inn?.oop)),
@@ -255,6 +259,24 @@ function formatCoverageDetailNoteSection(
       detail.coinsuranceLines.map((row) => `- ${row.network} ${row.services}: ${row.amount}`)
     )
   }
+  if (detail.benefitLines?.length) {
+    appendSection(
+      lines,
+      'All benefits',
+      detail.benefitLines.map((row) => {
+        const bits = [
+          row.category,
+          row.services,
+          row.amount,
+          row.network && row.network !== 'N/A' ? row.network : undefined,
+          row.coverageLevel,
+          row.period,
+          row.notes,
+        ].filter(Boolean)
+        return `- ${bits.join(' · ')}`
+      })
+    )
+  }
   if (detail.coveredServices?.length) {
     appendSection(lines, 'Covered services', [detail.coveredServices.join(', ')])
   }
@@ -268,6 +290,23 @@ function formatCoverageDetailNoteSection(
       noteLine('Gender', detail.subscriber.gender),
       noteLine('Address', detail.subscriber.address),
     ])
+  }
+
+  if (detail.dependents?.length) {
+    appendSection(
+      lines,
+      'Dependents',
+      detail.dependents.map((dependent) => {
+        const name = [dependent.firstName, dependent.lastName].filter(Boolean).join(' ')
+        const bits = [
+          name,
+          dependent.relationship,
+          dependent.dateOfBirth ? formatNoteDate(dependent.dateOfBirth, timeZone) : undefined,
+          dependent.gender,
+        ].filter(Boolean)
+        return `- ${bits.join(' · ')}`
+      })
+    )
   }
 
   if (detail.payerCorrespondence?.name || detail.payerCorrespondence?.address) {

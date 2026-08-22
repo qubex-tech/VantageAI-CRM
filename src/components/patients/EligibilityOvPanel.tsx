@@ -71,7 +71,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 function CostTable({
   rows,
 }: {
-  rows?: Array<{ services: string; amount: string; network: 'INN' | 'OON' }>
+  rows?: Array<{ services: string; amount: string; network: string }>
 }) {
   if (!rows?.length) return null
   return (
@@ -98,17 +98,76 @@ function CostTable({
   )
 }
 
+function BenefitLinesTable({
+  rows,
+}: {
+  rows?: EligibilityCoverageDetail['benefitLines']
+}) {
+  if (!rows?.length) return null
+  return (
+    <div className="max-h-96 overflow-auto rounded-md border border-gray-200">
+      <table className="w-full text-left text-sm">
+        <thead className="sticky top-0 bg-white text-xs text-gray-500">
+          <tr>
+            <th className="px-2 py-1.5 font-medium">Type</th>
+            <th className="px-2 py-1.5 font-medium">Service</th>
+            <th className="px-2 py-1.5 font-medium">Network</th>
+            <th className="px-2 py-1.5 font-medium">Amount</th>
+            <th className="px-2 py-1.5 font-medium">Details</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, index) => {
+            const details = [row.coverageLevel, row.period, row.notes].filter(Boolean).join(' · ')
+            return (
+              <tr
+                key={`${row.category}-${row.services}-${row.amount}-${index}`}
+                className="border-t border-gray-100"
+              >
+                <td className="whitespace-nowrap px-2 py-1.5 align-top text-gray-500">{row.category}</td>
+                <td className="px-2 py-1.5 align-top text-gray-900">{row.services}</td>
+                <td className="whitespace-nowrap px-2 py-1.5 align-top text-gray-600">{row.network || '—'}</td>
+                <td className="whitespace-nowrap px-2 py-1.5 align-top font-medium text-gray-900">
+                  {row.amount || '—'}
+                </td>
+                <td className="px-2 py-1.5 align-top text-gray-600">{details || '—'}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function hasInnOonValues(detail: EligibilityCoverageDetail): boolean {
+  return Boolean(
+    moneyPair(detail.inn?.deductible) ||
+      moneyPair(detail.oon?.deductible) ||
+      moneyPair(detail.inn?.oop) ||
+      moneyPair(detail.oon?.oop) ||
+      detail.inn?.officeCopay ||
+      detail.oon?.officeCopay ||
+      detail.inn?.officeCoinsurance ||
+      detail.oon?.officeCoinsurance
+  )
+}
+
+function personName(person?: { firstName?: string; lastName?: string }): string | undefined {
+  const name = [person?.firstName, person?.lastName].filter(Boolean).join(' ')
+  return name || undefined
+}
+
 function OptionalField({ label, value }: { label: string; value?: string | null }) {
   if (!value) return null
   return <Field label={label} value={value} />
 }
 
 function CoverageSnapshot({ detail }: { detail: EligibilityCoverageDetail }) {
-  const subscriberName = [detail.subscriber?.firstName, detail.subscriber?.lastName]
-    .filter(Boolean)
-    .join(' ')
+  const subscriberName = personName(detail.subscriber)
   const planType = detail.insuranceType || detail.planType
-  const showInnOon = Boolean(detail.inn || detail.oon)
+  const showInnOon = hasInnOonValues(detail)
+  const employer = detail.employer && detail.employer !== detail.planName ? detail.employer : undefined
   return (
     <>
       <Section title="Plan">
@@ -117,19 +176,34 @@ function CoverageSnapshot({ detail }: { detail: EligibilityCoverageDetail }) {
           <OptionalField label="Payer ID" value={detail.payerId} />
           <OptionalField label="Plan" value={detail.planName} />
           <OptionalField label="Plan type" value={planType} />
+          <OptionalField label="Employer" value={employer} />
           <OptionalField label="Group" value={detail.groupNumber} />
           <OptionalField label="Plan #" value={detail.planNumber} />
+          <OptionalField label="ID card #" value={detail.idCardSerialNumber} />
           <OptionalField label="Coverage level" value={detail.coverageLevel} />
           <OptionalField label="Member status" value={detail.memberStatus} />
-          <OptionalField label="Plan description" value={detail.planDescription} />
+          <OptionalField
+            label="Plan description"
+            value={detail.planDescription && detail.planDescription !== employer ? detail.planDescription : undefined}
+          />
           <OptionalField label="Coverage start" value={formatDisplayDate(detail.coverageStartDate)} />
           <OptionalField label="Coverage end" value={formatDisplayDate(detail.coverageEndDate)} />
           <OptionalField label="Eligibility start" value={formatDisplayDate(detail.eligibilityStartDate)} />
           <OptionalField label="Eligibility end" value={formatDisplayDate(detail.eligibilityEndDate)} />
           <OptionalField label="As of" value={formatDisplayDate(detail.serviceDate)} />
+          <OptionalField label="Last visit" value={formatDisplayDate(detail.latestVisitDate)} />
           <OptionalField label="Reference #" value={detail.referenceNumber} />
         </dl>
       </Section>
+
+      {detail.annualMaximum && (detail.annualMaximum.total || detail.annualMaximum.remaining) && (
+        <Section title="Annual maximum">
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <OptionalField label="Total" value={detail.annualMaximum.total} />
+            <OptionalField label="Remaining" value={detail.annualMaximum.remaining} />
+          </dl>
+        </Section>
+      )}
 
       {showInnOon && (
         <Section title="In-network vs out-of-network">
@@ -181,6 +255,12 @@ function CoverageSnapshot({ detail }: { detail: EligibilityCoverageDetail }) {
         </Section>
       )}
 
+      {detail.benefitLines && detail.benefitLines.length > 0 && (
+        <Section title="All benefits from payer">
+          <BenefitLinesTable rows={detail.benefitLines} />
+        </Section>
+      )}
+
       {detail.coveredServices && detail.coveredServices.length > 0 && (
         <Section title="Covered services">
           <div className="flex flex-wrap gap-1.5">
@@ -199,13 +279,33 @@ function CoverageSnapshot({ detail }: { detail: EligibilityCoverageDetail }) {
       {detail.subscriber && (subscriberName || detail.subscriber.address || detail.subscriber.memberId) && (
         <Section title="Subscriber on file with payer">
           <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <OptionalField label="Name" value={subscriberName || undefined} />
+            <OptionalField label="Name" value={subscriberName} />
             <OptionalField label="Member ID" value={detail.subscriber.memberId} />
             <OptionalField label="Date of birth" value={formatDisplayDate(detail.subscriber.dateOfBirth)} />
             <OptionalField label="Gender" value={detail.subscriber.gender} />
             <OptionalField label="Address" value={detail.subscriber.address} />
             <OptionalField label="Group" value={detail.subscriber.groupNumber} />
           </dl>
+        </Section>
+      )}
+
+      {detail.dependents && detail.dependents.length > 0 && (
+        <Section title="Dependents on file with payer">
+          <div className="space-y-3">
+            {detail.dependents.map((dependent, index) => (
+              <dl
+                key={`${personName(dependent) || 'dependent'}-${index}`}
+                className="grid grid-cols-2 gap-3 sm:grid-cols-3"
+              >
+                <OptionalField label="Name" value={personName(dependent)} />
+                <OptionalField label="Relationship" value={dependent.relationship} />
+                <OptionalField label="Date of birth" value={formatDisplayDate(dependent.dateOfBirth)} />
+                <OptionalField label="Gender" value={dependent.gender} />
+                <OptionalField label="Address" value={dependent.address} />
+                <OptionalField label="Plan #" value={dependent.planNumber} />
+              </dl>
+            ))}
+          </div>
         </Section>
       )}
 

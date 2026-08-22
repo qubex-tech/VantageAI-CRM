@@ -54,13 +54,32 @@ export interface StediBenefitInformation {
   quantityQualifierCode?: string
   benefitAmount?: string
   benefitPercent?: string
+  benefitQuantity?: string
   inPlanNetworkIndicator?: string
   inPlanNetworkIndicatorCode?: string
   authOrCertIndicator?: string
   additionalInformation?: Array<{ description?: string }>
+  benefitsDateInformation?: {
+    latestVisitOrConsultation?: string
+    [key: string]: string | undefined
+  }
+  benefitsServiceDelivery?: StediBenefitServiceDelivery[]
   benefitsRelatedEntity?: StediRelatedEntity
   benefitsRelatedEntities?: StediRelatedEntity[]
   [key: string]: unknown
+}
+
+export interface StediBenefitServiceDelivery {
+  quantity?: string
+  numOfPeriods?: string
+  quantityQualifier?: string
+  timePeriodQualifier?: string
+  quantityQualifierCode?: string
+  timePeriodQualifierCode?: string
+  sampleSelectionModulus?: string
+  unitForMeasurementCode?: string
+  unitForMeasurementQualifier?: string
+  unitForMeasurementQualifierCode?: string
 }
 
 export interface StediRelatedEntity {
@@ -104,6 +123,7 @@ export interface StediEligibilityResponse {
     groupNumber?: string
     groupDescription?: string
     planNumber?: string
+    idCardSerialNumber?: string
   }
   planDateInformation?: {
     planBegin?: string
@@ -111,7 +131,24 @@ export interface StediEligibilityResponse {
     eligibilityBegin?: string
     eligibilityEnd?: string
     service?: string
+    latestVisitOrConsultation?: string
   }
+  dependents?: Array<{
+    firstName?: string
+    lastName?: string
+    middleName?: string
+    dateOfBirth?: string
+    gender?: string
+    planNumber?: string
+    relationToSubscriber?: string
+    relationToSubscriberCode?: string
+    address?: {
+      address1?: string
+      city?: string
+      state?: string
+      postalCode?: string
+    }
+  }>
   planStatus?: Array<{
     status?: string
     statusCode?: string
