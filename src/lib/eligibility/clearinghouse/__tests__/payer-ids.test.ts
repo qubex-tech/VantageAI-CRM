@@ -53,7 +53,7 @@ describe('canonical eligibility request', () => {
     expect(request.serviceTypeCodes).toEqual(['30'])
   })
 
-  it('keeps multiple selected service type codes', () => {
+  it('collapses selected dental sibling STCs to 35', () => {
     const request = mapToCanonicalEligibilityRequest({
       practiceId: 'p1',
       patient: { firstName: 'Jane', lastName: 'Doe', dateOfBirth: '1990-01-15' },
@@ -65,6 +65,6 @@ describe('canonical eligibility request', () => {
       providerOrganizationName: 'Advanced Family Dental',
     })
     expect(request.serviceType).toBe('35')
-    expect(request.serviceTypeCodes).toEqual(['35', '23', '41'])
+    expect(request.serviceTypeCodes).toEqual(['35'])
   })
 })

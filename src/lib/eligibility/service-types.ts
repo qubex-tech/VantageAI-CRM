@@ -100,14 +100,15 @@ export function primaryServiceTypeCode(codes: string[], fallback = '30'): string
 }
 
 /**
- * Stedi/payers often honor only the first STC. If dental 35 is selected, drop
- * medical 30 so a dental 270 is not sent as a medical plan check.
+ * Send one general STC on the 270. Asking Aetna (and similar dental payers) for
+ * every sibling code (23/41/25/…) comes back as a stub 271 that marks those
+ * services non-covered. Request 35 or 30; the 271 still includes copays,
+ * coinsurance, and limitations for the sibling types.
  */
 export function orderServiceTypeCodesForRequest(codes?: string[]): string[] {
   const normalized = normalizeServiceTypeCodes(codes ?? [])
-  if (normalized.includes('35') && normalized.includes('30')) {
-    return normalized.filter((code) => code !== '30')
-  }
+  if (normalized.includes('35')) return ['35']
+  if (normalized.includes('30')) return ['30']
   return normalized
 }
 

@@ -34,11 +34,11 @@ describe('mapToStediEligibilityRequest', () => {
     expect(request.encounter?.serviceTypeCodes).toEqual(['30'])
   })
 
-  it('sends only the selected service type codes', () => {
+  it('collapses dental sibling STCs to 35 on the 270', () => {
     const request = mapToStediEligibilityRequest(
       baseInput({ serviceType: '35', serviceTypeCodes: ['35', '23', '41'] })
     )
-    expect(request.encounter?.serviceTypeCodes).toEqual(['35', '23', '41'])
+    expect(request.encounter?.serviceTypeCodes).toEqual(['35'])
   })
 
   it('drops medical 30 when dental 35 is also selected', () => {

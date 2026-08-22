@@ -36,8 +36,9 @@ export function ServiceTypeMultiSelect({
       <div>
         <Label>Service types</Label>
         <p className="text-sm text-gray-500 mt-1">
-          Eligibility checks request only the selected service type codes. Dental practices
-          typically use 35 (Dental Care); medical practices typically use 30.
+          Dental practices should select only 35 (Dental Care). Medical practices should select
+          only 30. Payers return copays, coinsurance, and limitations on that one check. Listing
+          every procedure code often comes back as non-covered with no dollar amounts.
         </p>
       </div>
       {GROUPS.map((group) => {

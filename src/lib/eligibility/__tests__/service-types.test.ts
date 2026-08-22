@@ -28,8 +28,16 @@ describe('normalizeServiceTypeCodes', () => {
 })
 
 describe('orderServiceTypeCodesForRequest', () => {
-  it('drops 30 when 35 is selected so dental checks are not sent as medical', () => {
-    expect(orderServiceTypeCodesForRequest(['30', '35', '23'])).toEqual(['35', '23'])
+  it('sends only dental 35 when 35 is selected, dropping medical and sibling STCs', () => {
+    expect(orderServiceTypeCodesForRequest(['30', '35', '1', '23', '41'])).toEqual(['35'])
+  })
+
+  it('sends only medical 30 when 30 is selected without 35', () => {
+    expect(orderServiceTypeCodesForRequest(['30', '98', '88'])).toEqual(['30'])
+  })
+
+  it('keeps a specific STC list when no general 30/35 is selected', () => {
+    expect(orderServiceTypeCodesForRequest(['98', 'UC'])).toEqual(['98', 'UC'])
   })
 })
 
