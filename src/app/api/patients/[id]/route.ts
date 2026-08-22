@@ -9,6 +9,7 @@ import { emitEvent } from '@/lib/outbox'
 import { syncPatientUpdateToEhr } from '@/lib/integrations/ehr/patientUpdate'
 import { syncOpenDentalCommlogsForPatient } from '@/lib/integrations/opendental/commlogSync'
 import { syncOpenDentalAppointmentsForPatient } from '@/lib/integrations/opendental/appointmentSync'
+import { syncOpenDentalInsuranceForPatient } from '@/lib/integrations/opendental/insuranceSync'
 import { normalizeDateOnly, parseDateOnlyString } from '@/lib/date'
 
 export const dynamic = 'force-dynamic'
@@ -98,6 +99,27 @@ export async function GET(
         }
       } catch (error) {
         console.warn('[Patient GET] Open Dental appointment pull failed', {
+          patientId: patient.id,
+          error: error instanceof Error ? error.message : 'unknown',
+        })
+      }
+
+      // Best-effort: pull Family Module insurance into InsurancePolicy so the
+      // existing Insurance tab reflects Open Dental coverage without UI changes.
+      try {
+        const insuranceResult = await syncOpenDentalInsuranceForPatient({
+          practiceId,
+          patientId: patient.id,
+          externalEhrId: patient.externalEhrId,
+        })
+        if (insuranceResult.status === 'success') {
+          patient.insurancePolicies = await prisma.insurancePolicy.findMany({
+            where: { patientId: patient.id },
+            orderBy: [{ isPrimary: 'desc' }],
+          })
+        }
+      } catch (error) {
+        console.warn('[Patient GET] Open Dental insurance pull failed', {
           patientId: patient.id,
           error: error instanceof Error ? error.message : 'unknown',
         })

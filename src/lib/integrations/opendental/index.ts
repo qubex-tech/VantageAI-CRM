@@ -18,3 +18,10 @@ export {
   recordSyncResult,
 } from './connectionManager'
 export { logOpenDentalAudit } from './audit'
+export {
+  syncOpenDentalInsuranceForPatient,
+  mapOpenDentalFamilyInsuranceRow,
+  mapOpenDentalPlanType,
+  mapOpenDentalRelationship,
+  resolveOpenDentalMemberId,
+} from './insuranceSync'

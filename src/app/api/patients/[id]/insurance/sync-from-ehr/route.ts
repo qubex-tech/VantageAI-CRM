@@ -3,12 +3,15 @@ import { requireAuth } from '@/lib/middleware'
 import { prisma } from '@/lib/db'
 import { syncPatientInsuranceFromEhr } from '@/lib/ehr/syncPatientInsuranceFromEhr'
 import { getEcwDocumentationConfigGaps } from '@/lib/ehr/vantageEcwBackend'
+import { syncOpenDentalInsuranceForPatient } from '@/lib/integrations/opendental/insuranceSync'
+import { OPEN_DENTAL_EXTERNAL_PREFIX } from '@/lib/integrations/opendental/patientSync'
 
 export const dynamic = 'force-dynamic'
 
 /**
  * POST /api/patients/[id]/insurance/sync-from-ehr
- * Pulls Coverage + Organization (Payor) from eCW and upserts local InsurancePolicy rows.
+ * Pulls insurance from the linked EHR (eCW FHIR or Open Dental Family Module)
+ * and upserts local InsurancePolicy rows for the patient Insurance tab.
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -33,10 +36,56 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         {
           ok: false,
           reason: 'patient_not_linked_to_ehr',
-          message: 'Link this patient to eCW (external EHR patient id) before syncing insurance.',
+          message: 'Link this patient to an EHR before syncing insurance.',
         },
         { status: 400 }
       )
+    }
+
+    const isOpenDental = patient.externalEhrId.startsWith(OPEN_DENTAL_EXTERNAL_PREFIX)
+
+    if (isOpenDental) {
+      const result = await syncOpenDentalInsuranceForPatient({
+        practiceId: user.practiceId,
+        patientId,
+        externalEhrId: patient.externalEhrId,
+        actorUserId: user.id,
+      })
+
+      if (result.status === 'skipped' && result.reason === 'opendental_not_configured') {
+        return NextResponse.json(
+          { ok: false, reason: result.reason, message: 'Open Dental is not configured for this practice.' },
+          { status: 503 }
+        )
+      }
+
+      if (result.status === 'skipped') {
+        return NextResponse.json({ ok: false, reason: result.reason }, { status: 400 })
+      }
+
+      if (result.status === 'error') {
+        return NextResponse.json({ ok: false, error: result.message }, { status: 502 })
+      }
+
+      return NextResponse.json({
+        ok: true,
+        source: 'opendental',
+        syncedCount: result.syncedCount,
+        insuranceStatus: result.insuranceStatus,
+        policies: result.policies,
+        coveragesFromEhr: result.coveragesFromEhr.map((c) => ({
+          patPlanNum: c.patPlanNum,
+          memberId: c.memberId,
+          groupNumber: c.groupNumber,
+          planName: c.planName,
+          planType: c.planType,
+          payorName: c.payerNameRaw,
+          payorPhone: c.insurerPhoneRaw,
+          isPrimary: c.isPrimary,
+          subscriberIsPatient: c.subscriberIsPatient,
+          relationshipToPatient: c.relationshipToPatient,
+        })),
+      })
     }
 
     const result = await syncPatientInsuranceFromEhr({
@@ -63,6 +112,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     return NextResponse.json({
       ok: true,
+      source: 'ecw_fhir',
       syncedCount: result.syncedCount,
       insuranceStatus: result.insuranceStatus,
       policies: result.policies,
@@ -82,7 +132,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     })
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to sync insurance from eCW' },
+      { error: error instanceof Error ? error.message : 'Failed to sync insurance from EHR' },
       { status: 500 }
     )
   }
