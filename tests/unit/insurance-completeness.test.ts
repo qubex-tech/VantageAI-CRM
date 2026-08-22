@@ -129,8 +129,25 @@ describe('Insurance Completeness Utilities', () => {
         expect(result.status).toBe('missing_info')
         expect(result.missingFields).toContain('Subscriber first name')
         expect(result.missingFields).toContain('Subscriber last name')
-        expect(result.missingFields).toContain('Subscriber date of birth')
+        expect(result.warnings).toContain('Subscriber date of birth')
         expect(result.missingFields).toContain('Relationship to patient')
+      })
+
+      it('is ready without subscriber DOB when name and relationship are present', () => {
+        const policy = {
+          payerNameRaw: 'Aetna',
+          memberId: 'ABC123',
+          subscriberIsPatient: false,
+          subscriberFirstName: 'Jane',
+          subscriberLastName: 'Doe',
+          relationshipToPatient: 'Spouse',
+        }
+
+        const result = computeInsuranceCompleteness(policy, completePatient)
+
+        expect(result.status).toBe('ready')
+        expect(result.missingFields).toHaveLength(0)
+        expect(result.warnings).toContain('Subscriber date of birth')
       })
 
       it('should be ready when subscriber info is complete', () => {

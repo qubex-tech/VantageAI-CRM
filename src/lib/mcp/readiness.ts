@@ -107,7 +107,10 @@ export function computeReadiness(
       missing_fields.push({ field: 'subscriber.last_name', reason: 'Required when subscriber is not patient' })
     }
     if (!policy.subscriberDob) {
-      missing_fields.push({ field: 'subscriber.dob', reason: 'Required when subscriber is not patient' })
+      warnings.push({
+        field: 'subscriber.dob',
+        reason: 'Recommended when subscriber is not the patient; 270/271 can still run without it',
+      })
     }
     if (!policy.relationshipToPatient?.trim()) {
       missing_fields.push({ field: 'relationship_to_patient', reason: 'Required when subscriber is not patient' })

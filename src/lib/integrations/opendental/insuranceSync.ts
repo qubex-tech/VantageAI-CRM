@@ -3,6 +3,7 @@ import { createTimelineEntry } from '@/lib/audit'
 import { normalizePhoneForDialing } from '@/lib/phone'
 import { extractPatNumFromExternalId } from './commlogWriteback'
 import { getOpenDentalClient, getOpenDentalConnection, getOpenDentalServices } from './factory'
+import { findSubscriberDobInPractice } from '@/lib/eligibility/resolve-subscriber-dob'
 
 /** Denormalized row from GET /familymodules/{PatNum}/Insurance */
 export type OpenDentalFamilyInsurance = {
@@ -43,6 +44,7 @@ export type OpenDentalInsuranceCoverage = {
   subscriberIsPatient: boolean
   subscriberFirstName: string | null
   subscriberLastName: string | null
+  subscriberPatNum: number | null
   relationshipToPatient: string | null
   availityPayerId: string | null
   isPending: boolean
@@ -157,6 +159,7 @@ export function mapOpenDentalFamilyInsuranceRow(
     subscriberIsPatient,
     subscriberFirstName: subscriberIsPatient ? null : firstName,
     subscriberLastName: subscriberIsPatient ? null : lastName,
+    subscriberPatNum: subscriberIsPatient ? null : asNumber(row.Subscriber),
     relationshipToPatient: subscriberIsPatient ? null : mapOpenDentalRelationship(relationship),
     availityPayerId: cleanString(extras?.electId),
     isPending: asBool(row.IsPending),
@@ -169,7 +172,8 @@ export function mapOpenDentalFamilyInsuranceRow(
 function coverageToPolicyFields(
   coverage: OpenDentalInsuranceCoverage,
   practiceId: string,
-  patientId: string
+  patientId: string,
+  subscriberDob: Date | null
 ) {
   return {
     practiceId,
@@ -185,7 +189,7 @@ function coverageToPolicyFields(
     subscriberIsPatient: coverage.subscriberIsPatient,
     subscriberFirstName: coverage.subscriberFirstName,
     subscriberLastName: coverage.subscriberLastName,
-    subscriberDob: null as Date | null,
+    subscriberDob,
     relationshipToPatient: coverage.relationshipToPatient,
     availityPayerId: coverage.availityPayerId,
   }
@@ -292,6 +296,24 @@ export async function syncOpenDentalInsuranceForPatient(params: {
     })
     .filter((c): c is OpenDentalInsuranceCoverage => c != null)
 
+  const subscriberDobs = new Map<string, Date | null>()
+  await Promise.all(
+    coverages.map(async (coverage) => {
+      if (coverage.subscriberIsPatient) {
+        subscriberDobs.set(coverage.memberId, null)
+        return
+      }
+      const dob = await findSubscriberDobInPractice({
+        practiceId,
+        excludePatientId: patientId,
+        firstName: coverage.subscriberFirstName,
+        lastName: coverage.subscriberLastName,
+        subscriberPatNum: coverage.subscriberPatNum,
+      })
+      subscriberDobs.set(coverage.memberId, dob)
+    })
+  )
+
   if (coverages.length === 0) {
     await prisma.patient.update({
       where: { id: patientId },
@@ -332,7 +354,12 @@ export async function syncOpenDentalInsuranceForPatient(params: {
     const byMemberId = new Map(existing.map((p) => [p.memberId, p]))
 
     for (const coverage of coverages) {
-      const data = coverageToPolicyFields(coverage, practiceId, patientId)
+      const data = coverageToPolicyFields(
+        coverage,
+        practiceId,
+        patientId,
+        subscriberDobs.get(coverage.memberId) ?? null
+      )
       const match = byMemberId.get(coverage.memberId)
 
       if (match) {
@@ -349,6 +376,7 @@ export async function syncOpenDentalInsuranceForPatient(params: {
             subscriberIsPatient: data.subscriberIsPatient,
             subscriberFirstName: data.subscriberFirstName,
             subscriberLastName: data.subscriberLastName,
+            subscriberDob: data.subscriberDob ?? match.subscriberDob,
             relationshipToPatient: data.relationshipToPatient,
             availityPayerId: data.availityPayerId ?? match.availityPayerId,
           },

@@ -72,7 +72,8 @@ export function deriveBcbsAlphaPrefix(memberId: string): string | null {
 /**
  * Compute completeness for a single policy.
  * ✅ Ready requires: payer name, member ID, patient first/last/DOB (on profile),
- *   and if subscriber != patient: subscriber first/last/DOB + relationship.
+ *   and if subscriber != patient: subscriber first/last + relationship.
+ * Subscriber DOB is recommended for dependents but does not block a 270/271.
  * For BCBS: alpha prefix required (derived automatically if possible); if cannot derive, add to missing_fields.
  */
 export function computeInsuranceCompleteness(
@@ -102,7 +103,7 @@ export function computeInsuranceCompleteness(
   if (!policy.subscriberIsPatient) {
     if (!policy.subscriberFirstName?.trim()) missingFields.push('Subscriber first name')
     if (!policy.subscriberLastName?.trim()) missingFields.push('Subscriber last name')
-    if (!policy.subscriberDob) missingFields.push('Subscriber date of birth')
+    if (!policy.subscriberDob) warnings.push('Subscriber date of birth')
     if (!policy.relationshipToPatient?.trim()) missingFields.push('Relationship to patient')
   }
 

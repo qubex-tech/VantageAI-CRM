@@ -17,6 +17,7 @@ vi.mock('@/lib/db', () => ({
   prisma: {
     patient: {
       findFirst: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
       update: vi.fn(),
     },
     insurancePolicy: {
@@ -113,6 +114,7 @@ describe('Open Dental insurance mapping', () => {
       subscriberIsPatient: false,
       subscriberFirstName: 'Eve',
       subscriberLastName: 'Wilkins',
+      subscriberPatNum: 10,
       relationshipToPatient: 'Other',
       availityPayerId: 'SB600',
     })
