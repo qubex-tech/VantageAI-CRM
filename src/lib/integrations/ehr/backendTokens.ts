@@ -24,7 +24,7 @@ export async function refreshBackendConnectionIfNeeded(params: {
   }
   const now = params.now || new Date()
   const expiresAt = connection.expiresAt ? new Date(connection.expiresAt) : null
-  if (!shouldRefresh(expiresAt, now)) {
+  if (connection.status === 'connected' && !shouldRefresh(expiresAt, now)) {
     return connection
   }
   return refreshBackendConnection({

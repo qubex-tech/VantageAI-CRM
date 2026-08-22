@@ -113,7 +113,7 @@ async function syncPatientNoteToEhrDocumentReference(params: {
       tenantId: practiceId,
       providerId: WRITEBACK_PROVIDER_ID,
       authFlow: 'backend_services',
-      status: 'connected',
+      status: { in: ['connected', 'error', 'expired'] },
     },
     orderBy: { updatedAt: 'desc' },
   })

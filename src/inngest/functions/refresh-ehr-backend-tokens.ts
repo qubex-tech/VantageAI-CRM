@@ -19,9 +19,10 @@ export const refreshEhrBackendTokens = inngest.createFunction(
       return prisma.ehrConnection.findMany({
         where: {
           authFlow: 'backend_services',
-          status: 'connected',
+          status: { in: ['connected', 'error', 'expired'] },
           accessTokenEnc: { not: null },
           OR: [
+            { status: { in: ['error', 'expired'] } },
             { expiresAt: null },
             { expiresAt: { lte: refreshBefore } },
           ],
