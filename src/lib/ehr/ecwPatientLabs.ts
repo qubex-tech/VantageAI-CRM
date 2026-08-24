@@ -186,15 +186,17 @@ export function sameLabInstant(a?: string | null, b?: string | null): boolean {
   return a.slice(0, 16) === b.slice(0, 16)
 }
 
-export function matchOrderToReport(
-  orders: Array<{
+export function matchOrderToReport<
+  T extends {
     id: string
     panelKey: string
     collectionDateTime?: string | null
     occurrenceDateTime?: string | null
-  }>,
+  },
+>(
+  orders: T[],
   report: { panelKey: string; collectionDateTime?: string | null }
-) {
+): T | null {
   const samePanel = orders.filter((order) => order.panelKey === report.panelKey)
   return (
     samePanel.find((order) => sameLabInstant(order.collectionDateTime, report.collectionDateTime)) ||

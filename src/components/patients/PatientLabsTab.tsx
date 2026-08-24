@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertCircle, FlaskConical, Loader2, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { LabFlag, LabOrder, LabPanel, LabResultRow } from '@/lib/ehr/ecwPatientLabs'
@@ -53,7 +53,7 @@ export function PatientLabsTab({ patientId }: { patientId: string }) {
   const [innerTab, setInnerTab] = useState<'results' | 'orders' | 'graph'>('results')
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -68,11 +68,11 @@ export function PatientLabsTab({ patientId }: { patientId: string }) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [patientId])
 
   useEffect(() => {
     void load()
-  }, [patientId])
+  }, [load])
 
   const panel = useMemo(
     () => data?.panels.find((item) => item.key === panelKey) || data?.panels[0] || null,
