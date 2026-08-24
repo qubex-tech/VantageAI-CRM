@@ -43,11 +43,13 @@ import {
   Pencil,
   PhoneCall,
   FolderOpen,
+  FlaskConical,
   X,
   Tag,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { InsuranceTab } from './InsuranceTab'
+import { PatientLabsTab } from './PatientLabsTab'
 import { PreVisitChartAskSidebar, PreVisitChartTab } from './PreVisitChartTab'
 import { format, formatDistanceToNow } from 'date-fns'
 import { UserDateTime } from '@/components/ui/UserDateTime'
@@ -256,7 +258,7 @@ interface PatientNote {
 
 export function PatientDetailView({ patient, users = [], currentUserId = '' }: PatientDetailViewProps) {
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'activity' | 'appointments' | 'calls' | 'insurance' | 'previsit' | 'documentation'
+    'overview' | 'activity' | 'appointments' | 'calls' | 'insurance' | 'labs' | 'previsit' | 'documentation'
   >('overview')
   const [preVisitChartType, setPreVisitChartType] = useState<'new_patient' | 'follow_up'>('new_patient')
   const router = useRouter()
@@ -707,6 +709,17 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
               Insurance {patient.insurancePolicies.length > 0 && `(${patient.insurancePolicies.length})`}
             </button>
             <button
+              onClick={() => setActiveTab('labs')}
+              className={`px-1 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+                activeTab === 'labs'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <FlaskConical className="h-4 w-4" />
+              Labs
+            </button>
+            <button
               onClick={() => setActiveTab('previsit')}
               className={`px-1 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
                 activeTab === 'previsit'
@@ -733,7 +746,7 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
 
         {/* Content Area */}
         <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 md:py-6 min-w-0">
-          <div className="max-w-4xl w-full min-w-0 mx-auto">
+          <div className={`${activeTab === 'labs' ? 'max-w-6xl' : 'max-w-4xl'} w-full min-w-0 mx-auto`}>
             {activeTab === 'overview' && (
               <>
                 {/* Highlights Section */}
@@ -1123,6 +1136,8 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                 onRefresh={() => router.refresh()}
               />
             )}
+
+            {activeTab === 'labs' && <PatientLabsTab patientId={patient.id} />}
 
             {activeTab === 'previsit' && (
               <PreVisitChartTab
