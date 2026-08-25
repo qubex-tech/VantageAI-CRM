@@ -252,6 +252,11 @@ const BOOLEAN_CONDITION_OPTIONS = [
   { value: 'false', label: 'False' },
 ] as const
 
+const YES_NO_CONDITION_OPTIONS = [
+  { value: 'true', label: 'Yes' },
+  { value: 'false', label: 'No' },
+] as const
+
 const PATIENT_TYPE_CATEGORY_OPTIONS = [
   { value: 'new', label: 'New' },
   { value: 'existing', label: 'Existing' },
@@ -569,7 +574,7 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                               value: '',
                               ...(value === 'patient_on_list' ? { operator: 'equals' } : {}),
                               ...(value === 'patient.hasFutureScheduledAppointment'
-                                ? { withinDays: 60 }
+                                ? { withinDays: 60, value: false }
                                 : { withinDays: undefined }),
                             }
                             handleUpdate({ conditions: newConditions })
@@ -649,8 +654,7 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                                 }}
                               />
                               <p className="mt-1 text-[11px] text-gray-500">
-                                True if they have a scheduled visit between now and this many days
-                                ahead. Set value to No to send only when they have not rebooked.
+                                Choose No to send only when they have not rebooked.
                                 Checks the CRM first, then eCW or Open Dental.
                               </p>
                             </div>
@@ -783,6 +787,35 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                               <SelectContent>
                                 {OPEN_SLOT_SOURCE_OPTIONS.map((option) => (
                                   <SelectItem key={option.value} value={option.label}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : condition.field === 'patient.hasFutureScheduledAppointment' ? (
+                            <Select
+                              value={
+                                condition.value === true || condition.value === 'true'
+                                  ? 'true'
+                                  : condition.value === false || condition.value === 'false'
+                                    ? 'false'
+                                    : ''
+                              }
+                              onValueChange={(value) => {
+                                const newConditions = [...(config.conditions || [])]
+                                newConditions[index] = {
+                                  ...condition,
+                                  value: value === 'true',
+                                }
+                                handleUpdate({ conditions: newConditions })
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select Yes or No" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {YES_NO_CONDITION_OPTIONS.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
                                     {option.label}
                                   </SelectItem>
                                 ))}
