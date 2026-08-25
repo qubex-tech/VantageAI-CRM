@@ -571,11 +571,10 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                             newConditions[index] = {
                               ...condition,
                               field: value,
-                              value: '',
                               ...(value === 'patient_on_list' ? { operator: 'equals' } : {}),
                               ...(value === 'patient.hasFutureScheduledAppointment'
                                 ? { withinDays: 60, value: false }
-                                : { withinDays: undefined }),
+                                : { withinDays: undefined, value: '' }),
                             }
                             handleUpdate({ conditions: newConditions })
                           }}
