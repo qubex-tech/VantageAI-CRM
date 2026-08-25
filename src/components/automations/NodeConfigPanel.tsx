@@ -421,7 +421,7 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
     { value: 'patient_on_list', label: 'Patient is on list', type: 'string' as const },
     {
       value: 'patient.hasFutureScheduledAppointment',
-      label: 'Has future scheduled appointment',
+      label: 'Has scheduled appointment',
       type: 'boolean' as const,
     },
     ...eventSpecificFields,
@@ -568,6 +568,9 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                               field: value,
                               value: '',
                               ...(value === 'patient_on_list' ? { operator: 'equals' } : {}),
+                              ...(value === 'patient.hasFutureScheduledAppointment'
+                                ? { withinDays: 60 }
+                                : { withinDays: undefined }),
                             }
                             handleUpdate({ conditions: newConditions })
                           }}
@@ -625,6 +628,33 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                       </div>
                       {condition.operator !== 'exists' && condition.operator !== 'not_exists' && condition.operator !== 'is_empty' && (
                         <div>
+                          {condition.field === 'patient.hasFutureScheduledAppointment' && (
+                            <div className="mb-2">
+                              <Label className="text-xs">Look ahead (days)</Label>
+                              <Input
+                                type="number"
+                                min={1}
+                                max={365}
+                                value={condition.withinDays ?? 60}
+                                onChange={(e) => {
+                                  const raw = e.target.value
+                                  const parsed = raw === '' ? 60 : Number(raw)
+                                  const withinDays =
+                                    Number.isFinite(parsed) && parsed >= 1
+                                      ? Math.min(365, Math.floor(parsed))
+                                      : 60
+                                  const newConditions = [...(config.conditions || [])]
+                                  newConditions[index] = { ...condition, withinDays }
+                                  handleUpdate({ conditions: newConditions })
+                                }}
+                              />
+                              <p className="mt-1 text-[11px] text-gray-500">
+                                True if they have a scheduled visit between now and this many days
+                                ahead. Set value to No to send only when they have not rebooked.
+                                Checks the CRM first, then eCW or Open Dental.
+                              </p>
+                            </div>
+                          )}
                           <Label className="text-xs">Value</Label>
                           {condition.field === 'patient_on_list' ? (
                             <Select

@@ -324,28 +324,22 @@ export const runAutomationsForEvent = inngest.createFunction(
 
       if (!patientId) {
         return {
+          patientId: null as string | null,
           listIds: [] as string[],
-          hasFutureScheduledAppointment: false,
         }
       }
 
-      const { patientHasFutureScheduledAppointment } = await import(
-        '@/automations/patient-future-appointment'
-      )
-      const [memberships, hasFutureScheduledAppointment] = await Promise.all([
-        prisma.patientListMember.findMany({
-          where: {
-            practiceId,
-            patientId,
-          },
-          select: { listId: true },
-        }),
-        patientHasFutureScheduledAppointment({ practiceId, patientId }),
-      ])
+      const memberships = await prisma.patientListMember.findMany({
+        where: {
+          practiceId,
+          patientId,
+        },
+        select: { listId: true },
+      })
 
       return {
+        patientId,
         listIds: memberships.map((m) => m.listId),
-        hasFutureScheduledAppointment,
       }
     })
 
@@ -354,22 +348,42 @@ export const runAutomationsForEvent = inngest.createFunction(
       'evaluate-conditions',
       async () => {
         const results = []
-        const automationContext = buildAutomationContext(
-          payload.data,
-          practice || undefined,
-          patientContext.listIds,
-          {
-            hasFutureScheduledAppointment: patientContext.hasFutureScheduledAppointment,
-          }
-        )
+        const {
+          extractScheduledAppointmentLookahead,
+          patientHasFutureScheduledAppointment,
+        } = await import('@/automations/patient-future-appointment')
+        const appointmentCheckCache = new Map<string, boolean>()
+
         for (const rule of matchingRules) {
           try {
+            const lookahead = extractScheduledAppointmentLookahead(rule.conditionsJson)
+            let hasFutureScheduledAppointment = false
+            if (lookahead.used && patientContext.patientId) {
+              const cacheKey = lookahead.withinDays == null ? 'any' : String(lookahead.withinDays)
+              const cached = appointmentCheckCache.get(cacheKey)
+              if (cached != null) {
+                hasFutureScheduledAppointment = cached
+              } else {
+                hasFutureScheduledAppointment = await patientHasFutureScheduledAppointment({
+                  practiceId,
+                  patientId: patientContext.patientId,
+                  withinDays: lookahead.withinDays,
+                })
+                appointmentCheckCache.set(cacheKey, hasFutureScheduledAppointment)
+              }
+            }
+            const automationContext = buildAutomationContext(
+              payload.data,
+              practice || undefined,
+              patientContext.listIds,
+              { hasFutureScheduledAppointment }
+            )
             const matches = evaluateConditions(
               rule.conditionsJson as any,
               automationContext
             )
             if (matches) {
-              results.push(rule)
+              results.push({ rule, hasFutureScheduledAppointment })
             }
           } catch (error) {
             console.error(`Error evaluating rule ${rule.id}:`, error)
@@ -384,7 +398,7 @@ export const runAutomationsForEvent = inngest.createFunction(
     const executionResults = []
     const patientId = resolvePatientIdFromPayload(payload)
 
-    for (const rule of evaluatedRules) {
+    for (const { rule, hasFutureScheduledAppointment } of evaluatedRules) {
       // Create AutomationRun
       const run = await prisma.automationRun.create({
         data: {
@@ -435,7 +449,7 @@ export const runAutomationsForEvent = inngest.createFunction(
               practice || undefined,
               patientContext.listIds,
               {
-                hasFutureScheduledAppointment: patientContext.hasFutureScheduledAppointment,
+                hasFutureScheduledAppointment,
               }
             )
             let processedArgs = substituteVariables(rawArgs, automationContext)
