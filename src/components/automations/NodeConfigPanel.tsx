@@ -18,6 +18,13 @@ import { FlowNodeData } from './FlowBuilder'
 import Link from 'next/link'
 import { OPEN_SLOT_SOURCE_LABELS, type OpenSlotSource } from '@/lib/appointment-optimization/types'
 import { WEEKDAY_OPTIONS } from '@/lib/appointment-optimization/waitUntilLocalTime'
+import {
+  DELAY_UNITS,
+  delayAmountToSeconds,
+  inferDelayDisplay,
+  maxAmountForUnit,
+  type DelayUnit,
+} from '@/automations/delay'
 
 interface NodeConfigPanelProps {
   node: Node<FlowNodeData>
@@ -1486,17 +1493,58 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
 
             {config.actionType === 'delay_seconds' && (
               <div className="space-y-2">
-                <Label>Delay (seconds)</Label>
-                <Input
-                  type="number"
-                  placeholder="60"
-                  value={config.args?.seconds || ''}
-                  onChange={(e) => {
+                <Label>Delay</Label>
+                {(() => {
+                  const display = inferDelayDisplay(config.args || {})
+                  const updateDelay = (amount: number, unit: DelayUnit) => {
                     const currentArgs = config.args || {}
-                    handleUpdate({ args: { ...currentArgs, seconds: parseInt(e.target.value) || 0 } })
-                  }}
-                />
-                <p className="text-xs text-gray-500">Maximum: 86400 (24 hours)</p>
+                    const clamped = Math.min(Math.max(0, Math.floor(amount) || 0), maxAmountForUnit(unit))
+                    handleUpdate({
+                      args: {
+                        ...currentArgs,
+                        amount: clamped,
+                        unit,
+                        seconds: delayAmountToSeconds(clamped, unit),
+                      },
+                    })
+                  }
+                  return (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          min={1}
+                          max={maxAmountForUnit(display.unit)}
+                          placeholder="14"
+                          value={display.amount || ''}
+                          onChange={(e) => {
+                            updateDelay(parseInt(e.target.value, 10) || 0, display.unit)
+                          }}
+                        />
+                        <Select
+                          value={display.unit}
+                          onValueChange={(value) => {
+                            updateDelay(display.amount || 1, value as DelayUnit)
+                          }}
+                        >
+                          <SelectTrigger className="w-[140px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {DELAY_UNITS.map((unit) => (
+                              <SelectItem key={unit.value} value={unit.value}>
+                                {unit.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        Maximum 30 days. The next step waits this long before running.
+                      </p>
+                    </>
+                  )
+                })()}
               </div>
             )}
 

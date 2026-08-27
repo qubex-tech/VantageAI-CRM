@@ -16,6 +16,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Save, ArrowLeft } from 'lucide-react'
+import { delaySecondsFromArgs, MAX_DELAY_SECONDS } from '@/automations/delay'
 
 interface AutomationRule {
   id: string
@@ -264,11 +265,15 @@ export function FlowBuilderPage({ practiceId, userId, initialRules = [], initial
             errors.push(`Add note content for ${actionLabel}.`)
           }
           break
-        case 'delay_seconds':
-          if (typeof args.seconds !== 'number' || args.seconds <= 0) {
-            errors.push(`Set a delay in seconds (> 0) for ${actionLabel}.`)
+        case 'delay_seconds': {
+          const delaySeconds = delaySecondsFromArgs(args)
+          if (delaySeconds <= 0) {
+            errors.push(`Set a delay greater than 0 for ${actionLabel}.`)
+          } else if (delaySeconds > MAX_DELAY_SECONDS) {
+            errors.push(`Delay cannot exceed 30 days for ${actionLabel}.`)
           }
           break
+        }
         case 'wait_until_local_time':
           if (
             typeof args.hour !== 'number' ||

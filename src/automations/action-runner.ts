@@ -2,6 +2,7 @@ import { z } from 'zod'
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/db'
 import { logPatientActivity } from '@/lib/patient-activity'
+import { delaySecondsFromArgs, MAX_DELAY_SECONDS } from '@/automations/delay'
 
 /**
  * Action runner for automation actions
@@ -73,9 +74,18 @@ const updatePatientFieldsSchema = z.object({
   fields: z.record(z.any()), // Allowlist enforced in implementation
 })
 
-const delaySecondsSchema = z.object({
-  seconds: z.number().int().min(0).max(86400), // Max 24 hours
-})
+const delaySecondsSchema = z.preprocess((raw) => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw
+  const rec = raw as Record<string, unknown>
+  return {
+    ...rec,
+    seconds: delaySecondsFromArgs(rec),
+  }
+}, z.object({
+  seconds: z.number().int().min(0).max(MAX_DELAY_SECONDS),
+  amount: z.number().int().min(0).optional(),
+  unit: z.enum(['seconds', 'minutes', 'days']).optional(),
+}))
 
 const waitUntilLocalTimeSchema = z.object({
   hour: z.number().int().min(0).max(23),
@@ -991,7 +1001,9 @@ async function delaySeconds(
     result: {
       action: 'delay_seconds',
       seconds: args.seconds,
-      note: 'Delay logged (use step.sleep in Inngest for actual delay)',
+      amount: args.amount,
+      unit: args.unit,
+      note: 'Actual wait is performed via step.sleep in Inngest',
     },
   }
 }

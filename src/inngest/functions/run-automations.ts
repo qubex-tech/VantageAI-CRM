@@ -2,6 +2,7 @@ import { inngest } from '../client'
 import { prisma } from '@/lib/db'
 import { evaluateConditions } from '@/automations/condition-evaluator'
 import { runAction } from '@/automations/action-runner'
+import { delaySecondsFromArgs, splitDelayIntoSleepDurations } from '@/automations/delay'
 import { logAutomationActivity } from '@/lib/patient-activity'
 import { notifyPracticeAutomationRun } from '@/automations/automation-push-notification'
 
@@ -235,6 +236,49 @@ function buildAutomationContext(
   }
 }
 
+async function ruleStillMatchesAfterDelay(params: {
+  practiceId: string
+  conditionsJson: unknown
+  eventData: Record<string, any>
+  practice?: { name?: string | null; phone?: string | null; address?: string | null }
+  patientId: string | null
+}): Promise<boolean> {
+  const conditions = params.conditionsJson
+  if (!conditions || typeof conditions !== 'object') return true
+  const group = conditions as { conditions?: unknown[] }
+  if (!Array.isArray(group.conditions) || group.conditions.length === 0) return true
+
+  let listIds: string[] = []
+  if (params.patientId) {
+    const memberships = await prisma.patientListMember.findMany({
+      where: { practiceId: params.practiceId, patientId: params.patientId },
+      select: { listId: true },
+    })
+    listIds = memberships.map((m) => m.listId)
+  }
+
+  const {
+    extractScheduledAppointmentLookahead,
+    patientHasFutureScheduledAppointment,
+  } = await import('@/automations/patient-future-appointment')
+  const lookahead = extractScheduledAppointmentLookahead(params.conditionsJson)
+  let hasFutureScheduledAppointment = false
+  if (lookahead.used && params.patientId) {
+    hasFutureScheduledAppointment = await patientHasFutureScheduledAppointment({
+      practiceId: params.practiceId,
+      patientId: params.patientId,
+      withinDays: lookahead.withinDays,
+    })
+  }
+
+  return evaluateConditions(
+    params.conditionsJson as any,
+    buildAutomationContext(params.eventData, params.practice, listIds, {
+      hasFutureScheduledAppointment,
+    })
+  )
+}
+
 /**
  * Event payload structure for crm/event.received
  */
@@ -400,14 +444,19 @@ export const runAutomationsForEvent = inngest.createFunction(
 
     for (const { rule, hasFutureScheduledAppointment } of evaluatedRules) {
       // Create AutomationRun
-      const run = await prisma.automationRun.create({
-        data: {
-          practiceId,
-          ruleId: rule.id,
-          sourceEventId: payload.sourceEventId,
-          status: 'running',
-        },
-      })
+      const run = await step.run(
+        `create-run-${rule.id}-${payload.sourceEventId}`,
+        async () => {
+          return prisma.automationRun.create({
+            data: {
+              practiceId,
+              ruleId: rule.id,
+              sourceEventId: payload.sourceEventId,
+              status: 'running',
+            },
+          })
+        }
+      )
 
       try {
         const actions = rule.actionsJson as any[]
@@ -491,14 +540,44 @@ export const runAutomationsForEvent = inngest.createFunction(
             })
 
             if (action.type === 'delay_seconds') {
-              const delaySeconds = typeof processedArgs.seconds === 'number'
-                ? processedArgs.seconds
-                : Number(processedArgs.seconds)
-              if (!Number.isNaN(delaySeconds) && delaySeconds > 0) {
-                await step.sleep(
-                  `delay-${run.id}-${index}`,
-                  `${delaySeconds}s`
+              const delaySeconds = delaySecondsFromArgs(processedArgs)
+              if (delaySeconds > 0) {
+                const chunks = splitDelayIntoSleepDurations(delaySeconds)
+                for (const [chunkIndex, duration] of chunks.entries()) {
+                  await step.sleep(`delay-${run.id}-${index}-${chunkIndex}`, duration)
+                }
+
+                const stillMatches = await step.run(
+                  `recheck-after-delay-${rule.id}-${payload.sourceEventId}-${index}`,
+                  async () =>
+                    ruleStillMatchesAfterDelay({
+                      practiceId,
+                      conditionsJson: rule.conditionsJson,
+                      eventData: payload.data,
+                      practice: practice || undefined,
+                      patientId: patientId || patientContext.patientId,
+                    })
                 )
+                if (!stillMatches) {
+                  actionResults.push({
+                    actionType: action.type,
+                    status: 'succeeded',
+                    result: {
+                      action: 'delay_seconds',
+                      seconds: delaySeconds,
+                      skippedRemaining: true,
+                      reason: 'Conditions no longer matched after delay',
+                    },
+                  })
+                  for (const skipped of actions.slice(index + 1)) {
+                    actionResults.push({
+                      actionType: skipped.type,
+                      status: 'skipped',
+                      error: 'Skipped because conditions no longer matched after delay',
+                    })
+                  }
+                  break
+                }
               }
             }
 
@@ -644,16 +723,20 @@ export const runAutomationsForEvent = inngest.createFunction(
               }
             }
 
-            const result = await runAction({
-              practiceId,
-              runId: run.id,
-              actionType: action.type,
-              actionArgs: processedArgs,
-              eventData: {
-                ...payload.data,
-                userId: rule.createdByUserId, // Pass rule creator as userId for actions
-              },
-            })
+            const result = await step.run(
+              `action-${rule.id}-${payload.sourceEventId}-${index}`,
+              async () =>
+                runAction({
+                  practiceId,
+                  runId: run.id,
+                  actionType: action.type,
+                  actionArgs: processedArgs,
+                  eventData: {
+                    ...payload.data,
+                    userId: rule.createdByUserId, // Pass rule creator as userId for actions
+                  },
+                })
+            )
 
             console.log(`[AUTOMATION] Action result:`, {
               actionType: action.type,
