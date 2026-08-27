@@ -283,26 +283,6 @@ export async function DELETE(
       resourceId: appointment.id,
     })
 
-    // Emit event for automation
-    await emitEvent({
-      practiceId,
-      eventName: 'crm/appointment.cancelled',
-      entityType: 'appointment',
-      entityId: appointment.id,
-      data: {
-        appointment: {
-          id: appointment.id,
-          patientId: appointment.patientId,
-          status: appointment.status,
-          startTime: appointment.startTime.toISOString(),
-          endTime: appointment.endTime.toISOString(),
-          visitType: appointment.visitType,
-        },
-        patient: appointment.patient,
-        userId: user.id,
-      },
-    })
-
     await handleAppointmentChangeForSlotFill({ before: existing, after: appointment })
 
     // Best-effort: mark the appointment broken in Open Dental. Must never block cancel.

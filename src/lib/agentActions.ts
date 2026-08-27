@@ -41,6 +41,7 @@ import { getEcwScheduleFromSettings } from '@/lib/integrations/ehr/scheduling'
 import { formatOpenDentalLocalDateTime } from '@/lib/integrations/opendental/commlogWriteback'
 import { buildAppointmentExternalId } from '@/lib/integrations/opendental/appointmentSync'
 import { writeBackAppointmentToOpenDental } from '@/lib/integrations/opendental/appointmentWriteback'
+import { handleAppointmentChangeForSlotFill } from '@/lib/appointment-optimization/appointmentChangeHandler'
 import {
   buildPatientIdentityFacts,
   buildSafePatientUpdate,
@@ -966,10 +967,12 @@ export async function cancelAppointment(
   })
 
   // Update local appointment
-  await prisma.appointment.update({
+  const updated = await prisma.appointment.update({
     where: { id: appointmentId },
     data: { status: 'cancelled' },
   })
+
+  await handleAppointmentChangeForSlotFill({ before: appointment, after: updated })
 
   // For Open Dental-linked appointments, mark the OD appointment Broken (best-effort).
   if (isOpenDentalLinked) {

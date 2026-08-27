@@ -1235,6 +1235,15 @@ async function updateAppointmentStatus(
     data: { status: args.status },
   })
 
+  try {
+    const { handleAppointmentChangeForSlotFill } = await import(
+      '@/lib/appointment-optimization/appointmentChangeHandler'
+    )
+    await handleAppointmentChangeForSlotFill({ before: appointment, after: updated })
+  } catch (error) {
+    console.error('Failed to handle appointment status change for automations:', error)
+  }
+
   // Log to patient activity timeline
   try {
     await logPatientActivity({

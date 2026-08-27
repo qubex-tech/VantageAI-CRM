@@ -1,3 +1,5 @@
+import { prisma } from '@/lib/db'
+import { emitEvent } from '@/lib/outbox'
 import {
   getOutboundAgentsSettings,
   hasActiveSlotFillRules,
@@ -106,6 +108,61 @@ async function handleFreedSlot(params: {
 }
 
 /**
+ * True when appointment status became cancelled (CRM cancel or eCW Encounter cancelled).
+ * Newly synced cancelled visits only emit if they are still upcoming.
+ */
+export function shouldEmitAppointmentCancelledEvent(
+  before: { status: string } | null,
+  after: { status: string; startTime: Date },
+  now: Date = new Date()
+): boolean {
+  if (after.status !== 'cancelled') return false
+  if (before?.status === 'cancelled') return false
+  if (before) return true
+  return after.startTime.getTime() > now.getTime()
+}
+
+async function emitAppointmentCancelledAutomation(appointment: AppointmentSlotFillSnapshot) {
+  const row = await prisma.appointment.findFirst({
+    where: { id: appointment.id, practiceId: appointment.practiceId },
+    include: {
+      patient: {
+        select: {
+          id: true,
+          name: true,
+          firstName: true,
+          lastName: true,
+          preferredName: true,
+          phone: true,
+          primaryPhone: true,
+          secondaryPhone: true,
+          email: true,
+        },
+      },
+    },
+  })
+  if (!row?.patient) return
+
+  await emitEvent({
+    practiceId: appointment.practiceId,
+    eventName: 'crm/appointment.cancelled',
+    entityType: 'appointment',
+    entityId: row.id,
+    data: {
+      appointment: {
+        id: row.id,
+        patientId: row.patientId,
+        status: row.status,
+        startTime: row.startTime.toISOString(),
+        endTime: row.endTime.toISOString(),
+        visitType: row.visitType,
+      },
+      patient: row.patient,
+    },
+  })
+}
+
+/**
  * EHR-agnostic entry point: compare appointment state before/after any write
  * (CRM UI, Cal.com, ECW sync, Open Dental sync, portal, etc.) and fire
  * configured Slot Fill trigger scenarios.
@@ -115,6 +172,17 @@ export async function handleAppointmentChangeForSlotFill(params: {
   after: AppointmentSlotFillSnapshot
 }) {
   const { before, after } = params
+
+  if (shouldEmitAppointmentCancelledEvent(before, after)) {
+    try {
+      await emitAppointmentCancelledAutomation(after)
+    } catch (error) {
+      console.error('[automation] appointment cancelled emit failed', {
+        appointmentId: after.id,
+        error: error instanceof Error ? error.message : error,
+      })
+    }
+  }
 
   try {
     if (after.status === 'cancelled' && before?.status !== 'cancelled') {
