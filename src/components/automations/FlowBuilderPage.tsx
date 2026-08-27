@@ -17,6 +17,11 @@ import {
 } from '@/components/ui/dialog'
 import { Save, ArrowLeft } from 'lucide-react'
 import { delaySecondsFromArgs, MAX_DELAY_SECONDS } from '@/automations/delay'
+import {
+  countActionsBeforeCondition,
+  getEvaluateAfterActionCount,
+  orderedFlowNodes,
+} from '@/automations/flow-chain'
 
 interface AutomationRule {
   id: string
@@ -47,12 +52,30 @@ function ruleToFlow(rule: AutomationRule): { nodes: Node<FlowNodeData>[]; edges:
   const remainingConditions = conditionList.filter(
     (c: any) => !(c?.field === 'list.id' && c?.operator === 'equals')
   )
+  const actions = Array.isArray(rule.actionsJson) ? rule.actionsJson : []
+  const evaluateAfter = Math.min(getEvaluateAfterActionCount(conditions), actions.length)
+  const prefixActions = actions.slice(0, evaluateAfter)
+  const suffixActions = actions.slice(evaluateAfter)
 
-  // Create trigger node
-  const triggerNode: Node<FlowNodeData> = {
+  const GAP_X = 240
+  const y = 200
+  let x = 100
+  let lastNodeId = 'trigger-0'
+
+  const pushEdge = (targetId: string) => {
+    edges.push({
+      id: `e-${lastNodeId}-${targetId}`,
+      source: lastNodeId,
+      target: targetId,
+    })
+    lastNodeId = targetId
+    x += GAP_X
+  }
+
+  nodes.push({
     id: 'trigger-0',
     type: 'trigger',
-    position: { x: 100, y: 200 },
+    position: { x, y },
     data: {
       label: rule.name || 'Trigger',
       type: 'trigger',
@@ -61,43 +84,15 @@ function ruleToFlow(rule: AutomationRule): { nodes: Node<FlowNodeData>[]; edges:
         ...(listIdCondition?.value ? { listId: listIdCondition.value } : {}),
       },
     },
-  }
-  nodes.push(triggerNode)
+  })
+  x += GAP_X
 
-  let lastNodeId = 'trigger-0'
-  let yOffset = 200
-
-  // Create condition node if conditions exist (excluding injected list.id filter)
-  if (remainingConditions.length > 0) {
-    const conditionNode: Node<FlowNodeData> = {
-      id: 'condition-0',
-      type: 'condition',
-      position: { x: 350, y: yOffset },
-      data: {
-        label: 'Condition',
-        type: 'condition',
-        config: {
-          operator: conditions?.operator || 'and',
-          conditions: remainingConditions,
-        },
-      },
-    }
-    nodes.push(conditionNode)
-    edges.push({
-      id: `e-${lastNodeId}-condition-0`,
-      source: lastNodeId,
-      target: 'condition-0',
-    })
-    lastNodeId = 'condition-0'
-    yOffset += 50
-  }
-
-  // Create action nodes
-  rule.actionsJson.forEach((action, index) => {
-    const actionNode: Node<FlowNodeData> = {
-      id: `action-${index}`,
+  const addActionNode = (action: any, index: number) => {
+    const id = `action-${index}`
+    nodes.push({
+      id,
       type: 'action',
-      position: { x: 600, y: yOffset + index * 150 },
+      position: { x, y },
       data: {
         label: action.type.replace(/_/g, ' ') || 'Action',
         type: 'action',
@@ -106,15 +101,30 @@ function ruleToFlow(rule: AutomationRule): { nodes: Node<FlowNodeData>[]; edges:
           args: action.args || {},
         },
       },
-    }
-    nodes.push(actionNode)
-    edges.push({
-      id: `e-${lastNodeId}-action-${index}`,
-      source: lastNodeId,
-      target: `action-${index}`,
     })
-    lastNodeId = `action-${index}`
-  })
+    pushEdge(id)
+  }
+
+  prefixActions.forEach((action, index) => addActionNode(action, index))
+
+  if (remainingConditions.length > 0) {
+    nodes.push({
+      id: 'condition-0',
+      type: 'condition',
+      position: { x, y },
+      data: {
+        label: 'Condition',
+        type: 'condition',
+        config: {
+          operator: conditions?.operator || 'and',
+          conditions: remainingConditions,
+        },
+      },
+    })
+    pushEdge('condition-0')
+  }
+
+  suffixActions.forEach((action, index) => addActionNode(action, prefixActions.length + index))
 
   return { nodes, edges }
 }
@@ -129,22 +139,20 @@ function flowToRule(
   conditionsJson: any
   actionsJson: any[]
 } {
-  const triggerNode = nodes.find((n) => n.type === 'trigger')
-  const conditionNodes = nodes.filter((n) => n.type === 'condition')
-  const actionNodes = nodes.filter((n) => n.type === 'action')
+  const ordered = orderedFlowNodes(nodes, edges)
+  const triggerNode = ordered.find((n) => n.type === 'trigger') || nodes.find((n) => n.type === 'trigger')
+  const conditionNodes = ordered.filter((n) => n.type === 'condition')
+  const actionNodes = ordered.filter((n) => n.type === 'action')
 
-  // Get trigger event
   const triggerEvent = triggerNode?.data.config?.eventName || 'crm/appointment.created'
   const listId = triggerNode?.data.config?.listId
 
-  // Build conditions (combine all condition nodes)
   let conditionsJson: any = { operator: 'and', conditions: [] }
   if (conditionNodes.length > 0) {
     const firstCondition = conditionNodes[0]
     conditionsJson = firstCondition.data.config || { operator: 'and', conditions: [] }
   }
 
-  // Persist selected list as an implicit list.id equals condition for list triggers
   if (
     (triggerEvent === 'crm/list.run' || triggerEvent === 'crm/list.member_added') &&
     typeof listId === 'string' &&
@@ -161,28 +169,17 @@ function flowToRule(
     }
   }
 
-  // Build actions from action nodes
+  const evaluateAfterActionCount = countActionsBeforeCondition(nodes, edges)
+  if (evaluateAfterActionCount > 0) {
+    conditionsJson = {
+      ...conditionsJson,
+      evaluateAfterActionCount,
+    }
+  }
+
   const actionsJson = actionNodes.map((node) => {
-    // Ensure args is properly extracted and serialized
     const nodeArgs = node.data.config?.args || {}
-    
-    console.log('[FLOW_TO_RULE] Processing action node:', {
-      nodeId: node.id,
-      actionType: node.data.config?.actionType,
-      rawArgs: nodeArgs,
-      argsType: typeof nodeArgs,
-      argsKeys: Object.keys(nodeArgs),
-      fullConfig: node.data.config,
-    })
-    
-    // Deep clone to ensure all nested properties are included
     const serializedArgs = JSON.parse(JSON.stringify(nodeArgs))
-    
-    console.log('[FLOW_TO_RULE] Serialized args:', {
-      serializedArgs,
-      serializedKeys: Object.keys(serializedArgs),
-    })
-    
     return {
       type: node.data.config?.actionType || 'create_note',
       args: serializedArgs,

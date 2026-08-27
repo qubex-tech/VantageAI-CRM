@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { evaluateConditions } from '@/automations/condition-evaluator'
 import { runAction } from '@/automations/action-runner'
 import { delaySecondsFromArgs, splitDelayIntoSleepDurations } from '@/automations/delay'
+import { getEvaluateAfterActionCount } from '@/automations/flow-chain'
 import { logAutomationActivity } from '@/lib/patient-activity'
 import { notifyPracticeAutomationRun } from '@/automations/automation-push-notification'
 
@@ -400,6 +401,11 @@ export const runAutomationsForEvent = inngest.createFunction(
 
         for (const rule of matchingRules) {
           try {
+            if (getEvaluateAfterActionCount(rule.conditionsJson) > 0) {
+              // Delay (or other prefix actions) run first; conditions are checked after that wait.
+              results.push({ rule, hasFutureScheduledAppointment: false })
+              continue
+            }
             const lookahead = extractScheduledAppointmentLookahead(rule.conditionsJson)
             let hasFutureScheduledAppointment = false
             if (lookahead.used && patientContext.patientId) {
