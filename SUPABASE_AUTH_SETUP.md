@@ -4,7 +4,7 @@
 
 ### 1. Get Supabase API Keys
 
-1. Go to your Supabase Dashboard: https://supabase.com/dashboard/project/yxmtekolhhyeypicyfzq
+1. Go to your Supabase Dashboard: https://supabase.com/dashboard/project/[YOUR-PROJECT-REF]
 2. Navigate to **Settings** → **API**
 3. Find **Project API keys** section
 4. Copy the **anon public** key (this is safe to expose in client-side code)
@@ -14,7 +14,7 @@
 Add these variables to your `.env` file:
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL=https://yxmtekolhhyeypicyfzq.supabase.co
+NEXT_PUBLIC_SUPABASE_URL=https://[YOUR-PROJECT-REF].supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
 ```
 

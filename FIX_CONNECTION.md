@@ -4,7 +4,7 @@ The connection is failing. Here's how to fix it:
 
 ## Step 1: Verify Database is Ready
 
-1. Go to: https://supabase.com/dashboard/project/yxmtekolhhyeypicyfzq
+1. Go to: https://supabase.com/dashboard/project/[YOUR-PROJECT-REF]
 2. Check if the project status shows "Active" (not "Setting up")
 3. If it's still setting up, wait 2-3 more minutes
 
@@ -34,7 +34,7 @@ For migrations, we need direct connection. But for running the app later, you ca
 
 If you have `psql` installed, test directly:
 ```bash
-psql "postgresql://postgres:rA6pUqcH7Z3yFqj4@db.yxmtekolhhyeypicyfzq.supabase.co:5432/postgres"
+psql "postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres"
 ```
 
 ## Once Connection Works

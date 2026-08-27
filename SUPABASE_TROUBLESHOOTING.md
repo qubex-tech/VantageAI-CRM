@@ -14,7 +14,7 @@ Supabase has a connection pooler that's more reliable. Update your DATABASE_URL:
 
 Or try updating your .env to use port 6543 (pooler):
 ```
-DATABASE_URL="postgresql://postgres:rA6pUqcH7Z3yFqj4@db.yxmtekolhhyeypicyfzq.supabase.co:6543/postgres?pgbouncer=true&schema=public"
+DATABASE_URL="postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:6543/postgres?pgbouncer=true&schema=public"
 ```
 
 ## Option 2: Check IP Allowlist
@@ -34,11 +34,11 @@ DATABASE_URL="postgresql://postgres:rA6pUqcH7Z3yFqj4@db.yxmtekolhhyeypicyfzq.sup
 
 You can test if the connection works with psql (if installed):
 ```bash
-psql "postgresql://postgres:rA6pUqcH7Z3yFqj4@db.yxmtekolhhyeypicyfzq.supabase.co:5432/postgres"
+psql "postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres"
 ```
 
 Or try the pooler port:
 ```bash
-psql "postgresql://postgres:rA6pUqcH7Z3yFqj4@db.yxmtekolhhyeypicyfzq.supabase.co:6543/postgres"
+psql "postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:6543/postgres"
 ```
 

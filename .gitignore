@@ -28,6 +28,13 @@ yarn-error.log*
 .env.vercel
 .env.vercel.prod
 
+# env backup files (often contain leaked secrets)
+.env.bak*
+.env.backup*
+.env*.bak
+*.env.bak
+*.env.backup
+
 # vercel
 .vercel
 

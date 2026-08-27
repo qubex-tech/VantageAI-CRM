@@ -8,7 +8,7 @@
 import { PrismaClient } from '@prisma/client'
 
 process.env.DATABASE_URL =
-  process.env.twfvatkcekctlmdlasil_POSTGRES_URL_NON_POOLING || process.env.DATABASE_URL
+  process.env.POSTGRES_URL_NON_POOLING || process.env.DATABASE_URL
 
 const prisma = new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL } } })
 

@@ -1,12 +1,15 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { requireAuth } from '@/lib/middleware'
 
 /**
  * Debug endpoint to check current database connection status
  * This helps diagnose connection pool issues
+ * Requires authentication to prevent information disclosure
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    await requireAuth(req)
     // Try a simple query to check connection
     const result = await prisma.$queryRaw`SELECT 1 as test`
     
@@ -43,6 +46,12 @@ export async function GET() {
         : 'Switch to Transaction Mode (port 6543)',
     })
   } catch (error) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
     return NextResponse.json({
       status: 'error',
       error: error instanceof Error ? error.message : 'Unknown error',

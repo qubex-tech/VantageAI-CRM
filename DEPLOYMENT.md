@@ -51,11 +51,11 @@ Before deploying, add all environment variables in Vercel:
 
 ```bash
 # Database (Supabase)
-DATABASE_URL=postgresql://postgres.yxmtekolhhyeypicyfzq:YOUR_PASSWORD@aws-0-us-west-2.pooler.supabase.com:5432/postgres
+DATABASE_URL=postgresql://postgres.[YOUR-PROJECT-REF]:[YOUR-PASSWORD]@aws-0-us-west-2.pooler.supabase.com:5432/postgres
 
 # Supabase Auth
-NEXT_PUBLIC_SUPABASE_URL=https://yxmtekolhhyeypicyfzq.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+NEXT_PUBLIC_SUPABASE_URL=https://[YOUR-PROJECT-REF].supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=[YOUR-ANON-KEY]
 
 # NextAuth (if still using - optional)
 NEXTAUTH_URL=https://yourdomain.com
@@ -152,7 +152,7 @@ Add a **CNAME record**:
 
 Your `DATABASE_URL` should use Supabase's **Session Pooler** (which you're already using):
 ```
-postgresql://postgres.yxmtekolhhyeypicyfzq:password@aws-0-us-west-2.pooler.supabase.com:5432/postgres
+postgresql://postgres.[YOUR-PROJECT-REF]:[YOUR-PASSWORD]@aws-0-us-west-2.pooler.supabase.com:5432/postgres
 ```
 
 **Important:** 
