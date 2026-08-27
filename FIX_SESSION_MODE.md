@@ -20,7 +20,7 @@ You need to manually add `connection_limit=1` to your DATABASE_URL in Vercel.
    
    Your URL should look like:
    ```
-   postgresql://postgres.ghzbondhdjashchkkymg:***@aws-1-us-east-1.pooler.supabase.com:5432/postgres?connection_limit=1
+   postgresql://postgres.[YOUR-PROJECT-REF]:***@aws-1-us-east-1.pooler.supabase.com:5432/postgres?connection_limit=1
    ```
    
    If your URL already has query parameters (like `?sslmode=require`), add `&connection_limit=1`:

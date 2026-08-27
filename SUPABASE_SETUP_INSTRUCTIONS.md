@@ -11,7 +11,7 @@
 
 ### 1. Get Your Supabase API Key
 
-1. Go to: https://supabase.com/dashboard/project/yxmtekolhhyeypicyfzq
+1. Go to: https://supabase.com/dashboard/project/[YOUR-PROJECT-REF]
 2. Click **Settings** → **API**
 3. Under **Project API keys**, copy the **anon public** key
 
@@ -20,7 +20,7 @@
 Add these two lines to your `.env` file:
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL=https://yxmtekolhhyeypicyfzq.supabase.co
+NEXT_PUBLIC_SUPABASE_URL=https://[YOUR-PROJECT-REF].supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
 ```
 

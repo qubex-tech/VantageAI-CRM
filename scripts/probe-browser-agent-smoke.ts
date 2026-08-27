@@ -10,7 +10,7 @@
 import { PrismaClient } from '@prisma/client'
 
 process.env.DATABASE_URL =
-  process.env.twfvatkcekctlmdlasil_POSTGRES_URL_NON_POOLING || process.env.DATABASE_URL
+  process.env.POSTGRES_URL_NON_POOLING || process.env.DATABASE_URL
 
 async function main() {
   const practiceId = process.argv[2]

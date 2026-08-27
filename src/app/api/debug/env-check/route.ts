@@ -1,23 +1,33 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/middleware'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+export async function GET(req: NextRequest) {
+  try {
+    await requireAuth(req)
 
-  return NextResponse.json({
-    environment: process.env.NODE_ENV,
-    hasUrl: !!supabaseUrl,
-    urlValue: supabaseUrl || 'MISSING',
-    urlLength: supabaseUrl?.length || 0,
-    hasKey: !!supabaseAnonKey,
-    keyValue: supabaseAnonKey ? `${supabaseAnonKey.substring(0, 30)}...` : 'MISSING',
-    keyLength: supabaseAnonKey?.length || 0,
-    allEnvKeys: Object.keys(process.env).filter(k => k.includes('SUPABASE')),
-    message: (!supabaseUrl || !supabaseAnonKey) 
-      ? 'Environment variables are missing. They must be set in Vercel and a new build must be triggered.'
-      : 'Environment variables are present.',
-  })
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+    return NextResponse.json({
+      environment: process.env.NODE_ENV,
+      hasUrl: !!supabaseUrl,
+      urlValue: supabaseUrl || 'MISSING',
+      urlLength: supabaseUrl?.length || 0,
+      hasKey: !!supabaseAnonKey,
+      keyValue: supabaseAnonKey ? `${supabaseAnonKey.substring(0, 30)}...` : 'MISSING',
+      keyLength: supabaseAnonKey?.length || 0,
+      allEnvKeys: Object.keys(process.env).filter(k => k.includes('SUPABASE')),
+      message: (!supabaseUrl || !supabaseAnonKey) 
+        ? 'Environment variables are missing. They must be set in Vercel and a new build must be triggered.'
+        : 'Environment variables are present.',
+    })
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Unauthorized' },
+      { status: 401 }
+    )
+  }
 }
 
