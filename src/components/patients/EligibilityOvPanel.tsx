@@ -171,7 +171,7 @@ function CoverageSnapshot({ detail }: { detail: EligibilityCoverageDetail }) {
   return (
     <>
       <Section title="Plan">
-        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           <OptionalField label="Payer" value={detail.payerName} />
           <OptionalField label="Payer ID" value={detail.payerId} />
           <OptionalField label="Plan" value={detail.planName} />
@@ -198,7 +198,7 @@ function CoverageSnapshot({ detail }: { detail: EligibilityCoverageDetail }) {
 
       {detail.annualMaximum && (detail.annualMaximum.total || detail.annualMaximum.remaining) && (
         <Section title="Annual maximum">
-          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             <OptionalField label="Total" value={detail.annualMaximum.total} />
             <OptionalField label="Remaining" value={detail.annualMaximum.remaining} />
           </dl>
@@ -278,7 +278,7 @@ function CoverageSnapshot({ detail }: { detail: EligibilityCoverageDetail }) {
 
       {detail.subscriber && (subscriberName || detail.subscriber.address || detail.subscriber.memberId) && (
         <Section title="Subscriber on file with payer">
-          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             <OptionalField label="Name" value={subscriberName} />
             <OptionalField label="Member ID" value={detail.subscriber.memberId} />
             <OptionalField label="Date of birth" value={formatDisplayDate(detail.subscriber.dateOfBirth)} />
@@ -311,7 +311,7 @@ function CoverageSnapshot({ detail }: { detail: EligibilityCoverageDetail }) {
 
       {detail.payerCorrespondence && (detail.payerCorrespondence.name || detail.payerCorrespondence.address) && (
         <Section title="Payer correspondence">
-          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             <OptionalField label="Name" value={detail.payerCorrespondence.name} />
             <OptionalField label="Address" value={detail.payerCorrespondence.address} />
           </dl>
@@ -373,7 +373,7 @@ export function EligibilityOvPanel({
       {detail ? (
         <CoverageSnapshot detail={detail} />
       ) : rheum ? (
-        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           <Field label="Plan type" value={rheum.planType} unknown={unknown.has('planType')} />
           <Field
             label="Network"

@@ -209,25 +209,22 @@ export function InsuranceTab({
       if (!res.ok) {
         throw new Error(data?.error || 'Eligibility check failed')
       }
-      setCheckMessage(
-        [
-          data.message || 'Eligibility check started',
-          data.callRequired ? 'Call confirmation recommended.' : null,
-          data.structuredVoicePrompt ? `Voice script: ${data.structuredVoicePrompt}` : null,
-        ]
-          .filter(Boolean)
-          .join(' ')
-      )
+      const inProgress =
+        data.path === 'availity_in_progress' ||
+        data.path === 'clearinghouse_in_progress' ||
+        data.eligibility?.status === 'in_progress'
+      if (inProgress) {
+        setCheckMessage(data.message || 'Eligibility check in progress')
+      } else if (data.eligibility?.status === 'failed' || data.path === 'skipped') {
+        setCheckMessage(data.message || data.error || 'Eligibility check failed')
+      } else {
+        setCheckMessage(null)
+      }
       await loadRecentChecks()
       onRefresh()
 
       const checkId = data.eligibility?.eligibilityCheckId
-      if (
-        checkId &&
-        (data.path === 'availity_in_progress' ||
-          data.path === 'clearinghouse_in_progress' ||
-          data.eligibility?.status === 'in_progress')
-      ) {
+      if (checkId && inProgress) {
         for (let i = 0; i < 20; i++) {
           await new Promise((r) => setTimeout(r, 3000))
           const poll = await fetch(`/api/insurance/eligibility-check/${checkId}`)
@@ -237,7 +234,7 @@ export function InsuranceTab({
           if (status === 'complete' || status === 'failed' || status === 'fallback_voice') {
             setCheckMessage(
               status === 'complete'
-                ? 'Eligibility check completed'
+                ? null
                 : status === 'fallback_voice'
                   ? 'Availity check failed — voice verification started'
                   : pollData.check?.errorMessage || 'Eligibility check failed'
@@ -332,81 +329,25 @@ export function InsuranceTab({
                 className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-gray-900">{policy.payerNameRaw}</span>
-                      {policy.isPrimary && (
-                        <span className="rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
-                          Primary
-                        </span>
-                      )}
-                      {completeness.status === 'ready' ? (
-                        <span className="inline-flex items-center gap-1 rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
-                          ✅ Ready
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-                          ⚠️ Missing info
-                        </span>
-                      )}
-                      {eligibilityBadge(policy.eligibilityStatus)}
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
-                      <span>Member ID: {maskMemberId(policy.memberId)}</span>
-                      {policy.insurerPhoneRaw && <span>Insurer phone: {policy.insurerPhoneRaw}</span>}
-                      {policy.availityPayerId && <span>Payer ID: {policy.availityPayerId}</span>}
-                      {policy.clearinghousePayerIds &&
-                        Object.entries(policy.clearinghousePayerIds)
-                          .filter(([vendor, id]) => vendor !== 'availity' && Boolean(id))
-                          .map(([, id]) => (
-                            <span key={id}>Payer ID: {id}</span>
-                          ))}
-                      {policy.groupNumber && (
-                        <span>Group #: {policy.groupNumber}</span>
-                      )}
-                      {policy.planName && <span>Plan: {policy.planName}</span>}
-                      {policy.lastEligibilityCheckedAt && (
-                        <span>
-                          Last checked: {new Date(policy.lastEligibilityCheckedAt).toLocaleString()}
-                        </span>
-                      )}
-                      <span className="inline-flex items-center gap-1">
-                        Subscriber: {policy.subscriberIsPatient ? (
-                          <>
-                            <User className="h-3.5 w-3" /> Self
-                          </>
-                        ) : (
-                          <>
-                            <UserCircle className="h-3.5 w-3" /> Other
-                          </>
-                        )}
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span className="font-medium text-gray-900">{policy.payerNameRaw}</span>
+                    {policy.isPrimary && (
+                      <span className="rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                        Primary
                       </span>
-                    </div>
-                    {completeness.missingFields.length > 0 && (
-                      <div className="mt-2 text-xs text-amber-700">
-                        Missing: {completeness.missingFields.join(', ')}
-                      </div>
                     )}
-                    {completeness.warnings.length > 0 && completeness.missingFields.length === 0 && (
-                      <div className="mt-2 text-xs text-gray-500">
-                        Recommended: {completeness.warnings.join(', ')}
-                      </div>
+                    {completeness.status === 'ready' ? (
+                      <span className="inline-flex items-center gap-1 rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                        ✅ Ready
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                        ⚠️ Missing info
+                      </span>
                     )}
-                    {(() => {
-                      const latest = recentChecks.find(
-                        (c) =>
-                          c.policy?.id === policy.id ||
-                          (c.policy?.payerNameRaw === policy.payerNameRaw && c.parsedSummary?.rheum)
-                      )
-                      return latest?.parsedSummary?.rheum || latest?.parsedSummary?.coverageDetail ? (
-                        <EligibilityOvPanel
-                          compact
-                          summary={latest.parsedSummary}
-                        />
-                      ) : null
-                    })()}
+                    {eligibilityBadge(policy.eligibilityStatus)}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2">
                     <Button
                       variant="outline"
                       size="sm"
@@ -437,6 +378,88 @@ export function InsuranceTab({
                     </Button>
                   </div>
                 </div>
+                <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-sm text-gray-600 sm:grid-cols-3 lg:grid-cols-4">
+                  <div>
+                    <dt className="text-xs text-gray-500">Member ID</dt>
+                    <dd className="text-gray-900">{maskMemberId(policy.memberId)}</dd>
+                  </div>
+                  {policy.availityPayerId && (
+                    <div>
+                      <dt className="text-xs text-gray-500">Payer ID</dt>
+                      <dd className="text-gray-900">{policy.availityPayerId}</dd>
+                    </div>
+                  )}
+                  {policy.clearinghousePayerIds &&
+                    Object.entries(policy.clearinghousePayerIds)
+                      .filter(([vendor, id]) => vendor !== 'availity' && Boolean(id))
+                      .map(([, id]) => (
+                        <div key={id}>
+                          <dt className="text-xs text-gray-500">Payer ID</dt>
+                          <dd className="text-gray-900">{id}</dd>
+                        </div>
+                      ))}
+                  {policy.planName && (
+                    <div>
+                      <dt className="text-xs text-gray-500">Plan</dt>
+                      <dd className="text-gray-900">{policy.planName}</dd>
+                    </div>
+                  )}
+                  {policy.groupNumber && (
+                    <div>
+                      <dt className="text-xs text-gray-500">Group #</dt>
+                      <dd className="text-gray-900">{policy.groupNumber}</dd>
+                    </div>
+                  )}
+                  {policy.insurerPhoneRaw && (
+                    <div>
+                      <dt className="text-xs text-gray-500">Insurer phone</dt>
+                      <dd className="text-gray-900">{policy.insurerPhoneRaw}</dd>
+                    </div>
+                  )}
+                  {policy.lastEligibilityCheckedAt && (
+                    <div>
+                      <dt className="text-xs text-gray-500">Last checked</dt>
+                      <dd className="text-gray-900">
+                        {new Date(policy.lastEligibilityCheckedAt).toLocaleString()}
+                      </dd>
+                    </div>
+                  )}
+                  <div>
+                    <dt className="text-xs text-gray-500">Subscriber</dt>
+                    <dd className="inline-flex items-center gap-1 text-gray-900">
+                      {policy.subscriberIsPatient ? (
+                        <>
+                          <User className="h-3.5 w-3" /> Self
+                        </>
+                      ) : (
+                        <>
+                          <UserCircle className="h-3.5 w-3" /> Other
+                        </>
+                      )}
+                    </dd>
+                  </div>
+                </dl>
+                {completeness.missingFields.length > 0 && (
+                  <div className="mt-2 text-xs text-amber-700">
+                    Missing: {completeness.missingFields.join(', ')}
+                  </div>
+                )}
+                {completeness.warnings.length > 0 && completeness.missingFields.length === 0 && (
+                  <div className="mt-2 text-xs text-gray-500">
+                    Recommended: {completeness.warnings.join(', ')}
+                  </div>
+                )}
+                {(() => {
+                  const latest = recentChecks.find(
+                    (c) =>
+                      c.policy?.id === policy.id ||
+                      (c.policy?.payerNameRaw === policy.payerNameRaw &&
+                        Boolean(c.parsedSummary?.rheum || c.parsedSummary?.coverageDetail))
+                  )
+                  return latest?.parsedSummary?.rheum || latest?.parsedSummary?.coverageDetail ? (
+                    <EligibilityOvPanel compact summary={latest.parsedSummary} />
+                  ) : null
+                })()}
               </li>
             )
           })}
@@ -446,20 +469,15 @@ export function InsuranceTab({
       {recentChecks.length > 0 && (
         <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-4">
           <h3 className="text-sm font-semibold text-gray-900">Recent eligibility checks</h3>
-          <ul className="mt-2 space-y-3">
+          <ul className="mt-2 divide-y divide-gray-200">
             {recentChecks.slice(0, 5).map((check) => (
-              <li key={check.id} className="text-sm text-gray-600">
-                <div>
-                  {new Date(check.createdAt).toLocaleString()} — {check.policy?.payerNameRaw || 'Policy'}:{' '}
-                  {check.status}
-                  {check.parsedSummary?.eligibilityStatus
-                    ? ` (${check.parsedSummary.eligibilityStatus})`
-                    : ''}
-                  {check.errorMessage ? ` — ${check.errorMessage}` : ''}
-                </div>
-                {check.parsedSummary?.rheum || check.parsedSummary?.coverageDetail ? (
-                  <EligibilityOvPanel compact summary={check.parsedSummary} />
-                ) : null}
+              <li key={check.id} className="py-2 text-sm text-gray-600 first:pt-0 last:pb-0">
+                {new Date(check.createdAt).toLocaleString()} — {check.policy?.payerNameRaw || 'Policy'}:{' '}
+                {check.status}
+                {check.parsedSummary?.eligibilityStatus
+                  ? ` (${check.parsedSummary.eligibilityStatus})`
+                  : ''}
+                {check.errorMessage ? ` — ${check.errorMessage}` : ''}
               </li>
             ))}
           </ul>
