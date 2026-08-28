@@ -112,9 +112,20 @@ export function isSuccessfulTransactionStatus(status: string | number | undefine
 /** eCW Bundle `$transaction` entry `response.status` when practitioner refs are invalid for org/location. */
 const ECW_TRANSACTION_STATUS_WRONG_PRACTITIONER = '101'
 
+/**
+ * eCW Telephone Encounter create only accepts `planned` or `finished`
+ * (Error Code Reference Guide, July 2026: 106 = UNSUPPORTED_ENCOUNTER_STATUS).
+ * Official sample uses `planned`. `arrived` is valid FHIR but eCW rejects it with 106.
+ */
+const ECW_TELEPHONE_ENCOUNTER_CREATE_STATUS = 'planned'
+
 function ecwTransactionFailureHint(status: string | number | undefined): string {
-  if (String(status ?? '').trim() === ECW_TRANSACTION_STATUS_WRONG_PRACTITIONER) {
-    return ' — eCW: wrong practitioner information (verify telephone encounter practitioner refs vs org/location).'
+  const code = String(status ?? '').trim()
+  if (code === ECW_TRANSACTION_STATUS_WRONG_PRACTITIONER) {
+    return ' — eCW: INVALID_PROVIDER (101). Verify telephone encounter practitioner refs vs org/location.'
+  }
+  if (code === '106') {
+    return ' — eCW: UNSUPPORTED_ENCOUNTER_STATUS (106). Telephone Encounter create only allows planned or finished.'
   }
   return ''
 }
@@ -595,7 +606,7 @@ export function buildTelephoneEncounterBundle(params: {
             profile: ['http://hl7.org/fhir/us/core/StructureDefinition/us-core-encounter'],
           },
           extension: telephoneExtensions,
-          status: params.encounterStatus?.trim() || 'arrived',
+          status: params.encounterStatus?.trim() || ECW_TELEPHONE_ENCOUNTER_CREATE_STATUS,
           class: classBlock,
           type: [
             {
@@ -678,7 +689,7 @@ export async function writeBackRetellCallToEhr(params: {
   extractedData: ExtractedCallData
 }): Promise<WritebackResult> {
   const { practiceId, patientId, call, extractedData } = params
-  const WRITEBACK_VERSION = 'writeback_v20'
+  const WRITEBACK_VERSION = 'writeback_v21'
   if (!call.call_id) {
     return { status: 'skipped', reason: 'missing_call_id' }
   }
@@ -1256,9 +1267,9 @@ export async function writeBackRetellCallToEhr(params: {
         | undefined
       encounterId = extractResourceIdFromLocation(encounterLocation, 'Encounter') || null
       encounterUrl = encounterId ? `${client.getBaseUrl()}/Encounter/${encounterId}` : null
-      // No PUT — ECW's background process finalizes past-dated encounters to status=finished
-      // within minutes, which is what makes them addressable by staff. A PUT pre-empts that
-      // finalization and leaves status=arrived permanently.
+      // No PUT — create as `planned` (the only open status eCW TE create accepts). eCW's
+      // background process finalizes past-dated encounters to `finished` within minutes.
+      // A PUT with a non-finished status can pre-empt that and leave the TE unaddressed.
       await logEhrAudit({
         tenantId: practiceId,
         actorUserId: null,
@@ -1451,6 +1462,11 @@ export async function syncPatientNoteToEhrEncounter(params: {
   noteType: string
   content: string
   actorUserId: string
+  /**
+   * Skip the follow-up Encounter PUT. Eligibility notes create a fresh telephone
+   * encounter; a PUT can block eCW from finalizing it (same as Retell writeback).
+   */
+  skipFollowUpPut?: boolean
 }) {
   const { practiceId, patientId, noteType, content, actorUserId } = params
   const settings = await getEhrSettings(practiceId)
@@ -1500,7 +1516,7 @@ export async function syncPatientNoteToEhrEncounter(params: {
     // call writeback has persisted the canonical encounter/message content.
     return Date.now() - startedAt < 2 * 60 * 60 * 1000
   })
-  let resolvedEncounterId = encounterId
+  let resolvedEncounterId = noteType === 'billing' ? null : encounterId
 
   if (noteType === 'telephone_encounter' && hasRecentCallManagedWriteback) {
     return { status: 'skipped', reason: 'telephone_encounter_managed_by_call_writeback' }
@@ -1511,7 +1527,7 @@ export async function syncPatientNoteToEhrEncounter(params: {
       tenantId: practiceId,
       providerId: WRITEBACK_PROVIDER_ID,
       authFlow: 'backend_services',
-      status: 'connected',
+      status: { in: ['connected', 'error', 'expired'] },
     },
     orderBy: { updatedAt: 'desc' },
   })
@@ -1617,6 +1633,15 @@ export async function syncPatientNoteToEhrEncounter(params: {
     })) as any
     const createStatus = createResponse?.entry?.[0]?.response?.status as string | undefined
     if (!isSuccessfulTransactionStatus(createStatus)) {
+      const hint = ecwTransactionFailureHint(createStatus)
+      console.error('[EHR Note Sync] Encounter create failed', {
+        practiceId,
+        patientId,
+        noteType,
+        createStatus,
+        hint,
+        outcome: createResponse?.entry?.[0],
+      })
       return { status: 'error', reason: `encounter_create_failed_${createStatus || 'missing_status'}` }
     }
     const createLocation = createResponse?.entry?.[0]?.response?.location as string | undefined
@@ -1625,6 +1650,23 @@ export async function syncPatientNoteToEhrEncounter(params: {
 
   if (!resolvedEncounterId) {
     return { status: 'error', reason: 'missing_encounter_id' }
+  }
+
+  if (params.skipFollowUpPut) {
+    await logEhrAudit({
+      tenantId: practiceId,
+      actorUserId,
+      action: 'FHIR_WRITE',
+      providerId: connection.providerId,
+      entity: 'Encounter',
+      entityId: resolvedEncounterId,
+      metadata: {
+        patientId: patient.id,
+        noteType,
+        skipFollowUpPut: true,
+      },
+    })
+    return { status: 'success', encounterId: resolvedEncounterId }
   }
 
   const updateBundle = buildTelephoneEncounterBundle({

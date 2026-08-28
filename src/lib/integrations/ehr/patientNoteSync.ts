@@ -41,8 +41,8 @@ export async function syncPatientNoteToEhr(params: {
   content: string
   actorUserId: string
   /**
-   * Override practice note-type settings. Used for eligibility billing notes so
-   * ordinary CRM billing notes stay Vantage-only unless staff enable them.
+   * Override practice note-type settings. Eligibility billing notes force a
+   * telephone encounter (DocumentReference is not permitted on the write app).
    */
   forceMode?: EhrPatientNoteSyncMode
 }): Promise<PatientNoteEhrSyncResult> {
@@ -60,6 +60,7 @@ export async function syncPatientNoteToEhr(params: {
       noteType: params.noteType,
       content: params.content,
       actorUserId: params.actorUserId,
+      skipFollowUpPut: params.noteType === 'billing',
     })
     if (result.status === 'success') {
       return {
