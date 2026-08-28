@@ -43,3 +43,39 @@ export function formatFhirPatientDisplayName(patient: {
 }): string | null {
   return formatFhirHumanName(patient.name?.[0])
 }
+
+export type SplitPersonName = {
+  firstName: string | null
+  lastName: string | null
+}
+
+/**
+ * Split a person display string into first/last.
+ * Handles eCW Coverage.subscriber.display ("LAST, FIRST") and "First Last".
+ */
+export function splitPersonDisplayName(raw: string | null | undefined): SplitPersonName {
+  const text = raw?.trim()
+  if (!text) return { firstName: null, lastName: null }
+
+  if (text.includes(',')) {
+    const [lastRaw, restRaw = ''] = text.split(',')
+    const last = lastRaw.trim() || null
+    const first = restRaw.trim().split(/\s+/).filter(Boolean)[0] || null
+    return { firstName: first, lastName: last }
+  }
+
+  const parts = text.split(/\s+/).filter(Boolean)
+  if (parts.length === 1) return { firstName: parts[0], lastName: null }
+  return { firstName: parts[0], lastName: parts.slice(1).join(' ') }
+}
+
+/** Prefer structured given/family; fall back to display text. */
+export function namesFromFhirHumanName(name?: FhirHumanName | null): SplitPersonName {
+  if (!name) return { firstName: null, lastName: null }
+  const given = (name.given || []).map((part) => part?.trim()).filter(Boolean)
+  const family = name.family?.trim() || ''
+  if (given.length || family) {
+    return { firstName: given[0] || null, lastName: family || null }
+  }
+  return splitPersonDisplayName(name.text)
+}

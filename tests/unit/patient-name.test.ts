@@ -3,6 +3,8 @@ import {
   formatFhirHumanName,
   formatFhirPatientDisplayName,
   formatPatientDisplayName,
+  namesFromFhirHumanName,
+  splitPersonDisplayName,
 } from '@/lib/patient-name'
 
 describe('formatPatientDisplayName', () => {
@@ -47,5 +49,33 @@ describe('formatFhirPatientDisplayName', () => {
         given: ['Nicole', 'Marie'],
       })
     ).toBe('Nicole Marie King')
+  })
+})
+
+describe('splitPersonDisplayName', () => {
+  it('parses eCW last-comma-first display', () => {
+    expect(splitPersonDisplayName('DOE, JANE')).toEqual({
+      firstName: 'JANE',
+      lastName: 'DOE',
+    })
+  })
+
+  it('parses first last display', () => {
+    expect(splitPersonDisplayName('Jane Doe')).toEqual({
+      firstName: 'Jane',
+      lastName: 'Doe',
+    })
+  })
+})
+
+describe('namesFromFhirHumanName', () => {
+  it('prefers given and family over last-first text', () => {
+    expect(
+      namesFromFhirHumanName({
+        text: 'King Nicole',
+        family: 'King',
+        given: ['Nicole'],
+      })
+    ).toEqual({ firstName: 'Nicole', lastName: 'King' })
   })
 })

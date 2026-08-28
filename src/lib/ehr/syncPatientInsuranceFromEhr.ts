@@ -6,6 +6,7 @@ import {
   isEcwDocumentationConfigured,
   type EcwPatientCoverage,
 } from '@/lib/ehr/vantageEcwBackend'
+import { findSubscriberDobInPractice } from '@/lib/eligibility/resolve-subscriber-dob'
 
 function mapPlanType(coverageType?: string, planName?: string): string | null {
   const t = (coverageType || '').toUpperCase()
@@ -25,7 +26,12 @@ function mapInsuranceStatus(eligibilityStatus?: string): string {
   return 'missing'
 }
 
-function coverageToPolicyFields(coverage: EcwPatientCoverage, practiceId: string, patientId: string) {
+function coverageToPolicyFields(
+  coverage: EcwPatientCoverage,
+  practiceId: string,
+  patientId: string,
+  subscriberDob: Date | null
+) {
   const payerName = coverage.payorName?.trim() || 'Unknown payer'
   const phone = coverage.payorPhone?.trim() || null
   return {
@@ -40,10 +46,60 @@ function coverageToPolicyFields(coverage: EcwPatientCoverage, practiceId: string
     planType: mapPlanType(coverage.coverageType, coverage.planName),
     isPrimary: coverage.isPrimary,
     subscriberIsPatient: coverage.subscriberIsPatient,
-    subscriberFirstName: null as string | null,
-    subscriberLastName: null as string | null,
-    subscriberDob: null as Date | null,
+    subscriberFirstName: coverage.subscriberIsPatient
+      ? null
+      : coverage.subscriberFirstName?.trim() || null,
+    subscriberLastName: coverage.subscriberIsPatient
+      ? null
+      : coverage.subscriberLastName?.trim() || null,
+    subscriberDob: coverage.subscriberIsPatient ? null : subscriberDob,
     relationshipToPatient: coverage.subscriberIsPatient ? null : coverage.relationshipToPatient || null,
+  }
+}
+
+function parseCoverageDob(value?: string): Date | null {
+  const date = value?.trim().slice(0, 10)
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null
+  return new Date(`${date}T00:00:00.000Z`)
+}
+
+async function enrichCoverageSubscriberFromLocalChart(
+  practiceId: string,
+  patientId: string,
+  coverage: EcwPatientCoverage
+): Promise<EcwPatientCoverage> {
+  if (coverage.subscriberIsPatient) return coverage
+  if (
+    coverage.subscriberFirstName?.trim() &&
+    coverage.subscriberLastName?.trim() &&
+    coverage.subscriberDob
+  ) {
+    return coverage
+  }
+
+  if (!coverage.subscriberPatientId) return coverage
+
+  const holder = await prisma.patient.findFirst({
+    where: {
+      practiceId,
+      deletedAt: null,
+      id: { not: patientId },
+      OR: [
+        { externalEhrId: coverage.subscriberPatientId },
+        { externalEhrId: `Patient/${coverage.subscriberPatientId}` },
+      ],
+    },
+    select: { firstName: true, lastName: true, dateOfBirth: true },
+  })
+  if (!holder) return coverage
+
+  return {
+    ...coverage,
+    subscriberFirstName: coverage.subscriberFirstName?.trim() || holder.firstName || undefined,
+    subscriberLastName: coverage.subscriberLastName?.trim() || holder.lastName || undefined,
+    subscriberDob:
+      coverage.subscriberDob ||
+      (holder.dateOfBirth ? holder.dateOfBirth.toISOString().slice(0, 10) : undefined),
   }
 }
 
@@ -85,7 +141,11 @@ export async function syncPatientInsuranceFromEhr(params: {
   let coverages: EcwPatientCoverage[]
   try {
     const result = await fetchEcwPatientCoverages(patient.externalEhrId, practiceId)
-    coverages = result.coverages
+    coverages = await Promise.all(
+      result.coverages.map((coverage) =>
+        enrichCoverageSubscriberFromLocalChart(practiceId, patientId, coverage)
+      )
+    )
   } catch (error) {
     const message = error instanceof Error ? error.message : 'ehr_fetch_failed'
     return { status: 'error', message }
@@ -109,6 +169,28 @@ export async function syncPatientInsuranceFromEhr(params: {
     }
   }
 
+  const subscriberDobs = new Map<string, Date | null>()
+  await Promise.all(
+    coverages.map(async (coverage) => {
+      if (coverage.subscriberIsPatient) {
+        subscriberDobs.set(coverage.memberId, null)
+        return
+      }
+      const fromCoverage = parseCoverageDob(coverage.subscriberDob)
+      if (fromCoverage) {
+        subscriberDobs.set(coverage.memberId, fromCoverage)
+        return
+      }
+      const dob = await findSubscriberDobInPractice({
+        practiceId,
+        excludePatientId: patientId,
+        firstName: coverage.subscriberFirstName,
+        lastName: coverage.subscriberLastName,
+      })
+      subscriberDobs.set(coverage.memberId, dob)
+    })
+  )
+
   const upserted: Array<{ id: string; payerNameRaw: string; memberId: string; isPrimary: boolean }> = []
 
   await prisma.$transaction(async (tx) => {
@@ -119,7 +201,12 @@ export async function syncPatientInsuranceFromEhr(params: {
     const byMemberId = new Map(existing.map((p) => [p.memberId, p]))
 
     for (const coverage of coverages) {
-      const data = coverageToPolicyFields(coverage, practiceId, patientId)
+      const data = coverageToPolicyFields(
+        coverage,
+        practiceId,
+        patientId,
+        subscriberDobs.get(coverage.memberId) ?? null
+      )
       const match = byMemberId.get(coverage.memberId)
 
       if (match) {
@@ -134,6 +221,9 @@ export async function syncPatientInsuranceFromEhr(params: {
             planType: data.planType,
             isPrimary: data.isPrimary,
             subscriberIsPatient: data.subscriberIsPatient,
+            subscriberFirstName: data.subscriberFirstName || match.subscriberFirstName,
+            subscriberLastName: data.subscriberLastName || match.subscriberLastName,
+            subscriberDob: data.subscriberDob ?? match.subscriberDob,
             relationshipToPatient: data.relationshipToPatient,
           },
         })

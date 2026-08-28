@@ -9,7 +9,7 @@ import {
   upsertPayerIdMap,
 } from './clearinghouse'
 import { computeEligibilityReadiness } from './readiness'
-import { fillMissingSubscriberDob } from './resolve-subscriber-dob'
+import { fillMissingSubscriberIdentity } from './resolve-subscriber-dob'
 import { finalizeParsedEligibilityCheck } from './finalize-check'
 import { customerFacingVendorName } from './vendor-labels'
 
@@ -70,14 +70,16 @@ export async function runEligibilityCheck(
     throw new Error('No insurance policy found for patient')
   }
 
-  const resolvedSubscriberDob = await fillMissingSubscriberDob({
+  const resolvedSubscriber = await fillMissingSubscriberIdentity({
     practiceId,
     patientId,
+    externalEhrId: patient.externalEhrId,
     policy,
   })
-  if (resolvedSubscriberDob) {
-    policy.subscriberDob = resolvedSubscriberDob
-  }
+  policy.subscriberFirstName = resolvedSubscriber.subscriberFirstName
+  policy.subscriberLastName = resolvedSubscriber.subscriberLastName
+  policy.subscriberDob = resolvedSubscriber.subscriberDob
+  policy.relationshipToPatient = resolvedSubscriber.relationshipToPatient
 
   const adapter = getClearinghouseAdapter(settings.primaryVendorKey)
   const vendorLabel = customerFacingVendorName(adapter.vendorKey, adapter.displayName)

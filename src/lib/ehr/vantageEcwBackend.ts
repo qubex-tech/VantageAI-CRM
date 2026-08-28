@@ -1,5 +1,10 @@
 import { createEcwClientAssertionJwt } from '@/lib/ehr/ecwClientAssertion'
 import { prisma } from '@/lib/db'
+import {
+  namesFromFhirHumanName,
+  splitPersonDisplayName,
+  type FhirHumanName,
+} from '@/lib/patient-name'
 
 type SmartConfig = {
   token_endpoint?: string
@@ -542,6 +547,10 @@ export type EcwPatientCoverage = {
   isPrimary: boolean
   subscriberIsPatient: boolean
   relationshipToPatient?: string
+  subscriberFirstName?: string
+  subscriberLastName?: string
+  subscriberDob?: string
+  subscriberPatientId?: string
   payorOrganizationId?: string
   payorName?: string
   payorPhone?: string
@@ -565,7 +574,70 @@ function coverageClassValue(
   return undefined
 }
 
-function parseEcwCoverageResource(resource: Record<string, unknown>): Omit<
+function fhirPatientIdFromReference(ref?: string | null): string | undefined {
+  const raw = ref?.trim()
+  if (!raw) return undefined
+  if (raw.startsWith('#')) return undefined
+  const match = raw.match(/(?:^|\/)Patient\/([^|/\s?]+)/i)
+  return match?.[1]
+}
+
+function containedIdFromReference(ref?: string | null): string | undefined {
+  const raw = ref?.trim()
+  if (!raw?.startsWith('#')) return undefined
+  return raw.slice(1) || undefined
+}
+
+function fhirBirthDate(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const date = value.trim().slice(0, 10)
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : undefined
+}
+
+function namesFromFhirPatientResource(resource: Record<string, unknown> | null | undefined): {
+  firstName?: string
+  lastName?: string
+  birthDate?: string
+} {
+  if (!resource || resource.resourceType !== 'Patient') return {}
+  const names = Array.isArray(resource.name) ? resource.name : []
+  const parsed = namesFromFhirHumanName(names[0] as FhirHumanName | undefined)
+  const birthDate = fhirBirthDate(resource.birthDate)
+  return {
+    firstName: parsed.firstName || undefined,
+    lastName: parsed.lastName || undefined,
+    birthDate,
+  }
+}
+
+function findContainedPatient(
+  resource: Record<string, unknown>,
+  subscriberRef?: string
+): Record<string, unknown> | null {
+  const contained = Array.isArray(resource.contained) ? resource.contained : []
+  const localId = containedIdFromReference(subscriberRef)
+  const fhirId = fhirPatientIdFromReference(subscriberRef)
+  for (const entry of contained) {
+    if (!entry || typeof entry !== 'object') continue
+    const row = entry as Record<string, unknown>
+    if (row.resourceType !== 'Patient') continue
+    const id = typeof row.id === 'string' ? row.id : ''
+    if (localId && (id === localId || id === `#${localId}`)) return row
+    if (fhirId && id === fhirId) return row
+  }
+  return null
+}
+
+function mapEcwRelationship(code?: string, text?: string): string | undefined {
+  const raw = `${code || ''} ${text || ''}`.trim().toLowerCase()
+  if (!raw) return undefined
+  if (/self/.test(raw)) return undefined
+  if (/spouse/.test(raw)) return 'Spouse'
+  if (/child/.test(raw)) return 'Child'
+  return (text || code || '').trim() || 'Other'
+}
+
+export function parseEcwCoverageResource(resource: Record<string, unknown>): Omit<
   EcwPatientCoverage,
   'payorName' | 'payorPhone' | 'payorAddress' | 'rawPayor'
 > | null {
@@ -596,6 +668,21 @@ function parseEcwCoverageResource(resource: Record<string, unknown>): Omit<
     relationshipCoding?.display
   const subscriberIsPatient = relationshipCoding?.code === 'self' || /self/i.test(relationshipText || '')
 
+  const subscriber = resource.subscriber as
+    | { reference?: string; display?: string }
+    | undefined
+  const subscriberPatientId = fhirPatientIdFromReference(subscriber?.reference)
+  const containedPatient = findContainedPatient(resource, subscriber?.reference)
+  const fromPatient = namesFromFhirPatientResource(containedPatient)
+  const fromDisplay = splitPersonDisplayName(subscriber?.display)
+  const subscriberFirstName = subscriberIsPatient
+    ? undefined
+    : fromPatient.firstName || fromDisplay.firstName || undefined
+  const subscriberLastName = subscriberIsPatient
+    ? undefined
+    : fromPatient.lastName || fromDisplay.lastName || undefined
+  const subscriberDob = subscriberIsPatient ? undefined : fromPatient.birthDate
+
   const payorRef = (Array.isArray(resource.payor) ? resource.payor[0] : null) as { reference?: string } | null
   const payorOrganizationId = payorRef?.reference?.replace(/^Organization\//i, '').split('|')[0]
 
@@ -615,7 +702,13 @@ function parseEcwCoverageResource(resource: Record<string, unknown>): Omit<
     planName: plan?.name || plan?.value,
     isPrimary: order === 1,
     subscriberIsPatient,
-    relationshipToPatient: subscriberIsPatient ? undefined : relationshipText,
+    relationshipToPatient: subscriberIsPatient
+      ? undefined
+      : mapEcwRelationship(relationshipCoding?.code, relationshipText),
+    subscriberFirstName,
+    subscriberLastName,
+    subscriberDob,
+    subscriberPatientId,
     payorOrganizationId,
     rawCoverage: resource,
   }
@@ -685,6 +778,14 @@ export async function fetchEcwPatientCoverages(
     `Coverage?${new URLSearchParams({ patient: patientParam }).toString()}`
   )
   const entries = Array.isArray(bundle.entry) ? bundle.entry : []
+  const patientsById = new Map<string, Record<string, unknown>>()
+  for (const entry of entries) {
+    const resource = (entry as { resource?: Record<string, unknown> }).resource
+    if (!resource || resource.resourceType !== 'Patient') continue
+    if (typeof resource.id === 'string' && resource.id.trim()) {
+      patientsById.set(resource.id.trim(), resource)
+    }
+  }
   const parsed: EcwPatientCoverage[] = []
 
   for (const entry of entries) {
@@ -692,6 +793,37 @@ export async function fetchEcwPatientCoverages(
     if (!resource || resource.resourceType !== 'Coverage') continue
     const base = parseEcwCoverageResource(resource)
     if (!base) continue
+
+    let subscriberFirstName = base.subscriberFirstName
+    let subscriberLastName = base.subscriberLastName
+    let subscriberDob = base.subscriberDob
+
+    if (
+      !base.subscriberIsPatient &&
+      base.subscriberPatientId &&
+      (!subscriberFirstName || !subscriberLastName || !subscriberDob)
+    ) {
+      let subscriberPatient = patientsById.get(base.subscriberPatientId)
+      if (!subscriberPatient) {
+        try {
+          subscriberPatient = await ecwFhirGetJson(
+            practiceId,
+            `Patient/${encodeURIComponent(base.subscriberPatientId)}`
+          )
+          if (subscriberPatient.resourceType === 'Patient') {
+            patientsById.set(base.subscriberPatientId, subscriberPatient)
+          } else {
+            subscriberPatient = undefined
+          }
+        } catch {
+          subscriberPatient = undefined
+        }
+      }
+      const fromPatient = namesFromFhirPatientResource(subscriberPatient)
+      subscriberFirstName = subscriberFirstName || fromPatient.firstName
+      subscriberLastName = subscriberLastName || fromPatient.lastName
+      subscriberDob = subscriberDob || fromPatient.birthDate
+    }
 
     let payorName: string | undefined
     let payorPhone: string | undefined
@@ -712,6 +844,9 @@ export async function fetchEcwPatientCoverages(
 
     parsed.push({
       ...base,
+      subscriberFirstName,
+      subscriberLastName,
+      subscriberDob,
       payorName,
       payorPhone,
       payorAddress,
