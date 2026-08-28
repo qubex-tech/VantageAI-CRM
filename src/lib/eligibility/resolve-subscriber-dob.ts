@@ -190,11 +190,12 @@ export async function fillMissingSubscriberIdentity(params: {
   }
 
   const ehrId = params.externalEhrId?.trim()
-  const needsEhr =
-    Boolean(ehrId) &&
+  if (
+    ehrId &&
     !ehrId.startsWith('opendental:') &&
-    (!firstName || !lastName || !relationship)
-  if (needsEhr && (await isEcwDocumentationConfigured(params.practiceId))) {
+    (!firstName || !lastName || !relationship) &&
+    (await isEcwDocumentationConfigured(params.practiceId))
+  ) {
     try {
       const { coverages } = await fetchEcwPatientCoverages(ehrId, params.practiceId)
       const match =
