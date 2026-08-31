@@ -3,6 +3,7 @@ import { syncPatientNoteToEhr } from '@/lib/integrations/ehr/patientNoteSync'
 import type { PatientNoteEhrSyncResult } from '@/lib/integrations/ehr/patientNoteSync'
 import type { ParsedEligibilitySummary } from '@/lib/availity'
 import { formatEligibilityNoteContent } from '@/lib/availity'
+import { formatPatientDob } from '@/lib/mcp/verification-fields'
 import { getPracticeTimeZone } from '@/lib/practice-timezone'
 import { formatUserFacingDateTime } from '@/lib/timezone'
 
@@ -45,7 +46,7 @@ export function formatEligibilityBillingNote(params: {
     sourceLabel: params.sourceLabel,
     timeZone: params.timeZone,
     patientName: params.patient ? patientDisplayName(params.patient) : undefined,
-    patientDob: params.patient?.dateOfBirth || undefined,
+    patientDob: formatPatientDob(params.patient?.dateOfBirth) || undefined,
     memberId: params.policy?.memberId || undefined,
     groupNumber: params.policy?.groupNumber || undefined,
     planName: params.policy?.planName || undefined,

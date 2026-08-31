@@ -70,4 +70,23 @@ describe('eligibility billing note', () => {
     expect(note).toContain('Benefits')
     expect(note).not.toMatch(/stedi/i)
   })
+
+  it('does not shift a UTC-midnight patient DOB when the practice is in Chicago', () => {
+    const note = formatEligibilityBillingNote({
+      summary,
+      payerNameRaw: 'BCBS',
+      checkedAt: new Date('2026-08-21T16:00:00Z'),
+      sourceLabel: 'Availity',
+      timeZone: 'America/Chicago',
+      patient: {
+        firstName: 'Ravina',
+        lastName: 'Shetty',
+        dateOfBirth: new Date('1980-06-14T00:00:00.000Z'),
+      },
+    })
+
+    expect(note).toContain('Date of birth: 1980-06-14')
+    expect(note).not.toContain('Jun 13, 1980')
+    expect(note).not.toContain('1980-06-13')
+  })
 })
