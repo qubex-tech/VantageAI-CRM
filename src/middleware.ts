@@ -113,14 +113,20 @@ export async function middleware(req: NextRequest) {
       '/reset-password',
       '/auth/callback',
       '/api/mobile',
+      // SMART on FHIR OAuth flow — must be public for EHR-initiated launches
       '/api/integrations/ehr/login',
       '/api/integrations/ehr/launch',
       '/api/integrations/ehr/callback',
       '/api/integrations/ehr/jwks',
+      // eCW backend services — auth via EHR_BACKEND_API_KEY header inside the route
       '/api/integrations/ehr/backend/connect',
       '/api/integrations/ehr/backend/token',
       '/api/integrations/ehr/backend/token/health',
-      '/api/integrations/ehr/backend/token/debug-auth',
+      // EHR test/bulk/status/writeback routes: public because machine clients send
+      // x-api-key or Bearer EHR_BACKEND_API_KEY (no cookie). Route handlers call
+      // resolveEhrPractice which fails closed (throws "Not authenticated") when the
+      // API key does not match. Do NOT remove from publicPaths or API-key clients
+      // will be redirected to /login before the handler runs.
       '/api/integrations/ehr/test/patient',
       '/api/integrations/ehr/test/patient/update',
       '/api/integrations/ehr/test/patient/sync-from-ehr',
@@ -144,7 +150,7 @@ export async function middleware(req: NextRequest) {
     
     // Allow MCP API (auth via X-API-Key header, not session)
     if (pathname.startsWith('/mcp/') || pathname.startsWith('/api/mcp/') ||
-        pathname === '/mcp' || pathname === '/health' || pathname === '/tools' || pathname === '/call') {
+        pathname === '/mcp') {
       return res
     }
     
