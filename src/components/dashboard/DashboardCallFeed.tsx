@@ -83,7 +83,7 @@ export function DashboardCallFeed({
   return (
     <section className="mt-8">
       <div className="mb-4">
-        <h2 className="text-lg font-semibold text-gray-900">Recent calls</h2>
+        <h2 className="text-lg font-semibold text-gray-900">Feed</h2>
         <p className="text-sm text-gray-500">Inbound front desk activity</p>
       </div>
 

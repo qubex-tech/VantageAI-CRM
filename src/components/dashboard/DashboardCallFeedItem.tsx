@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { formatDistanceToNow } from 'date-fns'
 import { Phone, PhoneForwarded, PhoneOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { CallFeedItem } from '@/lib/dashboard/callFeed'
+import type { CallFeedItem, CallFeedPatientType } from '@/lib/dashboard/callFeed'
 
 export interface DashboardCallFeedItemProps {
   item: CallFeedItem
@@ -31,6 +31,12 @@ const TRANSFER_BADGE: Record<
     className: 'bg-red-50 text-red-700',
     Icon: PhoneOff,
   },
+}
+
+const PATIENT_TYPE_BADGE: Record<CallFeedPatientType, string> = {
+  'New Patient': 'bg-lime-50 text-lime-700',
+  'Existing Patient': 'bg-sky-50 text-sky-700',
+  Other: 'bg-gray-100 text-gray-600',
 }
 
 function formatDuration(seconds: number): string {
@@ -74,6 +80,14 @@ export function DashboardCallFeedItem({
             <h3 className="truncate text-sm font-semibold text-gray-900">
               {item.callerDisplayName}
             </h3>
+            <span
+              className={cn(
+                'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+                PATIENT_TYPE_BADGE[item.patientType]
+              )}
+            >
+              {item.patientType}
+            </span>
             {item.callerPhone && item.callerPhone !== item.callerDisplayName ? (
               <span className="text-xs text-gray-400">{item.callerPhone}</span>
             ) : null}

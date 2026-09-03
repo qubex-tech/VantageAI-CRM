@@ -8,6 +8,7 @@ import {
 } from '@/lib/outbound-customer-notifications'
 
 export type CallFeedTransferStatus = 'none' | 'successful' | 'unsuccessful'
+export type CallFeedPatientType = 'New Patient' | 'Existing Patient' | 'Other'
 
 export interface CallFeedItem {
   id: string
@@ -17,6 +18,7 @@ export interface CallFeedItem {
   callerDisplayName: string
   callerPhone: string
   summary: string | null
+  patientType: CallFeedPatientType
   transferStatus: CallFeedTransferStatus
   transferOutcomeRaw: string | null
 }
@@ -66,6 +68,60 @@ function toAnalyticsRow(row: VoiceConversationFeedRow): AnalyticsCallRow {
   }
 }
 
+function asObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {}
+}
+
+function booleanLike(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'number') {
+    if (value === 1) return true
+    if (value === 0) return false
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (['true', 'yes', '1'].includes(normalized)) return true
+    if (['false', 'no', '0'].includes(normalized)) return false
+  }
+  return undefined
+}
+
+/** Same New / Existing / Other rules as the staff call list. */
+export function detectCallFeedPatientType(metadata: unknown): CallFeedPatientType {
+  const meta = metadataRecord(metadata)
+  const custom = asObject(meta.retell_custom_data)
+  const patientTypeRaw =
+    meta.patient_type ??
+    meta.patientType ??
+    custom.patient_type ??
+    custom.patientType ??
+    custom['Patient Type']
+
+  const newPatientFlag = booleanLike(
+    meta.new_patient_add ?? custom.new_patient_add ?? custom['New Patient Add']
+  )
+  const existingPatientFlag = booleanLike(
+    meta.existing_patient_update ??
+      custom.existing_patient_update ??
+      custom['Existing Patient Update']
+  )
+
+  if (newPatientFlag === true) return 'New Patient'
+  if (existingPatientFlag === true) return 'Existing Patient'
+
+  if (typeof patientTypeRaw === 'string') {
+    const lower = patientTypeRaw.toLowerCase()
+    if (lower.includes('new')) return 'New Patient'
+    if (lower.includes('exist') || lower.includes('return') || lower.includes('establish')) {
+      return 'Existing Patient'
+    }
+  }
+
+  return 'Other'
+}
+
 export function readCallFeedSummary(metadata: unknown): string | null {
   const meta = metadataRecord(metadata)
   const summary = typeof meta.call_summary === 'string' ? meta.call_summary.trim() : ''
@@ -112,6 +168,7 @@ export function mapVoiceConversationToFeedItem(row: VoiceConversationFeedRow): C
     callerDisplayName: displayName !== '—' ? displayName : phone || 'Unknown caller',
     callerPhone: phone ? formatPhoneNumberForDisplay(phone) : '',
     summary: readCallFeedSummary(row.metadata),
+    patientType: detectCallFeedPatientType(row.metadata),
     transferStatus,
     transferOutcomeRaw,
   }

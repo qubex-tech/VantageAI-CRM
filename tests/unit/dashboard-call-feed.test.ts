@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   callFeedCursorWhere,
   decodeCallFeedCursor,
+  detectCallFeedPatientType,
   encodeCallFeedCursor,
   formatCallFeedDayLabel,
   mapVoiceConversationToFeedItem,
@@ -131,6 +132,7 @@ describe('mapVoiceConversationToFeedItem', () => {
       callerPhone: '(555) 123-4567',
       summary: 'Asked about hours',
       transferStatus: 'successful',
+      patientType: 'Other',
       durationSeconds: 260,
     })
   })
@@ -140,6 +142,34 @@ describe('mapVoiceConversationToFeedItem', () => {
     expect(item.callerDisplayName).toBe('5551234567')
     expect(item.summary).toBeNull()
     expect(item.transferStatus).toBe('none')
+    expect(item.patientType).toBe('Other')
+  })
+})
+
+describe('detectCallFeedPatientType', () => {
+  it('uses New Patient Add / Existing Patient Update flags first', () => {
+    expect(
+      detectCallFeedPatientType({
+        retell_custom_data: { 'New Patient Add': true },
+      })
+    ).toBe('New Patient')
+    expect(
+      detectCallFeedPatientType({
+        existing_patient_update: 'yes',
+        patient_type: 'new',
+      })
+    ).toBe('Existing Patient')
+  })
+
+  it('classifies patient_type strings as New, Existing, or Other', () => {
+    expect(detectCallFeedPatientType({ patient_type: 'New Patient' })).toBe('New Patient')
+    expect(
+      detectCallFeedPatientType({
+        retell_custom_data: { 'Patient Type': 'returning patient' },
+      })
+    ).toBe('Existing Patient')
+    expect(detectCallFeedPatientType({})).toBe('Other')
+    expect(detectCallFeedPatientType(null)).toBe('Other')
   })
 })
 

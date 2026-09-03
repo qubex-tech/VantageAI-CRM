@@ -1,6 +1,7 @@
 export type {
   CallFeedItem,
   CallFeedPage,
+  CallFeedPatientType,
   CallFeedTransferStatus,
 } from '@/lib/dashboard/callFeed'
 
