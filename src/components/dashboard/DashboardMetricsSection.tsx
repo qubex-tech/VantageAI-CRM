@@ -10,6 +10,8 @@ import {
   resolveDashboardRangeInTimeZone,
 } from '@/lib/analytics/dashboardDateRange'
 import { normalizeTimeZone, resolveTimeZone } from '@/lib/timezone'
+import { CALL_FEED_PAGE_SIZE } from '@/lib/dashboard/callFeed'
+import { loadCallFeedPage } from '@/lib/dashboard/loadCallFeedPage'
 import type { DashboardMetricsPayload, DashboardPeriodMetrics } from '@/components/dashboard/types'
 
 export { DashboardMetricsSkeleton } from '@/components/dashboard/DashboardMetricsSkeleton'
@@ -133,12 +135,21 @@ export async function DashboardMetricsSection({
   initialDays: 7 | 30
 }) {
   const timeZone = await resolveDashboardTimeZone(practiceId)
-  const metrics = await loadDashboardMetrics(practiceId, timeZone)
+  const [metrics, feed] = await Promise.all([
+    loadDashboardMetrics(practiceId, timeZone),
+    loadCallFeedPage({ practiceId, limit: CALL_FEED_PAGE_SIZE }),
+  ])
 
   return (
     <>
       <DashboardBackgroundSync />
-      <DashboardView userName={userName} metrics={metrics} initialDays={initialDays} />
+      <DashboardView
+        userName={userName}
+        practiceId={practiceId}
+        metrics={metrics}
+        feed={feed}
+        initialDays={initialDays}
+      />
     </>
   )
 }

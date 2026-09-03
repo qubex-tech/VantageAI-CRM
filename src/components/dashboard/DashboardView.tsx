@@ -4,19 +4,28 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { HealixCommandCenter } from '@/components/healix/HealixCommandCenter'
 import { DashboardFrontDeskMetrics } from '@/components/dashboard/DashboardFrontDeskMetrics'
+import { DashboardCallFeed } from '@/components/dashboard/DashboardCallFeed'
 import { DashboardDateRangeToggle } from '@/components/dashboard/DashboardDateRangeToggle'
 import { DashboardPageHeader } from '@/components/dashboard/DashboardPageHeader'
 import { usePageHeaderExtras } from '@/components/layout/PageHeaderExtrasContext'
-import type { DashboardMetricsPayload } from '@/components/dashboard/types'
+import type { CallFeedPage, DashboardMetricsPayload } from '@/components/dashboard/types'
 import type { HealixContextPayload } from '@/hooks/useHealixContext'
 
 interface DashboardViewProps {
   userName: string
+  practiceId: string
   metrics: DashboardMetricsPayload
+  feed: CallFeedPage
   initialDays?: 7 | 30
 }
 
-export function DashboardView({ userName, metrics, initialDays = 7 }: DashboardViewProps) {
+export function DashboardView({
+  userName,
+  practiceId,
+  metrics,
+  feed,
+  initialDays = 7,
+}: DashboardViewProps) {
   const searchParams = useSearchParams()
   const urlDays = searchParams.get('days') === '30' ? 30 : 7
   const [days, setDays] = useState<7 | 30>(initialDays ?? urlDays)
@@ -81,6 +90,12 @@ export function DashboardView({ userName, metrics, initialDays = 7 }: DashboardV
         transfersSuccessful={active.transfersSuccessful}
         transfersUnsuccessful={active.transfersUnsuccessful}
         transfersAttempted={active.transfersAttempted}
+      />
+
+      <DashboardCallFeed
+        practiceId={practiceId}
+        timeZone={metrics.timeZone}
+        initialPage={feed}
       />
     </>
   )

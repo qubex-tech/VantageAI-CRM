@@ -1,3 +1,9 @@
+export type {
+  CallFeedItem,
+  CallFeedPage,
+  CallFeedTransferStatus,
+} from '@/lib/dashboard/callFeed'
+
 export interface DashboardPeriodMetrics {
   days: 7 | 30
   rangeLabel: string
