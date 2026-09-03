@@ -79,6 +79,17 @@ describe('computeInboundTransferMetrics', () => {
     })
   })
 
+  it('counts unsuccessful for the short Retell enum failed', () => {
+    const metrics = computeInboundTransferMetrics([
+      row({ retell_custom_data: { transfer_outcome: 'failed' } }),
+    ])
+    expect(metrics).toEqual({
+      transfersAttempted: 1,
+      transfersSuccessful: 0,
+      transfersUnsuccessful: 1,
+    })
+  })
+
   it('counts unsuccessful for did-not-pick-up copy', () => {
     const metrics = computeInboundTransferMetrics([
       row({

@@ -191,15 +191,19 @@ function normalizeTransferOutcomeForMatch(value: string): string {
 
 /**
  * True when the Retell transfer-outcome string should trigger missed-transfer staff email.
- * Matches: exact "not successful", or the "cannot be completed / did not pick up" product phrases
- * (case-insensitive, whitespace collapsed).
+ * Case-insensitive, whitespace collapsed. Covers short enums (`failed`) and longer
+ * Retell analysis copy (cannot complete / did not pick up / not successful).
  */
 export function isUnsuccessfulTransferOutcomeText(outcome: string): boolean {
   const n = normalizeTransferOutcomeForMatch(outcome)
-  if (n === 'not successful') return true
-  if (n.includes('transfer call cannot be completed') && n.includes('did not pick up')) {
-    return true
-  }
+  if (!n) return false
+
+  if (n === 'failed' || n === 'unsuccessful' || n === 'not successful') return true
+  if (n.includes('not successful')) return true
+  if (/(^|[^a-z])failed\b/.test(n)) return true
+  if (n.includes('did not pick up')) return true
+  if (n.includes('cannot be completed') || n.includes('could not be completed')) return true
+
   return false
 }
 

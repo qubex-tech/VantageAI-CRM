@@ -133,6 +133,35 @@ describe('isUnsuccessfulTransferOutcomeText', () => {
     expect(isUnsuccessfulTransferOutcomeText(longPhrase)).toBe(true)
     expect(isUnsuccessfulTransferOutcomeText(`  ${shortPhrase}  `)).toBe(true)
   })
+
+  it('is true for the short Retell enum "failed"', () => {
+    expect(isUnsuccessfulTransferOutcomeText('failed')).toBe(true)
+    expect(isUnsuccessfulTransferOutcomeText('Failed')).toBe(true)
+    expect(isUnsuccessfulTransferOutcomeText('  FAILED  ')).toBe(true)
+  })
+
+  it('is true for related failure copy that is not the old pick-up phrase', () => {
+    expect(isUnsuccessfulTransferOutcomeText('Transfer not successful')).toBe(true)
+    expect(isUnsuccessfulTransferOutcomeText('Transfer failed due to technical issues')).toBe(true)
+    expect(
+      isUnsuccessfulTransferOutcomeText(
+        'Transfer connected but could not be completed due to an error'
+      )
+    ).toBe(true)
+    expect(
+      isUnsuccessfulTransferOutcomeText(
+        'Transfer call cannot be completed, the other side declined the transfer.'
+      )
+    ).toBe(true)
+  })
+
+  it('is false for successful and non-failure outcomes', () => {
+    expect(isUnsuccessfulTransferOutcomeText('successful')).toBe(false)
+    expect(isUnsuccessfulTransferOutcomeText('transferred successfully')).toBe(false)
+    expect(isUnsuccessfulTransferOutcomeText('transfer initiated')).toBe(false)
+    expect(isUnsuccessfulTransferOutcomeText('not_applicable')).toBe(false)
+    expect(isUnsuccessfulTransferOutcomeText('not needed')).toBe(false)
+  })
 })
 
 describe('isSuccessfulTransferOutcomeText', () => {
@@ -150,6 +179,7 @@ describe('isSuccessfulTransferOutcomeText', () => {
 
   it('is false for unsuccessful outcomes', () => {
     expect(isSuccessfulTransferOutcomeText('not successful')).toBe(false)
+    expect(isSuccessfulTransferOutcomeText('failed')).toBe(false)
     expect(
       isSuccessfulTransferOutcomeText(
         'Transfer call cannot be completed, the other side did not pick up.'
@@ -200,6 +230,19 @@ describe('isUnsuccessfulTransferFromRetellAnalysis', () => {
           transfer_outcome:
             'Transfer call cannot be completed, the other side did not pick up.. please inform the customer that the transfer did not go through and offer to try again or assist them directly.',
         })
+      )
+    ).toBe(true)
+  })
+
+  it('is true when outcome is the short Retell enum failed', () => {
+    expect(
+      isUnsuccessfulTransferFromRetellAnalysis(
+        callWithCustomAnalysis({ 'Transfer Outcome': 'failed' })
+      )
+    ).toBe(true)
+    expect(
+      isUnsuccessfulTransferFromRetellAnalysis(
+        callWithCustomAnalysis({ transfer_outcome: 'Failed' })
       )
     ).toBe(true)
   })

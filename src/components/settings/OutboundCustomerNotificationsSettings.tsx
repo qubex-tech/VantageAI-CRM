@@ -131,7 +131,7 @@ export function OutboundCustomerNotificationsSettings({
                 <Label htmlFor="notify-unsuccessful-transfer">Unsuccessful transfer</Label>
                 <p className="text-sm text-gray-500">
                   Send an email when Retell post-call analysis reports an unsuccessful transfer (e.g.
-                  &quot;not successful&quot; or &quot;transfer call cannot be completed… did not pick up&quot;),
+                  &quot;failed&quot;, &quot;not successful&quot;, or &quot;transfer call cannot be completed… did not pick up&quot;),
                   including the caller&apos;s voicemail message when present.
                 </p>
               </div>
