@@ -43,11 +43,47 @@ export interface ApidazeInboundParams {
   uuid: string | null
 }
 
+export function resolveApidazeApiBaseUrl(raw?: string | null): string {
+  let value = (raw ?? '').trim().replace(/^['"]+|['"]+$/g, '').trim()
+  if (!value) {
+    return DEFAULT_APIDAZE_API_BASE_URL
+  }
+
+  if (!/^https?:\/\//i.test(value)) {
+    value = `https://${value}`
+  }
+
+  try {
+    const parsed = new URL(value)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return DEFAULT_APIDAZE_API_BASE_URL
+    }
+
+    const host = parsed.hostname.toLowerCase()
+    const path = parsed.pathname.replace(/\/$/, '')
+    if (path === '/docs' || path.startsWith('/docs/') || host === 'api.apidaze.io' && path.startsWith('/docs')) {
+      return DEFAULT_APIDAZE_API_BASE_URL
+    }
+
+    return `${parsed.origin}${path}`
+  } catch {
+    return DEFAULT_APIDAZE_API_BASE_URL
+  }
+}
+
 export function getApidazeApiBaseUrl(): string {
-  return (
-    process.env.APIDAZE_API_BASE_URL?.trim().replace(/\/$/, '') ||
-    DEFAULT_APIDAZE_API_BASE_URL
-  )
+  return resolveApidazeApiBaseUrl(process.env.APIDAZE_API_BASE_URL)
+}
+
+export function buildApidazeRequestUrl(
+  credentials: Pick<ApidazeCredentials, 'apiKey' | 'apiSecret' | 'baseUrl'>,
+  path: string
+): string {
+  const base = resolveApidazeApiBaseUrl(credentials.baseUrl)
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  const url = new URL(`${base}/${encodeURIComponent(credentials.apiKey)}${normalizedPath}`)
+  url.searchParams.set('api_secret', credentials.apiSecret)
+  return url.toString()
 }
 
 export function getApidazeCredentials(): ApidazeCredentials | null {
@@ -275,12 +311,20 @@ async function apidazeFetch(
   path: string,
   init?: RequestInit
 ): Promise<{ ok: true; status: number; body: string } | { ok: false; status: number; error: string; body: string }> {
-  const url = new URL(
-    `${credentials.baseUrl.replace(/\/$/, '')}/${encodeURIComponent(credentials.apiKey)}${path}`
-  )
-  url.searchParams.set('api_secret', credentials.apiSecret)
+  let requestUrl: string
+  try {
+    requestUrl = buildApidazeRequestUrl(credentials, path)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Invalid URL'
+    return {
+      ok: false,
+      status: 0,
+      body: '',
+      error: `Could not build Apidaze API URL. Check APIDAZE_API_BASE_URL. ${message}`,
+    }
+  }
 
-  const response = await fetch(url.toString(), {
+  const response = await fetch(requestUrl, {
     ...init,
     headers: {
       Accept: 'application/xml, application/json, text/xml, */*',

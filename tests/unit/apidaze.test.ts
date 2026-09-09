@@ -1,13 +1,45 @@
 import { describe, expect, it } from 'vitest'
 import {
+  DEFAULT_APIDAZE_API_BASE_URL,
+  buildApidazeRequestUrl,
   formatApidazeNumber,
   formatE164,
   isApidazeWebhookAuthorized,
   parseApidazeInboundParams,
   parseApidazeNumbersPayload,
   parseApidazeSendResponse,
+  resolveApidazeApiBaseUrl,
 } from '@/lib/apidaze'
 import { selectSmsProvider } from '@/lib/sms'
+
+describe('apidaze API base URL', () => {
+  it('defaults when empty and prepends https when missing', () => {
+    expect(resolveApidazeApiBaseUrl('')).toBe(DEFAULT_APIDAZE_API_BASE_URL)
+    expect(resolveApidazeApiBaseUrl('cpaas-api.voipinnovations.com')).toBe(
+      'https://cpaas-api.voipinnovations.com'
+    )
+  })
+
+  it('ignores the swagger docs URL', () => {
+    expect(resolveApidazeApiBaseUrl('https://api.apidaze.io/docs/')).toBe(
+      DEFAULT_APIDAZE_API_BASE_URL
+    )
+  })
+
+  it('builds a request URL with key, path, and secret', () => {
+    const url = buildApidazeRequestUrl(
+      {
+        apiKey: 'app-key',
+        apiSecret: 'app-secret',
+        baseUrl: 'cpaas-api.voipinnovations.com',
+      },
+      '/numbers'
+    )
+    expect(url).toBe(
+      'https://cpaas-api.voipinnovations.com/app-key/numbers?api_secret=app-secret'
+    )
+  })
+})
 
 describe('apidaze number formatting', () => {
   it('adds country code without plus for Apidaze', () => {
