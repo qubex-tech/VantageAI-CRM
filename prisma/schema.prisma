@@ -43,6 +43,7 @@ model Practice {
   sendgridIntegrations       SendgridIntegration[]
   twilioIntegrations         TwilioIntegration[]
   telnyxIntegrations         TelnyxIntegration[]
+  apidazeIntegrations        ApidazeIntegration[]
   pebbleIntegrations         PebbleIntegration[]
   openDentalConnections      OpenDentalConnection[]
   ehrConnections             EhrConnection[]
@@ -820,6 +821,21 @@ model TelnyxIntegration {
   @@index([fromNumber])
   @@index([messagingProfileId])
   @@map("telnyx_integrations")
+}
+
+model ApidazeIntegration {
+  id         String   @id @default(uuid())
+  practiceId String   @unique
+  fromNumber String
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId])
+  @@index([fromNumber])
+  @@map("apidaze_integrations")
 }
 
 model OpenDentalConnection {

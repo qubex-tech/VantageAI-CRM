@@ -15,7 +15,7 @@ import {
 import { Loader2 } from 'lucide-react'
 import { SMS_HOSTED_NUMBER_HELP } from '@/lib/sms-sender-validation'
 
-type FromNumberSource = 'telnyx_inventory' | 'custom'
+type FromNumberSource = 'apidaze_inventory' | 'telnyx_inventory' | 'custom'
 
 interface TelnyxPhoneNumber {
   id: string
@@ -25,12 +25,18 @@ interface TelnyxPhoneNumber {
   messagingReady: boolean
 }
 
+interface ApidazePhoneNumberLike {
+  id: string
+  phoneNumber: string
+}
+
 interface SmsSenderState {
-  activeProvider: 'telnyx' | 'twilio' | null
+  activeProvider: 'apidaze' | 'telnyx' | 'twilio' | null
   fromNumber: string | null
   fromNumberSource: FromNumberSource | null
   telnyxConfigured: boolean
   twilioConfigured: boolean
+  apidazeConfigured?: boolean
   telnyx: {
     fromNumber: string
     phoneNumberId: string | null
@@ -42,6 +48,10 @@ interface SmsSenderState {
     messagingServiceSid: string | null
     configured: boolean
     preferForSmsOutbound?: boolean
+  } | null
+  apidaze?: {
+    fromNumber: string
+    isActive: boolean
   } | null
 }
 
@@ -91,9 +101,19 @@ export function SmsFromNumberSettings({ practiceId }: SmsFromNumberSettingsProps
       setSenderState(data)
       setFromNumberSource(
         data.fromNumberSource ||
-          (data.telnyx?.apiKeyConfigured ? 'telnyx_inventory' : 'custom')
+          (data.apidazeConfigured
+            ? 'apidaze_inventory'
+            : data.telnyx?.apiKeyConfigured
+              ? 'telnyx_inventory'
+              : 'custom')
       )
-      setFromNumber(data.fromNumber || data.telnyx?.fromNumber || data.twilio?.fromNumber || '')
+      setFromNumber(
+        data.fromNumber ||
+          data.apidaze?.fromNumber ||
+          data.telnyx?.fromNumber ||
+          data.twilio?.fromNumber ||
+          ''
+      )
       setPhoneNumberId(data.telnyx?.phoneNumberId || '')
       setMessagingProfileId(data.telnyx?.messagingProfileId || '')
     } catch (err) {
@@ -123,6 +143,31 @@ export function SmsFromNumberSettings({ practiceId }: SmsFromNumberSettingsProps
     }
   }, [practiceId])
 
+  const loadApidazeNumbers = useCallback(async () => {
+    setLoadingNumbers(true)
+    setError('')
+    try {
+      const response = await fetch('/api/settings/apidaze/phone-numbers')
+      if (!response.ok) {
+        const payload = await response.json()
+        throw new Error(payload.error || 'Failed to load phone numbers')
+      }
+      const data = await response.json()
+      setPhoneNumbers(
+        (data.phoneNumbers || []).map((entry: ApidazePhoneNumberLike) => ({
+          id: entry.id,
+          phoneNumber: entry.phoneNumber,
+          features: [],
+          messagingReady: true,
+        }))
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load phone numbers')
+    } finally {
+      setLoadingNumbers(false)
+    }
+  }, [])
+
   useEffect(() => {
     void loadSenderState()
   }, [loadSenderState])
@@ -130,10 +175,18 @@ export function SmsFromNumberSettings({ practiceId }: SmsFromNumberSettingsProps
   useEffect(() => {
     if (fromNumberSource === 'telnyx_inventory' && senderState?.telnyx?.apiKeyConfigured) {
       void loadTelnyxNumbers()
+    } else if (fromNumberSource === 'apidaze_inventory' && senderState?.apidazeConfigured) {
+      void loadApidazeNumbers()
     } else {
       setPhoneNumbers([])
     }
-  }, [fromNumberSource, senderState?.telnyx?.apiKeyConfigured, loadTelnyxNumbers])
+  }, [
+    fromNumberSource,
+    senderState?.telnyx?.apiKeyConfigured,
+    senderState?.apidazeConfigured,
+    loadTelnyxNumbers,
+    loadApidazeNumbers,
+  ])
 
   const selectedNumber = useMemo(
     () => phoneNumbers.find((entry) => entry.phoneNumber === fromNumber),
@@ -171,7 +224,11 @@ export function SmsFromNumberSettings({ practiceId }: SmsFromNumberSettingsProps
       }
 
       const sourceLabel =
-        payload.fromNumberSource === 'custom' ? 'custom number' : 'Telnyx number'
+        payload.fromNumberSource === 'custom'
+          ? 'custom number'
+          : payload.fromNumberSource === 'apidaze_inventory'
+            ? 'Apidaze number'
+            : 'Telnyx number'
       setSuccess(`From Number saved (${payload.provider}, ${sourceLabel}): ${payload.fromNumber}`)
       if (payload.warning) {
         setSuccess(`${payload.warning}`)
@@ -189,15 +246,19 @@ export function SmsFromNumberSettings({ practiceId }: SmsFromNumberSettingsProps
   }
 
   const providerLabel =
-    senderState?.activeProvider === 'telnyx'
-      ? 'Telnyx'
-      : senderState?.activeProvider === 'twilio'
-        ? 'Twilio'
-        : senderState?.telnyx?.apiKeyConfigured
-          ? 'Telnyx (configure sender below)'
-          : senderState?.twilio?.configured
-            ? 'Twilio (configure sender below)'
-            : 'Not configured'
+    senderState?.activeProvider === 'apidaze'
+      ? 'Apidaze'
+      : senderState?.activeProvider === 'telnyx'
+        ? 'Telnyx'
+        : senderState?.activeProvider === 'twilio'
+          ? 'Twilio'
+          : senderState?.apidazeConfigured
+            ? 'Apidaze (configure sender below)'
+            : senderState?.telnyx?.apiKeyConfigured
+              ? 'Telnyx (configure sender below)'
+              : senderState?.twilio?.configured
+                ? 'Twilio (configure sender below)'
+                : 'Not configured'
 
   const customNeedsTwilio =
     fromNumberSource === 'custom' &&
@@ -209,8 +270,8 @@ export function SmsFromNumberSettings({ practiceId }: SmsFromNumberSettingsProps
       <CardHeader>
         <CardTitle>SMS From Number</CardTitle>
         <CardDescription>
-          Choose the phone number patients see when this practice sends SMS. Use a custom number
-          (e.g. Twilio or your own verified sender) or pick from your Telnyx account.
+          Choose the phone number patients see when this practice sends SMS. Prefer an Apidaze
+          application number (customer line), or fall back to Telnyx / a custom Twilio sender.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -243,6 +304,9 @@ export function SmsFromNumberSettings({ practiceId }: SmsFromNumberSettingsProps
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  {senderState?.apidazeConfigured && (
+                    <SelectItem value="apidaze_inventory">Apidaze application number</SelectItem>
+                  )}
                   <SelectItem value="custom">Custom number (not from Telnyx inventory)</SelectItem>
                   {canUseTelnyxInventory && (
                     <SelectItem value="telnyx_inventory">Telnyx account number</SelectItem>
@@ -251,7 +315,51 @@ export function SmsFromNumberSettings({ practiceId }: SmsFromNumberSettingsProps
               </Select>
             </div>
 
-            {fromNumberSource === 'telnyx_inventory' ? (
+            {fromNumberSource === 'apidaze_inventory' ? (
+              <>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void loadApidazeNumbers()}
+                    disabled={loadingNumbers}
+                  >
+                    {loadingNumbers ? 'Refreshing...' : 'Refresh Apidaze Numbers'}
+                  </Button>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="smsFromNumberApidaze">From Number *</Label>
+                  {phoneNumbers.length > 0 ? (
+                    <Select value={fromNumber} onValueChange={handleNumberChange}>
+                      <SelectTrigger id="smsFromNumberApidaze">
+                        <SelectValue placeholder="Select outbound SMS number" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {phoneNumbers.map((entry) => (
+                          <SelectItem key={entry.id} value={entry.phoneNumber}>
+                            {entry.phoneNumber}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      id="smsFromNumberApidaze"
+                      type="text"
+                      value={fromNumber}
+                      onChange={(e) => setFromNumber(e.target.value)}
+                      placeholder="+15551234567"
+                      required
+                    />
+                  )}
+                  <p className="text-xs text-gray-500">
+                    Numbers loaded from the shared Vantage Apidaze application.
+                  </p>
+                </div>
+              </>
+            ) : fromNumberSource === 'telnyx_inventory' ? (
               <>
                 <div className="flex flex-wrap gap-2">
                   <Button

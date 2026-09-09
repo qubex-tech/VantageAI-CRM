@@ -10,6 +10,7 @@ export const SMS_HOSTED_NUMBER_HELP = {
   telnyxHostedSmsDocs: 'https://developers.telnyx.com/docs/messaging/messages/hosted-sms',
   twilioHostedSmsUrl: 'https://console.twilio.com/us1/develop/phone-numbers/port-host/host',
   twilioHostedSmsDocs: 'https://www.twilio.com/docs/phone-numbers/hosted-numbers',
+  apidazeDocs: 'https://api.apidaze.io/docs/',
 } as const
 
 export function buildTwilioSenderNotOnAccountError(fromNumber: string): string {
@@ -25,5 +26,13 @@ export function buildTelnyxSenderNotOnAccountError(fromNumber: string): string {
     `${fromNumber} is not on your Telnyx account. Host the number in Telnyx Hosted SMS (voice can stay with your current carrier), ` +
     `assign it to a messaging profile, then select it under "Telnyx account number". ` +
     `See: ${SMS_HOSTED_NUMBER_HELP.telnyxHostedSmsDocs}`
+  )
+}
+
+export function buildApidazeSenderNotOnAccountError(fromNumber: string): string {
+  return (
+    `${fromNumber} is not assigned to the Vantage Apidaze application. ` +
+    `Assign or host the practice line on that application first, then select it here. ` +
+    `See: ${SMS_HOSTED_NUMBER_HELP.apidazeDocs}`
   )
 }

@@ -276,9 +276,17 @@ export const telnyxTestSchema = z.object({
 
 export const smsFromNumberSchema = z.object({
   fromNumber: z.string().min(1, 'From number is required'),
-  fromNumberSource: z.enum(['telnyx_inventory', 'custom']).optional().default('telnyx_inventory'),
+  fromNumberSource: z
+    .enum(['apidaze_inventory', 'telnyx_inventory', 'custom'])
+    .optional()
+    .default('telnyx_inventory'),
   phoneNumberId: z.string().optional().or(z.literal('')).transform(val => val === '' ? undefined : val),
   messagingProfileId: z.string().optional().or(z.literal('')).transform(val => val === '' ? undefined : val),
+})
+
+export const apidazeIntegrationSchema = z.object({
+  fromNumber: z.string().min(1, 'Phone number is required'),
+  isActive: z.boolean().optional(),
 })
 
 export const bookAppointmentSchema = z.object({

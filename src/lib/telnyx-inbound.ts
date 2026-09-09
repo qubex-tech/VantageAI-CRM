@@ -158,29 +158,19 @@ export async function resolvePatientIdFromRecentOutboundMessage(params: {
   return recent?.patientId ?? null
 }
 
-/**
- * Resolve which patient an inbound SMS belongs to.
- * Prefers explicit patientId from outreach/conversation context over demographic guessing.
- */
-export async function resolveInboundSmsPatient(params: {
+export async function resolveInboundSmsPatientForPracticeIds(params: {
   from: string
-  messagingProfileId?: string | null
-  toNumbers: string[]
+  practiceIds: string[]
 }): Promise<{
   patient: PatientPhoneMatch | null
   integrationPracticeIds: string[]
   resolution?: InboundSmsPatientResolution
 } | null> {
-  const integrations = await findMatchingTelnyxIntegrations({
-    messagingProfileId: params.messagingProfileId,
-    toNumbers: params.toNumbers,
-  })
-
-  if (integrations.length === 0) {
+  if (params.practiceIds.length === 0) {
     return null
   }
 
-  const integrationPracticeIds = integrations.map((entry) => entry.practiceId)
+  const integrationPracticeIds = params.practiceIds
 
   const slotFillAttempt = await findActiveSlotFillOutreachByReplyPhone({
     practiceIds: integrationPracticeIds,
@@ -236,4 +226,28 @@ export async function resolveInboundSmsPatient(params: {
     integrationPracticeIds,
     resolution: 'unique_phone_match',
   }
+}
+
+/**
+ * Resolve which patient an inbound SMS belongs to.
+ * Prefers explicit patientId from outreach/conversation context over demographic guessing.
+ */
+export async function resolveInboundSmsPatient(params: {
+  from: string
+  messagingProfileId?: string | null
+  toNumbers: string[]
+}): Promise<{
+  patient: PatientPhoneMatch | null
+  integrationPracticeIds: string[]
+  resolution?: InboundSmsPatientResolution
+} | null> {
+  const integrations = await findMatchingTelnyxIntegrations({
+    messagingProfileId: params.messagingProfileId,
+    toNumbers: params.toNumbers,
+  })
+
+  return resolveInboundSmsPatientForPracticeIds({
+    from: params.from,
+    practiceIds: integrations.map((entry) => entry.practiceId),
+  })
 }

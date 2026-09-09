@@ -9,6 +9,7 @@ import { RetellSettings } from '@/components/settings/RetellSettings'
 import { ResendSettings } from '@/components/settings/SendgridSettings'
 import { TwilioSettings } from '@/components/settings/TwilioSettings'
 import { TelnyxSettings } from '@/components/settings/TelnyxSettings'
+import { ApidazeSettings } from '@/components/settings/ApidazeSettings'
 import { CommunicationsSettings } from '@/components/settings/CommunicationsSettings'
 import { SmsFromNumberSettings } from '@/components/settings/SmsFromNumberSettings'
 import { PracticeManagement } from '@/components/settings/PracticeManagement'
@@ -38,6 +39,7 @@ export default async function SettingsPage() {
   let resendIntegration = null
   let twilioIntegration = null
   let telnyxIntegration = null
+  let apidazeIntegration = null
 
   if (user.practiceId) {
     const practiceId = user.practiceId
@@ -83,6 +85,14 @@ export default async function SettingsPage() {
       })
     } catch (error) {
       console.error('Error fetching Telnyx integration (table may not exist):', error)
+    }
+
+    try {
+      apidazeIntegration = await prisma.apidazeIntegration.findUnique({
+        where: { practiceId: practiceId },
+      })
+    } catch (error) {
+      console.error('Error fetching Apidaze integration (table may not exist):', error)
     }
   }
 
@@ -171,6 +181,11 @@ export default async function SettingsPage() {
                 <ResendSettings initialIntegration={resendIntegration} />
 
                 <CommunicationsSettings initialRetellIntegration={retellIntegration} />
+
+                <ApidazeSettings
+                  initialIntegration={apidazeIntegration}
+                  practiceId={user.practiceId ?? undefined}
+                />
 
                 <TelnyxSettings initialIntegration={telnyxIntegration} />
 

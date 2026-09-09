@@ -16,6 +16,7 @@ import { RetellSettings } from './RetellSettings'
 import { ResendSettings } from './SendgridSettings'
 import { TwilioSettings } from './TwilioSettings'
 import { TelnyxSettings } from './TelnyxSettings'
+import { ApidazeSettings } from './ApidazeSettings'
 import { CommunicationsSettings } from './CommunicationsSettings'
 import { SmsFromNumberSettings } from './SmsFromNumberSettings'
 import { ClinicalIntegrationsSettings } from './ClinicalIntegrationsSettings'
@@ -61,6 +62,7 @@ export function PracticeAPIConfiguration() {
   const [resendIntegration, setResendIntegration] = useState<any>(null)
   const [twilioIntegration, setTwilioIntegration] = useState<any>(null)
   const [telnyxIntegration, setTelnyxIntegration] = useState<any>(null)
+  const [apidazeIntegration, setApidazeIntegration] = useState<any>(null)
   const [eventTypeMappings, setEventTypeMappings] = useState<any[]>([])
 
   // Fetch all practices
@@ -93,6 +95,7 @@ export function PracticeAPIConfiguration() {
       setResendIntegration(null)
       setTwilioIntegration(null)
       setTelnyxIntegration(null)
+      setApidazeIntegration(null)
       setEventTypeMappings([])
       return
     }
@@ -151,6 +154,12 @@ export function PracticeAPIConfiguration() {
         if (telnyxResponse.ok) {
           const telnyxData = await telnyxResponse.json()
           setTelnyxIntegration(telnyxData.integration)
+        }
+
+        const apidazeResponse = await fetch(`/api/settings/apidaze?practiceId=${selectedPracticeId}`)
+        if (apidazeResponse.ok) {
+          const apidazeData = await apidazeResponse.json()
+          setApidazeIntegration(apidazeData.integration)
         }
       } catch (error) {
         console.error('Error fetching integrations:', error)
@@ -297,12 +306,17 @@ export function PracticeAPIConfiguration() {
                     practiceId={selectedPracticeId}
                     initialRetellIntegration={retellIntegration}
                   />
-                  <div className="text-sm font-medium text-gray-700">2. Telnyx Configuration</div>
+                  <div className="text-sm font-medium text-gray-700">2. Apidaze Configuration</div>
+                  <ApidazeSettings
+                    practiceId={selectedPracticeId}
+                    initialIntegration={apidazeIntegration}
+                  />
+                  <div className="text-sm font-medium text-gray-700">3. Telnyx Configuration</div>
                   <TelnyxSettingsWithPracticeId
                     practiceId={selectedPracticeId}
                     initialIntegration={telnyxIntegration}
                   />
-                  <div className="text-sm font-medium text-gray-700">3. Twilio Configuration</div>
+                  <div className="text-sm font-medium text-gray-700">4. Twilio Configuration</div>
                   <TwilioSettingsWithPracticeId
                     practiceId={selectedPracticeId}
                     initialIntegration={twilioIntegration}

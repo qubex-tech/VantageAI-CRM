@@ -7,6 +7,13 @@ import { smsFromNumberSchema } from '@/lib/validations'
 import { TelnyxApiClient } from '@/lib/telnyx'
 import { TwilioApiClient } from '@/lib/twilio'
 import {
+  apidazePhoneNumbersMatch,
+  formatE164 as formatApidazeE164,
+  getApidazePlatformClient,
+  isApidazePlatformConfigured,
+} from '@/lib/apidaze'
+import {
+  buildApidazeSenderNotOnAccountError,
   buildTelnyxSenderNotOnAccountError,
   buildTwilioSenderNotOnAccountError,
 } from '@/lib/sms-sender-validation'
@@ -65,6 +72,16 @@ async function clearTwilioPreferForSmsOutbound(practiceId: string) {
   }
 }
 
+async function deactivateApidaze(practiceId: string) {
+  const existing = await prisma.apidazeIntegration.findUnique({ where: { practiceId } })
+  if (existing?.isActive) {
+    await prisma.apidazeIntegration.update({
+      where: { practiceId },
+      data: { isActive: false },
+    })
+  }
+}
+
 /**
  * GET /api/settings/sms/sender
  * Returns the active SMS provider and configured outbound sender for a practice.
@@ -81,10 +98,11 @@ export async function GET(req: NextRequest) {
         fromNumberSource: null,
         telnyxConfigured: false,
         twilioConfigured: false,
+        apidazeConfigured: isApidazePlatformConfigured(),
       })
     }
 
-    const [telnyx, twilio, activeProvider] = await Promise.all([
+    const [telnyx, twilio, apidaze, activeProvider] = await Promise.all([
       prisma.telnyxIntegration.findUnique({
         where: { practiceId },
         select: {
@@ -106,6 +124,13 @@ export async function GET(req: NextRequest) {
           preferForSmsOutbound: true,
         },
       }),
+      prisma.apidazeIntegration.findUnique({
+        where: { practiceId },
+        select: {
+          fromNumber: true,
+          isActive: true,
+        },
+      }).catch(() => null),
       getActiveSmsProvider(practiceId),
     ])
 
@@ -119,22 +144,34 @@ export async function GET(req: NextRequest) {
         (twilio.messagingServiceSid || twilio.fromNumber)
     )
 
+    const apidazeConfigured = Boolean(
+      isApidazePlatformConfigured() && apidaze?.isActive && apidaze.fromNumber
+    )
+
     const fromNumberSource =
-      twilio?.preferForSmsOutbound && twilio.fromNumber
-        ? 'custom'
-        : telnyxConfigured
-          ? 'telnyx_inventory'
-          : twilio?.fromNumber
-            ? 'custom'
-            : null
+      apidazeConfigured
+        ? 'apidaze_inventory'
+        : twilio?.preferForSmsOutbound && twilio.fromNumber
+          ? 'custom'
+          : telnyxConfigured
+            ? 'telnyx_inventory'
+            : twilio?.fromNumber
+              ? 'custom'
+              : isApidazePlatformConfigured()
+                ? 'apidaze_inventory'
+                : null
 
     let fromNumber: string | null = null
-    if (fromNumberSource === 'custom' && twilio?.fromNumber) {
+    if (activeProvider === 'apidaze' && apidaze?.fromNumber) {
+      fromNumber = apidaze.fromNumber
+    } else if (fromNumberSource === 'custom' && twilio?.fromNumber) {
       fromNumber = twilio.fromNumber
     } else if (activeProvider === 'telnyx' && telnyx?.fromNumber) {
       fromNumber = telnyx.fromNumber
     } else if (activeProvider === 'twilio' && twilio?.fromNumber) {
       fromNumber = twilio.fromNumber
+    } else if (apidaze?.fromNumber) {
+      fromNumber = apidaze.fromNumber
     } else if (telnyx?.fromNumber) {
       fromNumber = telnyx.fromNumber
     } else if (twilio?.fromNumber) {
@@ -147,6 +184,7 @@ export async function GET(req: NextRequest) {
       fromNumberSource,
       telnyxConfigured,
       twilioConfigured,
+      apidazeConfigured: isApidazePlatformConfigured(),
       telnyx: telnyx
         ? {
             fromNumber: telnyx.fromNumber,
@@ -161,6 +199,12 @@ export async function GET(req: NextRequest) {
             messagingServiceSid: twilio.messagingServiceSid,
             configured: Boolean(twilio.accountSid && twilio.authToken),
             preferForSmsOutbound: twilio.preferForSmsOutbound,
+          }
+        : null,
+      apidaze: apidaze
+        ? {
+            fromNumber: apidaze.fromNumber,
+            isActive: apidaze.isActive,
           }
         : null,
     })
@@ -191,6 +235,48 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const validated = smsFromNumberSchema.parse(body)
     const fromNumber = formatE164(validated.fromNumber)
+
+    if (validated.fromNumberSource === 'apidaze_inventory') {
+      if (!isApidazePlatformConfigured()) {
+        return NextResponse.json(
+          { error: 'Apidaze is not configured. Set APIDAZE_API_KEY and APIDAZE_API_SECRET on the server.' },
+          { status: 400 }
+        )
+      }
+
+      const client = getApidazePlatformClient(fromNumber)
+      const numbers = await client.listPhoneNumbers()
+      const selected = numbers.find((entry) => apidazePhoneNumbersMatch(entry.phoneNumber, fromNumber))
+      if (!selected) {
+        return NextResponse.json(
+          { error: buildApidazeSenderNotOnAccountError(fromNumber) },
+          { status: 400 }
+        )
+      }
+
+      await clearTwilioPreferForSmsOutbound(practiceId)
+      const updated = await prisma.apidazeIntegration.upsert({
+        where: { practiceId },
+        create: {
+          practiceId,
+          fromNumber: formatApidazeE164(fromNumber),
+          isActive: true,
+        },
+        update: {
+          fromNumber: formatApidazeE164(fromNumber),
+          isActive: true,
+        },
+      })
+
+      return NextResponse.json({
+        success: true,
+        provider: 'apidaze',
+        fromNumberSource: 'apidaze_inventory',
+        fromNumber: updated.fromNumber,
+      })
+    }
+
+    await deactivateApidaze(practiceId)
 
     if (validated.fromNumberSource === 'custom') {
       const twilio = await prisma.twilioIntegration.findUnique({
