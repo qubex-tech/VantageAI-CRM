@@ -16,15 +16,12 @@ export async function POST(req: NextRequest) {
     }
 
     const client = getApidazePlatformClient()
-    const validation = await client.testConnection()
-    if (!validation.ok) {
-      return NextResponse.json(
-        { error: validation.error || 'Apidaze credential validation failed' },
-        { status: 400 }
-      )
-    }
-
-    return NextResponse.json({ success: true })
+    const numbers = await client.listPhoneNumbers()
+    return NextResponse.json({
+      success: true,
+      numberCount: numbers.length,
+      numbers: numbers.map((entry) => entry.phoneNumber),
+    })
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Apidaze connection test failed' },

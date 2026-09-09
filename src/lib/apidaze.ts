@@ -30,10 +30,18 @@ export interface SendSmsParams {
   from?: string
 }
 
+export interface ApidazeSendDebug {
+  host?: string
+  encoding?: string
+  status?: number
+  bodyPreview?: string
+}
+
 export interface SendSmsResult {
   success: boolean
   messageId?: string
   error?: string
+  debug?: ApidazeSendDebug
 }
 
 export interface ApidazeInboundParams {
@@ -282,7 +290,7 @@ export function parseApidazeSendResponse(payload: string, status: number): SendS
     return { success: false, error: detail || 'Apidaze SMS send failed' }
   }
 
-  if (okMatch || idMatch || /queued|submitted|sent|accepted/i.test(trimmed)) {
+  if (okMatch || idMatch) {
     return {
       success: true,
       messageId: idMatch?.[1]?.trim() || undefined,
@@ -422,20 +430,17 @@ export class ApidazeApiClient {
 
     const fromNumber = formatApidazeNumber(from)
     const toNumber = formatApidazeNumber(params.to)
-    const formBody = new URLSearchParams({
-      from: fromNumber,
-      to: toNumber,
-      body: params.body,
-      message_type: 'SMS',
-      num_retries: '3',
-    }).toString()
-    const jsonBody = JSON.stringify({
-      to: toNumber,
-      from: fromNumber,
-      body: params.body,
-      message_type: 'SMS',
-      num_retries: 3,
-    })
+    const toLocal = toNumber.length === 11 && toNumber.startsWith('1') ? toNumber.slice(1) : toNumber
+    const fromLocal = fromNumber.length === 11 && fromNumber.startsWith('1') ? fromNumber.slice(1) : fromNumber
+
+    const formFor = (fromValue: string, toValue: string) =>
+      new URLSearchParams({
+        from: fromValue,
+        to: toValue,
+        body: params.body,
+        message_type: 'SMS',
+        num_retries: '3',
+      }).toString()
 
     const bases = Array.from(
       new Set([
@@ -446,21 +451,43 @@ export class ApidazeApiClient {
       ])
     )
 
-    const attempts: Array<{ base: string; encoding: 'form' | 'json'; body: string; contentType: string }> = []
-    for (const base of bases) {
-      attempts.push({
-        base,
+    const attempts: Array<{
+      base: string
+      encoding: 'form' | 'json'
+      body: string
+      contentType: string
+    }> = [
+      {
+        base: bases[0],
         encoding: 'form',
-        body: formBody,
+        body: formFor(fromNumber, toNumber),
         contentType: 'application/x-www-form-urlencoded',
-      })
-    }
-    attempts.push({
-      base: bases[0],
-      encoding: 'json',
-      body: jsonBody,
-      contentType: 'application/json',
-    })
+      },
+      {
+        base: bases[0],
+        encoding: 'form',
+        body: formFor(fromLocal, toLocal),
+        contentType: 'application/x-www-form-urlencoded',
+      },
+      ...bases.slice(1).map((base) => ({
+        base,
+        encoding: 'form' as const,
+        body: formFor(fromNumber, toNumber),
+        contentType: 'application/x-www-form-urlencoded',
+      })),
+      {
+        base: bases[0],
+        encoding: 'json',
+        body: JSON.stringify({
+          to: toNumber,
+          from: fromNumber,
+          body: params.body,
+          message_type: 'SMS',
+          num_retries: 3,
+        }),
+        contentType: 'application/json',
+      },
+    ]
 
     let lastResult: SendSmsResult = { success: false, error: 'Apidaze SMS send failed' }
 
@@ -476,18 +503,23 @@ export class ApidazeApiClient {
           }
         )
         const parsed = parseApidazeSendResponse(result.body, result.status)
-        console.info('[Apidaze SMS] send attempt', {
+        const debug = {
           host: attempt.base,
           encoding: attempt.encoding,
           status: result.status,
+          bodyPreview: (result.body || result.error || '').replace(/\s+/g, ' ').slice(0, 300),
+        }
+        console.info('[Apidaze SMS] send attempt', {
+          ...debug,
           success: parsed.success,
           messageId: parsed.messageId || null,
           error: parsed.error || null,
         })
+        const withDebug = { ...parsed, debug }
         if (parsed.success) {
-          return parsed
+          return withDebug
         }
-        lastResult = parsed
+        lastResult = withDebug
       }
 
       return lastResult

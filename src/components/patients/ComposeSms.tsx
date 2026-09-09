@@ -132,7 +132,10 @@ export function ComposeSms({
       if (!response.ok) {
         errorOccurred = true
         errorMessage = data?.error || 'Failed to send SMS'
-        if (
+        const debugPreview = data?.debug?.bodyPreview ? ` Apidaze said: ${data.debug.bodyPreview}` : ''
+        if (data?.provider === 'apidaze' || errorMessage.toLowerCase().includes('apidaze')) {
+          errorMessage = `${errorMessage}${debugPreview}`
+        } else if (
           errorMessage.includes('Twilio integration not configured') ||
           errorMessage.includes('Twilio integration not found') ||
           errorMessage.includes('Telnyx integration not configured') ||

@@ -87,7 +87,11 @@ export async function POST(req: NextRequest) {
       }
 
       return NextResponse.json(
-        { error: errorMessage },
+        {
+          error: errorMessage,
+          provider: smsClient.provider,
+          debug: 'debug' in result ? result.debug : undefined,
+        },
         { status: 500 }
       )
     }
@@ -156,6 +160,7 @@ export async function POST(req: NextRequest) {
             to,
             provider: smsClient.provider,
             providerMessageId: result.messageId,
+            debug: 'debug' in result ? result.debug : undefined,
           },
         })
       } catch (error) {

@@ -138,7 +138,13 @@ export function ApidazeSettings({ initialIntegration, practiceId }: ApidazeSetti
         throw new Error(payload.error || 'Connection test failed')
       }
 
-      setSuccess('Apidaze platform credentials are valid.')
+      const payload = await response.json()
+      const count = typeof payload.numberCount === 'number' ? payload.numberCount : 0
+      setSuccess(
+        count > 0
+          ? `Apidaze connection ok. Found ${count} number${count === 1 ? '' : 's'} on the application.`
+          : 'Apidaze credentials were accepted, but no numbers were returned for this application.'
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Connection test failed')
     } finally {

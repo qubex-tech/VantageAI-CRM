@@ -77,6 +77,14 @@ describe('apidaze payload parsers', () => {
     expect(result.error).toMatch(/empty/i)
   })
 
+  it('does not treat HTML that happens to contain "sent" as success', () => {
+    const result = parseApidazeSendResponse(
+      '<html><body>Your request was sent to the documentation site</body></html>',
+      200
+    )
+    expect(result.success).toBe(false)
+  })
+
   it('parses failed send XML', () => {
     const result = parseApidazeSendResponse('<error>from number not on application</error>', 200)
     expect(result.success).toBe(false)
