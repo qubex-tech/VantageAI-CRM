@@ -257,10 +257,16 @@ export function parseApidazeSendResponse(payload: string, status: number): SendS
           error: message || code || `Apidaze SMS send failed (HTTP ${status})`,
         }
       }
+      const details =
+        parsed.details && typeof parsed.details === 'object'
+          ? (parsed.details as Record<string, unknown>)
+          : {}
       const messageId =
         (typeof parsed.id === 'string' && parsed.id) ||
         (typeof parsed.uuid === 'string' && parsed.uuid) ||
         (typeof parsed.message_id === 'string' && parsed.message_id) ||
+        (typeof details.uuid === 'string' && details.uuid) ||
+        (typeof details.id === 'string' && details.id) ||
         undefined
       if (parsed.ok === true || parsed.success === true || parsed.status === 'ok' || messageId) {
         return { success: true, messageId }

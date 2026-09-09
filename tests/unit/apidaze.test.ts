@@ -71,6 +71,19 @@ describe('apidaze payload parsers', () => {
     expect(result.messageId).toBe('abc-123')
   })
 
+  it('parses CPaaS JSON ok with a nested uuid', () => {
+    const result = parseApidazeSendResponse(
+      JSON.stringify({
+        ok: true,
+        message: 'Message sent',
+        details: { uuid: '8a7af0f0-bf50-4d0f-802d-9ffe9c541de0' },
+      }),
+      200
+    )
+    expect(result.success).toBe(true)
+    expect(result.messageId).toBe('8a7af0f0-bf50-4d0f-802d-9ffe9c541de0')
+  })
+
   it('does not treat an empty HTTP 200 as a sent message', () => {
     const result = parseApidazeSendResponse('', 200)
     expect(result.success).toBe(false)
