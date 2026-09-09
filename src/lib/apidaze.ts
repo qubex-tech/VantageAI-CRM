@@ -59,9 +59,8 @@ export function resolveApidazeApiBaseUrl(raw?: string | null): string {
       return DEFAULT_APIDAZE_API_BASE_URL
     }
 
-    const host = parsed.hostname.toLowerCase()
     const path = parsed.pathname.replace(/\/$/, '')
-    if (path === '/docs' || path.startsWith('/docs/') || host === 'api.apidaze.io' && path.startsWith('/docs')) {
+    if (path === '/docs' || path.startsWith('/docs/')) {
       return DEFAULT_APIDAZE_API_BASE_URL
     }
 
@@ -224,30 +223,75 @@ function dedupeNumbers(numbers: ApidazePhoneNumber[]): ApidazePhoneNumber[] {
 }
 
 export function parseApidazeSendResponse(payload: string, status: number): SendSmsResult {
-  const errorMatch = payload.match(/<(?:error|errors)[^>]*>([\s\S]*?)<\/(?:error|errors)>/i)
-  const okMatch = payload.match(/<(?:ok|success)[^>]*>([\s\S]*?)<\/(?:ok|success)>/i)
-  const idMatch = payload.match(
+  const trimmed = payload.trim()
+  const errorMatch = trimmed.match(/<(?:error|errors)[^>]*>([\s\S]*?)<\/(?:error|errors)>/i)
+  const okMatch = trimmed.match(/<(?:ok|success)[^>]*>([\s\S]*?)<\/(?:ok|success)>/i)
+  const idMatch = trimmed.match(
     /<(?:id|uuid|message_id|messageid|message-id)[^>]*>([^<]+)</i
   )
 
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(trimmed) as Record<string, unknown>
+      const message =
+        (typeof parsed.message === 'string' && parsed.message) ||
+        (typeof parsed.error === 'string' && parsed.error) ||
+        ''
+      const code = typeof parsed.code === 'string' ? parsed.code : ''
+      if (
+        status < 200 ||
+        status >= 300 ||
+        code.startsWith('E_') ||
+        /fail|denied|invalid|unauthorized|error/i.test(`${code} ${message}`)
+      ) {
+        return {
+          success: false,
+          error: message || code || `Apidaze SMS send failed (HTTP ${status})`,
+        }
+      }
+      const messageId =
+        (typeof parsed.id === 'string' && parsed.id) ||
+        (typeof parsed.uuid === 'string' && parsed.uuid) ||
+        (typeof parsed.message_id === 'string' && parsed.message_id) ||
+        undefined
+      if (parsed.ok === true || parsed.success === true || parsed.status === 'ok' || messageId) {
+        return { success: true, messageId }
+      }
+    } catch {
+      // Fall through to XML / text parsing.
+    }
+  }
+
   if (status < 200 || status >= 300 || errorMatch) {
-    const detail = stripXmlTags(errorMatch?.[1] || payload).slice(0, 400)
+    const detail = stripXmlTags(errorMatch?.[1] || trimmed).slice(0, 400)
     return {
       success: false,
       error: detail || `Apidaze SMS send failed (HTTP ${status})`,
     }
   }
 
-  if (payload && /fail|denied|invalid/i.test(payload) && !okMatch) {
-    const detail = stripXmlTags(payload).slice(0, 400)
-    if (/fail|denied|invalid/i.test(detail)) {
-      return { success: false, error: detail || 'Apidaze SMS send failed' }
+  if (!trimmed) {
+    return {
+      success: false,
+      error: 'Apidaze returned an empty success response; the message was not confirmed as queued.',
+    }
+  }
+
+  if (/fail|denied|invalid|unauthorized/i.test(trimmed) && !okMatch) {
+    const detail = stripXmlTags(trimmed).slice(0, 400)
+    return { success: false, error: detail || 'Apidaze SMS send failed' }
+  }
+
+  if (okMatch || idMatch || /queued|submitted|sent|accepted/i.test(trimmed)) {
+    return {
+      success: true,
+      messageId: idMatch?.[1]?.trim() || undefined,
     }
   }
 
   return {
-    success: true,
-    messageId: idMatch?.[1]?.trim() || undefined,
+    success: false,
+    error: `Apidaze did not confirm the SMS was queued: ${stripXmlTags(trimmed).slice(0, 240)}`,
   }
 }
 
@@ -376,24 +420,77 @@ export class ApidazeApiClient {
       return { success: false, error: 'Message body is required.' }
     }
 
-    try {
-      const result = await apidazeFetch(this.credentials, '/sms/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: formatApidazeNumber(params.to),
-          from: formatApidazeNumber(from),
-          body: params.body,
-          message_type: 'SMS',
-          num_retries: 3,
-        }),
-      })
+    const fromNumber = formatApidazeNumber(from)
+    const toNumber = formatApidazeNumber(params.to)
+    const formBody = new URLSearchParams({
+      from: fromNumber,
+      to: toNumber,
+      body: params.body,
+      message_type: 'SMS',
+      num_retries: '3',
+    }).toString()
+    const jsonBody = JSON.stringify({
+      to: toNumber,
+      from: fromNumber,
+      body: params.body,
+      message_type: 'SMS',
+      num_retries: 3,
+    })
 
-      if (!result.ok) {
-        return parseApidazeSendResponse(result.body, result.status)
+    const bases = Array.from(
+      new Set([
+        resolveApidazeApiBaseUrl(this.credentials.baseUrl),
+        'https://api.apidaze.io',
+        'https://api4.apidaze.io',
+        DEFAULT_APIDAZE_API_BASE_URL,
+      ])
+    )
+
+    const attempts: Array<{ base: string; encoding: 'form' | 'json'; body: string; contentType: string }> = []
+    for (const base of bases) {
+      attempts.push({
+        base,
+        encoding: 'form',
+        body: formBody,
+        contentType: 'application/x-www-form-urlencoded',
+      })
+    }
+    attempts.push({
+      base: bases[0],
+      encoding: 'json',
+      body: jsonBody,
+      contentType: 'application/json',
+    })
+
+    let lastResult: SendSmsResult = { success: false, error: 'Apidaze SMS send failed' }
+
+    try {
+      for (const attempt of attempts) {
+        const result = await apidazeFetch(
+          { ...this.credentials, baseUrl: attempt.base },
+          '/sms/send',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': attempt.contentType },
+            body: attempt.body,
+          }
+        )
+        const parsed = parseApidazeSendResponse(result.body, result.status)
+        console.info('[Apidaze SMS] send attempt', {
+          host: attempt.base,
+          encoding: attempt.encoding,
+          status: result.status,
+          success: parsed.success,
+          messageId: parsed.messageId || null,
+          error: parsed.error || null,
+        })
+        if (parsed.success) {
+          return parsed
+        }
+        lastResult = parsed
       }
 
-      return parseApidazeSendResponse(result.body, result.status)
+      return lastResult
     } catch (error: unknown) {
       console.error('Apidaze SMS send failed:', error)
       return {

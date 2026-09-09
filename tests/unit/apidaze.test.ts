@@ -71,6 +71,12 @@ describe('apidaze payload parsers', () => {
     expect(result.messageId).toBe('abc-123')
   })
 
+  it('does not treat an empty HTTP 200 as a sent message', () => {
+    const result = parseApidazeSendResponse('', 200)
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/empty/i)
+  })
+
   it('parses failed send XML', () => {
     const result = parseApidazeSendResponse('<error>from number not on application</error>', 200)
     expect(result.success).toBe(false)

@@ -154,6 +154,7 @@ export async function POST(req: NextRequest) {
           userId: user.id,
           metadata: {
             to,
+            provider: smsClient.provider,
             providerMessageId: result.messageId,
           },
         })
