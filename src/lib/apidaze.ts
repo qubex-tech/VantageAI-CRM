@@ -507,7 +507,9 @@ export class ApidazeApiClient {
           host: attempt.base,
           encoding: attempt.encoding,
           status: result.status,
-          bodyPreview: (result.body || result.error || '').replace(/\s+/g, ' ').slice(0, 300),
+          bodyPreview: (result.body || ('error' in result ? result.error : ''))
+            .replace(/\s+/g, ' ')
+            .slice(0, 300),
         }
         console.info('[Apidaze SMS] send attempt', {
           ...debug,
