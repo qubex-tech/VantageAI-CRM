@@ -1,10 +1,10 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/middleware'
 import { getApidazePlatformClient, isApidazePlatformConfigured } from '@/lib/apidaze'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   try {
     await requireAuth(req)
 
