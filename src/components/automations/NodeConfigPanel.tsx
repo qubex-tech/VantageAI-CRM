@@ -264,6 +264,11 @@ const YES_NO_CONDITION_OPTIONS = [
   { value: 'false', label: 'No' },
 ] as const
 
+const EHR_ACTIVE_CONDITION_OPTIONS = [
+  { value: 'true', label: 'Active' },
+  { value: 'false', label: 'Inactive' },
+] as const
+
 const PATIENT_TYPE_CATEGORY_OPTIONS = [
   { value: 'new', label: 'New' },
   { value: 'existing', label: 'Existing' },
@@ -432,6 +437,11 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
     ...PATIENT_FIELDS,
     { value: 'patient_on_list', label: 'Patient is on list', type: 'string' as const },
     {
+      value: 'patient.ehrActive',
+      label: 'eCW patient status',
+      type: 'boolean' as const,
+    },
+    {
       value: 'patient.hasFutureScheduledAppointment',
       label: 'Has scheduled appointment',
       type: 'boolean' as const,
@@ -578,10 +588,14 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                             newConditions[index] = {
                               ...condition,
                               field: value,
-                              ...(value === 'patient_on_list' ? { operator: 'equals' } : {}),
+                              ...(value === 'patient_on_list' || value === 'patient.ehrActive'
+                                ? { operator: 'equals' }
+                                : {}),
                               ...(value === 'patient.hasFutureScheduledAppointment'
                                 ? { withinDays: 60, value: false }
-                                : { withinDays: undefined, value: '' }),
+                                : value === 'patient.ehrActive'
+                                  ? { withinDays: undefined, value: true }
+                                  : { withinDays: undefined, value: '' }),
                             }
                             handleUpdate({ conditions: newConditions })
                           }}
@@ -793,6 +807,35 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                               <SelectContent>
                                 {OPEN_SLOT_SOURCE_OPTIONS.map((option) => (
                                   <SelectItem key={option.value} value={option.label}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : condition.field === 'patient.ehrActive' ? (
+                            <Select
+                              value={
+                                condition.value === true || condition.value === 'true'
+                                  ? 'true'
+                                  : condition.value === false || condition.value === 'false'
+                                    ? 'false'
+                                    : ''
+                              }
+                              onValueChange={(value) => {
+                                const newConditions = [...(config.conditions || [])]
+                                newConditions[index] = {
+                                  ...condition,
+                                  value: value === 'true',
+                                }
+                                handleUpdate({ conditions: newConditions })
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select Active or Inactive" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {EHR_ACTIVE_CONDITION_OPTIONS.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
                                     {option.label}
                                   </SelectItem>
                                 ))}

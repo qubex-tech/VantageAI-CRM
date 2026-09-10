@@ -13,6 +13,7 @@ import { createPatient } from '@/lib/integrations/fhir/resources/patient'
 import { formatDateOnlyForInput } from '@/lib/date'
 import { formatFhirPatientDisplayName } from '@/lib/patient-name'
 import { extractEcwSecondaryMrn } from '@/lib/integrations/ehr/ecwPatientIds'
+import { mapFhirPatientActive } from '@/lib/integrations/ehr/ecwPatientRosterSync'
 
 const UPDATE_PROVIDER_ID = 'ecw_write'
 const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.326070'
@@ -124,6 +125,7 @@ type FhirPatientRead = {
   name?: Array<{ text?: string; family?: string; given?: string[] }>
   birthDate?: string
   gender?: string
+  active?: boolean
   telecom?: Array<{ system?: string; value?: string }>
 }
 
@@ -266,12 +268,14 @@ export async function syncPatientDemographicsFromEhr(params: {
     fhirPatient.telecom?.find((t) => t.system === 'email')?.value?.trim() || null
   const dateOfBirthFromFhir = fhirPatient.birthDate ? new Date(fhirPatient.birthDate) : null
   const externalMrn = extractEcwSecondaryMrn(fhirPatient)
+  const ehrActive = mapFhirPatientActive(fhirPatient)
 
   await prisma.patient.update({
     where: { id: patientId },
     data: {
       externalEhrId: canonicalId,
       ...(externalMrn ? { externalMrn } : {}),
+      ...(ehrActive !== null ? { ehrActive } : {}),
       firstName: firstNameFromFhir ?? patient.firstName,
       lastName: lastNameFromFhir ?? patient.lastName,
       name: nameFromFhir ?? patient.name,

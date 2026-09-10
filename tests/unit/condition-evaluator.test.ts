@@ -222,6 +222,50 @@ describe('Condition Evaluator', () => {
     })
   })
 
+  describe('patient.ehrActive condition', () => {
+    it('matches Active and Inactive from the stored FHIR status', () => {
+      expect(
+        evaluateConditions(
+          { field: 'patient.ehrActive', operator: 'equals', value: true },
+          { patient: { ehrActive: true } }
+        )
+      ).toBe(true)
+      expect(
+        evaluateConditions(
+          { field: 'patient.ehrActive', operator: 'equals', value: false },
+          { patient: { ehrActive: false } }
+        )
+      ).toBe(true)
+      expect(
+        evaluateConditions(
+          { field: 'patient.ehrActive', operator: 'equals', value: true },
+          { patient: { ehrActive: false } }
+        )
+      ).toBe(false)
+    })
+
+    it('does not match Active or Inactive when status is unknown', () => {
+      expect(
+        evaluateConditions(
+          { field: 'patient.ehrActive', operator: 'equals', value: true },
+          { patient: { ehrActive: null } }
+        )
+      ).toBe(false)
+      expect(
+        evaluateConditions(
+          { field: 'patient.ehrActive', operator: 'equals', value: false },
+          { patient: { ehrActive: null } }
+        )
+      ).toBe(false)
+      expect(
+        evaluateConditions(
+          { field: 'patient.ehrActive', operator: 'equals', value: true },
+          { patient: {} }
+        )
+      ).toBe(false)
+    })
+  })
+
   describe('boolean coercion', () => {
     it('matches boolean field values against true/false strings', () => {
       expect(

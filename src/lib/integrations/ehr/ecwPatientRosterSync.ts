@@ -16,6 +16,7 @@ export type FhirPatient = {
   name?: Array<{ family?: string; given?: string[] }>
   birthDate?: string
   gender?: string
+  active?: boolean
   telecom?: Array<{ system?: string; value?: string }>
   address?: Array<{
     line?: string[]
@@ -42,6 +43,10 @@ function buildFullName(patient: FhirPatient) {
   return [given, family].filter(Boolean).join(' ').trim()
 }
 
+export function mapFhirPatientActive(patient: { active?: boolean }): boolean | null {
+  return typeof patient.active === 'boolean' ? patient.active : null
+}
+
 export function mapFhirPatientRecord(patient: FhirPatient) {
   const name = buildFullName(patient)
   const telecom = patient.telecom || []
@@ -62,6 +67,7 @@ export function mapFhirPatientRecord(patient: FhirPatient) {
     name: name || null,
     dateOfBirth: patient.birthDate ? new Date(`${patient.birthDate}T00:00:00.000Z`) : null,
     gender: patient.gender || null,
+    ehrActive: mapFhirPatientActive(patient),
     primaryPhone: phone || null,
     phone: phone || null,
     email: email || null,

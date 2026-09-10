@@ -184,7 +184,10 @@ function buildAutomationContext(
   eventData: Record<string, any>,
   practice?: { name?: string | null; phone?: string | null; address?: string | null },
   patientListIds: string[] = [],
-  patientFlags: { hasFutureScheduledAppointment?: boolean } = {}
+  patientFlags: {
+    hasFutureScheduledAppointment?: boolean
+    ehrActive?: boolean | null
+  } = {}
 ) {
   const patient = eventData.patient || {}
   const appointment = eventData.appointment || {}
@@ -217,6 +220,7 @@ function buildAutomationContext(
       preferredName: patient.preferredName || patient.firstName || inferredFirstName,
       listIds: patientListIds,
       hasFutureScheduledAppointment: Boolean(patientFlags.hasFutureScheduledAppointment),
+      ehrActive: patientFlags.ehrActive ?? null,
     },
     appointment: {
       ...appointment,
@@ -250,12 +254,20 @@ async function ruleStillMatchesAfterDelay(params: {
   if (!Array.isArray(group.conditions) || group.conditions.length === 0) return true
 
   let listIds: string[] = []
+  let ehrActive: boolean | null = null
   if (params.patientId) {
-    const memberships = await prisma.patientListMember.findMany({
-      where: { practiceId: params.practiceId, patientId: params.patientId },
-      select: { listId: true },
-    })
+    const [memberships, patient] = await Promise.all([
+      prisma.patientListMember.findMany({
+        where: { practiceId: params.practiceId, patientId: params.patientId },
+        select: { listId: true },
+      }),
+      prisma.patient.findFirst({
+        where: { id: params.patientId, practiceId: params.practiceId, deletedAt: null },
+        select: { ehrActive: true },
+      }),
+    ])
     listIds = memberships.map((m) => m.listId)
+    ehrActive = patient?.ehrActive ?? null
   }
 
   const {
@@ -276,6 +288,7 @@ async function ruleStillMatchesAfterDelay(params: {
     params.conditionsJson as any,
     buildAutomationContext(params.eventData, params.practice, listIds, {
       hasFutureScheduledAppointment,
+      ehrActive,
     })
   )
 }
@@ -371,20 +384,28 @@ export const runAutomationsForEvent = inngest.createFunction(
         return {
           patientId: null as string | null,
           listIds: [] as string[],
+          ehrActive: null as boolean | null,
         }
       }
 
-      const memberships = await prisma.patientListMember.findMany({
-        where: {
-          practiceId,
-          patientId,
-        },
-        select: { listId: true },
-      })
+      const [memberships, patient] = await Promise.all([
+        prisma.patientListMember.findMany({
+          where: {
+            practiceId,
+            patientId,
+          },
+          select: { listId: true },
+        }),
+        prisma.patient.findFirst({
+          where: { id: patientId, practiceId, deletedAt: null },
+          select: { ehrActive: true },
+        }),
+      ])
 
       return {
         patientId,
         listIds: memberships.map((m) => m.listId),
+        ehrActive: patient?.ehrActive ?? null,
       }
     })
 
@@ -426,7 +447,7 @@ export const runAutomationsForEvent = inngest.createFunction(
               payload.data,
               practice || undefined,
               patientContext.listIds,
-              { hasFutureScheduledAppointment }
+              { hasFutureScheduledAppointment, ehrActive: patientContext.ehrActive }
             )
             const matches = evaluateConditions(
               rule.conditionsJson as any,
@@ -505,6 +526,7 @@ export const runAutomationsForEvent = inngest.createFunction(
               patientContext.listIds,
               {
                 hasFutureScheduledAppointment,
+                ehrActive: patientContext.ehrActive,
               }
             )
             let processedArgs = substituteVariables(rawArgs, automationContext)
