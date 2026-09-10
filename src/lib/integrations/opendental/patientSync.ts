@@ -3,6 +3,7 @@ import type { Patient as OdPatient } from '@vantage/opendental-sdk'
 import { getOpenDentalServices } from './factory'
 import { recordSyncResult } from './connectionManager'
 import { logOpenDentalAudit } from './audit'
+import { mapOpenDentalPatientActive } from '@/lib/integrations/ehr/patientActive'
 
 /** Namespace prefix so Open Dental IDs never collide with FHIR `externalEhrId` values. */
 export const OPEN_DENTAL_EXTERNAL_PREFIX = 'opendental:'
@@ -29,6 +30,7 @@ type MappedPatient = {
   state: string | null
   postalCode: string | null
   preferredContactMethod: string
+  ehrActive: boolean | null
 }
 
 function cleanString(value: unknown): string | null {
@@ -100,6 +102,7 @@ export function mapOpenDentalPatient(od: OdPatient): MappedPatient {
     state,
     postalCode,
     preferredContactMethod: primaryPhone ? 'phone' : email ? 'email' : 'phone',
+    ehrActive: mapOpenDentalPatientActive(od.PatStatus),
   }
 }
 
@@ -130,6 +133,7 @@ function patientUpdateFromMapped(
     city: string | null
     state: string | null
     postalCode: string | null
+    ehrActive: boolean | null
   },
   mapped: MappedPatient
 ) {
@@ -151,6 +155,7 @@ function patientUpdateFromMapped(
     city: mapped.city ?? existing.city,
     state: mapped.state ?? existing.state,
     postalCode: mapped.postalCode ?? existing.postalCode,
+    ehrActive: mapped.ehrActive ?? existing.ehrActive,
   }
 }
 
@@ -233,6 +238,7 @@ export async function upsertPatientFromOpenDental(params: {
           city: mergeCandidate.city || mapped.city,
           state: mergeCandidate.state || mapped.state,
           postalCode: mergeCandidate.postalCode || mapped.postalCode,
+          ehrActive: mapped.ehrActive ?? mergeCandidate.ehrActive,
           consentSource: mergeCandidate.consentSource || 'import',
         },
       })
@@ -261,6 +267,7 @@ export async function upsertPatientFromOpenDental(params: {
       state: mapped.state,
       postalCode: mapped.postalCode,
       preferredContactMethod: mapped.preferredContactMethod,
+      ehrActive: mapped.ehrActive,
       consentSource: 'import',
     },
   })
@@ -365,7 +372,15 @@ export async function syncOpenDentalPatients(params: {
 
       for (const od of batch) {
         summary.fetched += 1
-        if (!isOpenDentalPatientActive(od)) continue
+        if (!isOpenDentalPatientActive(od)) {
+          if (od.PatNum) {
+            await prisma.patient.updateMany({
+              where: { practiceId, externalEhrId: buildExternalId(od.PatNum) },
+              data: { ehrActive: false },
+            })
+          }
+          continue
+        }
         try {
           const mapped = mapOpenDentalPatient(od)
           const { outcome } = await upsertPatientFromOpenDental({ practiceId, mapped })

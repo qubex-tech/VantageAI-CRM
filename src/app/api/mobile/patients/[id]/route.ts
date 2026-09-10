@@ -62,6 +62,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
         doNotContact: true,
         notes: true,
         externalEhrId: true,
+        ehrActive: true,
         tags: { select: { id: true, tag: true }, take: 20 },
         insurancePolicies: {
           orderBy: { createdAt: 'desc' },
@@ -133,6 +134,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
         doNotContact: patient.doNotContact,
         chartNotes: patient.notes,
         externalEhrId: patient.externalEhrId,
+        ehrActive: patient.ehrActive,
         tags: patient.tags.map((t) => ({ id: t.id, name: t.tag })),
         insurancePolicies: patient.insurancePolicies.map((policy) => ({
           id: policy.id,

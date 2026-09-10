@@ -80,6 +80,7 @@ interface PatientDetailViewProps {
     name: string
     // Basic Information
     externalEhrId?: string | null
+    ehrActive?: boolean | null
     firstName?: string | null
     lastName?: string | null
     preferredName?: string | null
@@ -1349,6 +1350,14 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                         <div className="text-sm font-medium text-gray-900 break-words">{patient.externalEhrId}</div>
                       </div>
                     )}
+                    {patient.ehrActive === true || patient.ehrActive === false ? (
+                      <div className="min-w-0">
+                        <div className="text-xs text-gray-500 mb-1">Patient status</div>
+                        <div className="text-sm font-medium text-gray-900">
+                          {patient.ehrActive ? 'Active' : 'Inactive'}
+                        </div>
+                      </div>
+                    ) : null}
                     {(patient.firstName || patient.lastName) && (
                       <div className="min-w-0">
                         <div className="text-xs text-gray-500 mb-1">First Name</div>

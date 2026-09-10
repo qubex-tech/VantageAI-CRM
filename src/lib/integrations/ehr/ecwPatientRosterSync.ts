@@ -8,6 +8,9 @@ import { decryptString } from '@/lib/integrations/ehr/crypto'
 import { refreshBackendConnectionIfNeeded } from '@/lib/integrations/ehr/backendTokens'
 import { logEhrAudit } from '@/lib/integrations/ehr/audit'
 import { extractEcwSecondaryMrn } from '@/lib/integrations/ehr/ecwPatientIds'
+import { mapFhirPatientActive } from '@/lib/integrations/ehr/patientActive'
+
+export { mapFhirPatientActive } from '@/lib/integrations/ehr/patientActive'
 
 export type FhirPatient = {
   resourceType?: string
@@ -41,10 +44,6 @@ function buildFullName(patient: FhirPatient) {
   const given = name?.given?.join(' ') || ''
   const family = name?.family || ''
   return [given, family].filter(Boolean).join(' ').trim()
-}
-
-export function mapFhirPatientActive(patient: { active?: boolean }): boolean | null {
-  return typeof patient.active === 'boolean' ? patient.active : null
 }
 
 export function mapFhirPatientRecord(patient: FhirPatient) {

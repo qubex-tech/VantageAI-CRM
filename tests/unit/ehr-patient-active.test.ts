@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   mapFhirPatientActive,
+  mapOpenDentalPatientActive,
+} from '@/lib/integrations/ehr/patientActive'
+import {
   mapFhirPatientRecord,
   mergePatientUpdate,
 } from '@/lib/integrations/ehr/ecwPatientRosterSync'
@@ -14,6 +17,24 @@ describe('mapFhirPatientActive', () => {
   it('returns null when active is missing or not a boolean', () => {
     expect(mapFhirPatientActive({})).toBeNull()
     expect(mapFhirPatientActive({ active: undefined })).toBeNull()
+    expect(mapFhirPatientActive(null)).toBeNull()
+  })
+})
+
+describe('mapOpenDentalPatientActive', () => {
+  it('maps Open Dental PatStatus to Active/Inactive', () => {
+    expect(mapOpenDentalPatientActive('Patient')).toBe(true)
+    expect(mapOpenDentalPatientActive('NonPatient')).toBe(true)
+    expect(mapOpenDentalPatientActive('Prospective')).toBe(true)
+    expect(mapOpenDentalPatientActive('Inactive')).toBe(false)
+    expect(mapOpenDentalPatientActive('Archived')).toBe(false)
+    expect(mapOpenDentalPatientActive('Deleted')).toBe(false)
+    expect(mapOpenDentalPatientActive('Deceased')).toBe(false)
+  })
+
+  it('returns null when PatStatus is missing', () => {
+    expect(mapOpenDentalPatientActive(undefined)).toBeNull()
+    expect(mapOpenDentalPatientActive('')).toBeNull()
   })
 })
 
@@ -42,7 +63,7 @@ describe('mergePatientUpdate ehrActive', () => {
     })
   })
 
-  it('does not clear a stored status when FHIR omits active', () => {
+  it('does not clear a stored status when the EHR omits active', () => {
     expect(mergePatientUpdate({ ehrActive: true }, { ehrActive: null })).toEqual({})
   })
 })

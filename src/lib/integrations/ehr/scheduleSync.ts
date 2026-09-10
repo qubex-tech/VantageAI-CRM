@@ -20,6 +20,7 @@ import {
 import { formatFhirPatientDisplayName } from '@/lib/patient-name'
 import { phoneMatchKey } from '@/lib/patient-identity'
 import { extractEcwSecondaryMrn } from '@/lib/integrations/ehr/ecwPatientIds'
+import { mapFhirPatientActive } from '@/lib/integrations/ehr/patientActive'
 
 const WRITEBACK_PROVIDER_ID = 'ecw_write'
 const STALE_SYNC_WINDOW_MS = 12 * 60 * 60 * 1000
@@ -55,6 +56,7 @@ type FhirPatient = {
   name?: Array<{ text?: string; family?: string; given?: string[] }>
   birthDate?: string
   gender?: string
+  active?: boolean
   telecom?: Array<{ system?: string; value?: string }>
 }
 
@@ -868,6 +870,7 @@ async function upsertPatientFromEhr(params: {
   const birthDate = patient?.birthDate ? new Date(patient.birthDate) : null
   const phoneKey = phoneMatchKey(primaryPhone)
   const externalMrn = extractEcwSecondaryMrn(patient)
+  const ehrActive = mapFhirPatientActive(patient)
 
   // Before creating a new profile, merge with an existing local patient match and attach EHR ID.
   const mergeOrConditions: Array<Record<string, unknown>> = []
@@ -933,6 +936,7 @@ async function upsertPatientFromEhr(params: {
           primaryPhone: mergeCandidate.primaryPhone || primaryPhone,
           phone: mergeCandidate.phone || primaryPhone || mergeCandidate.phone,
           email: mergeCandidate.email || email,
+          ...(ehrActive !== null ? { ehrActive } : {}),
           consentSource: mergeCandidate.consentSource || 'import',
         },
       })
@@ -955,6 +959,7 @@ async function upsertPatientFromEhr(params: {
       primaryPhone,
       phone: primaryPhone || 'unknown',
       email,
+      ...(ehrActive !== null ? { ehrActive } : {}),
       preferredContactMethod: primaryPhone ? 'phone' : 'email',
       consentSource: 'import',
     },

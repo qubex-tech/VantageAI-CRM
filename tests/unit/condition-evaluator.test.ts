@@ -223,7 +223,7 @@ describe('Condition Evaluator', () => {
   })
 
   describe('patient.ehrActive condition', () => {
-    it('matches Active and Inactive from the stored FHIR status', () => {
+    it('matches Active and Inactive from the stored EHR status', () => {
       expect(
         evaluateConditions(
           { field: 'patient.ehrActive', operator: 'equals', value: true },

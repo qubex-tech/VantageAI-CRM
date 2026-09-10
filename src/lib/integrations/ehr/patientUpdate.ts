@@ -13,7 +13,7 @@ import { createPatient } from '@/lib/integrations/fhir/resources/patient'
 import { formatDateOnlyForInput } from '@/lib/date'
 import { formatFhirPatientDisplayName } from '@/lib/patient-name'
 import { extractEcwSecondaryMrn } from '@/lib/integrations/ehr/ecwPatientIds'
-import { mapFhirPatientActive } from '@/lib/integrations/ehr/ecwPatientRosterSync'
+import { mapFhirPatientActive } from '@/lib/integrations/ehr/patientActive'
 
 const UPDATE_PROVIDER_ID = 'ecw_write'
 const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.326070'

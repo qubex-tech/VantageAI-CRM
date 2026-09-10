@@ -157,7 +157,7 @@ model Patient {
   // Basic Information
   externalEhrId           String?
   externalMrn             String?
-  /// FHIR Patient.active from eCW: true = Active, false = Inactive, null = unknown / not synced
+  /// Chart status from the connected EHR/EMR: true = Active, false = Inactive, null = unknown / not synced
   ehrActive               Boolean?
   firstName               String?
   lastName                String?

@@ -438,7 +438,7 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
     { value: 'patient_on_list', label: 'Patient is on list', type: 'string' as const },
     {
       value: 'patient.ehrActive',
-      label: 'eCW patient status',
+      label: 'Patient status',
       type: 'boolean' as const,
     },
     {
