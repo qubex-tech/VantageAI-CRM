@@ -322,27 +322,131 @@ function diffMinutesNaive(start: NaiveParts, end: NaiveParts): number {
   return Math.round((b - a) / 60_000)
 }
 
+function compareNaive(a: NaiveParts, b: NaiveParts): number {
+  return naiveToUtcMs(a) - naiveToUtcMs(b)
+}
+
+function maxNaive(a: NaiveParts, b: NaiveParts): NaiveParts {
+  return compareNaive(a, b) >= 0 ? a : b
+}
+
+function minNaive(a: NaiveParts, b: NaiveParts): NaiveParts {
+  return compareNaive(a, b) <= 0 ? a : b
+}
+
+type OpenDentalTimeRange = {
+  start: NaiveParts
+  end: NaiveParts
+  provNum: number
+  opNum: number
+}
+
+/**
+ * Snap a wall-clock time forward to the next `lengthMinutes` grid
+ * (:00/:30 for a 30-minute slot). Seconds are discarded.
+ */
+function ceilToLengthStep(p: NaiveParts, lengthMinutes: number): NaiveParts {
+  const step = Math.max(1, lengthMinutes)
+  const dayMins = p.h * 60 + p.mi
+  const rem = dayMins % step
+  if (rem === 0 && p.s === 0) return { ...p, s: 0 }
+  const bump = rem === 0 ? step : step - rem
+  return addMinutesNaive({ ...p, s: 0 }, bump)
+}
+
+function parseOpenDentalTimeRanges(
+  raw: Array<Record<string, unknown>>,
+  fallbackProvNum: number,
+  fallbackOpNum: number
+): OpenDentalTimeRange[] {
+  const ranges: OpenDentalTimeRange[] = []
+  for (const range of raw) {
+    const start = parseNaive(range.DateTimeStart)
+    const end = parseNaive(range.DateTimeEnd)
+    if (!start || !end) continue
+    if (diffMinutesNaive(start, end) <= 0) continue
+    ranges.push({
+      start,
+      end,
+      provNum: num(range.ProvNum) ?? fallbackProvNum,
+      opNum: num(range.OpNum) ?? fallbackOpNum,
+    })
+  }
+  return ranges
+}
+
+/** Intersect open windows across chairs. Empty input yields empty. */
+function intersectOpenDentalTimeRangeLists(
+  lists: OpenDentalTimeRange[][]
+): OpenDentalTimeRange[] {
+  if (lists.length === 0) return []
+  return lists.reduce((acc, next) => {
+    const out: OpenDentalTimeRange[] = []
+    for (const a of acc) {
+      for (const b of next) {
+        const start = maxNaive(a.start, b.start)
+        const end = minNaive(a.end, b.end)
+        if (diffMinutesNaive(start, end) > 0) {
+          out.push({
+            start,
+            end,
+            provNum: a.provNum,
+            opNum: a.opNum,
+          })
+        }
+      }
+    }
+    return out
+  })
+}
+
+/**
+ * Cut bookable starts from an open window. Starts are clock-aligned to
+ * `lengthMinutes` so a leftover 2:50–3:30 hole still yields 3:00.
+ */
+function sliceOpenDentalTimeRanges(
+  ranges: OpenDentalTimeRange[],
+  lengthMinutes: number,
+  timeZone: string
+): OpenDentalOpenSlot[] {
+  const slots: OpenDentalOpenSlot[] = []
+  for (const range of ranges) {
+    let cursor = ceilToLengthStep(range.start, lengthMinutes)
+    while (diffMinutesNaive(cursor, range.end) >= lengthMinutes) {
+      const naive = formatNaive(cursor)
+      slots.push({
+        start: naive,
+        startUtc: openDentalNaiveToInstant(naive, timeZone)?.toISOString() ?? null,
+        provNum: range.provNum,
+        opNum: range.opNum,
+        lengthMinutes,
+      })
+      cursor = addMinutesNaive(cursor, lengthMinutes)
+    }
+  }
+  slots.sort((a, b) => a.start.localeCompare(b.start))
+  return slots
+}
+
 /**
  * Fetch open scheduling windows from Open Dental and subdivide them into discrete,
  * bookable start times of `lengthMinutes` each. Does **not** apply blockout filtering —
  * callers that already loaded blockouts once should filter after merging.
  */
-async function getOpenDentalOpenSlotsRaw(params: {
+async function fetchOpenDentalSlotRanges(params: {
   practiceId: string
   provNum?: number | null
   opNum?: number | null
   dateStart: string
   dateEnd?: string
   lengthMinutes?: number | null
-}): Promise<OpenDentalOpenSlot[]> {
+}): Promise<OpenDentalTimeRange[]> {
   const { practiceId, provNum, opNum, dateStart, dateEnd } = params
   const lengthMinutes = params.lengthMinutes && params.lengthMinutes > 0
     ? params.lengthMinutes
     : DEFAULT_SLOT_LENGTH_MINUTES
 
   const services = await getOpenDentalServices(practiceId)
-  const timeZone = await getPracticeTimeZone(practiceId)
-
   const query: Record<string, string | number> = {
     dateStart,
     dateEnd: dateEnd ?? dateStart,
@@ -351,36 +455,25 @@ async function getOpenDentalOpenSlotsRaw(params: {
   if (provNum) query.ProvNum = provNum
   if (opNum) query.OpNum = opNum
 
-  const ranges = (await services.appointments.getSlots(query)) as Array<Record<string, unknown>>
-  if (!Array.isArray(ranges)) return []
+  const raw = (await services.appointments.getSlots(query)) as Array<Record<string, unknown>>
+  if (!Array.isArray(raw)) return []
+  return parseOpenDentalTimeRanges(raw, provNum ?? 0, opNum ?? 0)
+}
 
-  const slots: OpenDentalOpenSlot[] = []
-  for (const range of ranges) {
-    const start = parseNaive(range.DateTimeStart)
-    const end = parseNaive(range.DateTimeEnd)
-    const rProv = num(range.ProvNum) ?? provNum ?? 0
-    const rOp = num(range.OpNum) ?? opNum ?? 0
-    if (!start || !end) continue
-
-    const windowMinutes = diffMinutesNaive(start, end)
-    let cursor = start
-    let offset = 0
-    while (offset + lengthMinutes <= windowMinutes) {
-      const naive = formatNaive(cursor)
-      slots.push({
-        start: naive,
-        startUtc: openDentalNaiveToInstant(naive, timeZone)?.toISOString() ?? null,
-        provNum: rProv,
-        opNum: rOp,
-        lengthMinutes,
-      })
-      cursor = addMinutesNaive(cursor, lengthMinutes)
-      offset += lengthMinutes
-    }
-  }
-
-  slots.sort((a, b) => a.start.localeCompare(b.start))
-  return slots
+async function getOpenDentalOpenSlotsRaw(params: {
+  practiceId: string
+  provNum?: number | null
+  opNum?: number | null
+  dateStart: string
+  dateEnd?: string
+  lengthMinutes?: number | null
+}): Promise<OpenDentalOpenSlot[]> {
+  const lengthMinutes = params.lengthMinutes && params.lengthMinutes > 0
+    ? params.lengthMinutes
+    : DEFAULT_SLOT_LENGTH_MINUTES
+  const timeZone = await getPracticeTimeZone(params.practiceId)
+  const ranges = await fetchOpenDentalSlotRanges(params)
+  return sliceOpenDentalTimeRanges(ranges, lengthMinutes, timeZone)
 }
 
 async function loadBlockoutsOrEmpty(params: {
@@ -432,8 +525,10 @@ export async function getOpenDentalOpenSlots(params: {
  * - `operatoryMatch: 'any'` (default): **union** — a start is offered if free on any
  *   configured operatory. When the same start is free on multiple chairs, the earliest
  *   configured operatory is kept so the slot's `opNum` can be preferred at booking time.
- * - `operatoryMatch: 'all'`: **intersection** — a start is offered only if free on every
- *   configured operatory. `opNum` is taken from the first configured operatory.
+ * - `operatoryMatch: 'all'`: **range intersection, then slice** — overlapping open
+ *   windows across every configured operatory are cut into `lengthMinutes` starts
+ *   (clock-aligned). A 2:50–3:30 hole on one chair and 3:00–4:00 on the other
+ *   yields 3:00. `opNum` is taken from the first configured operatory.
  *
  * Blockouts are loaded **once** for the date range (not once per operatory), and
  * per-operatory slot fetches run in parallel.
@@ -473,20 +568,25 @@ export async function getOpenDentalOpenSlotsForOperatories(params: {
     })
   }
 
-  const [blockouts, ...slotsByOp] = await Promise.all([
+  const resolvedLength = lengthMinutes && lengthMinutes > 0
+    ? lengthMinutes
+    : DEFAULT_SLOT_LENGTH_MINUTES
+  const timeZone = await getPracticeTimeZone(practiceId)
+
+  const [blockouts, ...rangesByOp] = await Promise.all([
     loadBlockoutsOrEmpty({
       practiceId,
       dateStart,
       dateEnd: dateEnd ?? dateStart,
     }),
     ...uniqueOps.map((opNum) =>
-      getOpenDentalOpenSlotsRaw({
+      fetchOpenDentalSlotRanges({
         practiceId,
         provNum,
         opNum,
         dateStart,
         dateEnd,
-        lengthMinutes,
+        lengthMinutes: resolvedLength,
       })
     ),
   ])
@@ -494,19 +594,13 @@ export async function getOpenDentalOpenSlotsForOperatories(params: {
   const pickedByStart = new Map<string, OpenDentalOpenSlot>()
 
   if (operatoryMatch === 'all') {
-    const startSets = slotsByOp.map((slots) => new Set(slots.map((s) => s.start)))
-    const firstOpByStart = new Map<string, OpenDentalOpenSlot>()
-    for (const slot of slotsByOp[0]) {
-      if (!firstOpByStart.has(slot.start)) firstOpByStart.set(slot.start, slot)
-    }
-    for (const [start, slot] of firstOpByStart) {
-      if (startSets.every((set) => set.has(start))) {
-        pickedByStart.set(start, slot)
-      }
+    const overlapped = intersectOpenDentalTimeRangeLists(rangesByOp)
+    for (const slot of sliceOpenDentalTimeRanges(overlapped, resolvedLength, timeZone)) {
+      if (!pickedByStart.has(slot.start)) pickedByStart.set(slot.start, slot)
     }
   } else {
-    for (const slots of slotsByOp) {
-      for (const slot of slots) {
+    for (const ranges of rangesByOp) {
+      for (const slot of sliceOpenDentalTimeRanges(ranges, resolvedLength, timeZone)) {
         if (!pickedByStart.has(slot.start)) {
           pickedByStart.set(slot.start, slot)
         }

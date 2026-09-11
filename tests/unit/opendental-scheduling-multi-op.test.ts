@@ -171,4 +171,99 @@ describe('getOpenDentalOpenSlotsForOperatories', () => {
       expect.not.objectContaining({ OpNum: expect.anything() })
     )
   })
+
+  it('intersects leftover ranges before slicing so 3:00 and 5:00 survive all-match', async () => {
+    const getSlots = vi.fn().mockImplementation(async (query: Record<string, unknown>) => {
+      const op = Number(query.OpNum)
+      if (op === 1) {
+        return [
+          {
+            DateTimeStart: '2026-09-10 14:50:00',
+            DateTimeEnd: '2026-09-10 15:30:00',
+            ProvNum: 24,
+            OpNum: 1,
+          },
+          {
+            DateTimeStart: '2026-09-10 17:00:00',
+            DateTimeEnd: '2026-09-10 18:00:00',
+            ProvNum: 24,
+            OpNum: 1,
+          },
+        ]
+      }
+      if (op === 2) {
+        return [
+          {
+            DateTimeStart: '2026-09-10 15:00:00',
+            DateTimeEnd: '2026-09-10 16:00:00',
+            ProvNum: 24,
+            OpNum: 2,
+          },
+          {
+            DateTimeStart: '2026-09-10 17:00:00',
+            DateTimeEnd: '2026-09-10 18:00:00',
+            ProvNum: 24,
+            OpNum: 2,
+          },
+        ]
+      }
+      return []
+    })
+
+    vi.mocked(getOpenDentalServices).mockResolvedValue({
+      appointments: { getSlots },
+      schedules: {
+        list: vi.fn().mockResolvedValue([
+          {
+            SchedType: 'Blockout',
+            SchedDate: '2026-09-10',
+            StartTime: '17:30:00',
+            StopTime: '18:30:00',
+            operatories: '1,2',
+            Note: 'DR LEAVE AT 5:30PM',
+          },
+        ]),
+      },
+    } as never)
+
+    const merged = await getOpenDentalOpenSlotsForOperatories({
+      practiceId: 'practice-1',
+      provNum: 24,
+      opNums: [1, 2],
+      dateStart: '2026-09-10',
+      lengthMinutes: 30,
+      operatoryMatch: 'all',
+    })
+
+    expect(merged.map((s) => s.start)).toEqual([
+      '2026-09-10 15:00:00',
+      '2026-09-10 17:00:00',
+    ])
+    expect(merged[0].opNum).toBe(1)
+  })
+
+  it('clock-aligns a leftover single-chair hole so 2:50–3:30 yields 3:00', async () => {
+    const getSlots = vi.fn().mockResolvedValue([
+      {
+        DateTimeStart: '2026-09-10 14:50:00',
+        DateTimeEnd: '2026-09-10 15:30:00',
+        ProvNum: 24,
+        OpNum: 1,
+      },
+    ])
+    vi.mocked(getOpenDentalServices).mockResolvedValue({
+      appointments: { getSlots },
+      schedules: { list: vi.fn().mockResolvedValue([]) },
+    } as never)
+
+    const merged = await getOpenDentalOpenSlotsForOperatories({
+      practiceId: 'practice-1',
+      provNum: 24,
+      opNums: [1],
+      dateStart: '2026-09-10',
+      lengthMinutes: 30,
+    })
+
+    expect(merged.map((s) => s.start)).toEqual(['2026-09-10 15:00:00'])
+  })
 })
