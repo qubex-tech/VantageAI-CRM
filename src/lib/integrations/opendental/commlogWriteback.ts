@@ -233,11 +233,6 @@ export function buildCommlogNote(call: RetellCall, extractedData: ExtractedCallD
   if (extractedData.preferred_dentist) lines.push(`Preferred provider: ${extractedData.preferred_dentist}`)
   const caller = extractedData.user_phone_number || extractedData.patient_phone_number
   if (caller) lines.push(`Caller: ${caller}`)
-  if (call.transcript) {
-    lines.push('')
-    lines.push('Transcript:')
-    lines.push(call.transcript)
-  }
   return truncate(lines.filter(Boolean).join('\n'), MAX_NOTE_LENGTH)
 }
 

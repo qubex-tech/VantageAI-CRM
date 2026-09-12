@@ -100,6 +100,8 @@ describe('Retell payment type for Open Dental notes', () => {
     })
     expect(newPatientNote).toContain('Payment type: self pay')
     expect(newPatientNote).toContain('Reason: Schedule a first-time dental appointment')
+    expect(newPatientNote).not.toContain('Transcript:')
+    expect(newPatientNote).not.toContain('hello')
 
     const existingNote = buildCommlogNote(call, {
       call_reason: 'Check appointment',
