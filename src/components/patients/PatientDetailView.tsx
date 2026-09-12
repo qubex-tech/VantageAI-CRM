@@ -144,6 +144,16 @@ interface PatientDetailViewProps {
       rxPcn?: string | null
       rxGroup?: string | null
     }>
+    ehrReferrals?: Array<{
+      id: string
+      referralType: string
+      status?: string | null
+      referralDate?: Date | string | null
+      note?: string | null
+      specialistName?: string | null
+      specialistSpecialty?: string | null
+      specialistPhone?: string | null
+    }>
     appointments: Array<{
       id: string
       startTime: Date
@@ -194,6 +204,18 @@ function formatPrimaryLocation(patient: {
   ].filter(Boolean) as string[]
   if (parts.length > 0) return parts.join(', ')
   return patient.address || ''
+}
+
+function formatReferralTypeLabel(type: string): string {
+  if (type === 'RefTo') return 'Outgoing'
+  if (type === 'RefFrom') return 'Incoming'
+  return 'Referral'
+}
+
+function formatReferralStatusLabel(status?: string | null): string | null {
+  if (!status || status === 'None') return null
+  if (status === 'InTreatment') return 'In treatment'
+  return status.replace(/([a-z])([A-Z])/g, '$1 $2')
 }
 
 /** Click-to-copy value with brief "Copied!" feedback */
@@ -276,6 +298,7 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
   const [notesLoading, setNotesLoading] = useState(false)
   const [showMobileDetails, setShowMobileDetails] = useState(false)
   const [tags, setTags] = useState(patient.tags || [])
+  const [ehrReferrals, setEhrReferrals] = useState(patient.ehrReferrals || [])
   const [newTag, setNewTag] = useState('')
   const [tagsSaving, setTagsSaving] = useState(false)
   const [tagsError, setTagsError] = useState('')
@@ -285,6 +308,31 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
   useEffect(() => {
     setTags(patient.tags || [])
   }, [patient.tags])
+
+  useEffect(() => {
+    setEhrReferrals(patient.ehrReferrals || [])
+  }, [patient.ehrReferrals])
+
+  useEffect(() => {
+    let cancelled = false
+    const refreshReferrals = async () => {
+      try {
+        const res = await fetch(`/api/patients/${patient.id}`, { cache: 'no-store' })
+        if (!res.ok) return
+        const data = await res.json().catch(() => ({}))
+        const next = data.patient?.ehrReferrals
+        if (!cancelled && Array.isArray(next)) {
+          setEhrReferrals(next)
+        }
+      } catch {
+        // Profile can still render stored referrals if the live EHR pull fails.
+      }
+    }
+    void refreshReferrals()
+    return () => {
+      cancelled = true
+    }
+  }, [patient.id])
 
   const saveTags = async (nextTagValues: string[]) => {
     const unique = Array.from(
@@ -867,7 +915,69 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                         <Building2 className="h-5 w-5 text-gray-400" />
                       </div>
                     </div>
+
+                    {/* Referrals */}
+                    <div className="border border-gray-200 rounded-lg p-4 bg-white">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-xs text-gray-500 mb-1">EHR referrals</div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {ehrReferrals.length > 0
+                              ? `${ehrReferrals.length} referral${ehrReferrals.length === 1 ? '' : 's'}`
+                              : 'No referrals'}
+                          </div>
+                        </div>
+                        <Share2 className="h-5 w-5 text-gray-400" />
+                      </div>
+                    </div>
                   </div>
+                </div>
+
+                <div className="mb-8">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Share2 className="h-4 w-4 text-gray-500" />
+                    <h2 className="text-sm font-medium text-gray-900">Referrals</h2>
+                  </div>
+                  {ehrReferrals.length === 0 ? (
+                    <div className="border border-gray-200 rounded-lg p-4 bg-white text-sm text-gray-500">
+                      No specialist referrals on file
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {ehrReferrals.map((referral) => {
+                        const status = formatReferralStatusLabel(referral.status)
+                        return (
+                          <div key={referral.id} className="border border-gray-200 rounded-lg p-4 bg-white">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="text-xs text-gray-500 mb-1">
+                                  {formatReferralTypeLabel(referral.referralType)}
+                                  {referral.specialistSpecialty ? ` · ${referral.specialistSpecialty}` : ''}
+                                </div>
+                                <div className="text-sm font-medium text-gray-900">
+                                  {referral.specialistName || 'Unnamed referral'}
+                                </div>
+                                <div className="text-xs text-gray-500 mt-1">
+                                  {[
+                                    referral.referralDate
+                                      ? formatDateOnly(referral.referralDate, 'MMM d, yyyy')
+                                      : null,
+                                    status,
+                                    referral.specialistPhone,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' · ')}
+                                </div>
+                                {referral.note && (
+                                  <div className="text-sm text-gray-600 mt-2">{referral.note}</div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* Activity Section Preview */}

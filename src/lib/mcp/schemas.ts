@@ -68,6 +68,20 @@ export const getUpcomingAppointmentsInput = z.object({
   }
 )
 
+export const getPatientReferralsInput = z.object({
+  patient_id: uuid.optional(),
+  first_name: z.string().min(1).optional(),
+  last_name: z.string().min(1).optional(),
+  dob: z.string().min(1).optional(),
+  zip: z.string().optional(),
+}).refine(
+  (v) => !!v.patient_id || (!!v.first_name && !!v.last_name && !!v.dob),
+  {
+    message: 'Provide patient_id or (first_name, last_name, dob)',
+    path: ['patient_id'],
+  }
+)
+
 export const resolvePatientForSchedulingInput = z.object({
   phone: z.string().min(1).optional(),
   first_name: z.string().min(1).optional(),
@@ -92,4 +106,5 @@ export type GetVerificationBundleInput = z.infer<typeof getVerificationBundleInp
 export type SearchPatientByDemographicsInput = z.infer<typeof searchPatientByDemographicsInput>
 export type GetInsuranceVerificationContextInput = z.infer<typeof getInsuranceVerificationContextInput>
 export type GetUpcomingAppointmentsInput = z.infer<typeof getUpcomingAppointmentsInput>
+export type GetPatientReferralsInput = z.infer<typeof getPatientReferralsInput>
 export type ResolvePatientForSchedulingInput = z.infer<typeof resolvePatientForSchedulingInput>

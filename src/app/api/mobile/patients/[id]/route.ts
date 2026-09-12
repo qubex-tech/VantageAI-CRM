@@ -64,6 +64,20 @@ export async function GET(req: NextRequest, context: RouteContext) {
         externalEhrId: true,
         ehrActive: true,
         tags: { select: { id: true, tag: true }, take: 20 },
+        ehrReferrals: {
+          orderBy: [{ referralDate: 'desc' }, { updatedAt: 'desc' }],
+          take: 10,
+          select: {
+            id: true,
+            referralType: true,
+            status: true,
+            referralDate: true,
+            specialistName: true,
+            specialistSpecialty: true,
+            specialistPhone: true,
+            note: true,
+          },
+        },
         insurancePolicies: {
           orderBy: { createdAt: 'desc' },
           take: 5,
@@ -136,6 +150,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
         externalEhrId: patient.externalEhrId,
         ehrActive: patient.ehrActive,
         tags: patient.tags.map((t) => ({ id: t.id, name: t.tag })),
+        ehrReferrals: patient.ehrReferrals,
         insurancePolicies: patient.insurancePolicies.map((policy) => ({
           id: policy.id,
           carrierName: policy.payerNameRaw,

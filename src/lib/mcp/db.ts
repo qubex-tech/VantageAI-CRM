@@ -87,6 +87,13 @@ export async function getPatientById(patientId: string, practiceId?: string | nu
   })
 }
 
+export async function getEhrReferralsByPatientId(patientId: string, practiceId?: string | null) {
+  return prisma.patientEhrReferral.findMany({
+    where: { patientId, ...(practiceId ? { practiceId } : {}) },
+    orderBy: [{ referralDate: 'desc' }, { updatedAt: 'desc' }],
+  })
+}
+
 export async function getInsurancePoliciesByPatientId(patientId: string, practiceId?: string | null) {
   return prisma.insurancePolicy.findMany({
     where: { patientId, ...(practiceId ? { practiceId } : {}) },

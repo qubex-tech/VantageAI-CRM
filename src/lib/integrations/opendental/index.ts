@@ -25,3 +25,13 @@ export {
   mapOpenDentalRelationship,
   resolveOpenDentalMemberId,
 } from './insuranceSync'
+export {
+  syncOpenDentalReferralsForPatient,
+  getLiveEhrReferralsForVoice,
+  loadStoredEhrReferralsForVoice,
+  mapOpenDentalRefAttach,
+  formatEhrReferralSpeakable,
+  formatOpenDentalSpecialistName,
+  toVoiceEhrReferral,
+  groupVoiceEhrReferrals,
+} from './referralSync'

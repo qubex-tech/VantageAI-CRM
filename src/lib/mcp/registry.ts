@@ -123,7 +123,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'get_upcoming_appointments',
     description:
-      "Get a patient's upcoming (scheduled/confirmed) appointments, ordered soonest-first. On Open Dental practices this live-pulls the patient's OD appointments before responding so the agent uses current schedule data, not a stale CRM mirror. Each appointment includes a ready-to-read summary with the date and time in the patient's local timezone, chairside notes when available, plus next_appointment for convenience. Resolve the patient with patient_id, or with first_name + last_name + dob during a live call.",
+      "Get a patient's upcoming (scheduled/confirmed) appointments, ordered soonest-first. On Open Dental practices this live-pulls the patient's OD appointments before responding so the agent uses current schedule data, not a stale CRM mirror. Each appointment includes a ready-to-read summary with the date and time in the patient's local timezone, chairside notes when available, plus next_appointment for convenience. Also live-pulls clinical EHR referrals (ehr_referrals) so you can tell the caller if this office referred them to a specialist. Resolve the patient with patient_id, or with first_name + last_name + dob during a live call.",
     input_schema: {
       type: 'object',
       properties: {
@@ -138,6 +138,24 @@ export const TOOL_DEFINITIONS = [
     },
     inputSchema: schemas.getUpcomingAppointmentsInput,
     handler: handlers.handleGetUpcomingAppointments,
+  },
+  {
+    name: 'get_patient_referrals',
+    description:
+      "Get a patient's clinical referrals from the EHR (Open Dental RefAttaches). Live-pulls outgoing referrals (this office sent the patient to a specialist) and incoming referrals (another doctor sent them here) so you can tell the caller who they were referred to, specialty, date, and status. Use when the caller asks about a specialist referral, who the doctor sent them to, or referral status. Resolve the patient with patient_id, or with first_name + last_name + dob during a live call.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        patient_id: { type: 'string', format: 'uuid' },
+        first_name: { type: 'string' },
+        last_name: { type: 'string' },
+        dob: { type: 'string' },
+        zip: { type: 'string' },
+      },
+      description: 'Provide patient_id OR first_name + last_name + dob',
+    },
+    inputSchema: schemas.getPatientReferralsInput,
+    handler: handlers.handleGetPatientReferrals,
   },
 ] as const
 

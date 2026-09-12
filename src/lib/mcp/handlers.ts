@@ -4,6 +4,7 @@ import { writeMcpAuditLog, collectFieldPaths } from './audit'
 import { buildVerificationAgentFields, formatPatientDob } from './verification-fields'
 import { formatAppointmentForVoice } from '@/lib/appointments/voice-context'
 import { getLiveUpcomingAppointmentsForVoice } from '@/lib/appointments/live-opendental-refresh'
+import { getLiveEhrReferralsForVoice } from '@/lib/integrations/opendental/referralSync'
 import {
   fetchOpenDentalChartFacts,
   normalizeDobToIso,
@@ -19,6 +20,7 @@ import type {
   SearchPatientByDemographicsInput,
   GetInsuranceVerificationContextInput,
   GetUpcomingAppointmentsInput,
+  GetPatientReferralsInput,
   ResolvePatientForSchedulingInput,
 } from './schemas'
 
@@ -653,11 +655,116 @@ export async function handleGetUpcomingAppointments(
     output.message = message
   }
 
+  if (useLiveOd && practiceId && patient.externalEhrId?.startsWith('opendental:')) {
+    try {
+      const liveReferrals = await getLiveEhrReferralsForVoice({
+        practiceId,
+        patientId: patient.id,
+        externalEhrId: patient.externalEhrId,
+      })
+      output.ehr_referrals = {
+        count: liveReferrals.referrals.length,
+        has_outgoing: liveReferrals.grouped.outgoing.length > 0,
+        outgoing: liveReferrals.grouped.outgoing,
+        incoming: liveReferrals.grouped.incoming,
+        speakable_summaries: liveReferrals.grouped.speakable_summaries,
+        refreshed_from_opendental: liveReferrals.refreshedFromOpenDental,
+      }
+    } catch (error) {
+      output.ehr_referrals_error =
+        error instanceof Error ? error.message : 'opendental_referral_refresh_failed'
+    }
+  }
+
   await writeMcpAuditLog({
     ...ctx,
     patientId: patient.id,
     policyId: null,
     toolName: 'get_upcoming_appointments',
+    fieldsReturned: collectFieldPaths(output),
+  })
+
+  return { output, patientId: patient.id }
+}
+
+export async function handleGetPatientReferrals(
+  input: GetPatientReferralsInput,
+  ctx: RequestContext
+): Promise<{ output: object; patientId: string | null }> {
+  let patientId = input.patient_id ?? null
+  if (!patientId) {
+    const matches = await db.searchPatientsByDemographics({
+      firstName: input.first_name!,
+      lastName: input.last_name!,
+      dob: input.dob!,
+      zip: input.zip,
+    }, ctx.practiceId)
+    if (matches.length === 0) {
+      return {
+        output: { error: { code: 'NOT_FOUND', message: 'No patient matched provided demographics' }, matches: [] },
+        patientId: null,
+      }
+    }
+    if (matches.length > 1) {
+      return {
+        output: { error: { code: 'AMBIGUOUS_PATIENT', message: 'Multiple patients matched. Provide patient_id.' }, matches },
+        patientId: null,
+      }
+    }
+    patientId = matches[0].patient_id
+  }
+
+  const patient = await db.getPatientById(patientId, ctx.practiceId)
+  if (!patient) {
+    return {
+      output: { error: { code: 'NOT_FOUND', message: 'Patient not found' } },
+      patientId,
+    }
+  }
+
+  const practiceId = ctx.practiceId ?? patient.practiceId
+  const live = await getLiveEhrReferralsForVoice({
+    practiceId,
+    patientId: patient.id,
+    externalEhrId: patient.externalEhrId,
+  })
+
+  const { outgoing, incoming, other, speakable_summaries } = live.grouped
+  let message: string | undefined
+  if (live.error && live.referrals.length === 0) {
+    message =
+      'Could not load referrals from Open Dental. Please try again or transfer to the front desk.'
+  } else if (live.referrals.length === 0) {
+    message = 'No specialist referrals found for this patient'
+  }
+
+  const output: Record<string, unknown> = {
+    patient_id: patient.id,
+    count: live.referrals.length,
+    has_outgoing: outgoing.length > 0,
+    has_incoming: incoming.length > 0,
+    outgoing,
+    incoming,
+    other,
+    speakable_summaries,
+    refreshed_from_opendental: live.refreshedFromOpenDental,
+    opendental_refresh: live.summary,
+  }
+  if (live.error) {
+    output.opendental_refresh_error = live.error
+  }
+  if (live.reason) {
+    output.opendental_refresh_reason = live.reason
+  }
+  if (message) {
+    output.message = message
+  }
+
+  await writeMcpAuditLog({
+    ...ctx,
+    patientId: patient.id,
+    policyId: null,
+    toolName: 'get_patient_referrals',
     fieldsReturned: collectFieldPaths(output),
   })
 

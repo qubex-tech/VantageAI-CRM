@@ -30,6 +30,9 @@ export default async function PatientDetailPage({
       insurancePolicies: {
         orderBy: [{ isPrimary: 'desc' }],
       },
+      ehrReferrals: {
+        orderBy: [{ referralDate: 'desc' }, { updatedAt: 'desc' }],
+      },
       appointments: {
         orderBy: { startTime: 'desc' },
       },

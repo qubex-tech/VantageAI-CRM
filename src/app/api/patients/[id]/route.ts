@@ -10,6 +10,7 @@ import { syncPatientUpdateToEhr } from '@/lib/integrations/ehr/patientUpdate'
 import { syncOpenDentalCommlogsForPatient } from '@/lib/integrations/opendental/commlogSync'
 import { syncOpenDentalAppointmentsForPatient } from '@/lib/integrations/opendental/appointmentSync'
 import { syncOpenDentalInsuranceForPatient } from '@/lib/integrations/opendental/insuranceSync'
+import { syncOpenDentalReferralsForPatient } from '@/lib/integrations/opendental/referralSync'
 import { normalizeDateOnly, parseDateOnlyString } from '@/lib/date'
 
 export const dynamic = 'force-dynamic'
@@ -39,6 +40,9 @@ export async function GET(
       include: {
         tags: true,
         insurancePolicies: true,
+        ehrReferrals: {
+          orderBy: [{ referralDate: 'desc' }, { updatedAt: 'desc' }],
+        },
         appointments: {
           orderBy: { startTime: 'desc' },
           take: 10,
@@ -120,6 +124,27 @@ export async function GET(
         }
       } catch (error) {
         console.warn('[Patient GET] Open Dental insurance pull failed', {
+          patientId: patient.id,
+          error: error instanceof Error ? error.message : 'unknown',
+        })
+      }
+
+      // Best-effort: pull Open Dental RefAttaches so outgoing/incoming specialist
+      // referrals show on the profile and are ready for the voice agent.
+      try {
+        const referralResult = await syncOpenDentalReferralsForPatient({
+          practiceId,
+          patientId: patient.id,
+          externalEhrId: patient.externalEhrId,
+        })
+        if (referralResult.status === 'success') {
+          patient.ehrReferrals = await prisma.patientEhrReferral.findMany({
+            where: { patientId: patient.id },
+            orderBy: [{ referralDate: 'desc' }, { updatedAt: 'desc' }],
+          })
+        }
+      } catch (error) {
+        console.warn('[Patient GET] Open Dental referral pull failed', {
           patientId: patient.id,
           error: error instanceof Error ? error.message : 'unknown',
         })

@@ -24,6 +24,7 @@ model Practice {
   users                      User[]
   patients                   Patient[]
   insurancePolicies          InsurancePolicy[]
+  ehrReferrals               PatientEhrReferral[]
   appointments               Appointment[]
   calendarBlocks             CalendarBlock[]
   openSlotEvents             OpenSlotEvent[]
@@ -202,6 +203,7 @@ model Patient {
 
   practice                   Practice                    @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   insurancePolicies          InsurancePolicy[]
+  ehrReferrals               PatientEhrReferral[]
   eligibilityChecks          EligibilityCheck[]
   appointments               Appointment[]
   outreachAttempts           OutreachAttempt[]
@@ -241,6 +243,39 @@ model Patient {
   @@index([primaryInsuranceId])
   @@index([secondaryInsuranceId])
   @@map("patients")
+}
+
+/// Clinical EHR referrals (e.g. Open Dental RefAttaches), not marketing ReferralLink.
+model PatientEhrReferral {
+  id                  String    @id @default(uuid())
+  practiceId          String
+  patientId           String
+  source              String    @default("opendental")
+  externalAttachId    String
+  externalReferralId  String?
+  referralType        String
+  status              String?
+  referralDate        DateTime?
+  note                String?
+  specialistName      String?
+  specialistSpecialty String?
+  specialistPhone     String?
+  specialistTitle     String?
+  isDoctor            Boolean?
+  referringProvNum    Int?
+  procNum             Int?
+  lastPulledAt        DateTime
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([practiceId, source, externalAttachId])
+  @@index([patientId])
+  @@index([practiceId, patientId])
+  @@index([patientId, referralType])
+  @@map("patient_ehr_referrals")
 }
 
 model PatientNote {
