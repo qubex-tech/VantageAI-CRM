@@ -3,7 +3,10 @@ import { computeReadiness } from './readiness'
 import { writeMcpAuditLog, collectFieldPaths } from './audit'
 import { buildVerificationAgentFields, formatPatientDob } from './verification-fields'
 import { formatAppointmentForVoice } from '@/lib/appointments/voice-context'
-import { getLiveUpcomingAppointmentsForVoice } from '@/lib/appointments/live-opendental-refresh'
+import {
+  getLivePreviousAppointmentsForVoice,
+  getLiveUpcomingAppointmentsForVoice,
+} from '@/lib/appointments/live-opendental-refresh'
 import { getLiveEhrReferralsForVoice } from '@/lib/integrations/opendental/referralSync'
 import {
   fetchOpenDentalChartFacts,
@@ -20,6 +23,7 @@ import type {
   SearchPatientByDemographicsInput,
   GetInsuranceVerificationContextInput,
   GetUpcomingAppointmentsInput,
+  GetPreviousAppointmentsInput,
   GetPatientReferralsInput,
   ResolvePatientForSchedulingInput,
 } from './schemas'
@@ -593,6 +597,7 @@ export async function handleGetUpcomingAppointments(
   const useLiveOd = Boolean(practiceId && scheduling && usesOpenDentalForRead(scheduling))
 
   let appointments: ReturnType<typeof formatAppointmentForVoice>[] = []
+  let previousAppointments: ReturnType<typeof formatAppointmentForVoice>[] = []
   let opendentalRefresh: Record<string, number> | null = null
   let refreshedFromOpendental = false
   let opendentalRefreshError: string | null = null
@@ -605,6 +610,7 @@ export async function handleGetUpcomingAppointments(
       limit: input.limit ?? 5,
     })
     appointments = live.appointments
+    previousAppointments = live.previousAppointments
     refreshedFromOpendental = live.refreshedFromOpenDental
     if (live.summary) {
       opendentalRefresh = {
@@ -621,6 +627,7 @@ export async function handleGetUpcomingAppointments(
       // Fail closed: do not fall back to CRM when the live OD pull fails.
       opendentalRefreshError = live.error
       appointments = []
+      previousAppointments = []
       refreshedFromOpendental = false
       message =
         'Could not load upcoming appointments from Open Dental. Please try again or transfer to the front desk.'
@@ -628,12 +635,12 @@ export async function handleGetUpcomingAppointments(
       message = 'No upcoming appointments found for this patient'
     }
   } else {
-    const rows = await db.getUpcomingAppointmentsByPatientId(
-      patientId,
-      ctx.practiceId,
-      input.limit ?? 5
-    )
+    const [rows, previousRows] = await Promise.all([
+      db.getUpcomingAppointmentsByPatientId(patientId, ctx.practiceId, input.limit ?? 5),
+      db.getPreviousAppointmentsByPatientId(patientId, ctx.practiceId, 5),
+    ])
     appointments = rows.map(formatAppointmentForVoice)
+    previousAppointments = previousRows.map(formatAppointmentForVoice)
     if (appointments.length === 0) {
       message = 'No upcoming appointments found for this patient'
     }
@@ -644,6 +651,8 @@ export async function handleGetUpcomingAppointments(
     count: appointments.length,
     has_upcoming: appointments.length > 0,
     next_appointment: appointments[0] ?? null,
+    has_previous: previousAppointments.length > 0,
+    last_appointment: previousAppointments[0] ?? null,
     appointments,
     refreshed_from_opendental: refreshedFromOpendental,
     opendental_refresh: opendentalRefresh,
@@ -681,6 +690,118 @@ export async function handleGetUpcomingAppointments(
     patientId: patient.id,
     policyId: null,
     toolName: 'get_upcoming_appointments',
+    fieldsReturned: collectFieldPaths(output),
+  })
+
+  return { output, patientId: patient.id }
+}
+
+export async function handleGetPreviousAppointments(
+  input: GetPreviousAppointmentsInput,
+  ctx: RequestContext
+): Promise<{ output: object; patientId: string | null }> {
+  let patientId = input.patient_id ?? null
+  if (!patientId) {
+    const matches = await db.searchPatientsByDemographics({
+      firstName: input.first_name!,
+      lastName: input.last_name!,
+      dob: input.dob!,
+      zip: input.zip,
+    }, ctx.practiceId)
+    if (matches.length === 0) {
+      return {
+        output: { error: { code: 'NOT_FOUND', message: 'No patient matched provided demographics' }, matches: [] },
+        patientId: null,
+      }
+    }
+    if (matches.length > 1) {
+      return {
+        output: { error: { code: 'AMBIGUOUS_PATIENT', message: 'Multiple patients matched. Provide patient_id.' }, matches },
+        patientId: null,
+      }
+    }
+    patientId = matches[0].patient_id
+  }
+
+  const patient = await db.getPatientById(patientId, ctx.practiceId)
+  if (!patient) {
+    return {
+      output: { error: { code: 'NOT_FOUND', message: 'Patient not found' } },
+      patientId,
+    }
+  }
+
+  const practiceId = ctx.practiceId ?? patient.practiceId
+  const scheduling = practiceId ? await getSchedulingSettings(practiceId) : null
+  const useLiveOd = Boolean(practiceId && scheduling && usesOpenDentalForRead(scheduling))
+
+  let appointments: ReturnType<typeof formatAppointmentForVoice>[] = []
+  let opendentalRefresh: Record<string, number> | null = null
+  let refreshedFromOpendental = false
+  let opendentalRefreshError: string | null = null
+  let message: string | undefined
+
+  if (useLiveOd && practiceId) {
+    const live = await getLivePreviousAppointmentsForVoice({
+      practiceId,
+      patientId: patient.id,
+      limit: input.limit ?? 5,
+    })
+    appointments = live.appointments
+    refreshedFromOpendental = live.refreshedFromOpenDental
+    if (live.summary) {
+      opendentalRefresh = {
+        fetched: live.summary.fetched,
+        created: live.summary.created,
+        updated: live.summary.updated,
+        skipped: live.summary.skipped,
+        errors: live.summary.errors,
+        pruned: live.summary.pruned,
+        statusReconciled: live.summary.statusReconciled,
+      }
+    }
+    if (live.error) {
+      opendentalRefreshError = live.error
+      appointments = []
+      refreshedFromOpendental = false
+      message =
+        'Could not load previous appointments from Open Dental. Please try again or transfer to the front desk.'
+    } else if (appointments.length === 0) {
+      message = 'No previous appointments found for this patient'
+    }
+  } else {
+    const rows = await db.getPreviousAppointmentsByPatientId(
+      patientId,
+      ctx.practiceId,
+      input.limit ?? 5
+    )
+    appointments = rows.map(formatAppointmentForVoice)
+    if (appointments.length === 0) {
+      message = 'No previous appointments found for this patient'
+    }
+  }
+
+  const output: Record<string, unknown> = {
+    patient_id: patient.id,
+    count: appointments.length,
+    has_previous: appointments.length > 0,
+    last_appointment: appointments[0] ?? null,
+    appointments,
+    refreshed_from_opendental: refreshedFromOpendental,
+    opendental_refresh: opendentalRefresh,
+  }
+  if (opendentalRefreshError) {
+    output.opendental_refresh_error = opendentalRefreshError
+  }
+  if (message) {
+    output.message = message
+  }
+
+  await writeMcpAuditLog({
+    ...ctx,
+    patientId: patient.id,
+    policyId: null,
+    toolName: 'get_previous_appointments',
     fieldsReturned: collectFieldPaths(output),
   })
 

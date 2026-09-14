@@ -123,7 +123,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'get_upcoming_appointments',
     description:
-      "Get a patient's upcoming (scheduled/confirmed) appointments, ordered soonest-first. On Open Dental practices this live-pulls the patient's OD appointments before responding so the agent uses current schedule data, not a stale CRM mirror. Each appointment includes a ready-to-read summary with the date and time in the patient's local timezone, chairside notes when available, plus next_appointment for convenience. Also live-pulls clinical EHR referrals (ehr_referrals) so you can tell the caller if this office referred them to a specialist. Resolve the patient with patient_id, or with first_name + last_name + dob during a live call.",
+      "Get a patient's upcoming (scheduled/confirmed) appointments, ordered soonest-first. Also returns last_appointment (most recent completed or past visit) from the same live pull so you can answer “when was my last appointment?” without another tool. Use get_previous_appointments when the caller wants more past visit history. On Open Dental practices this live-pulls the patient's OD appointments before responding so the agent uses current schedule data, not a stale CRM mirror. Each appointment includes a ready-to-read summary with the date and time in the patient's local timezone, chairside notes when available, plus next_appointment for convenience. Also live-pulls clinical EHR referrals (ehr_referrals) so you can tell the caller if this office referred them to a specialist. Resolve the patient with patient_id, or with first_name + last_name + dob during a live call.",
     input_schema: {
       type: 'object',
       properties: {
@@ -138,6 +138,25 @@ export const TOOL_DEFINITIONS = [
     },
     inputSchema: schemas.getUpcomingAppointmentsInput,
     handler: handlers.handleGetUpcomingAppointments,
+  },
+  {
+    name: 'get_previous_appointments',
+    description:
+      "Get a patient's previous / last visits, ordered most-recent-first. Use when the caller asks when they were last seen, the date of their last cleaning/appointment, or visit history. Includes completed Open Dental visits and past scheduled appointments that have not been marked complete. Each item has a ready-to-read summary with the local date and time, plus last_appointment for convenience. On Open Dental practices this live-pulls current EHR data. Resolve the patient with patient_id, or with first_name + last_name + dob during a live call.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        patient_id: { type: 'string', format: 'uuid' },
+        first_name: { type: 'string' },
+        last_name: { type: 'string' },
+        dob: { type: 'string' },
+        zip: { type: 'string' },
+        limit: { type: 'integer', minimum: 1, maximum: 20, default: 5 },
+      },
+      description: 'Provide patient_id OR first_name + last_name + dob',
+    },
+    inputSchema: schemas.getPreviousAppointmentsInput,
+    handler: handlers.handleGetPreviousAppointments,
   },
   {
     name: 'get_patient_referrals',

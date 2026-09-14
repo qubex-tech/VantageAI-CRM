@@ -147,6 +147,18 @@ export async function getPrimaryPolicyForPatient(patientId: string, practiceId?:
   })
 }
 
+const voiceAppointmentSelect = {
+  id: true,
+  status: true,
+  startTime: true,
+  endTime: true,
+  timezone: true,
+  visitType: true,
+  reason: true,
+  notes: true,
+  providerId: true,
+} as const
+
 export async function getUpcomingAppointmentsByPatientId(
   patientId: string,
   practiceId?: string | null,
@@ -161,17 +173,31 @@ export async function getUpcomingAppointmentsByPatientId(
     },
     orderBy: { startTime: 'asc' },
     take: limit,
-    select: {
-      id: true,
-      status: true,
-      startTime: true,
-      endTime: true,
-      timezone: true,
-      visitType: true,
-      reason: true,
-      notes: true,
-      providerId: true,
+    select: voiceAppointmentSelect,
+  })
+}
+
+export async function getPreviousAppointmentsByPatientId(
+  patientId: string,
+  practiceId?: string | null,
+  limit = 5
+) {
+  const now = new Date()
+  return prisma.appointment.findMany({
+    where: {
+      patientId,
+      ...(practiceId ? { practiceId } : {}),
+      OR: [
+        { status: 'completed' },
+        {
+          status: { in: ['scheduled', 'confirmed'] },
+          startTime: { lt: now },
+        },
+      ],
     },
+    orderBy: { startTime: 'desc' },
+    take: limit,
+    select: voiceAppointmentSelect,
   })
 }
 

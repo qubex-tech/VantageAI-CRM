@@ -122,6 +122,7 @@ describe('getLiveUpcomingAppointmentsForVoice', () => {
     })
 
     expect(result.appointments).toEqual([])
+    expect(result.previousAppointments).toEqual([])
     expect(result.error).toBeNull()
     expect(result.refreshedFromOpenDental).toBe(true)
     expect(prisma.appointment.findUnique).not.toHaveBeenCalled()
@@ -184,6 +185,7 @@ describe('getLiveUpcomingAppointmentsForVoice', () => {
 
     expect(result.error).toBeNull()
     expect(result.appointments).toHaveLength(1)
+    expect(result.previousAppointments).toEqual([])
     expect(result.appointments[0].id).toBe('crm-apt-1')
     expect(prisma.appointment.findUnique).toHaveBeenCalledWith({
       where: { calBookingId: 'opendental:apt:80001' },
@@ -205,9 +207,82 @@ describe('getLiveUpcomingAppointmentsForVoice', () => {
     })
 
     expect(result.appointments).toEqual([])
+    expect(result.previousAppointments).toEqual([])
     expect(result.error).toBe('OD connection reset')
     expect(result.refreshedFromOpenDental).toBe(false)
     expect(prisma.appointment.findUnique).not.toHaveBeenCalled()
     expect(prisma.appointment.findMany).not.toHaveBeenCalled()
+  })
+
+  it('returns completed and past scheduled visits as previous appointments', async () => {
+    const past = new Date('2024-03-15T14:00:00.000Z')
+    vi.mocked(reconcileOpenDentalAppointmentsForPatient).mockResolvedValue({
+      summary: {
+        fetched: 2,
+        created: 0,
+        updated: 2,
+        skipped: 0,
+        errors: 0,
+        errorSamples: [],
+        pruned: 0,
+        statusReconciled: 0,
+      },
+      timeZone: 'America/Chicago',
+      patNum: 2274,
+      liveOdAppointments: [
+        {
+          AptNum: 90001,
+          PatNum: 2274,
+          AptStatus: 'Complete',
+          AptDateTime: '2024-03-15 09:00:00',
+          ProvNum: 24,
+          Pattern: 'XXXXXX',
+          Note: 'cleaning',
+          ProcDescript: 'Cleaning',
+        } as never,
+        {
+          AptNum: 90002,
+          PatNum: 2274,
+          AptStatus: 'Broken',
+          AptDateTime: '2024-01-10 09:00:00',
+          ProvNum: 24,
+          Pattern: 'XXXXXX',
+          Note: '',
+          ProcDescript: 'Cleaning',
+        } as never,
+      ],
+      linked: true,
+      configured: true,
+    })
+    vi.mocked(prisma.appointment.findUnique).mockImplementation(async ({ where }) => {
+      if (where.calBookingId === 'opendental:apt:90001') {
+        return {
+          id: 'crm-apt-past',
+          status: 'completed',
+          startTime: past,
+          endTime: new Date(past.getTime() + 30 * 60_000),
+          timezone: 'America/Chicago',
+          visitType: 'Cleaning',
+          reason: 'Cleaning',
+          notes: 'Synced from Open Dental Appointment/90001 — cleaning',
+          providerId: 'prov:24',
+        } as never
+      }
+      return null
+    })
+
+    const { getLivePreviousAppointmentsForVoice } = await import(
+      '@/lib/appointments/live-opendental-refresh'
+    )
+    const result = await getLivePreviousAppointmentsForVoice({
+      practiceId: 'practice-1',
+      patientId: 'patient-1',
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.appointments).toHaveLength(1)
+    expect(result.appointments[0].id).toBe('crm-apt-past')
+    expect(result.appointments[0].notes).toBe('cleaning')
+    expect(result.refreshedFromOpenDental).toBe(true)
   })
 })

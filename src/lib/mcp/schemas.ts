@@ -68,6 +68,8 @@ export const getUpcomingAppointmentsInput = z.object({
   }
 )
 
+export const getPreviousAppointmentsInput = getUpcomingAppointmentsInput
+
 export const getPatientReferralsInput = z.object({
   patient_id: uuid.optional(),
   first_name: z.string().min(1).optional(),
@@ -106,5 +108,6 @@ export type GetVerificationBundleInput = z.infer<typeof getVerificationBundleInp
 export type SearchPatientByDemographicsInput = z.infer<typeof searchPatientByDemographicsInput>
 export type GetInsuranceVerificationContextInput = z.infer<typeof getInsuranceVerificationContextInput>
 export type GetUpcomingAppointmentsInput = z.infer<typeof getUpcomingAppointmentsInput>
+export type GetPreviousAppointmentsInput = z.infer<typeof getPreviousAppointmentsInput>
 export type GetPatientReferralsInput = z.infer<typeof getPatientReferralsInput>
 export type ResolvePatientForSchedulingInput = z.infer<typeof resolvePatientForSchedulingInput>

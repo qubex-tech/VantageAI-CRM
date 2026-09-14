@@ -2,7 +2,7 @@
  * Shared helpers for surfacing a patient's appointments to AI voice agents.
  *
  * Used by:
- *  - the inbound Retell MCP tool `get_upcoming_appointments`
+ *  - the inbound Retell MCP tools `get_upcoming_appointments` and `get_previous_appointments`
  *  - outbound slot-fill outreach (so the agent knows the patient's current visit)
  *
  * Times are formatted in each appointment's own stored IANA timezone so the

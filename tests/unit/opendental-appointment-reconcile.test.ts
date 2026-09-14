@@ -36,6 +36,7 @@ vi.mock('@/lib/integrations/opendental/audit', () => ({
 import { prisma } from '@/lib/db'
 import { getOpenDentalConnection, getOpenDentalServices } from '@/lib/integrations/opendental/factory'
 import {
+  isOpenDentalVoicePreviousStatus,
   isOpenDentalVoiceUpcomingStatus,
   reconcileOpenDentalAppointmentsForPatient,
 } from '@/lib/integrations/opendental/appointmentSync'
@@ -47,6 +48,25 @@ describe('isOpenDentalVoiceUpcomingStatus', () => {
     expect(isOpenDentalVoiceUpcomingStatus('Broken')).toBe(false)
     expect(isOpenDentalVoiceUpcomingStatus('Complete')).toBe(false)
     expect(isOpenDentalVoiceUpcomingStatus('UnschedList')).toBe(false)
+  })
+})
+
+describe('isOpenDentalVoicePreviousStatus', () => {
+  const now = Date.parse('2026-09-13T16:00:00.000Z')
+
+  it('treats Complete as a previous visit', () => {
+    expect(isOpenDentalVoicePreviousStatus('Complete', new Date('2024-01-10T15:00:00.000Z'), now)).toBe(true)
+  })
+
+  it('treats past Scheduled/ASAP as previous when OD has not marked Complete', () => {
+    expect(isOpenDentalVoicePreviousStatus('Scheduled', new Date('2026-09-01T15:00:00.000Z'), now)).toBe(true)
+    expect(isOpenDentalVoicePreviousStatus('ASAP', new Date('2026-09-01T15:00:00.000Z'), now)).toBe(true)
+  })
+
+  it('excludes future Scheduled and Broken', () => {
+    expect(isOpenDentalVoicePreviousStatus('Scheduled', new Date('2026-10-01T15:00:00.000Z'), now)).toBe(false)
+    expect(isOpenDentalVoicePreviousStatus('Broken', new Date('2026-09-01T15:00:00.000Z'), now)).toBe(false)
+    expect(isOpenDentalVoicePreviousStatus('Complete', null, now)).toBe(false)
   })
 })
 

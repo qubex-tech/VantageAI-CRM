@@ -144,6 +144,17 @@ export function isOpenDentalVoiceUpcomingStatus(status: unknown): boolean {
   return normalized === 'scheduled' || normalized === 'asap'
 }
 
+/**
+ * Statuses the voice agent may speak as a previous / last visit.
+ * Complete always counts. Past Scheduled/ASAP counts when OD has not marked Complete yet.
+ */
+export function isOpenDentalVoicePreviousStatus(status: unknown, start: Date | null, now = Date.now()): boolean {
+  if (!start) return false
+  const normalized = cleanString(status)?.toLowerCase()
+  if (normalized === 'complete') return true
+  return isOpenDentalVoiceUpcomingStatus(status) && start.getTime() < now
+}
+
 type UpsertOutcome = 'created' | 'updated'
 
 async function upsertAppointmentFromOpenDental(params: {
