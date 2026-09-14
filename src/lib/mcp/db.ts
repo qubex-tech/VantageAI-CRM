@@ -1,7 +1,12 @@
 /**
- * MCP data access (read-only). Uses main app Prisma.
+ * MCP data access. Uses main app Prisma.
+ * Demographic search live-pulls Open Dental / eCW and upserts into the CRM.
  */
 import { prisma } from '@/lib/db'
+import {
+  resolvePatientsFromLiveEhr,
+  toDemographicMatches,
+} from '@/lib/patients/live-ehr-demographic-resolve'
 
 function toIsoDate(year: number, month: number, day: number): string | null {
   if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null
@@ -212,6 +217,24 @@ export async function searchPatientsByDemographics(params: {
   const dobCandidates = normalizeDobCandidates(params.dob)
   if (dobCandidates.length === 0) return []
 
+  if (practiceId) {
+    try {
+      const live = await resolvePatientsFromLiveEhr({
+        practiceId,
+        firstName,
+        lastName,
+        dobCandidates,
+        zip: params.zip,
+      })
+      if (live.length > 0) return live
+    } catch (error) {
+      console.warn('[voice-ehr] live demographic resolve failed; falling back to CRM', {
+        practiceId,
+        error: error instanceof Error ? error.message : 'unknown',
+      })
+    }
+  }
+
   const where: {
     deletedAt: null
     practiceId?: string
@@ -225,7 +248,6 @@ export async function searchPatientsByDemographics(params: {
         }
     >
     dateOfBirth?: { not: null }
-    postalCode?: string
   } = {
     deletedAt: null,
     dateOfBirth: { not: null },
@@ -245,9 +267,6 @@ export async function searchPatientsByDemographics(params: {
       ],
     },
   ]
-  if (params.zip?.trim()) {
-    where.postalCode = params.zip.trim()
-  }
 
   const patients = await prisma.patient.findMany({
     where,
@@ -261,15 +280,5 @@ export async function searchPatientsByDemographics(params: {
     return dobCandidates.includes(storedDob)
   })
 
-  type Row = (typeof patients)[number]
-  return matched.map((p: Row) => ({
-    patient_id: p.id,
-    confidence: params.zip ? 'high' : 'medium',
-    display: {
-      first_name: p.firstName ?? undefined,
-      last_name: p.lastName ?? undefined,
-      dob: p.dateOfBirth?.toISOString().slice(0, 10),
-      zip_masked: p.postalCode ? `****${p.postalCode.slice(-4)}` : undefined,
-    },
-  }))
+  return toDemographicMatches(matched, params.zip)
 }

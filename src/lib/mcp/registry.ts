@@ -106,7 +106,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'search_patient_by_demographics',
-    description: 'Search for patients by first name, last name, date of birth, and optional ZIP. Returns matches with masked display.',
+    description:
+      'Search for patients by first name, last name, date of birth, and optional ZIP. Live-queries the practice EHR (Open Dental or eCW), upserts any hits into the CRM in real time, then returns matches with masked display. ZIP ranks matches but does not exclude patients with a blank ZIP.',
     input_schema: {
       type: 'object',
       properties: {
@@ -123,7 +124,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'get_upcoming_appointments',
     description:
-      "Get a patient's upcoming (scheduled/confirmed) appointments, ordered soonest-first. Also returns last_appointment (most recent completed or past visit) from the same live pull so you can answer “when was my last appointment?” without another tool. Use get_previous_appointments when the caller wants more past visit history. On Open Dental practices this live-pulls the patient's OD appointments before responding so the agent uses current schedule data, not a stale CRM mirror. Each appointment includes a ready-to-read summary with the date and time in the patient's local timezone, chairside notes when available, plus next_appointment for convenience. Also live-pulls clinical EHR referrals (ehr_referrals) so you can tell the caller if this office referred them to a specialist. Resolve the patient with patient_id, or with first_name + last_name + dob during a live call.",
+      "Get a patient's upcoming (scheduled/confirmed) appointments, ordered soonest-first. Also returns last_appointment (most recent completed or past visit) from the same live pull so you can answer “when was my last appointment?” without another tool. Use get_previous_appointments when the caller wants more past visit history. On Open Dental practices this live-pulls the patient's OD appointments before responding so the agent uses current schedule data, not a stale CRM mirror. Each appointment includes a ready-to-read summary with the date and time in the patient's local timezone, chairside notes when available, plus next_appointment for convenience. Also live-pulls clinical EHR referrals (ehr_referrals) so you can tell the caller if this office referred them to a specialist. Resolve the patient with patient_id, or with first_name + last_name + dob (live EHR lookup + CRM upsert) during a live call.",
     input_schema: {
       type: 'object',
       properties: {
@@ -142,7 +143,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'get_previous_appointments',
     description:
-      "Get a patient's previous / last visits, ordered most-recent-first. Use when the caller asks when they were last seen, the date of their last cleaning/appointment, or visit history. Includes completed Open Dental visits and past scheduled appointments that have not been marked complete. Each item has a ready-to-read summary with the local date and time, plus last_appointment for convenience. On Open Dental practices this live-pulls current EHR data. Resolve the patient with patient_id, or with first_name + last_name + dob during a live call.",
+      "Get a patient's previous / last visits, ordered most-recent-first. Use when the caller asks when they were last seen, the date of their last cleaning/appointment, or visit history. Includes completed Open Dental visits and past scheduled appointments that have not been marked complete. Each item has a ready-to-read summary with the local date and time, plus last_appointment for convenience. On Open Dental practices this live-pulls current EHR data. Resolve the patient with patient_id, or with first_name + last_name + dob (live EHR lookup + CRM upsert) during a live call.",
     input_schema: {
       type: 'object',
       properties: {
@@ -161,7 +162,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'get_patient_referrals',
     description:
-      "Get a patient's clinical referrals from the EHR (Open Dental RefAttaches). Live-pulls outgoing referrals (this office sent the patient to a specialist) and incoming referrals (another doctor sent them here) so you can tell the caller who they were referred to, specialty, date, and status. Use when the caller asks about a specialist referral, who the doctor sent them to, or referral status. Resolve the patient with patient_id, or with first_name + last_name + dob during a live call.",
+      "Get a patient's clinical referrals from the EHR (Open Dental RefAttaches). Live-pulls outgoing referrals (this office sent the patient to a specialist) and incoming referrals (another doctor sent them here) so you can tell the caller who they were referred to, specialty, date, and status. Use when the caller asks about a specialist referral, who the doctor sent them to, or referral status. Resolve the patient with patient_id, or with first_name + last_name + dob (live EHR lookup + CRM upsert) during a live call.",
     input_schema: {
       type: 'object',
       properties: {
