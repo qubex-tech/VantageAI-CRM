@@ -146,6 +146,7 @@ describe('mapVoiceConversationToFeedItem', () => {
       patientType: 'Other',
       durationSeconds: 260,
       insuranceInfoUpdate: false,
+      medicalHistoryUpdate: false,
     })
   })
 
@@ -163,6 +164,23 @@ describe('mapVoiceConversationToFeedItem', () => {
       })
     )
     expect(item.insuranceInfoUpdate).toBe(true)
+    expect(item.medicalHistoryUpdate).toBe(false)
+    expect(item.transferStatus).toBe('none')
+  })
+
+  it('flags medical history update calls from Retell custom analysis', () => {
+    const item = mapVoiceConversationToFeedItem(
+      feedRow({
+        metadata: {
+          call_summary: 'Caller reported a new allergy',
+          retell_custom_data: {
+            'Updated Allergies': 'Penicillin — rash',
+          },
+        },
+      })
+    )
+    expect(item.medicalHistoryUpdate).toBe(true)
+    expect(item.insuranceInfoUpdate).toBe(false)
     expect(item.transferStatus).toBe('none')
   })
 
@@ -173,6 +191,7 @@ describe('mapVoiceConversationToFeedItem', () => {
     expect(item.transferStatus).toBe('none')
     expect(item.patientType).toBe('Other')
     expect(item.insuranceInfoUpdate).toBe(false)
+    expect(item.medicalHistoryUpdate).toBe(false)
   })
 })
 

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { formatDistanceToNow } from 'date-fns'
-import { Phone, PhoneForwarded, PhoneOff, Shield } from 'lucide-react'
+import { Phone, PhoneForwarded, PhoneOff, Shield, Stethoscope } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { CallFeedItem, CallFeedPatientType } from '@/lib/dashboard/callFeed'
 
@@ -109,7 +109,14 @@ export function DashboardCallFeedItem({
               Insurance info update
             </span>
           ) : null}
-          {item.transferStatus !== 'none' || !item.insuranceInfoUpdate ? (
+          {item.medicalHistoryUpdate ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5 text-xs font-medium text-teal-700">
+              <Stethoscope className="h-3 w-3" />
+              Medical history update
+            </span>
+          ) : null}
+          {item.transferStatus !== 'none' ||
+          (!item.insuranceInfoUpdate && !item.medicalHistoryUpdate) ? (
             <span
               title={item.transferOutcomeRaw ?? undefined}
               className={cn(

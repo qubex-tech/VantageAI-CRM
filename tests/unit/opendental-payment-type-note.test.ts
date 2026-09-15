@@ -148,5 +148,44 @@ describe('Retell payment type for Open Dental notes', () => {
     })
     expect(note).not.toContain('Insurance info update')
     expect(note).not.toContain('Insurance Member ID:')
+    expect(note).not.toContain('Medical history update')
+    expect(note).not.toContain('Updated Medications:')
+  })
+
+  it('includes collected medical history, medication, and allergy updates in the commlog', () => {
+    const note = buildCommlogNote({ transcript: 'hello' } as RetellCall, {
+      call_reason: 'Update medical history',
+      call_summary: 'Caller reported new medications and an allergy',
+      patient_type: 'existing patient',
+      retell_custom_data: {
+        'Updated Medications': 'Started lisinopril 10mg daily; discontinued ibuprofen',
+        'Updated Medical History': 'Recently diagnosed with hypertension',
+        'Updated Allergies': 'Penicillin — rash',
+      },
+    })
+
+    expect(note).toContain('Medical history update')
+    expect(note).toContain(
+      'Updated Medications: Started lisinopril 10mg daily; discontinued ibuprofen'
+    )
+    expect(note).toContain('Updated Medical History: Recently diagnosed with hypertension')
+    expect(note).toContain('Updated Allergies: Penicillin — rash')
+    expect(note).not.toContain('Transcript:')
+  })
+
+  it('includes only the medical history fields that were discussed', () => {
+    const note = buildCommlogNote({ transcript: 'hello' } as RetellCall, {
+      call_reason: 'Allergy update',
+      call_summary: 'Caller reported a new allergy',
+      retell_custom_data: {
+        'Updated Medications': '',
+        'Updated Allergies': 'Latex',
+      },
+    })
+
+    expect(note).toContain('Medical history update')
+    expect(note).toContain('Updated Allergies: Latex')
+    expect(note).not.toContain('Updated Medications:')
+    expect(note).not.toContain('Updated Medical History:')
   })
 })

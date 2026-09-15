@@ -7,6 +7,7 @@ import {
   isUnsuccessfulTransferOutcomeText,
 } from '@/lib/outbound-customer-notifications'
 import { hasInsuranceInfoUpdateInMetadata } from '@/lib/retell-insurance-info-update'
+import { hasMedicalHistoryUpdateInMetadata } from '@/lib/retell-medical-history-update'
 
 export type CallFeedTransferStatus = 'none' | 'successful' | 'unsuccessful'
 export type CallFeedPatientType = 'New Patient' | 'Existing Patient' | 'Other'
@@ -23,6 +24,7 @@ export interface CallFeedItem {
   transferStatus: CallFeedTransferStatus
   transferOutcomeRaw: string | null
   insuranceInfoUpdate: boolean
+  medicalHistoryUpdate: boolean
 }
 
 export interface CallFeedCursor {
@@ -174,6 +176,7 @@ export function mapVoiceConversationToFeedItem(row: VoiceConversationFeedRow): C
     transferStatus,
     transferOutcomeRaw,
     insuranceInfoUpdate: hasInsuranceInfoUpdateInMetadata(row.metadata),
+    medicalHistoryUpdate: hasMedicalHistoryUpdateInMetadata(row.metadata),
   }
 }
 

@@ -35,6 +35,10 @@ import {
   type InsuranceInfoUpdateData,
 } from './retell-insurance-info-update'
 import {
+  extractMedicalHistoryUpdate,
+  type MedicalHistoryUpdateData,
+} from './retell-medical-history-update'
+import {
   buildSafePatientUpdate,
   fetchOpenDentalChartFacts,
   resolveDemographics,
@@ -72,6 +76,8 @@ export interface ExtractedCallData {
   retell_custom_data?: Record<string, unknown>
   /** Present only when the agent collected insurance-update fields on the call. */
   insurance_info_update?: InsuranceInfoUpdateData
+  /** Present only when the agent collected medication, history, or allergy updates. */
+  medical_history_update?: MedicalHistoryUpdateData
   insurance_verification?: {
     /** Retell call analysis summary. */
     summary?: string
@@ -1359,6 +1365,15 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
     extracted.insurance_info_update = insuranceInfoUpdate
   }
 
+  const medicalHistoryUpdate = extractMedicalHistoryUpdate([
+    customData,
+    metadata,
+    collectedDynamic,
+  ])
+  if (medicalHistoryUpdate) {
+    extracted.medical_history_update = medicalHistoryUpdate
+  }
+
   if (isInsuranceVerificationCall) {
     // Capture Retell's "Extracted Data" exactly as returned (label + value),
     // preserving Retell's ordering. Nothing is invented or back-filled.
@@ -1699,7 +1714,7 @@ export async function processRetellCallData(
   call: RetellCall,
   userId: string | null
 ): Promise<{ patientId: string | null; extractedData: ExtractedCallData }> {
-  const RETELL_EXTRACT_VERSION = 'retell_extraction_v7'
+  const RETELL_EXTRACT_VERSION = 'retell_extraction_v8'
   // Extract data from call
   const extractedData = extractCallData(call)
   const customAnalysis = call.call_analysis?.custom_analysis_data as Record<string, any> | undefined
@@ -1781,6 +1796,12 @@ export async function processRetellCallData(
   }
   if (!extractedData.insurance_info_update) {
     extractedData.insurance_info_update = extractInsuranceInfoUpdate([
+      customAnalysis,
+      extractedData.retell_custom_data,
+    ])
+  }
+  if (!extractedData.medical_history_update) {
+    extractedData.medical_history_update = extractMedicalHistoryUpdate([
       customAnalysis,
       extractedData.retell_custom_data,
     ])

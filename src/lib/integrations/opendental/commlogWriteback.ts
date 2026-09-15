@@ -13,8 +13,12 @@ import {
   extractInsuranceInfoUpdate,
   formatInsuranceInfoUpdateCommlogLines,
 } from '@/lib/retell-insurance-info-update'
+import {
+  extractMedicalHistoryUpdate,
+  formatMedicalHistoryUpdateCommlogLines,
+} from '@/lib/retell-medical-history-update'
 
-const WRITEBACK_VERSION = 'opendental_writeback_v2'
+const WRITEBACK_VERSION = 'opendental_writeback_v3'
 
 /** Open Dental commlog Mode_ for a phone call. */
 const DEFAULT_MODE = 'Phone'
@@ -244,6 +248,14 @@ export function buildCommlogNote(call: RetellCall, extractedData: ExtractedCallD
   if (insuranceInfoUpdate) {
     lines.push('Insurance info update')
     lines.push(...formatInsuranceInfoUpdateCommlogLines(insuranceInfoUpdate))
+  }
+  const medicalHistoryUpdate = extractMedicalHistoryUpdate([
+    extractedData.medical_history_update as Record<string, unknown> | undefined,
+    extractedData.retell_custom_data,
+  ])
+  if (medicalHistoryUpdate) {
+    lines.push('Medical history update')
+    lines.push(...formatMedicalHistoryUpdateCommlogLines(medicalHistoryUpdate))
   }
   return truncate(lines.filter(Boolean).join('\n'), MAX_NOTE_LENGTH)
 }
