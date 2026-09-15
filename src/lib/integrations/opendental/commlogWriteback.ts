@@ -9,8 +9,12 @@ import { formatPatientNoteForEhr, isPatientNoteType } from '@/lib/patient-note-t
 import { parseOpenDentalAptNumFromBookingId } from './appointmentSync'
 import type { ExtractedCallData } from '@/lib/process-call-data'
 import type { RetellCall } from '@/lib/retell-api'
+import {
+  extractInsuranceInfoUpdate,
+  formatInsuranceInfoUpdateCommlogLines,
+} from '@/lib/retell-insurance-info-update'
 
-const WRITEBACK_VERSION = 'opendental_writeback_v1'
+const WRITEBACK_VERSION = 'opendental_writeback_v2'
 
 /** Open Dental commlog Mode_ for a phone call. */
 const DEFAULT_MODE = 'Phone'
@@ -233,6 +237,14 @@ export function buildCommlogNote(call: RetellCall, extractedData: ExtractedCallD
   if (extractedData.preferred_dentist) lines.push(`Preferred provider: ${extractedData.preferred_dentist}`)
   const caller = extractedData.user_phone_number || extractedData.patient_phone_number
   if (caller) lines.push(`Caller: ${caller}`)
+  const insuranceInfoUpdate = extractInsuranceInfoUpdate([
+    extractedData.insurance_info_update as Record<string, unknown> | undefined,
+    extractedData.retell_custom_data,
+  ])
+  if (insuranceInfoUpdate) {
+    lines.push('Insurance info update')
+    lines.push(...formatInsuranceInfoUpdateCommlogLines(insuranceInfoUpdate))
+  }
   return truncate(lines.filter(Boolean).join('\n'), MAX_NOTE_LENGTH)
 }
 

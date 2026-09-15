@@ -31,6 +31,10 @@ import {
 } from './outbound-customer-notifications'
 import { persistInsuranceVerificationNote } from './insurance-verification-note'
 import {
+  extractInsuranceInfoUpdate,
+  type InsuranceInfoUpdateData,
+} from './retell-insurance-info-update'
+import {
   buildSafePatientUpdate,
   fetchOpenDentalChartFacts,
   resolveDemographics,
@@ -66,6 +70,8 @@ export interface ExtractedCallData {
   new_patient_add?: boolean
   existing_patient_update?: boolean
   retell_custom_data?: Record<string, unknown>
+  /** Present only when the agent collected insurance-update fields on the call. */
+  insurance_info_update?: InsuranceInfoUpdateData
   insurance_verification?: {
     /** Retell call analysis summary. */
     summary?: string
@@ -1344,6 +1350,15 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
   const isInsuranceVerificationCall =
     typeof callPurpose === 'string' && callPurpose.toLowerCase().includes('insurance')
 
+  const insuranceInfoUpdate = extractInsuranceInfoUpdate([
+    customData,
+    metadata,
+    collectedDynamic,
+  ])
+  if (insuranceInfoUpdate) {
+    extracted.insurance_info_update = insuranceInfoUpdate
+  }
+
   if (isInsuranceVerificationCall) {
     // Capture Retell's "Extracted Data" exactly as returned (label + value),
     // preserving Retell's ordering. Nothing is invented or back-filled.
@@ -1684,7 +1699,7 @@ export async function processRetellCallData(
   call: RetellCall,
   userId: string | null
 ): Promise<{ patientId: string | null; extractedData: ExtractedCallData }> {
-  const RETELL_EXTRACT_VERSION = 'retell_extraction_v4'
+  const RETELL_EXTRACT_VERSION = 'retell_extraction_v7'
   // Extract data from call
   const extractedData = extractCallData(call)
   const customAnalysis = call.call_analysis?.custom_analysis_data as Record<string, any> | undefined
@@ -1763,6 +1778,12 @@ export async function processRetellCallData(
       const email = customData['Patient Email'] || customData['Caller Email']
       if (email) extractedData.patient_email = String(email).trim()
     }
+  }
+  if (!extractedData.insurance_info_update) {
+    extractedData.insurance_info_update = extractInsuranceInfoUpdate([
+      customAnalysis,
+      extractedData.retell_custom_data,
+    ])
   }
   
   // Log extracted data for debugging

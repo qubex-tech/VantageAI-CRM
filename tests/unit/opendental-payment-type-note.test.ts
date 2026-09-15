@@ -112,4 +112,41 @@ describe('Retell payment type for Open Dental notes', () => {
     })
     expect(existingNote).not.toContain('Payment type:')
   })
+
+  it('includes collected insurance info update fields in the commlog', () => {
+    const call = { transcript: 'hello' } as RetellCall
+    const note = buildCommlogNote(call, {
+      call_reason: 'Update insurance',
+      call_summary: 'Caller provided new dental insurance details',
+      patient_type: 'existing patient',
+      retell_custom_data: {
+        'Insurance Policy Holder Name': 'Jane Doe',
+        'Insurance Policy Holder DOB': '1986-04-12',
+        'Dental Insurance Provider': 'Delta Dental',
+        'Insurance Member ID': 'XYZ123',
+        'Insurance Group Number': 'GRP-9',
+        'Dental Insurance Phone Number': '8005550100',
+        'Dental Insurance Claim Mailing Address': '123 Claim St, Austin, TX',
+      },
+    })
+
+    expect(note).toContain('Insurance info update')
+    expect(note).toContain('Insurance Policy Holder Name: Jane Doe')
+    expect(note).toContain('Insurance Policy Holder DOB: 1986-04-12')
+    expect(note).toContain('Dental Insurance Provider: Delta Dental')
+    expect(note).toContain('Insurance Member ID: XYZ123')
+    expect(note).toContain('Insurance Group Number: GRP-9')
+    expect(note).toContain('Dental Insurance Phone Number: 8005550100')
+    expect(note).toContain('Dental Insurance Claim Mailing Address: 123 Claim St, Austin, TX')
+    expect(note).not.toContain('Transcript:')
+  })
+
+  it('omits the insurance info update section when those fields were not collected', () => {
+    const note = buildCommlogNote({ transcript: 'hello' } as RetellCall, {
+      call_reason: 'Check appointment',
+      call_summary: 'Confirmed upcoming visit',
+    })
+    expect(note).not.toContain('Insurance info update')
+    expect(note).not.toContain('Insurance Member ID:')
+  })
 })

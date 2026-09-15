@@ -145,7 +145,25 @@ describe('mapVoiceConversationToFeedItem', () => {
       transferStatus: 'successful',
       patientType: 'Other',
       durationSeconds: 260,
+      insuranceInfoUpdate: false,
     })
+  })
+
+  it('flags insurance info update calls from Retell custom analysis', () => {
+    const item = mapVoiceConversationToFeedItem(
+      feedRow({
+        metadata: {
+          call_summary: 'Updated dental insurance on file',
+          retell_custom_data: {
+            'Insurance Policy Holder Name': 'Jane Doe',
+            'Insurance Member ID': 'XYZ123',
+            'Dental Insurance Provider': 'Delta Dental',
+          },
+        },
+      })
+    )
+    expect(item.insuranceInfoUpdate).toBe(true)
+    expect(item.transferStatus).toBe('none')
   })
 
   it('falls back to caller phone when no display name is present', () => {
@@ -154,6 +172,7 @@ describe('mapVoiceConversationToFeedItem', () => {
     expect(item.summary).toBeNull()
     expect(item.transferStatus).toBe('none')
     expect(item.patientType).toBe('Other')
+    expect(item.insuranceInfoUpdate).toBe(false)
   })
 })
 

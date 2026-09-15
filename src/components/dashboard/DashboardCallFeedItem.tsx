@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { formatDistanceToNow } from 'date-fns'
-import { Phone, PhoneForwarded, PhoneOff } from 'lucide-react'
+import { Phone, PhoneForwarded, PhoneOff, Shield } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { CallFeedItem, CallFeedPatientType } from '@/lib/dashboard/callFeed'
 
@@ -103,16 +103,24 @@ export function DashboardCallFeedItem({
         </div>
 
         <div className="flex shrink-0 flex-col items-start gap-1.5 sm:items-end">
-          <span
-            title={item.transferOutcomeRaw ?? undefined}
-            className={cn(
-              'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
-              badge.className
-            )}
-          >
-            <BadgeIcon className="h-3 w-3" />
-            {badge.label}
-          </span>
+          {item.insuranceInfoUpdate ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
+              <Shield className="h-3 w-3" />
+              Insurance info update
+            </span>
+          ) : null}
+          {item.transferStatus !== 'none' || !item.insuranceInfoUpdate ? (
+            <span
+              title={item.transferOutcomeRaw ?? undefined}
+              className={cn(
+                'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
+                badge.className
+              )}
+            >
+              <BadgeIcon className="h-3 w-3" />
+              {badge.label}
+            </span>
+          ) : null}
           <p className="text-xs text-gray-400">
             {relativeTime}
             <span className="mx-1 text-gray-300">·</span>
