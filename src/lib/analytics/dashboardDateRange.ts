@@ -153,11 +153,12 @@ export function parseDashboardRangeParam(params: {
     return range
   }
   if (params.days === '30') return '30'
-  return '7'
+  if (params.days === '7') return '7'
+  return 'today'
 }
 
 export function dashboardRangePath(range: DashboardRangeKey): string {
-  return range === '7' ? '/dashboard' : `/dashboard?range=${range}`
+  return range === 'today' ? '/dashboard' : `/dashboard?range=${range}`
 }
 
 export function dashboardRangeDayCount(range: DashboardRangeKey): number {

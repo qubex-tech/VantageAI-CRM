@@ -31,7 +31,7 @@ export function DashboardView({
   practiceId,
   metrics,
   feed,
-  initialRange = '7',
+  initialRange = 'today',
 }: DashboardViewProps) {
   const searchParams = useSearchParams()
   const urlRange = parseDashboardRangeParam({

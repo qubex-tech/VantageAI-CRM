@@ -17,18 +17,19 @@ describe('parseDashboardRangeParam', () => {
     expect(parseDashboardRangeParam({ range: '30' })).toBe('30')
   })
 
-  it('keeps the legacy days=30 query and defaults to 7', () => {
+  it('keeps the legacy days query and defaults to today', () => {
     expect(parseDashboardRangeParam({ days: '30' })).toBe('30')
-    expect(parseDashboardRangeParam({})).toBe('7')
-    expect(parseDashboardRangeParam({ range: 'nope' })).toBe('7')
+    expect(parseDashboardRangeParam({ days: '7' })).toBe('7')
+    expect(parseDashboardRangeParam({})).toBe('today')
+    expect(parseDashboardRangeParam({ range: 'nope' })).toBe('today')
   })
 })
 
 describe('dashboard range helpers', () => {
   it('builds dashboard URLs', () => {
-    expect(dashboardRangePath('7')).toBe('/dashboard')
-    expect(dashboardRangePath('today')).toBe('/dashboard?range=today')
+    expect(dashboardRangePath('today')).toBe('/dashboard')
     expect(dashboardRangePath('yesterday')).toBe('/dashboard?range=yesterday')
+    expect(dashboardRangePath('7')).toBe('/dashboard?range=7')
     expect(dashboardRangePath('30')).toBe('/dashboard?range=30')
   })
 
