@@ -14,7 +14,7 @@ import type { RetellCall } from '@/lib/retell-api'
  * - call_analyzed: full call data including call_analysis - use directly, no fetch
  * - call_ended: excludes call_analysis - fetch via API after 30s delay
  */
-const RETELL_PROCESS_VERSION = 'retell_extraction_v9'
+const RETELL_PROCESS_VERSION = 'retell_extraction_v10'
 
 export const processRetellCallEnded = inngest.createFunction(
   {

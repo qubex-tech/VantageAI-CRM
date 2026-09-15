@@ -45,6 +45,7 @@ import {
 import {
   buildSafePatientUpdate,
   fetchOpenDentalChartFacts,
+  normalizeDobToIso,
   resolveDemographics,
   resolvePostCallPatientMatch,
 } from './patient-identity'
@@ -901,39 +902,21 @@ function parseBooleanLike(value: unknown): boolean | undefined {
 
 function parsePatientDob(value: unknown): Date | undefined {
   if (!value) return undefined
-  const raw = String(value).trim()
-  if (!raw) return undefined
-
-  // Prefer explicit numeric formats to avoid locale ambiguity.
-  const mdy = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
-  if (mdy) {
-    const month = Number(mdy[1]) - 1
-    const day = Number(mdy[2])
-    const year = Number(mdy[3])
-    if (year > 1900 && month >= 0 && month <= 11 && day > 0 && day <= 31) {
-      return new Date(Date.UTC(year, month, day))
-    }
+  // Shared normalizer handles ISO, MDY, and Retell natural language including ordinals
+  // (e.g. "December 13th, 1965").
+  const iso = normalizeDobToIso(
+    value instanceof Date || typeof value === 'string' || value == null
+      ? value
+      : String(value)
+  )
+  if (!iso) return undefined
+  const [yearRaw, monthRaw, dayRaw] = iso.split('-')
+  const year = Number(yearRaw)
+  const month = Number(monthRaw) - 1
+  const day = Number(dayRaw)
+  if (!Number.isFinite(year) || year <= 1900 || month < 0 || month > 11 || day < 1 || day > 31) {
     return undefined
   }
-
-  const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
-  if (iso) {
-    const year = Number(iso[1])
-    const month = Number(iso[2]) - 1
-    const day = Number(iso[3])
-    if (year > 1900 && month >= 0 && month <= 11 && day > 0 && day <= 31) {
-      return new Date(Date.UTC(year, month, day))
-    }
-    return undefined
-  }
-
-  // Support natural language forms from Retell, e.g. "April 12, 1986".
-  const parsed = new Date(raw)
-  if (Number.isNaN(parsed.getTime())) return undefined
-  const year = parsed.getUTCFullYear()
-  const month = parsed.getUTCMonth()
-  const day = parsed.getUTCDate()
-  if (year <= 1900) return undefined
   return new Date(Date.UTC(year, month, day))
 }
 
@@ -1729,7 +1712,7 @@ export async function processRetellCallData(
   call: RetellCall,
   userId: string | null
 ): Promise<{ patientId: string | null; extractedData: ExtractedCallData }> {
-  const RETELL_EXTRACT_VERSION = 'retell_extraction_v9'
+  const RETELL_EXTRACT_VERSION = 'retell_extraction_v10'
   // Extract data from call
   const extractedData = extractCallData(call)
   const customAnalysis = call.call_analysis?.custom_analysis_data as Record<string, any> | undefined

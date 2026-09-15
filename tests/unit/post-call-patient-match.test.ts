@@ -121,6 +121,40 @@ describe('resolvePostCallPatientMatch', () => {
     expect(result).toEqual({ patient: existing, blockCreate: false })
   })
 
+  it('matches shared-phone charts when Retell DOB uses a day ordinal', async () => {
+    const odLinked = row({
+      id: 'c3463ef0',
+      name: 'Amir Thobani',
+      firstName: 'Amir',
+      lastName: 'Thobani',
+      dateOfBirth: new Date('1965-12-13T00:00:00.000Z'),
+      phone: '16309652880',
+      primaryPhone: '(630)965-2880',
+      externalEhrId: 'opendental:2274',
+    })
+    const otherSharedPhone = row({
+      id: 'other',
+      name: 'Mike Ryan',
+      firstName: 'Mike',
+      lastName: 'Ryan',
+      dateOfBirth: new Date('1980-01-01T00:00:00.000Z'),
+      phone: '6309652880',
+      primaryPhone: '16309652880',
+      externalEhrId: 'opendental:12450',
+    })
+
+    const result = await resolvePostCallPatientMatch(
+      practiceId,
+      [odLinked, otherSharedPhone],
+      { name: 'Amir Thobani', dateOfBirth: 'December 13th, 1965' },
+      '+16309652880'
+    )
+
+    expect(result.blockCreate).toBe(false)
+    expect(result.patient?.id).toBe('c3463ef0')
+    expect(result.patient?.externalEhrId).toBe('opendental:2274')
+  })
+
   it('reuses sole phone match when caller did not provide full identity', async () => {
     const existing = row({
       id: 'p1',

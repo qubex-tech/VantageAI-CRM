@@ -92,6 +92,11 @@ export function parsePatientName(name: string | null | undefined): ParsedName | 
   }
 }
 
+/** Strip day ordinals so Date/parsers accept Retell forms like "December 13th, 1965". */
+export function stripDobDayOrdinals(value: string): string {
+  return value.replace(/\b(\d{1,2})(st|nd|rd|th)\b/gi, '$1')
+}
+
 export function normalizeDobToIso(value: string | Date | null | undefined): string | null {
   if (!value) return null
   if (value instanceof Date) {
@@ -100,7 +105,7 @@ export function normalizeDobToIso(value: string | Date | null | undefined): stri
     if (iso.startsWith('1900-01-01') || iso.startsWith('0001-01-01')) return null
     return iso
   }
-  const raw = String(value).trim()
+  const raw = stripDobDayOrdinals(String(value).trim())
   if (!raw) return null
 
   const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
