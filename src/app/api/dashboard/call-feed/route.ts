@@ -24,10 +24,23 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid limit' }, { status: 400 })
     }
 
+    const fromRaw = params.get('from')
+    const toRaw = params.get('to')
+    const from = fromRaw ? new Date(fromRaw) : undefined
+    const to = toRaw ? new Date(toRaw) : undefined
+    if (fromRaw && (!from || Number.isNaN(from.getTime()))) {
+      return NextResponse.json({ error: 'Invalid from' }, { status: 400 })
+    }
+    if (toRaw && (!to || Number.isNaN(to.getTime()))) {
+      return NextResponse.json({ error: 'Invalid to' }, { status: 400 })
+    }
+
     const page = await loadCallFeedPage({
       practiceId: user.practiceId,
       cursor,
       limit,
+      from,
+      to,
     })
 
     return NextResponse.json(page)

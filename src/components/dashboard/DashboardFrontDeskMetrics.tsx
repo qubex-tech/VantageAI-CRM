@@ -4,7 +4,7 @@ import { Phone, PhoneForwarded, PhoneOff } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 export interface DashboardFrontDeskMetricsProps {
-  days: 7 | 30
+  periodDetail: string
   callsHandled: number
   transfersSuccessful: number
   transfersUnsuccessful: number
@@ -17,7 +17,7 @@ function formatPercent(value: number): string {
 }
 
 export function DashboardFrontDeskMetrics({
-  days,
+  periodDetail,
   callsHandled,
   transfersSuccessful,
   transfersUnsuccessful,
@@ -34,7 +34,7 @@ export function DashboardFrontDeskMetrics({
       description: 'Inbound calls answered by your AI front desk',
       icon: Phone,
       value: callsHandled,
-      detail: `${days}-day total`,
+      detail: periodDetail,
       accent: 'text-lime-500',
       iconBg: 'bg-lime-50',
       iconColor: 'text-lime-600',

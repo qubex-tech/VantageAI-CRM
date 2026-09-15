@@ -14,24 +14,76 @@ import {
 interface DashboardCallFeedProps {
   practiceId: string
   timeZone: string
+  rangeFrom: string
+  rangeTo: string
   initialPage: CallFeedPage
+  initialRangeFrom: string
+  initialRangeTo: string
+}
+
+function feedUrl(rangeFrom: string, rangeTo: string, cursor?: string | null) {
+  const params = new URLSearchParams({
+    from: rangeFrom,
+    to: rangeTo,
+    limit: String(CALL_FEED_PAGE_SIZE),
+  })
+  if (cursor) params.set('cursor', cursor)
+  return `/api/dashboard/call-feed?${params.toString()}`
 }
 
 export function DashboardCallFeed({
   practiceId,
   timeZone,
+  rangeFrom,
+  rangeTo,
   initialPage,
+  initialRangeFrom,
+  initialRangeTo,
 }: DashboardCallFeedProps) {
-  const [items, setItems] = useState<CallFeedItem[]>(initialPage.items)
-  const [nextCursor, setNextCursor] = useState<string | null>(initialPage.nextCursor)
-  const [loading, setLoading] = useState(false)
+  const usesInitialPage = rangeFrom === initialRangeFrom && rangeTo === initialRangeTo
+  const [items, setItems] = useState<CallFeedItem[]>(usesInitialPage ? initialPage.items : [])
+  const [nextCursor, setNextCursor] = useState<string | null>(
+    usesInitialPage ? initialPage.nextCursor : null
+  )
+  const [loading, setLoading] = useState(!usesInitialPage)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    setItems(initialPage.items)
-    setNextCursor(initialPage.nextCursor)
+    if (rangeFrom === initialRangeFrom && rangeTo === initialRangeTo) {
+      setItems(initialPage.items)
+      setNextCursor(initialPage.nextCursor)
+      setError(null)
+      setLoading(false)
+      return
+    }
+
+    const controller = new AbortController()
+    setLoading(true)
     setError(null)
-  }, [initialPage])
+    void fetch(feedUrl(rangeFrom, rangeTo), { signal: controller.signal })
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = (await res.json().catch(() => null)) as { error?: string } | null
+          throw new Error(body?.error || 'Could not load calls')
+        }
+        return res.json() as Promise<CallFeedPage>
+      })
+      .then((page) => {
+        setItems(page.items)
+        setNextCursor(page.nextCursor)
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return
+        setItems([])
+        setNextCursor(null)
+        setError(err instanceof Error ? err.message : 'Could not load calls')
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false)
+      })
+
+    return () => controller.abort()
+  }, [initialPage, initialRangeFrom, initialRangeTo, rangeFrom, rangeTo])
 
   const groups = useMemo(() => {
     const result: { key: string; label: string; items: CallFeedItem[] }[] = []
@@ -58,11 +110,7 @@ export function DashboardCallFeed({
     setLoading(true)
     setError(null)
     try {
-      const params = new URLSearchParams({
-        cursor: nextCursor,
-        limit: String(CALL_FEED_PAGE_SIZE),
-      })
-      const res = await fetch(`/api/dashboard/call-feed?${params.toString()}`)
+      const res = await fetch(feedUrl(rangeFrom, rangeTo, nextCursor))
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null
         throw new Error(body?.error || 'Could not load more calls')
@@ -87,9 +135,9 @@ export function DashboardCallFeed({
         <p className="text-sm text-gray-500">Inbound front desk activity</p>
       </div>
 
-      {items.length === 0 ? (
+      {items.length === 0 && !loading ? (
         <div className="rounded-xl border border-gray-100 bg-white p-6 text-sm text-gray-500 shadow-lg shadow-gray-200/50">
-          No inbound calls yet.
+          No inbound calls in this range.
         </div>
       ) : (
         <div className="space-y-6">
@@ -112,6 +160,17 @@ export function DashboardCallFeed({
           ))}
         </div>
       )}
+
+      {loading && items.length === 0 ? (
+        <div className="space-y-3">
+          {Array.from({ length: 2 }).map((_, index) => (
+            <div
+              key={index}
+              className="h-24 rounded-xl border border-gray-100 bg-white shadow-lg shadow-gray-200/50 animate-pulse"
+            />
+          ))}
+        </div>
+      ) : null}
 
       {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
 

@@ -18,6 +18,7 @@ export interface HealixFrontDeskStats {
   transfersUnsuccessful: number
   transfersAttempted: number
   days: number
+  periodLabel?: string
 }
 
 interface HealixCommandCenterProps {
@@ -98,7 +99,9 @@ export function HealixCommandCenter({ context, frontDeskStats }: HealixCommandCe
             <div className="flex flex-col items-center gap-0.5 rounded-lg bg-gray-50 py-2">
               <Phone className="h-3.5 w-3.5 text-lime-600" />
               <span className="text-sm font-semibold text-lime-600">{frontDeskStats.callsHandled}</span>
-              <span className="text-[10px] text-gray-500 text-center leading-tight">Calls ({frontDeskStats.days}d)</span>
+              <span className="text-[10px] text-gray-500 text-center leading-tight">
+                Calls ({frontDeskStats.periodLabel ?? `${frontDeskStats.days}d`})
+              </span>
             </div>
             <div className="flex flex-col items-center gap-0.5 rounded-lg bg-gray-50 py-2">
               <PhoneForwarded className="h-3.5 w-3.5 text-orange-400" />
@@ -120,7 +123,7 @@ export function HealixCommandCenter({ context, frontDeskStats }: HealixCommandCe
                 <Phone className="h-3.5 w-3.5 text-lime-600" />
                 <span>
                   <span className="font-medium text-lime-600">{frontDeskStats.callsHandled}</span>{' '}
-                  inbound calls ({frontDeskStats.days}d)
+                  inbound calls ({frontDeskStats.periodLabel ?? `${frontDeskStats.days}d`})
                 </span>
               </span>
               <span className="text-gray-300">·</span>

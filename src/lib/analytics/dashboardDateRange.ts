@@ -139,3 +139,106 @@ export function formatDashboardRangeLabel(
 ): string {
   return `Last ${days} days · ${formatRollingRangeLabel(from, to, timeZone)}`
 }
+
+export type DashboardRangeKey = 'today' | 'yesterday' | '7' | '30'
+
+export const DASHBOARD_RANGE_KEYS: DashboardRangeKey[] = ['today', 'yesterday', '7', '30']
+
+export function parseDashboardRangeParam(params: {
+  range?: string | null
+  days?: string | null
+}): DashboardRangeKey {
+  const range = params.range?.trim()
+  if (range === 'today' || range === 'yesterday' || range === '7' || range === '30') {
+    return range
+  }
+  if (params.days === '30') return '30'
+  return '7'
+}
+
+export function dashboardRangePath(range: DashboardRangeKey): string {
+  return range === '7' ? '/dashboard' : `/dashboard?range=${range}`
+}
+
+export function dashboardRangeDayCount(range: DashboardRangeKey): number {
+  if (range === 'today' || range === 'yesterday') return 1
+  return range === '30' ? 30 : 7
+}
+
+export function dashboardPeriodShortLabel(range: DashboardRangeKey): string {
+  switch (range) {
+    case 'today':
+      return 'Today'
+    case 'yesterday':
+      return 'Yesterday'
+    case '7':
+      return '7-day total'
+    case '30':
+      return '30-day total'
+  }
+}
+
+export function dashboardPeriodHealixLabel(range: DashboardRangeKey): string {
+  switch (range) {
+    case 'today':
+      return 'Today'
+    case 'yesterday':
+      return 'Yesterday'
+    case '7':
+      return '7d'
+    case '30':
+      return '30d'
+  }
+}
+
+export function resolveDashboardCalendarDayInTimeZone(
+  offsetDays: number,
+  timeZone: string,
+  now: Date = new Date()
+): { from: Date; to: Date; startMs: number; endMs: number; timeZone: string } {
+  const today = getZonedCalendarParts(now, timeZone)
+  const day = addCalendarDays(today, offsetDays)
+  const from = zonedLocalTimeToUtc(
+    { ...day, hour: 0, minute: 0, second: 0, millisecond: 0 },
+    timeZone
+  )
+  const to = zonedLocalTimeToUtc(
+    { ...day, hour: 23, minute: 59, second: 59, millisecond: 999 },
+    timeZone
+  )
+  return {
+    from,
+    to,
+    startMs: from.getTime(),
+    endMs: to.getTime(),
+    timeZone,
+  }
+}
+
+export function resolveDashboardPeriodRange(
+  range: DashboardRangeKey,
+  timeZone: string,
+  now: Date = new Date()
+): { from: Date; to: Date; startMs: number; endMs: number; timeZone: string } {
+  if (range === 'today') return resolveDashboardCalendarDayInTimeZone(0, timeZone, now)
+  if (range === 'yesterday') return resolveDashboardCalendarDayInTimeZone(-1, timeZone, now)
+  return resolveDashboardRangeInTimeZone(range === '30' ? 30 : 7, timeZone, now)
+}
+
+export function formatDashboardPeriodLabel(
+  range: DashboardRangeKey,
+  from: Date,
+  to: Date,
+  timeZone: string
+): string {
+  if (range === 'today' || range === 'yesterday') {
+    const dayLabel = from.toLocaleDateString('en-US', {
+      timeZone,
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    })
+    return `${range === 'today' ? 'Today' : 'Yesterday'} · ${dayLabel}`
+  }
+  return formatDashboardRangeLabel(range === '30' ? 30 : 7, from, to, timeZone)
+}

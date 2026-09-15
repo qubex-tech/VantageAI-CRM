@@ -8,6 +8,13 @@ import { DashboardCallFeed } from '@/components/dashboard/DashboardCallFeed'
 import { DashboardDateRangeToggle } from '@/components/dashboard/DashboardDateRangeToggle'
 import { DashboardPageHeader } from '@/components/dashboard/DashboardPageHeader'
 import { usePageHeaderExtras } from '@/components/layout/PageHeaderExtrasContext'
+import {
+  dashboardPeriodHealixLabel,
+  dashboardPeriodShortLabel,
+  dashboardRangePath,
+  parseDashboardRangeParam,
+  type DashboardRangeKey,
+} from '@/lib/analytics/dashboardDateRange'
 import type { CallFeedPage, DashboardMetricsPayload } from '@/components/dashboard/types'
 import type { HealixContextPayload } from '@/hooks/useHealixContext'
 
@@ -16,7 +23,7 @@ interface DashboardViewProps {
   practiceId: string
   metrics: DashboardMetricsPayload
   feed: CallFeedPage
-  initialDays?: 7 | 30
+  initialRange?: DashboardRangeKey
 }
 
 export function DashboardView({
@@ -24,30 +31,32 @@ export function DashboardView({
   practiceId,
   metrics,
   feed,
-  initialDays = 7,
+  initialRange = '7',
 }: DashboardViewProps) {
   const searchParams = useSearchParams()
-  const urlDays = searchParams.get('days') === '30' ? 30 : 7
-  const [days, setDays] = useState<7 | 30>(initialDays ?? urlDays)
+  const urlRange = parseDashboardRangeParam({
+    range: searchParams.get('range'),
+    days: searchParams.get('days'),
+  })
+  const [range, setRange] = useState<DashboardRangeKey>(initialRange ?? urlRange)
   const { setExtras } = usePageHeaderExtras()
 
-  const active = metrics.periods[days]
+  const active = metrics.periods[range]
 
-  const setDaysInstant = useCallback((value: 7 | 30) => {
-    setDays((current) => {
+  const setRangeInstant = useCallback((value: DashboardRangeKey) => {
+    setRange((current) => {
       if (value === current) return current
-      const url = value === 7 ? '/dashboard' : '/dashboard?days=30'
-      window.history.replaceState(null, '', url)
+      window.history.replaceState(null, '', dashboardRangePath(value))
       return value
     })
   }, [])
 
   useEffect(() => {
     setExtras(
-      <DashboardDateRangeToggle days={days} onDaysChange={setDaysInstant} />
+      <DashboardDateRangeToggle range={range} onRangeChange={setRangeInstant} />
     )
     return () => setExtras(null)
-  }, [days, setDaysInstant, setExtras])
+  }, [range, setRangeInstant, setExtras])
 
   const healixContext = useMemo<HealixContextPayload>(() => ({
     route: '/dashboard',
@@ -80,12 +89,13 @@ export function DashboardView({
             transfersUnsuccessful: active.transfersUnsuccessful,
             transfersAttempted: active.transfersAttempted,
             days: active.days,
+            periodLabel: dashboardPeriodHealixLabel(range),
           }}
         />
       </div>
 
       <DashboardFrontDeskMetrics
-        days={days}
+        periodDetail={dashboardPeriodShortLabel(range)}
         callsHandled={active.callsHandled}
         transfersSuccessful={active.transfersSuccessful}
         transfersUnsuccessful={active.transfersUnsuccessful}
@@ -95,7 +105,11 @@ export function DashboardView({
       <DashboardCallFeed
         practiceId={practiceId}
         timeZone={metrics.timeZone}
+        rangeFrom={active.rangeStart}
+        rangeTo={active.rangeEnd}
         initialPage={feed}
+        initialRangeFrom={metrics.periods[initialRange].rangeStart}
+        initialRangeTo={metrics.periods[initialRange].rangeEnd}
       />
     </>
   )

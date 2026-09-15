@@ -1,3 +1,5 @@
+import type { DashboardRangeKey } from '@/lib/analytics/dashboardDateRange'
+
 export type {
   CallFeedItem,
   CallFeedPage,
@@ -5,8 +7,11 @@ export type {
   CallFeedTransferStatus,
 } from '@/lib/dashboard/callFeed'
 
+export type { DashboardRangeKey }
+
 export interface DashboardPeriodMetrics {
-  days: 7 | 30
+  range: DashboardRangeKey
+  days: number
   rangeLabel: string
   rangeStart: string
   rangeEnd: string
@@ -18,8 +23,5 @@ export interface DashboardPeriodMetrics {
 
 export interface DashboardMetricsPayload {
   timeZone: string
-  periods: {
-    7: DashboardPeriodMetrics
-    30: DashboardPeriodMetrics
-  }
+  periods: Record<DashboardRangeKey, DashboardPeriodMetrics>
 }

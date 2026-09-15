@@ -24,6 +24,8 @@ export async function loadCallFeedPage(options: {
   practiceId: string
   cursor?: string | null
   limit?: number
+  from?: Date
+  to?: Date
 }): Promise<CallFeedPage> {
   const limit = Math.min(Math.max(options.limit ?? CALL_FEED_PAGE_SIZE, 1), 50)
   const decoded = options.cursor ? decodeCallFeedCursor(options.cursor) : null
@@ -43,7 +45,19 @@ export async function loadCallFeedPage(options: {
         NOT: {
           outcome: 'outbound_insurance_verification_initiated',
         },
-        ...(nextRawCursor ? callFeedCursorWhere(nextRawCursor) : {}),
+        AND: [
+          ...(options.from || options.to
+            ? [
+                {
+                  startedAt: {
+                    ...(options.from ? { gte: options.from } : {}),
+                    ...(options.to ? { lte: options.to } : {}),
+                  },
+                },
+              ]
+            : []),
+          ...(nextRawCursor ? [callFeedCursorWhere(nextRawCursor)] : []),
+        ],
       },
       select: FEED_SELECT,
       orderBy: [{ startedAt: 'desc' }, { id: 'desc' }],

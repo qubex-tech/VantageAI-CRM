@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 import { requireAuthenticatedUser } from '@/lib/auth-server'
+import { parseDashboardRangeParam } from '@/lib/analytics/dashboardDateRange'
 import { DashboardPageHeader } from '@/components/dashboard/DashboardPageHeader'
 import {
   DashboardMetricsSection,
@@ -8,17 +9,13 @@ import { DashboardMetricsSkeleton } from '@/components/dashboard/DashboardMetric
 
 export const dynamic = 'force-dynamic'
 
-function resolveDashboardDays(searchParams: { days?: string }): 7 | 30 {
-  return searchParams.days === '30' ? 30 : 7
-}
-
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ days?: string }>
+  searchParams: Promise<{ days?: string; range?: string }>
 }) {
   const params = await searchParams
-  const initialDays = resolveDashboardDays(params)
+  const initialRange = parseDashboardRangeParam(params)
   const user = await requireAuthenticatedUser()
 
   if (!user.practiceId) {
@@ -46,7 +43,7 @@ export default async function DashboardPage({
           practiceId={user.practiceId}
           userId={user.id}
           userName={userName}
-          initialDays={initialDays}
+          initialRange={initialRange}
         />
       </Suspense>
     </div>

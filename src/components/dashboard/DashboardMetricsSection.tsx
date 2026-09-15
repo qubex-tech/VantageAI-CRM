@@ -6,8 +6,12 @@ import { isInboundAgentCall } from '@/lib/analytics/voiceConversationInbound'
 import type { AnalyticsCallRow } from '@/lib/analytics/callSort'
 import { computeInboundTransferMetrics } from '@/lib/analytics/transferMetrics'
 import {
-  formatDashboardRangeLabel,
+  DASHBOARD_RANGE_KEYS,
+  dashboardRangeDayCount,
+  formatDashboardPeriodLabel,
+  resolveDashboardPeriodRange,
   resolveDashboardRangeInTimeZone,
+  type DashboardRangeKey,
 } from '@/lib/analytics/dashboardDateRange'
 import { normalizeTimeZone, resolveTimeZone } from '@/lib/timezone'
 import { CALL_FEED_PAGE_SIZE } from '@/lib/dashboard/callFeed'
@@ -54,7 +58,7 @@ async function resolveDashboardTimeZone(practiceId: string): Promise<string> {
 }
 
 function buildPeriodMetrics(
-  days: 7 | 30,
+  range: DashboardRangeKey,
   timeZone: string,
   rangeStart: Date,
   rangeEnd: Date,
@@ -68,8 +72,9 @@ function buildPeriodMetrics(
     computeInboundTransferMetrics(inboundCalls)
 
   return {
-    days,
-    rangeLabel: formatDashboardRangeLabel(days, rangeStart, rangeEnd, timeZone),
+    range,
+    days: dashboardRangeDayCount(range),
+    rangeLabel: formatDashboardPeriodLabel(range, rangeStart, rangeEnd, timeZone),
     rangeStart: rangeStart.toISOString(),
     rangeEnd: rangeEnd.toISOString(),
     // Source of truth is the practice-scoped voice_conversations table (attributed per
@@ -89,7 +94,6 @@ async function loadDashboardMetrics(
   timeZone: string
 ): Promise<DashboardMetricsPayload> {
   const now = new Date()
-  const range7 = resolveDashboardRangeInTimeZone(7, timeZone, now)
   const range30 = resolveDashboardRangeInTimeZone(30, timeZone, now)
 
   const callsRaw = await prisma.voiceConversation.findMany({
@@ -114,30 +118,39 @@ async function loadDashboardMetrics(
   })
 
   const inboundCalls = callsRaw.filter(isInboundAgentCall).map(toSerializableCallRow)
+  const periods = Object.fromEntries(
+    DASHBOARD_RANGE_KEYS.map((range) => {
+      const window = resolveDashboardPeriodRange(range, timeZone, now)
+      return [range, buildPeriodMetrics(range, timeZone, window.from, window.to, inboundCalls)]
+    })
+  ) as DashboardMetricsPayload['periods']
 
   return {
     timeZone,
-    periods: {
-      7: buildPeriodMetrics(7, timeZone, range7.from, range7.to, inboundCalls),
-      30: buildPeriodMetrics(30, timeZone, range30.from, range30.to, inboundCalls),
-    },
+    periods,
   }
 }
 
 export async function DashboardMetricsSection({
   practiceId,
   userName,
-  initialDays,
+  initialRange,
 }: {
   practiceId: string
   userId: string
   userName: string
-  initialDays: 7 | 30
+  initialRange: DashboardRangeKey
 }) {
   const timeZone = await resolveDashboardTimeZone(practiceId)
+  const feedRange = resolveDashboardPeriodRange(initialRange, timeZone)
   const [metrics, feed] = await Promise.all([
     loadDashboardMetrics(practiceId, timeZone),
-    loadCallFeedPage({ practiceId, limit: CALL_FEED_PAGE_SIZE }),
+    loadCallFeedPage({
+      practiceId,
+      limit: CALL_FEED_PAGE_SIZE,
+      from: feedRange.from,
+      to: feedRange.to,
+    }),
   ])
 
   return (
@@ -148,7 +161,7 @@ export async function DashboardMetricsSection({
         practiceId={practiceId}
         metrics={metrics}
         feed={feed}
-        initialDays={initialDays}
+        initialRange={initialRange}
       />
     </>
   )

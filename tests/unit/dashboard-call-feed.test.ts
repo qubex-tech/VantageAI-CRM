@@ -70,6 +70,17 @@ describe('resolveCallFeedTransferStatus', () => {
     ).toBe('successful')
   })
 
+  it('returns unsuccessful for the short Retell enum failed', () => {
+    expect(
+      resolveCallFeedTransferStatus(
+        analyticsRow({ retell_custom_data: { 'transfer outcome': 'failed' } })
+      )
+    ).toEqual({
+      transferStatus: 'unsuccessful',
+      transferOutcomeRaw: 'failed',
+    })
+  })
+
   it('returns unsuccessful for failed transfer phrases', () => {
     expect(
       resolveCallFeedTransferStatus(
