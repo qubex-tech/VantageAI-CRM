@@ -39,6 +39,10 @@ import {
   type MedicalHistoryUpdateData,
 } from './retell-medical-history-update'
 import {
+  extractRecordsRequest,
+  type RecordsRequestData,
+} from './retell-records-request'
+import {
   buildSafePatientUpdate,
   fetchOpenDentalChartFacts,
   resolveDemographics,
@@ -78,6 +82,8 @@ export interface ExtractedCallData {
   insurance_info_update?: InsuranceInfoUpdateData
   /** Present only when the agent collected medication, history, or allergy updates. */
   medical_history_update?: MedicalHistoryUpdateData
+  /** Present only when the caller requested records emailed to them or sent to another office. */
+  records_request?: RecordsRequestData
   insurance_verification?: {
     /** Retell call analysis summary. */
     summary?: string
@@ -1374,6 +1380,15 @@ export function extractCallData(call: RetellCall): ExtractedCallData {
     extracted.medical_history_update = medicalHistoryUpdate
   }
 
+  const recordsRequest = extractRecordsRequest([
+    customData,
+    metadata,
+    collectedDynamic,
+  ])
+  if (recordsRequest) {
+    extracted.records_request = recordsRequest
+  }
+
   if (isInsuranceVerificationCall) {
     // Capture Retell's "Extracted Data" exactly as returned (label + value),
     // preserving Retell's ordering. Nothing is invented or back-filled.
@@ -1714,7 +1729,7 @@ export async function processRetellCallData(
   call: RetellCall,
   userId: string | null
 ): Promise<{ patientId: string | null; extractedData: ExtractedCallData }> {
-  const RETELL_EXTRACT_VERSION = 'retell_extraction_v8'
+  const RETELL_EXTRACT_VERSION = 'retell_extraction_v9'
   // Extract data from call
   const extractedData = extractCallData(call)
   const customAnalysis = call.call_analysis?.custom_analysis_data as Record<string, any> | undefined
@@ -1802,6 +1817,12 @@ export async function processRetellCallData(
   }
   if (!extractedData.medical_history_update) {
     extractedData.medical_history_update = extractMedicalHistoryUpdate([
+      customAnalysis,
+      extractedData.retell_custom_data,
+    ])
+  }
+  if (!extractedData.records_request) {
+    extractedData.records_request = extractRecordsRequest([
       customAnalysis,
       extractedData.retell_custom_data,
     ])

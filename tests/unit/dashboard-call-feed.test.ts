@@ -147,6 +147,8 @@ describe('mapVoiceConversationToFeedItem', () => {
       durationSeconds: 260,
       insuranceInfoUpdate: false,
       medicalHistoryUpdate: false,
+      recordsRequestToPatient: false,
+      recordsRequestToOtherOffice: false,
     })
   })
 
@@ -181,7 +183,38 @@ describe('mapVoiceConversationToFeedItem', () => {
     )
     expect(item.medicalHistoryUpdate).toBe(true)
     expect(item.insuranceInfoUpdate).toBe(false)
+    expect(item.recordsRequestToPatient).toBe(false)
+    expect(item.recordsRequestToOtherOffice).toBe(false)
     expect(item.transferStatus).toBe('none')
+  })
+
+  it('flags records emailed to the patient', () => {
+    const item = mapVoiceConversationToFeedItem(
+      feedRow({
+        metadata: {
+          call_summary: 'Patient asked for records emailed to them',
+          retell_custom_data: { 'Records Request - Email To Patient': true },
+        },
+      })
+    )
+    expect(item.recordsRequestToPatient).toBe(true)
+    expect(item.recordsRequestToOtherOffice).toBe(false)
+  })
+
+  it('flags records requested for another dental office', () => {
+    const item = mapVoiceConversationToFeedItem(
+      feedRow({
+        metadata: {
+          call_summary: 'Send records to another office',
+          retell_custom_data: {
+            'Records Request - Dental Office Name': 'Bright Smile Dental',
+            'Records Request - Dental Office Email': 'records@brightsmile.example',
+          },
+        },
+      })
+    )
+    expect(item.recordsRequestToOtherOffice).toBe(true)
+    expect(item.recordsRequestToPatient).toBe(false)
   })
 
   it('falls back to caller phone when no display name is present', () => {
@@ -192,6 +225,8 @@ describe('mapVoiceConversationToFeedItem', () => {
     expect(item.patientType).toBe('Other')
     expect(item.insuranceInfoUpdate).toBe(false)
     expect(item.medicalHistoryUpdate).toBe(false)
+    expect(item.recordsRequestToPatient).toBe(false)
+    expect(item.recordsRequestToOtherOffice).toBe(false)
   })
 })
 

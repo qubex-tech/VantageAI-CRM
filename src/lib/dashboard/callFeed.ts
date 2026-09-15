@@ -8,6 +8,10 @@ import {
 } from '@/lib/outbound-customer-notifications'
 import { hasInsuranceInfoUpdateInMetadata } from '@/lib/retell-insurance-info-update'
 import { hasMedicalHistoryUpdateInMetadata } from '@/lib/retell-medical-history-update'
+import {
+  hasRecordsRequestToOtherOfficeInMetadata,
+  hasRecordsRequestToPatientInMetadata,
+} from '@/lib/retell-records-request'
 
 export type CallFeedTransferStatus = 'none' | 'successful' | 'unsuccessful'
 export type CallFeedPatientType = 'New Patient' | 'Existing Patient' | 'Other'
@@ -25,6 +29,8 @@ export interface CallFeedItem {
   transferOutcomeRaw: string | null
   insuranceInfoUpdate: boolean
   medicalHistoryUpdate: boolean
+  recordsRequestToPatient: boolean
+  recordsRequestToOtherOffice: boolean
 }
 
 export interface CallFeedCursor {
@@ -177,6 +183,8 @@ export function mapVoiceConversationToFeedItem(row: VoiceConversationFeedRow): C
     transferOutcomeRaw,
     insuranceInfoUpdate: hasInsuranceInfoUpdateInMetadata(row.metadata),
     medicalHistoryUpdate: hasMedicalHistoryUpdateInMetadata(row.metadata),
+    recordsRequestToPatient: hasRecordsRequestToPatientInMetadata(row.metadata),
+    recordsRequestToOtherOffice: hasRecordsRequestToOtherOfficeInMetadata(row.metadata),
   }
 }
 

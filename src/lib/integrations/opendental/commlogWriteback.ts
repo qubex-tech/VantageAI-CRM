@@ -17,8 +17,12 @@ import {
   extractMedicalHistoryUpdate,
   formatMedicalHistoryUpdateCommlogLines,
 } from '@/lib/retell-medical-history-update'
+import {
+  extractRecordsRequest,
+  formatRecordsRequestCommlogLines,
+} from '@/lib/retell-records-request'
 
-const WRITEBACK_VERSION = 'opendental_writeback_v3'
+const WRITEBACK_VERSION = 'opendental_writeback_v4'
 
 /** Open Dental commlog Mode_ for a phone call. */
 const DEFAULT_MODE = 'Phone'
@@ -256,6 +260,14 @@ export function buildCommlogNote(call: RetellCall, extractedData: ExtractedCallD
   if (medicalHistoryUpdate) {
     lines.push('Medical history update')
     lines.push(...formatMedicalHistoryUpdateCommlogLines(medicalHistoryUpdate))
+  }
+  const recordsRequest = extractRecordsRequest([
+    extractedData.records_request as Record<string, unknown> | undefined,
+    extractedData.retell_custom_data,
+  ])
+  if (recordsRequest) {
+    lines.push('Records request')
+    lines.push(...formatRecordsRequestCommlogLines(recordsRequest))
   }
   return truncate(lines.filter(Boolean).join('\n'), MAX_NOTE_LENGTH)
 }

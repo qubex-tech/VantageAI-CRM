@@ -150,6 +150,8 @@ describe('Retell payment type for Open Dental notes', () => {
     expect(note).not.toContain('Insurance Member ID:')
     expect(note).not.toContain('Medical history update')
     expect(note).not.toContain('Updated Medications:')
+    expect(note).not.toContain('Records request')
+    expect(note).not.toContain('Records Request - Email To Patient:')
   })
 
   it('includes collected medical history, medication, and allergy updates in the commlog', () => {
@@ -187,5 +189,41 @@ describe('Retell payment type for Open Dental notes', () => {
     expect(note).toContain('Updated Allergies: Latex')
     expect(note).not.toContain('Updated Medications:')
     expect(note).not.toContain('Updated Medical History:')
+  })
+
+  it('includes records emailed to the patient in the commlog', () => {
+    const note = buildCommlogNote({ transcript: 'hello' } as RetellCall, {
+      call_reason: 'Request records',
+      call_summary: 'Patient asked for records emailed to them',
+      retell_custom_data: { 'Records Request - Email To Patient': true },
+    })
+
+    expect(note).toContain('Records request')
+    expect(note).toContain('Records Request - Email To Patient: Yes')
+    expect(note).not.toContain('Records Request - Dental Office Name:')
+    expect(note).not.toContain('Transcript:')
+  })
+
+  it('includes records requested for another dental office in the commlog', () => {
+    const note = buildCommlogNote({ transcript: 'hello' } as RetellCall, {
+      call_reason: 'Transfer records',
+      call_summary: 'Send x-rays to another office',
+      retell_custom_data: {
+        'Records Request - Email To Patient': false,
+        'Records Request - Dental Office Name': 'Bright Smile Dental',
+        'Records Request - Dental Office Phone Number': '5125550199',
+        'Records Request - Dental Office Email': 'records@brightsmile.example',
+        'Records Request - Next Appointment Date With Other Dental Office': '2026-10-02',
+      },
+    })
+
+    expect(note).toContain('Records request')
+    expect(note).not.toContain('Records Request - Email To Patient:')
+    expect(note).toContain('Records Request - Dental Office Name: Bright Smile Dental')
+    expect(note).toContain('Records Request - Dental Office Phone Number: 5125550199')
+    expect(note).toContain('Records Request - Dental Office Email: records@brightsmile.example')
+    expect(note).toContain(
+      'Records Request - Next Appointment Date With Other Dental Office: 2026-10-02'
+    )
   })
 })
