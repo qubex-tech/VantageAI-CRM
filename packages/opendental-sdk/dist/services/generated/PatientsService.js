@@ -13,9 +13,9 @@ class PatientsService extends BaseDomainService_1.BaseDomainService {
     async get(id, params) {
         return this.getSingle(id, params);
     }
-    /** GET /simple */
+    /** GET /patients/Simple — DateTStamp and other filters only work on this endpoint. */
     async getSimple(params) {
-        return this.getSubResource('simple', params);
+        return this.getSubResource('Simple', params);
     }
     /** POST /patients */
     async create(body) {

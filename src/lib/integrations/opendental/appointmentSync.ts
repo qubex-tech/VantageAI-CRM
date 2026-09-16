@@ -555,6 +555,7 @@ export async function syncOpenDentalAppointments(params: {
   const patientCache = new Map<number, string>()
 
   const summary = emptySyncSummary()
+  const liveByAptNum = new Map<number, OdAppointment>()
 
   const baseParams: Record<string, string | number> = {}
   if (params.dateStart) baseParams.dateStart = params.dateStart
@@ -573,6 +574,9 @@ export async function syncOpenDentalAppointments(params: {
 
       for (const od of batch) {
         summary.fetched += 1
+        if (od.PatNum && od.AptNum) {
+          liveByAptNum.set(od.AptNum, od)
+        }
         try {
           if (!isSchedulableStatus(od.AptStatus) || !parseOdWallClock(od.AptDateTime)) {
             summary.skipped += 1
@@ -614,6 +618,60 @@ export async function syncOpenDentalAppointments(params: {
       offset += limit
     }
 
+    // Cancel CRM ghosts in the synced window whose AptNum is gone (or no longer upcoming)
+    // from the live OD list — otherwise manual Sync EHR leaves stale schedule rows.
+    if (params.dateStart && params.dateEnd) {
+      const windowStart =
+        openDentalNaiveToInstant(`${params.dateStart} 00:00:00`, timeZone) ??
+        new Date(`${params.dateStart}T00:00:00.000Z`)
+      const windowEnd =
+        openDentalNaiveToInstant(`${params.dateEnd} 23:59:59`, timeZone) ??
+        new Date(`${params.dateEnd}T23:59:59.999Z`)
+
+      const crmInWindow = await prisma.appointment.findMany({
+        where: {
+          practiceId,
+          startTime: { gte: windowStart, lte: windowEnd },
+          status: { in: ['scheduled', 'confirmed'] },
+          calBookingId: { startsWith: APPT_BOOKING_PREFIX },
+        },
+        select: { id: true, calBookingId: true, status: true },
+      })
+
+      for (const crm of crmInWindow) {
+        try {
+          const aptNum = parseOpenDentalAptNumFromBookingId(crm.calBookingId)
+          if (!aptNum) continue
+          const od = liveByAptNum.get(aptNum)
+          if (!od) {
+            await prisma.appointment.update({
+              where: { id: crm.id },
+              data: { status: 'cancelled' },
+            })
+            summary.pruned += 1
+            continue
+          }
+          if (!isOpenDentalVoiceUpcomingStatus(od.AptStatus)) {
+            const mapped = mapApptStatus(od.AptStatus)
+            const nextStatus =
+              mapped === 'scheduled' || mapped === 'confirmed' ? 'cancelled' : mapped
+            if (nextStatus !== crm.status) {
+              await prisma.appointment.update({
+                where: { id: crm.id },
+                data: { status: nextStatus },
+              })
+              summary.statusReconciled += 1
+            }
+          }
+        } catch (error) {
+          summary.errors += 1
+          if (summary.errorSamples.length < 5) {
+            summary.errorSamples.push(error instanceof Error ? error.message : 'unknown error')
+          }
+        }
+      }
+    }
+
     await recordSyncResult(practiceId, {
       status:
         summary.errors > 0 && summary.created + summary.updated === 0 ? 'error' : 'success',
@@ -630,6 +688,8 @@ export async function syncOpenDentalAppointments(params: {
         created: summary.created,
         updated: summary.updated,
         skipped: summary.skipped,
+        pruned: summary.pruned,
+        statusReconciled: summary.statusReconciled,
         errors: summary.errors,
         dateStart: params.dateStart ?? null,
         dateEnd: params.dateEnd ?? null,

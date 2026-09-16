@@ -352,6 +352,10 @@ export async function syncOpenDentalPatients(params: {
   }
 
   const baseParams: Record<string, string | number> = {}
+  // DateTStamp is only valid on GET /patients/Simple (not /patients). Using it on
+  // /patients returns 400 "'DateTStamp' is not a valid parameter." and aborts the
+  // daily sync before appointments run.
+  const useSimpleIncremental = Boolean(params.since)
   if (params.since) {
     const sinceDate = new Date(params.since)
     if (!Number.isNaN(sinceDate.getTime())) {
@@ -362,11 +366,16 @@ export async function syncOpenDentalPatients(params: {
   try {
     let offset = 0
     for (let page = 0; page < maxPages; page++) {
-      const batch = (await services.patients.list({
+      const pageParams = {
         ...baseParams,
         Limit: limit,
         Offset: offset,
-      })) as OdPatient[]
+      }
+      const batch = (
+        useSimpleIncremental
+          ? await services.patients.getSimple(pageParams)
+          : await services.patients.list(pageParams)
+      ) as OdPatient[]
 
       if (!Array.isArray(batch) || batch.length === 0) break
 

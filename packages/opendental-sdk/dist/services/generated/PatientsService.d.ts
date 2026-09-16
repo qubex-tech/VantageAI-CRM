@@ -6,7 +6,7 @@ export declare class PatientsService extends BaseDomainService {
     list(params?: Record<string, string | number | boolean | undefined | null>): Promise<unknown>;
     /** GET /{id} */
     get(id: string | number, params?: Record<string, string | number | boolean | undefined>): Promise<unknown>;
-    /** GET /simple */
+    /** GET /patients/Simple — DateTStamp and other filters only work on this endpoint. */
     getSimple(params?: Record<string, string | number | boolean | undefined | null>): Promise<unknown>;
     /** POST /patients */
     create(body: Record<string, unknown>): Promise<unknown>;

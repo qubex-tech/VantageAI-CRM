@@ -14,9 +14,9 @@ export class PatientsService extends BaseDomainService {
     return this.getSingle<Record<string, unknown>>(id, params)
   }
 
-  /** GET /simple */
+  /** GET /patients/Simple — DateTStamp and other filters only work on this endpoint. */
   async getSimple(params?: Record<string, string | number | boolean | undefined | null>): Promise<unknown> {
-    return this.getSubResource<Record<string, unknown>>('simple', params)
+    return this.getSubResource<Record<string, unknown>>('Simple', params)
   }
 
   /** POST /patients */

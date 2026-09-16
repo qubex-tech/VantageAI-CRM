@@ -54,7 +54,15 @@ export async function syncAllOpenDentalConnections(options?: {
           ? new Date(connection.lastSuccessfulSyncAt.getTime() - PATIENT_WATERMARK_OVERLAP_MS).toISOString()
           : undefined
 
-      const patients = await syncOpenDentalPatients({ practiceId, since })
+      let patients: PatientSyncSummary | undefined
+      let patientsError: string | undefined
+      try {
+        patients = await syncOpenDentalPatients({ practiceId, since })
+      } catch (error) {
+        // Keep appointments/commlogs moving even if patient incremental sync fails
+        // (e.g. API version quirks). Appointment sync creates missing patients on demand.
+        patientsError = error instanceof Error ? error.message : 'patient sync failed'
+      }
 
       const now = Date.now()
       const dateStart = formatYmd(new Date(now - daysBehind * DAY_MS))
@@ -63,9 +71,23 @@ export async function syncAllOpenDentalConnections(options?: {
       const appointments = await syncOpenDentalAppointments({ practiceId, dateStart, dateEnd })
 
       // Commlogs (notes) pulled incrementally on the same watermark as patients.
-      const commlogs = await syncOpenDentalCommlogs({ practiceId, since })
+      let commlogs: CommlogSyncSummary | undefined
+      let commlogsError: string | undefined
+      try {
+        commlogs = await syncOpenDentalCommlogs({ practiceId, since })
+      } catch (error) {
+        commlogsError = error instanceof Error ? error.message : 'commlog sync failed'
+      }
 
-      results.push({ practiceId, status: 'success', patients, appointments, commlogs })
+      const partialErrors = [patientsError, commlogsError].filter(Boolean)
+      results.push({
+        practiceId,
+        status: partialErrors.length ? 'error' : 'success',
+        patients,
+        appointments,
+        commlogs,
+        error: partialErrors.length ? partialErrors.join('; ') : undefined,
+      })
     } catch (error) {
       results.push({
         practiceId,

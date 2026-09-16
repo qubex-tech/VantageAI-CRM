@@ -241,13 +241,21 @@ export function AppointmentsView({
         const syncedCount = Number(result?.synced || 0)
         const createdCount = Number(result?.created || 0)
         const dayErrors = Number(result?.dayErrors || 0)
+        const prunedCount = Number(result?.pruned || 0)
+        const isOpenDental = result?.provider === 'opendental' || openDentalActions
         let message = `EHR sync complete. Synced ${syncedCount} appointment(s) (${createdCount} new).`
-        if (dayErrors > 0) {
-          message += ` ${dayErrors} day(s) failed — check EHR connection.`
+        if (prunedCount > 0) {
+          message += ` Cleared ${prunedCount} stale appointment(s).`
         }
-        if (syncedCount === 0) {
-          message =
-            'EHR sync finished but no appointments were returned. Verify ECW schedule and practitioner configuration.'
+        if (dayErrors > 0) {
+          message += isOpenDental
+            ? ` ${dayErrors} appointment(s) failed — check Open Dental connection.`
+            : ` ${dayErrors} day(s) failed — check EHR connection.`
+        }
+        if (syncedCount === 0 && prunedCount === 0) {
+          message = isOpenDental
+            ? 'EHR sync finished but no appointments were returned. Verify the Open Dental schedule for this date range.'
+            : 'EHR sync finished but no appointments were returned. Verify ECW schedule and practitioner configuration.'
         }
         const insurance = result?.insuranceEnrich
         if (insurance && insurance.eligiblePatientCount > 0) {
@@ -324,7 +332,11 @@ export function AppointmentsView({
               className="gap-2"
             >
               <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
-              {isSyncing ? 'Syncing schedule & insurance…' : 'Sync EHR'}
+              {isSyncing
+                ? openDentalActions
+                  ? 'Syncing Open Dental…'
+                  : 'Syncing schedule & insurance…'
+                : 'Sync EHR'}
             </Button>
             <Button
               size="sm"
