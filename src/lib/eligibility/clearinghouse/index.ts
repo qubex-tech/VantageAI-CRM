@@ -30,6 +30,7 @@ export async function getPracticeClearinghouseAdapter(
 export { getPracticeEligibilitySettings, upsertPracticeEligibilitySettings } from './settings'
 export { getPayerIdForVendor, upsertPayerIdMap } from './payer-ids'
 export {
+  knownStediPayerIdFromName,
   pickConfidentPayerMatch,
   resolvePayerIdFromName,
 } from './match-payer-from-name'

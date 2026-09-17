@@ -109,4 +109,32 @@ describe('resolvePayerIdFromName', () => {
     expect(match.status).toBe('matched')
     expect(calls).toBe(1)
   })
+
+  it('maps Open Dental DentaQuest of Illinois without searching', async () => {
+    let calls = 0
+    const match = await resolvePayerIdFromName({
+      payerName: 'DentaQuest of Illinois, LLC',
+      preferDental: true,
+      searchPayers: async () => {
+        calls += 1
+        return []
+      },
+    })
+    expect(match).toMatchObject({ status: 'matched', payerId: 'CX014' })
+    expect(calls).toBe(0)
+  })
+
+  it('maps Open Dental BLUE CROSS/BLUE SHIELD OF TX without searching', async () => {
+    let calls = 0
+    const match = await resolvePayerIdFromName({
+      payerName: 'BLUE CROSS/BLUE SHIELD OF TX',
+      preferDental: true,
+      searchPayers: async () => {
+        calls += 1
+        return [BCBSTX, BCBSIL]
+      },
+    })
+    expect(match).toMatchObject({ status: 'matched', payerId: 'G84980' })
+    expect(calls).toBe(0)
+  })
 })

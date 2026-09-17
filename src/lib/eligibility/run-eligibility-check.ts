@@ -95,7 +95,7 @@ export async function runEligibilityCheck(
   let payerId = getPayerIdForVendor(policy, adapter.vendorKey)
   let resolvedFromName: { payerId: string; name: string } | null = null
   const preferDental = settings.defaultServiceTypeCodes.includes('35')
-  const payerNameLooksDental = /\bdental\b|dentaguard/i.test(policy.payerNameRaw || '')
+  const payerNameLooksDental = /\bdental\b|dentaguard|dentaquest/i.test(policy.payerNameRaw || '')
   const shouldResolvePayer =
     adapter.vendorKey === 'stedi' &&
     adapter.capabilities.payerSearch &&
@@ -172,13 +172,34 @@ export async function runEligibilityCheck(
   }
 
   if (!readiness.ready) {
+    const errorMessage = `Missing required fields: ${readiness.missingFields.join(', ')}`
+    const check = await prisma.eligibilityCheck.create({
+      data: {
+        practiceId,
+        patientId,
+        policyId: policy.id,
+        source: 'clearinghouse_api',
+        vendorKey: adapter.vendorKey,
+        status: 'failed',
+        errorMessage,
+        completedAt: new Date(),
+        requestPayload: {
+          vendorKey: adapter.vendorKey,
+          appointmentType: input.appointmentType || null,
+          payerNameRaw: policy.payerNameRaw,
+          resolvedFromName,
+          missingFields: readiness.missingFields,
+          warnings: readiness.warnings,
+        },
+      },
+    })
     return {
-      eligibilityCheckId: '',
+      eligibilityCheckId: check.id,
       status: 'failed',
       vendorKey: adapter.vendorKey,
       vendorDisplayName: vendorLabel || undefined,
       readiness,
-      errorMessage: `Missing required fields: ${readiness.missingFields.join(', ')}`,
+      errorMessage,
     }
   }
 

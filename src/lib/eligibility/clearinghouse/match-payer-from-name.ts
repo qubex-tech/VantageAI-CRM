@@ -32,7 +32,25 @@ function labelsForHit(hit: PayerSearchResult): string[] {
 }
 
 function isDentalPayerLabel(value?: string | null): boolean {
-  return /\bdental\b|dentaguard|deltadental|delta dental/i.test(String(value || ''))
+  return /\bdental\b|dentaguard|dentaquest|deltadental|delta dental/i.test(String(value || ''))
+}
+
+/**
+ * Open Dental / eCW labels that Stedi search will not uniquely match.
+ * Values are Stedi primary IDs or listed aliases (G84980 is BCBS Texas).
+ */
+const KNOWN_STEDI_PAYER_BY_COMPACT: Record<string, { payerId: string; name: string }> = {
+  dentaquestofillinoisllc: { payerId: 'CX014', name: 'DentaQuest of Illinois' },
+  dentaquestofillinois: { payerId: 'CX014', name: 'DentaQuest of Illinois' },
+  bluecrossblueshieldoftx: { payerId: 'G84980', name: 'Blue Cross Blue Shield of Texas' },
+  bluecrossblueshieldoftexas: { payerId: 'G84980', name: 'Blue Cross Blue Shield of Texas' },
+}
+
+export function knownStediPayerIdFromName(
+  payerName: string
+): { payerId: string; name: string } | null {
+  const compact = compactPayerText(payerName)
+  return KNOWN_STEDI_PAYER_BY_COMPACT[compact] || null
 }
 
 function scoreHit(
@@ -128,6 +146,11 @@ export async function resolvePayerIdFromName(params: {
   searchPayers: (query: string) => Promise<PayerSearchResult[]>
   preferDental?: boolean
 }): Promise<PayerNameMatch> {
+  const known = knownStediPayerIdFromName(params.payerName)
+  if (known) {
+    return { status: 'matched', payerId: known.payerId, name: known.name, score: 50_000 }
+  }
+
   const options = { preferDental: Boolean(params.preferDental) }
   const queries = payerNameSearchQueries(params.payerName, options)
   if (queries.length === 0) return { status: 'none' }

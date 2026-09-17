@@ -162,26 +162,31 @@ const GEO_REGION_TOKENS = new Set([
 const PAYER_TRAILING_NOISE = /\bof\s+all\s+states\b/gi
 
 /**
- * Compact CRM payer codes → Availity typeahead labels.
- * Industry abbreviations only (not practice-specific nicknames).
+ * Compact CRM payer codes → Availity/Stedi search labels.
+ * Includes Open Dental spellings that do not match Stedi display names.
  */
+const BCBS_TEXAS_ALIASES = [
+  'BCBS Texas',
+  'Blue Cross Blue Shield of Texas',
+  'Blue Cross and Blue Shield of Texas',
+  'BCBS TX',
+]
+
 const CRM_PAYER_ALIAS_EXPANSIONS: Record<string, string[]> = {
-  bcbstx: [
-    'BCBS Texas',
-    'Blue Cross Blue Shield of Texas',
-    'Blue Cross and Blue Shield of Texas',
-    'BCBS TX',
+  bcbstx: BCBS_TEXAS_ALIASES,
+  bcbstexas: BCBS_TEXAS_ALIASES,
+  bcbstxcommercial: BCBS_TEXAS_ALIASES,
+  // Open Dental stores this exact label.
+  bluecrossblueshieldoftx: BCBS_TEXAS_ALIASES,
+  bluecrossblueshieldoftexas: BCBS_TEXAS_ALIASES,
+  dentaquestofillinoisllc: [
+    'DentaQuest',
+    'DentaQuest of Illinois',
+    'DentaQuest of Illinois LLC',
+    'CX014',
+    'CKIL1',
   ],
-  bcbstexas: [
-    'BCBS Texas',
-    'Blue Cross Blue Shield of Texas',
-    'Blue Cross and Blue Shield of Texas',
-  ],
-  bcbstxcommercial: [
-    'BCBS Texas',
-    'Blue Cross Blue Shield of Texas',
-    'Blue Cross and Blue Shield of Texas',
-  ],
+  dentaquestofillinois: ['DentaQuest', 'DentaQuest of Illinois', 'CX014', 'CKIL1'],
 }
 
 function uniqueStrings(values: string[]): string[] {
