@@ -6,6 +6,7 @@ import { getOpenDentalServices, getOpenDentalConnection } from './factory'
 import { recordSyncResult } from './connectionManager'
 import { logOpenDentalAudit } from './audit'
 import { ensureCrmPatientIdForPatNum } from './patientSync'
+import { extractOpenDentalConfirmed } from './confirmationStatus'
 
 /** Each character in an Open Dental Pattern represents a 5-minute slot. */
 const PATTERN_SLOT_MINUTES = 5
@@ -176,6 +177,7 @@ async function upsertAppointmentFromOpenDental(params: {
   const procedure = cleanString(od.ProcDescript)
   const odNote = cleanString(od.Note)
   const notes = [`Synced from Open Dental Appointment/${od.AptNum}`, odNote].filter(Boolean).join(' — ')
+  const { defNum: odConfirmedDefNum, label: odConfirmedLabel } = extractOpenDentalConfirmed(od)
 
   const existing = await prisma.appointment.findUnique({
     where: { calBookingId: externalKey },
@@ -202,6 +204,8 @@ async function upsertAppointmentFromOpenDental(params: {
     visitType: procedure || 'Open Dental Appointment',
     reason: procedure,
     notes,
+    odConfirmedDefNum,
+    odConfirmedLabel,
   }
 
   const saved = await prisma.appointment.upsert({

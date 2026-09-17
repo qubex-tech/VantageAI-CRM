@@ -11,6 +11,7 @@ import {
   setHealixPanelOpen,
 } from '@/components/healix/HealixButton'
 import Link from 'next/link'
+import { OdConfirmationBadge } from '@/components/appointments/OdConfirmationBadge'
 import { 
   Star, 
   Mail, 
@@ -160,6 +161,7 @@ interface PatientDetailViewProps {
       endTime: Date
       visitType: string
       status: string
+      odConfirmedLabel?: string | null
     }>
     timelineEntries: Array<{
       id: string
@@ -841,6 +843,11 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                               : 'No upcoming appointments'
                             }
                           </div>
+                          {nextAppointment?.odConfirmedLabel ? (
+                            <div className="mt-1.5">
+                              <OdConfirmationBadge label={nextAppointment.odConfirmedLabel} />
+                            </div>
+                          ) : null}
                         </div>
                         <Calendar className="h-5 w-5 text-gray-400" />
                       </div>
@@ -1188,7 +1195,7 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                                     <div className="text-sm text-gray-500 mt-1">
                                       {format(new Date(appointment.startTime), 'MMM d, yyyy h:mm a')} - {format(new Date(appointment.endTime), 'h:mm a')}
                                     </div>
-                                    <div className="flex items-center gap-2 mt-2">
+                                    <div className="flex items-center gap-2 mt-2 flex-wrap">
                                       <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium ${
                                         appointment.status === 'confirmed' || appointment.status === 'scheduled'
                                           ? 'bg-green-100 text-green-700'
@@ -1198,6 +1205,7 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                                       }`}>
                                         {appointment.status}
                                       </span>
+                                      <OdConfirmationBadge label={appointment.odConfirmedLabel} />
                                     </div>
                                   </div>
                                 </div>

@@ -94,6 +94,7 @@ interface Appointment {
   reason: string | null
   isCalBooking?: boolean
   providerName?: string | null
+  odConfirmedLabel?: string | null
 }
 
 export type AppointmentsCalendarLayout = 'week' | 'day'
@@ -894,9 +895,12 @@ export function AppointmentsCalendarView({
                               st.border,
                               st.text,
                             ].join(' ')}
-                            title={apt.visitType || apt.patient.name}
+                            title={[apt.patient.name, apt.odConfirmedLabel, apt.visitType]
+                              .filter(Boolean)
+                              .join(' · ')}
                           >
                             {apt.patient.name}
+                            {apt.odConfirmedLabel ? ` · ${apt.odConfirmedLabel}` : ''}
                           </div>
                         </Link>
                       )
@@ -1064,7 +1068,14 @@ export function AppointmentsCalendarView({
                                     ? ` – ${format(new Date(apt.endTime), 'h:mm a')}`
                                     : ''}
                                 </p>
-                                {apt.visitType && height > 36 && (
+                                {apt.odConfirmedLabel && height > 36 && (
+                                  <p
+                                    className={`text-[10px] mt-0.5 leading-tight truncate font-medium ${st.text}`}
+                                  >
+                                    {apt.odConfirmedLabel}
+                                  </p>
+                                )}
+                                {apt.visitType && height > (apt.odConfirmedLabel ? 52 : 36) && (
                                   <p
                                     className={`text-[10px] mt-0.5 leading-tight line-clamp-2 ${st.text} opacity-80`}
                                   >

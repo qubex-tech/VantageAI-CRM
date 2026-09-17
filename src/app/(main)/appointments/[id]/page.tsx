@@ -14,6 +14,7 @@ import {
 } from '@/lib/cal-booking-id'
 import { getOpenDentalConnection } from '@/lib/integrations/opendental/factory'
 import { AppointmentActionsBar } from '@/components/appointments/AppointmentActionsBar'
+import { OdConfirmationBadge } from '@/components/appointments/OdConfirmationBadge'
 
 export const dynamic = 'force-dynamic'
 
@@ -217,9 +218,12 @@ export default async function AppointmentDetailPage({
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-500">Status</p>
-                <span className="inline-block text-xs px-2 py-1 rounded-md bg-gray-100 text-gray-700 font-medium mt-1">
-                  {appointment.status}
-                </span>
+                <div className="flex flex-wrap items-center gap-2 mt-1">
+                  <span className="inline-block text-xs px-2 py-1 rounded-md bg-gray-100 text-gray-700 font-medium">
+                    {appointment.status}
+                  </span>
+                  <OdConfirmationBadge label={appointment.odConfirmedLabel} showCaption />
+                </div>
               </div>
               {appointment.calBookingId && (
                 <div>

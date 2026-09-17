@@ -31,6 +31,7 @@ interface Appointment {
   isCalBooking?: boolean
   providerReference?: string | null
   providerName?: string | null
+  odConfirmedLabel?: string | null
 }
 
 interface AppointmentsViewProps {

@@ -566,6 +566,10 @@ model Appointment {
   visitType    String // Maps to Cal event type name
   reason       String?
   notes        String?
+  /// Open Dental Appt Confirmed DefNum (definition.Category=2). Null for non-OD appointments.
+  odConfirmedDefNum Int?
+  /// Open Dental Appt Confirmed display label (e.g. eConfirmSent, Confirmed, Arrived).
+  odConfirmedLabel  String?
   calEventId   String? // Cal.com event type ID
   calBookingId String?  @unique // Cal.com booking ID
   createdAt    DateTime @default(now())

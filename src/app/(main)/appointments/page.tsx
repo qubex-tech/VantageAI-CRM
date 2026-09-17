@@ -330,6 +330,7 @@ export default async function AppointmentsPage({
     status: apt.status || 'scheduled',
     reason: apt.reason || null,
     isCalBooking: apt.isCalBooking || false,
+    odConfirmedLabel: apt.odConfirmedLabel || null,
     providerReference: apt.providerReference || apt.providerId || null,
     providerName: (() => {
       const providerReference = apt.providerReference || apt.providerId || null

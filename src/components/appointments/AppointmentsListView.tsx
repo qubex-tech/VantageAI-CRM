@@ -5,6 +5,7 @@ import { format } from 'date-fns'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Clock, User, Phone, ChevronRight } from 'lucide-react'
 import { AppointmentActionsBar } from './AppointmentActionsBar'
+import { OdConfirmationBadge } from './OdConfirmationBadge'
 
 interface Appointment {
   id: string
@@ -21,6 +22,7 @@ interface Appointment {
   reason: string | null
   isCalBooking?: boolean
   providerName?: string | null
+  odConfirmedLabel?: string | null
 }
 
 interface AppointmentsListViewProps {
@@ -95,6 +97,7 @@ export function AppointmentsListView({
                         {apt.patient.name}
                       </CardTitle>
                       <div className="flex items-center gap-2 shrink-0">
+                        <OdConfirmationBadge label={apt.odConfirmedLabel} />
                         <span
                           className={`text-xs px-2 py-1 rounded-lg border font-medium ${getStatusColor(apt.status)}`}
                         >
