@@ -6,6 +6,7 @@ import { delaySecondsFromArgs, splitDelayIntoSleepDurations } from '@/automation
 import { getEvaluateAfterActionCount } from '@/automations/flow-chain'
 import { logAutomationActivity } from '@/lib/patient-activity'
 import { notifyPracticeAutomationRun } from '@/automations/automation-push-notification'
+import { ruleMatchesUpcomingWindow } from '@/automations/appointment-upcoming'
 
 const DEFAULT_OUTREACH_COOLDOWN_HOURS = 24
 const DEDUPABLE_NOTIFICATION_ACTIONS = new Set([
@@ -199,9 +200,12 @@ function buildAutomationContext(
   const hoursUntilStart = typeof minutesUntilStart === 'number'
     ? Math.round(minutesUntilStart / 60)
     : undefined
-  const daysUntilStart = typeof hoursUntilStart === 'number'
-    ? Math.round(hoursUntilStart / 24)
-    : undefined
+  const daysUntilStart =
+    typeof appointment.daysUntilStart === 'number' && Number.isFinite(appointment.daysUntilStart)
+      ? appointment.daysUntilStart
+      : typeof hoursUntilStart === 'number'
+        ? Math.round(hoursUntilStart / 24)
+        : undefined
   const nameParts = typeof patient.name === 'string' ? patient.name.split(' ') : []
   const inferredFirstName = nameParts[0] || ''
   const inferredLastName = nameParts.slice(1).join(' ') || ''
@@ -249,6 +253,15 @@ async function ruleStillMatchesAfterDelay(params: {
   patientId: string | null
 }): Promise<boolean> {
   const conditions = params.conditionsJson
+  const daysUntilStart = params.eventData?.appointment?.daysUntilStart
+  if (
+    !ruleMatchesUpcomingWindow({
+      conditionsJson: conditions,
+      daysUntilStart,
+    })
+  ) {
+    return false
+  }
   if (!conditions || typeof conditions !== 'object') return true
   const group = conditions as { conditions?: unknown[] }
   if (!Array.isArray(group.conditions) || group.conditions.length === 0) return true
@@ -422,6 +435,16 @@ export const runAutomationsForEvent = inngest.createFunction(
 
         for (const rule of matchingRules) {
           try {
+            if (
+              !ruleMatchesUpcomingWindow({
+                triggerEvent: rule.triggerEvent,
+                conditionsJson: rule.conditionsJson,
+                actionsJson: rule.actionsJson,
+                daysUntilStart: payload.data?.appointment?.daysUntilStart,
+              })
+            ) {
+              continue
+            }
             if (getEvaluateAfterActionCount(rule.conditionsJson) > 0) {
               // Delay (or other prefix actions) run first; conditions are checked after that wait.
               results.push({ rule, hasFutureScheduledAppointment: false })
@@ -449,10 +472,17 @@ export const runAutomationsForEvent = inngest.createFunction(
               patientContext.listIds,
               { hasFutureScheduledAppointment, ehrActive: patientContext.ehrActive }
             )
-            const matches = evaluateConditions(
-              rule.conditionsJson as any,
-              automationContext
-            )
+            const matches =
+              ruleMatchesUpcomingWindow({
+                triggerEvent: rule.triggerEvent,
+                conditionsJson: rule.conditionsJson,
+                actionsJson: rule.actionsJson,
+                daysUntilStart: automationContext.appointment?.daysUntilStart,
+              }) &&
+              evaluateConditions(
+                rule.conditionsJson as any,
+                automationContext
+              )
             if (matches) {
               results.push({ rule, hasFutureScheduledAppointment })
             }
@@ -532,7 +562,7 @@ export const runAutomationsForEvent = inngest.createFunction(
             let processedArgs = substituteVariables(rawArgs, automationContext)
 
             // Auto-fill patientId from event data if missing and action requires it
-            const actionsRequiringPatientId = ['create_note', 'send_email', 'send_sms', 'send_reminder', 'update_patient_fields', 'tag_patient', 'create_insurance_policy', 'trigger_curogram_template']
+            const actionsRequiringPatientId = ['create_note', 'send_email', 'send_sms', 'send_reminder', 'update_patient_fields', 'tag_patient', 'create_insurance_policy', 'run_eligibility', 'trigger_curogram_template']
             if (actionsRequiringPatientId.includes(action.type) && !processedArgs.patientId) {
               // Try to extract patientId from common event data paths
               const resolvedPatientId =

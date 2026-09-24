@@ -62,6 +62,7 @@ const ACTION_OPTIONS = [
   
   // Insurance
   { value: 'create_insurance_policy', label: 'Create Insurance Policy', icon: Shield, category: 'Insurance' },
+  { value: 'run_eligibility', label: 'Run Eligibility Check', icon: Shield, category: 'Insurance' },
   
   // Control Flow
   { value: 'delay_seconds', label: 'Delay', icon: Clock, category: 'Control Flow' },
@@ -110,7 +111,10 @@ export function NodeSidebar({ onAddNode }: NodeSidebarProps) {
                     onClick={() =>
                       onAddNode('trigger', {
                         label: trigger.label,
-                        config: { eventName: trigger.value },
+                        config:
+                          trigger.value === 'crm/appointment.upcoming'
+                            ? { eventName: trigger.value, daysBefore: 2 }
+                            : { eventName: trigger.value },
                       })
                     }
                   >
@@ -164,7 +168,13 @@ export function NodeSidebar({ onAddNode }: NodeSidebarProps) {
                     onClick={() =>
                       onAddNode('action', {
                         label: action.label,
-                        config: { actionType: action.value, args: {} },
+                        config: {
+                          actionType: action.value,
+                          args:
+                            action.value === 'run_eligibility'
+                              ? { patientId: '{appointment.patientId}' }
+                              : {},
+                        },
                       })
                     }
                   >

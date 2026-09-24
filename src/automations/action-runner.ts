@@ -139,6 +139,21 @@ const createInsurancePolicySchema = z.object({
   relationshipToPatient: z.string().optional(),
 })
 
+const optionalInt = (min: number, max: number) =>
+  z.preprocess((value) => {
+    if (value === '' || value === undefined || value === null) return undefined
+    const n = typeof value === 'number' ? value : Number(value)
+    return Number.isFinite(n) ? n : value
+  }, z.number().int().min(min).max(max).optional())
+
+const runEligibilitySchema = z.object({
+  patientId: z.string().optional(),
+  policyId: z.string().optional(),
+  appointmentType: z.string().optional(),
+  daysBefore: optionalInt(0, 30),
+  skipIfCheckedWithinHours: optionalInt(1, 24 * 30),
+})
+
 const sendReminderSchema = z.object({
   patientId: z.string(),
   reminderType: z.enum(['appointment', 'payment', 'follow_up']).default('appointment'),
@@ -1354,6 +1369,204 @@ async function createInsurancePolicy(
   }
 }
 
+function unresolvedTemplate(value?: string): boolean {
+  return typeof value === 'string' && /\{[^}]+\}/.test(value)
+}
+
+function resolveEligibilityPatientId(
+  args: z.infer<typeof runEligibilitySchema>,
+  eventData: Record<string, any>
+): string | null {
+  if (args.patientId && !unresolvedTemplate(args.patientId)) {
+    return args.patientId.trim()
+  }
+  const candidates = [
+    eventData.patient?.id,
+    eventData.appointment?.patientId,
+    eventData.patientId,
+  ]
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim()
+  }
+  return null
+}
+
+/**
+ * Run insurance eligibility for the patient on the triggering appointment.
+ */
+async function runEligibility(
+  practiceId: string,
+  args: z.infer<typeof runEligibilitySchema>,
+  eventData: Record<string, any>
+): Promise<ActionResult> {
+  const patientId = resolveEligibilityPatientId(args, eventData)
+  if (!patientId) {
+    return {
+      status: 'failed',
+      error: 'Patient ID is required to run eligibility',
+    }
+  }
+
+  const daysUntilStart = eventData.appointment?.daysUntilStart
+  if (typeof args.daysBefore === 'number' && typeof daysUntilStart === 'number') {
+    if (daysUntilStart > args.daysBefore) {
+      return {
+        status: 'skipped',
+        result: {
+          action: 'run_eligibility',
+          reason: `Appointment is ${daysUntilStart} days away; rule waits until ${args.daysBefore} days before`,
+        },
+      }
+    }
+  }
+
+  const patient = await prisma.patient.findFirst({
+    where: {
+      id: patientId,
+      practiceId,
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+      selfPay: true,
+    },
+  })
+
+  if (!patient) {
+    return {
+      status: 'failed',
+      error: `Patient ${patientId} not found or not accessible`,
+    }
+  }
+
+  if (patient.selfPay) {
+    return {
+      status: 'skipped',
+      result: {
+        action: 'run_eligibility',
+        reason: 'Patient is marked self-pay',
+      },
+    }
+  }
+
+  const policyId =
+    args.policyId && !unresolvedTemplate(args.policyId) ? args.policyId.trim() : undefined
+
+  const policy = policyId
+    ? await prisma.insurancePolicy.findFirst({
+        where: { id: policyId, practiceId, patientId },
+      })
+    : await prisma.insurancePolicy.findFirst({
+        where: { practiceId, patientId },
+        orderBy: [{ isPrimary: 'desc' }, { updatedAt: 'desc' }],
+      })
+
+  if (!policy) {
+    return {
+      status: 'skipped',
+      result: {
+        action: 'run_eligibility',
+        reason: 'No insurance policy on file',
+      },
+    }
+  }
+
+  const skipHours = args.skipIfCheckedWithinHours ?? 24
+  const since = new Date(Date.now() - skipHours * 60 * 60 * 1000)
+  const lastCheckedAt = policy.lastEligibilityCheckedAt
+  if (lastCheckedAt && lastCheckedAt.getTime() >= since.getTime()) {
+    return {
+      status: 'skipped',
+      result: {
+        action: 'run_eligibility',
+        reason: `Eligibility already checked within the last ${skipHours} hours`,
+        policyId: policy.id,
+        lastEligibilityCheckedAt: lastCheckedAt.toISOString(),
+      },
+    }
+  }
+
+  const recentCheck = await prisma.eligibilityCheck.findFirst({
+    where: {
+      practiceId,
+      patientId,
+      policyId: policy.id,
+      createdAt: { gte: since },
+      status: { in: ['pending', 'in_progress', 'complete'] },
+    },
+    select: { id: true, status: true, createdAt: true },
+  })
+
+  if (recentCheck) {
+    return {
+      status: 'skipped',
+      result: {
+        action: 'run_eligibility',
+        reason: `Eligibility already ${recentCheck.status} within the last ${skipHours} hours`,
+        eligibilityCheckId: recentCheck.id,
+        policyId: policy.id,
+      },
+    }
+  }
+
+  const userId = await getOrCreateAutomationUserId(practiceId)
+  const appointmentType =
+    (args.appointmentType && !unresolvedTemplate(args.appointmentType)
+      ? args.appointmentType.trim()
+      : undefined) ||
+    (typeof eventData.appointment?.visitType === 'string'
+      ? eventData.appointment.visitType
+      : undefined)
+
+  const { runInsuranceVerification } = await import('@/lib/eligibility/run-insurance-verification')
+  const verification = await runInsuranceVerification({
+    practiceId,
+    userId,
+    patientId,
+    policyId: policy.id,
+    appointmentType,
+    source: 'api',
+  })
+
+  if (verification.path === 'skipped') {
+    return {
+      status: 'skipped',
+      result: {
+        action: 'run_eligibility',
+        path: verification.path,
+        message: verification.message,
+        policyId: policy.id,
+      },
+    }
+  }
+
+  if (verification.eligibility?.status === 'failed') {
+    return {
+      status: 'failed',
+      error: verification.eligibility.errorMessage || verification.message,
+      result: {
+        action: 'run_eligibility',
+        path: verification.path,
+        eligibilityCheckId: verification.eligibility.eligibilityCheckId,
+        policyId: policy.id,
+      },
+    }
+  }
+
+  return {
+    status: 'succeeded',
+    result: {
+      action: 'run_eligibility',
+      path: verification.path,
+      message: verification.message,
+      eligibilityCheckId: verification.eligibility?.eligibilityCheckId,
+      status: verification.eligibility?.status,
+      policyId: policy.id,
+      patientId,
+    },
+  }
+}
+
 /**
  * Send reminder (actually sends via email or SMS based on patient preference)
  */
@@ -1746,6 +1959,12 @@ export async function runAction(params: RunActionParams): Promise<ActionResult> 
       case 'create_insurance_policy': {
         const validated = createInsurancePolicySchema.parse(actionArgs)
         result = await createInsurancePolicy(practiceId, validated, eventData)
+        break
+      }
+
+      case 'run_eligibility': {
+        const validated = runEligibilitySchema.parse(actionArgs)
+        result = await runEligibility(practiceId, validated, eventData)
         break
       }
 

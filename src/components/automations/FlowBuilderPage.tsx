@@ -22,6 +22,11 @@ import {
   getEvaluateAfterActionCount,
   orderedFlowNodes,
 } from '@/automations/flow-chain'
+import {
+  clampUpcomingDays,
+  DEFAULT_UPCOMING_DAYS,
+  extractUpcomingDaysBeforeFromConditions,
+} from '@/automations/appointment-upcoming'
 
 interface AutomationRule {
   id: string
@@ -82,6 +87,13 @@ function ruleToFlow(rule: AutomationRule): { nodes: Node<FlowNodeData>[]; edges:
       config: {
         eventName: rule.triggerEvent,
         ...(listIdCondition?.value ? { listId: listIdCondition.value } : {}),
+        ...(rule.triggerEvent === 'crm/appointment.upcoming'
+          ? {
+              daysBefore:
+                extractUpcomingDaysBeforeFromConditions(rule.conditionsJson) ??
+                DEFAULT_UPCOMING_DAYS,
+            }
+          : {}),
       },
     },
   })
@@ -177,9 +189,28 @@ function flowToRule(
     }
   }
 
+  const upcomingDaysBefore =
+    triggerEvent === 'crm/appointment.upcoming'
+      ? clampUpcomingDays(triggerNode?.data.config?.daysBefore) ?? DEFAULT_UPCOMING_DAYS
+      : null
+
+  if (upcomingDaysBefore != null) {
+    conditionsJson = {
+      ...conditionsJson,
+      upcomingDaysBefore,
+    }
+  }
+
   const actionsJson = actionNodes.map((node) => {
     const nodeArgs = node.data.config?.args || {}
     const serializedArgs = JSON.parse(JSON.stringify(nodeArgs))
+    if (
+      upcomingDaysBefore != null &&
+      node.data.config?.actionType === 'run_eligibility' &&
+      serializedArgs.daysBefore == null
+    ) {
+      serializedArgs.daysBefore = upcomingDaysBefore
+    }
     return {
       type: node.data.config?.actionType || 'create_note',
       args: serializedArgs,
@@ -220,6 +251,11 @@ export function FlowBuilderPage({ practiceId, userId, initialRules = [], initial
       isMissingValue(triggerNode.data.config?.listId)
     ) {
       errors.push('Select a patient list for the list trigger.')
+    } else if (triggerNode.data.config?.eventName === 'crm/appointment.upcoming') {
+      const daysBefore = clampUpcomingDays(triggerNode.data.config?.daysBefore)
+      if (daysBefore == null) {
+        errors.push('Set days before appointment to a whole number between 0 and 30.')
+      }
     }
 
     const actionNodes = workflow.nodes.filter((n) => n.type === 'action')
@@ -337,6 +373,16 @@ export function FlowBuilderPage({ practiceId, userId, initialRules = [], initial
         case 'create_insurance_policy':
           if (isMissingValue(args.payerNameRaw) || isMissingValue(args.memberId)) {
             errors.push(`Add payer name and member ID for ${actionLabel}.`)
+          }
+          break
+        case 'run_eligibility':
+          if (
+            args.skipIfCheckedWithinHours !== undefined &&
+            args.skipIfCheckedWithinHours !== '' &&
+            (!Number.isFinite(Number(args.skipIfCheckedWithinHours)) ||
+              Number(args.skipIfCheckedWithinHours) <= 0)
+          ) {
+            errors.push(`Set a valid skip window in hours (> 0) for ${actionLabel}.`)
           }
           break
         case 'trigger_curogram_template':

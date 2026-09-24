@@ -480,6 +480,10 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                     value === 'crm/list.run' || value === 'crm/list.member_added'
                       ? config.listId || ''
                       : undefined,
+                  daysBefore:
+                    value === 'crm/appointment.upcoming'
+                      ? config.daysBefore ?? 2
+                      : undefined,
                 })
               }
             >
@@ -549,6 +553,28 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                     Run this automation from the list detail page using &quot;Run automations&quot;.
                   </p>
                 )}
+              </div>
+            )}
+
+            {config.eventName === 'crm/appointment.upcoming' && (
+              <div className="space-y-2 pt-2">
+                <Label>Days before appointment</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={30}
+                  value={config.daysBefore ?? 2}
+                  onChange={(e) => {
+                    const parsed = Number(e.target.value)
+                    handleUpdate({
+                      daysBefore: Number.isFinite(parsed) ? parsed : 2,
+                    })
+                  }}
+                />
+                <p className="text-xs text-gray-500">
+                  Run this workflow when the visit is this many days away. Appointments
+                  booked inside that window are picked up on the next scheduled run.
+                </p>
               </div>
             )}
           </div>
@@ -1003,6 +1029,7 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                   <SelectItem value="tag_patient">Tag Patient</SelectItem>
                   <SelectItem value="update_appointment_status">Update Appointment Status</SelectItem>
                   <SelectItem value="create_insurance_policy">Create Insurance Policy</SelectItem>
+                  <SelectItem value="run_eligibility">Run Eligibility Check</SelectItem>
                   <SelectItem value="delay_seconds">Delay</SelectItem>
                   <SelectItem value="wait_until_local_time">Wait Until Local Time</SelectItem>
                   <SelectItem value="wait_until_send_window">Wait Until Send Hours & Days</SelectItem>
@@ -1368,6 +1395,50 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            )}
+
+            {config.actionType === 'run_eligibility' && (
+              <div className="space-y-2">
+                <Label>Patient ID</Label>
+                <Input
+                  placeholder="{appointment.patientId} or {patient.id}"
+                  value={config.args?.patientId || ''}
+                  onChange={(e) => {
+                    const currentArgs = config.args || {}
+                    handleUpdate({ args: { ...currentArgs, patientId: e.target.value } })
+                  }}
+                />
+                <p className="text-xs text-gray-500">
+                  Uses the appointment patient when left as a placeholder. Pair this with
+                  the Appointment Upcoming trigger and set days before on the trigger.
+                </p>
+                <Label>Skip if checked within (hours)</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={720}
+                  placeholder="24"
+                  value={config.args?.skipIfCheckedWithinHours ?? ''}
+                  onChange={(e) => {
+                    const currentArgs = config.args || {}
+                    const parsed = Number(e.target.value)
+                    handleUpdate({
+                      args: {
+                        ...currentArgs,
+                        skipIfCheckedWithinHours: e.target.value === ''
+                          ? undefined
+                          : Number.isFinite(parsed)
+                            ? parsed
+                            : currentArgs.skipIfCheckedWithinHours,
+                      },
+                    })
+                  }}
+                />
+                <p className="text-xs text-gray-500">
+                  Default 24 hours. Prevents a second eligibility run if a recent check
+                  already exists.
+                </p>
               </div>
             )}
 

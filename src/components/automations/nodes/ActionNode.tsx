@@ -2,7 +2,7 @@
 
 import { memo } from 'react'
 import { Handle, Position, NodeProps } from 'reactflow'
-import { PlayCircle, Mail, MessageSquare, FileText, User, Clock } from 'lucide-react'
+import { PlayCircle, Mail, MessageSquare, FileText, User, Clock, Shield } from 'lucide-react'
 import { FlowNodeData } from '../FlowBuilder'
 
 const actionIcons: Record<string, any> = {
@@ -12,6 +12,8 @@ const actionIcons: Record<string, any> = {
   create_task: PlayCircle,
   update_patient_fields: User,
   delay_seconds: Clock,
+  run_eligibility: Shield,
+  create_insurance_policy: Shield,
 }
 
 export const ActionNode = memo(({ data, selected }: NodeProps<FlowNodeData>) => {
