@@ -132,7 +132,20 @@ function LoginForm() {
 
       if (signInError) {
         console.error('Supabase password sign-in error:', signInError.message)
-        setError('Invalid email or password. Please try again.')
+        // Provide more specific error messages based on the Supabase error
+        if (signInError.message?.toLowerCase().includes('invalid login credentials')) {
+          setError('Invalid email or password. Please try again.')
+        } else if (signInError.message?.toLowerCase().includes('email not confirmed')) {
+          setError('Please confirm your email address before signing in.')
+        } else if (signInError.message?.toLowerCase().includes('user not found')) {
+          setError('No account found with this email. Please check your email or sign up.')
+        } else if (signInError.message?.toLowerCase().includes('invalid password') || 
+                   signInError.message?.toLowerCase().includes('password')) {
+          // This can happen when user exists but has no password set (OTP-only account)
+          setError('Password login is not enabled for this account. Please use "Email Link" or click "Forgot password?" to set a password.')
+        } else {
+          setError(signInError.message || 'Invalid email or password. Please try again.')
+        }
         return
       }
 
@@ -237,7 +250,29 @@ function LoginForm() {
               <div className="text-sm text-green-600 bg-green-50 p-3 rounded">{message}</div>
             )}
             {error && (
-              <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">{error}</div>
+              <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">
+                <p>{error}</p>
+                {authMethod === 'password' && error.includes('Invalid email or password') && (
+                  <p className="mt-2 text-gray-600">
+                    If you haven&apos;t set a password yet, try{' '}
+                    <button
+                      type="button"
+                      className="text-blue-600 hover:underline font-medium"
+                      onClick={() => {
+                        setAuthMethod('otp')
+                        setError('')
+                        setPassword('')
+                      }}
+                    >
+                      Email Link
+                    </button>
+                    {' '}or{' '}
+                    <Link href="/forgot-password" className="text-blue-600 hover:underline font-medium">
+                      Forgot password?
+                    </Link>
+                  </p>
+                )}
+              </div>
             )}
             {authMethod === 'otp' && emailSent ? (
               <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded">
