@@ -5,7 +5,7 @@
  */
 
 export interface SendEmailParams {
-  to: string
+  to: string | string[]
   toName?: string
   subject: string
   htmlContent?: string
@@ -93,9 +93,12 @@ export class ResendApiClient {
 
       const from = fromName ? `${fromName} <${fromEmail}>` : fromEmail
       const textBody = params.textContent || (params.htmlContent ? params.htmlContent.replace(/<[^>]*>/g, '') : undefined)
+      const recipients = (Array.isArray(params.to) ? params.to : [params.to])
+        .map((email) => email.trim())
+        .filter(Boolean)
       const payload: Record<string, unknown> = {
         from,
-        to: [params.to],
+        to: recipients,
         subject: params.subject,
         html: params.htmlContent || undefined,
         text: textBody,

@@ -58,6 +58,20 @@ const leadSchema = z.object({
   company: z.string().max(0).optional().or(z.literal('')),
 })
 
+const DEFAULT_LEAD_NOTIFY_TO = [
+  'support@getvantage.tech',
+  'saqib@getvantage.tech',
+  'rabia@getvantage.tech',
+]
+
+function leadNotifyRecipients(): string[] {
+  const configured = (process.env.LEADS_NOTIFY_TO || '')
+    .split(',')
+    .map((email) => email.trim())
+    .filter(Boolean)
+  return configured.length > 0 ? configured : DEFAULT_LEAD_NOTIFY_TO
+}
+
 /**
  * Best-effort new-lead notification via Resend. No-op unless RESEND_API_KEY is
  * configured. Never throws to the caller (guarded where invoked).
@@ -65,7 +79,7 @@ const leadSchema = z.object({
 async function notifyNewLead(d: z.infer<typeof leadSchema>): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) return
-  const to = process.env.LEADS_NOTIFY_TO || 'support@getvantage.tech'
+  const to = leadNotifyRecipients()
   const fromEmail = process.env.LEADS_NOTIFY_FROM || 'onboarding@resend.dev'
   const client = new ResendApiClient(apiKey, fromEmail, 'VantageAI Leads')
   const row = (k: string, v?: string) =>
