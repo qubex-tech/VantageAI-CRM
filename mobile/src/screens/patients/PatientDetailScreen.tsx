@@ -179,6 +179,20 @@ export function PatientDetailScreen() {
             double-click & hold on the ring.
           </Text>
         )}
+        <Pressable
+          style={styles.glassesBtn}
+          onPress={() =>
+            navigation.navigate('GlassesSession', {
+              patientId,
+              patientName: patient.name,
+            })
+          }
+        >
+          <Text style={styles.glassesBtnText}>Glance on glasses</Text>
+        </Pressable>
+        <Text style={styles.hint}>
+          Three cards for Meta Ray-Ban Display. A real chart is sent only after Meta’s healthcare addendum is signed.
+        </Text>
       </View>
 
       <Section title="Contact">
@@ -303,6 +317,13 @@ const styles = StyleSheet.create({
     borderColor: colors.accentSurface,
   },
   ringBtnText: { color: colors.accent, fontSize: fontSize.base, fontWeight: fontWeight.semibold },
+  glassesBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.full,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+  },
+  glassesBtnText: { color: colors.white, fontSize: fontSize.base, fontWeight: fontWeight.semibold },
   btnDisabled: { opacity: 0.5 },
   secondaryBtn: {
     marginTop: spacing.md,

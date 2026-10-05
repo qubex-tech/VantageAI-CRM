@@ -30,6 +30,8 @@ export const ENDPOINTS = {
   // Patients
   mobilePatients: '/api/mobile/patients',
   mobilePatientById: (id: string) => `/api/mobile/patients/${id}`,
+  mobilePatientGlasses: (id: string) => `/api/mobile/patients/${id}/glasses`,
+  mobilePatientGlassesAsk: (id: string) => `/api/mobile/patients/${id}/glasses/ask`,
 
   // Features / Aria
   mobileFeatures: '/api/mobile/features',

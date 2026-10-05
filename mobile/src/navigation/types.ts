@@ -47,6 +47,11 @@ export type PatientsStackParamList = {
     patientId: string
     patientName?: string
   }
+  GlassesSession: {
+    patientId: string
+    patientName?: string
+    demo?: boolean
+  }
 }
 
 export type RootTabParamList = {

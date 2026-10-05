@@ -64,9 +64,17 @@
           "microphonePermission": "Aria needs microphone access to record visit audio for draft clinical notes."
         }
       ],
-      "expo-updates"
+      "expo-updates",
+      "./modules/meta-glasses/app.plugin.js"
     ],
     "extra": {
+      "metaGlasses": {
+        "linkDatSdk": false,
+        "metaAppId": "",
+        "clientToken": "",
+        "teamId": "",
+        "urlScheme": "vantagecrm"
+      },
       "eas": {
         "projectId": "7fc52a22-fa78-4cd4-83c7-5a342ab8377e"
       }

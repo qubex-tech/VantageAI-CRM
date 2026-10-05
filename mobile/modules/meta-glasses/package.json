@@ -1,0 +1,14 @@
+{
+  "name": "meta-glasses",
+  "version": "0.1.0",
+  "description": "Phone-owned Meta Ray-Ban Display session. Sends a full frame when the Wearables DAT SDK is linked.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "sideEffects": false,
+  "peerDependencies": {
+    "expo": "*",
+    "react": "*",
+    "react-native": "*"
+  },
+  "license": "UNLICENSED"
+}

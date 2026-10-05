@@ -2,8 +2,17 @@ import { ENDPOINTS } from '@/constants/api'
 import { apiGet, apiPost, getApiClient } from '@/services/apiClient'
 import type { AriaScheduleAppointment, AriaSession, AriaSoapNote } from '@/types'
 
-export async function fetchMobileFeatures(): Promise<{ ariaScribeEnabled: boolean }> {
-  return apiGet<{ ariaScribeEnabled: boolean }>(ENDPOINTS.mobileFeatures)
+export type MobileFeatures = {
+  ariaScribeEnabled: boolean
+  glasses?: {
+    phiAllowed: boolean
+    demoAvailable: boolean
+    reason: string
+  }
+}
+
+export async function fetchMobileFeatures(): Promise<MobileFeatures> {
+  return apiGet<MobileFeatures>(ENDPOINTS.mobileFeatures)
 }
 
 export async function fetchAriaSchedule(date?: string): Promise<{

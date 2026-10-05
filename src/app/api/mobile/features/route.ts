@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/middleware'
 import { isAriaScribeEnabled } from '@/lib/aria/enabled'
+import { glassesFeatureStatus } from '@/lib/glasses/healthcare-gate'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +16,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       ariaScribeEnabled,
+      glasses: glassesFeatureStatus(),
       agents: {
         aria: {
           enabled: ariaScribeEnabled,
