@@ -1393,6 +1393,7 @@ function resolveEligibilityPatientId(
 
 /**
  * Run insurance eligibility for the patient on the triggering appointment.
+ * Pulls the latest coverage from the linked EHR before reading CRM policies.
  */
 async function runEligibility(
   practiceId: string,
@@ -1429,6 +1430,7 @@ async function runEligibility(
     select: {
       id: true,
       selfPay: true,
+      externalEhrId: true,
     },
   })
 
@@ -1439,12 +1441,61 @@ async function runEligibility(
     }
   }
 
-  if (patient.selfPay) {
+  let actorUserId: string | undefined
+  try {
+    actorUserId = await getOrCreateAutomationUserId(practiceId)
+  } catch (error) {
+    console.warn('[AUTOMATION] Could not resolve automation user before EHR insurance sync', {
+      practiceId,
+      patientId,
+      error: error instanceof Error ? error.message : 'unknown',
+    })
+  }
+
+  const { syncLatestInsuranceFromEhr } = await import('@/lib/ehr/syncLatestInsuranceFromEhr')
+  const ehrSync = await syncLatestInsuranceFromEhr({
+    practiceId,
+    patientId,
+    externalEhrId: patient.externalEhrId,
+    actorUserId,
+  })
+
+  if (ehrSync.status === 'error') {
+    console.warn('[AUTOMATION] EHR insurance sync failed before eligibility', {
+      practiceId,
+      patientId,
+      source: ehrSync.source,
+      message: ehrSync.message,
+    })
+  }
+
+  let selfPay = patient.selfPay
+  if (ehrSync.status === 'success') {
+    const refreshed = await prisma.patient.findFirst({
+      where: { id: patientId, practiceId, deletedAt: null },
+      select: { selfPay: true },
+    })
+    if (refreshed) selfPay = refreshed.selfPay
+  }
+
+  if (ehrSync.status === 'success' && (ehrSync.syncedCount ?? 0) === 0) {
+    return {
+      status: 'skipped',
+      result: {
+        action: 'run_eligibility',
+        reason: 'No insurance coverage in the EHR',
+        ehrSync,
+      },
+    }
+  }
+
+  if (selfPay) {
     return {
       status: 'skipped',
       result: {
         action: 'run_eligibility',
         reason: 'Patient is marked self-pay',
+        ehrSync,
       },
     }
   }
@@ -1467,6 +1518,7 @@ async function runEligibility(
       result: {
         action: 'run_eligibility',
         reason: 'No insurance policy on file',
+        ehrSync,
       },
     }
   }
@@ -1482,6 +1534,7 @@ async function runEligibility(
         reason: `Eligibility already checked within the last ${skipHours} hours`,
         policyId: policy.id,
         lastEligibilityCheckedAt: lastCheckedAt.toISOString(),
+        ehrSync,
       },
     }
   }
@@ -1505,11 +1558,12 @@ async function runEligibility(
         reason: `Eligibility already ${recentCheck.status} within the last ${skipHours} hours`,
         eligibilityCheckId: recentCheck.id,
         policyId: policy.id,
+        ehrSync,
       },
     }
   }
 
-  const userId = await getOrCreateAutomationUserId(practiceId)
+  const userId = actorUserId || (await getOrCreateAutomationUserId(practiceId))
   const appointmentType =
     (args.appointmentType && !unresolvedTemplate(args.appointmentType)
       ? args.appointmentType.trim()
@@ -1536,6 +1590,7 @@ async function runEligibility(
         path: verification.path,
         message: verification.message,
         policyId: policy.id,
+        ehrSync,
       },
     }
   }
@@ -1549,6 +1604,7 @@ async function runEligibility(
         path: verification.path,
         eligibilityCheckId: verification.eligibility.eligibilityCheckId,
         policyId: policy.id,
+        ehrSync,
       },
     }
   }
@@ -1563,6 +1619,7 @@ async function runEligibility(
       status: verification.eligibility?.status,
       policyId: policy.id,
       patientId,
+      ehrSync,
     },
   }
 }
