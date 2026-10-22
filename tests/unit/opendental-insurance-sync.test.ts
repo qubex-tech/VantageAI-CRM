@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const { createdPolicies } = vi.hoisted(() => ({
+  createdPolicies: [] as Record<string, unknown>[],
+}))
 import {
   mapOpenDentalFamilyInsuranceRow,
   mapOpenDentalPlanType,
@@ -29,10 +33,10 @@ vi.mock('@/lib/db', () => ({
     $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn({
       insurancePolicy: {
         findMany: vi.fn().mockResolvedValue([]),
-        create: vi.fn().mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
-          id: 'policy-1',
-          ...data,
-        })),
+        create: vi.fn().mockImplementation(async ({ data }: { data: Record<string, unknown> }) => {
+          createdPolicies.push(data)
+          return { id: 'policy-1', ...data }
+        }),
         update: vi.fn(),
         updateMany: vi.fn(),
       },
@@ -124,6 +128,7 @@ describe('Open Dental insurance mapping', () => {
 describe('syncOpenDentalInsuranceForPatient', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    createdPolicies.length = 0
   })
 
   it('upserts InsurancePolicy rows from FamilyModules insurance', async () => {
@@ -181,6 +186,62 @@ describe('syncOpenDentalInsuranceForPatient', () => {
         metadata: expect.objectContaining({ source: 'opendental' }),
       })
     )
+  })
+
+  it('loads ElectID with ShortQuery when GET /carriers is unsupported and stores it as the Stedi payer ID', async () => {
+    const put = vi.fn().mockResolvedValue([
+      { CarrierNum: 158, ElectID: '05030', Phone: '(800)323-1743' },
+    ])
+    vi.mocked(prisma.patient.findFirst).mockResolvedValue({
+      id: 'patient-1',
+      externalEhrId: 'opendental:4931',
+    } as never)
+    vi.mocked(getOpenDentalConnection).mockResolvedValue({ isActive: true } as never)
+    vi.mocked(getOpenDentalClient).mockResolvedValue({
+      get: vi.fn().mockResolvedValue([
+        {
+          PatNum: 4931,
+          InsSubNum: 20,
+          Subscriber: 4931,
+          subscriber: 'David Geataz',
+          SubscriberID: 'MEM1',
+          PatPlanNum: 30,
+          Ordinal: 1,
+          Relationship: 'Self',
+          CarrierNum: 158,
+          CarrierName: 'Delta Dental of IL',
+          GroupNum: 'G1',
+          PlanType: 'p',
+        },
+      ]),
+      put,
+    } as never)
+    vi.mocked(getOpenDentalServices).mockResolvedValue({
+      carriers: {
+        get: vi.fn().mockRejectedValue(new Error('"carriers GET  is not a valid method."')),
+      },
+    } as never)
+
+    const result = await syncOpenDentalInsuranceForPatient({
+      practiceId: 'practice-1',
+      patientId: 'patient-1',
+    })
+
+    expect(result.status).toBe('success')
+    expect(put).toHaveBeenCalledWith(
+      'queries/ShortQuery',
+      expect.objectContaining({
+        body: expect.objectContaining({
+          SqlCommand: expect.stringContaining('CarrierNum IN (158)'),
+        }),
+      })
+    )
+    expect(createdPolicies[0]).toMatchObject({
+      payerNameRaw: 'Delta Dental of IL',
+      availityPayerId: '05030',
+      insurerPhoneRaw: '(800)323-1743',
+      clearinghousePayerIds: { stedi: '05030' },
+    })
   })
 
   it('skips when Open Dental is not configured', async () => {

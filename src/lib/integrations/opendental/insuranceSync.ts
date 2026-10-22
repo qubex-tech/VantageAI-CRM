@@ -4,6 +4,7 @@ import { normalizePhoneForDialing } from '@/lib/phone'
 import { extractPatNumFromExternalId } from './commlogWriteback'
 import { getOpenDentalClient, getOpenDentalConnection, getOpenDentalServices } from './factory'
 import { findSubscriberDobInPractice } from '@/lib/eligibility/resolve-subscriber-dob'
+import { upsertPayerIdMap } from '@/lib/eligibility/clearinghouse/payer-ids'
 
 /** Denormalized row from GET /familymodules/{PatNum}/Insurance */
 export type OpenDentalFamilyInsurance = {
@@ -192,6 +193,9 @@ function coverageToPolicyFields(
     subscriberDob,
     relationshipToPatient: coverage.relationshipToPatient,
     availityPayerId: coverage.availityPayerId,
+    clearinghousePayerIds: coverage.availityPayerId
+      ? upsertPayerIdMap(null, 'stedi', coverage.availityPayerId)
+      : undefined,
   }
 }
 
@@ -212,6 +216,47 @@ async function fetchFamilyInsuranceRows(practiceId: string, patNum: number): Pro
   return []
 }
 
+function isCarrierGetUnsupported(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /carriers GET/i.test(message) && /not a valid method/i.test(message)
+}
+
+function carrierDetailsFromRecord(carrier: Record<string, unknown> | null | undefined): {
+  phone: string | null
+  electId: string | null
+} {
+  return {
+    phone: cleanString(carrier?.Phone),
+    electId: cleanString(carrier?.ElectID),
+  }
+}
+
+async function fetchCarrierDetailsViaShortQuery(
+  practiceId: string,
+  carrierNums: number[]
+): Promise<Map<number, { phone: string | null; electId: string | null }>> {
+  const byCarrier = new Map<number, { phone: string | null; electId: string | null }>()
+  const ids = carrierNums.filter((n) => Number.isInteger(n) && n > 0)
+  if (ids.length === 0) return byCarrier
+
+  const client = await getOpenDentalClient(practiceId)
+  const result = await client.put<Array<Record<string, unknown>> | Record<string, unknown>>(
+    'queries/ShortQuery',
+    {
+      body: {
+        SqlCommand: `SELECT CarrierNum, ElectID, Phone FROM carrier WHERE CarrierNum IN (${ids.join(',')})`,
+      },
+    }
+  )
+  const rows = Array.isArray(result) ? result : result ? [result] : []
+  for (const row of rows) {
+    const carrierNum = asNumber(row.CarrierNum)
+    if (carrierNum == null) continue
+    byCarrier.set(carrierNum, carrierDetailsFromRecord(row))
+  }
+  return byCarrier
+}
+
 async function enrichCarrierDetails(
   practiceId: string,
   rows: OpenDentalFamilyInsurance[]
@@ -226,23 +271,42 @@ async function enrichCarrierDetails(
   const byCarrier = new Map<number, { phone: string | null; electId: string | null }>()
   if (carrierNums.length === 0) return byCarrier
 
+  let carrierGetUnsupported = false
   try {
     const services = await getOpenDentalServices(practiceId)
-    await Promise.all(
-      carrierNums.map(async (carrierNum) => {
-        try {
-          const carrier = (await services.carriers.get(carrierNum)) as Record<string, unknown> | null
-          byCarrier.set(carrierNum, {
-            phone: cleanString(carrier?.Phone),
-            electId: cleanString(carrier?.ElectID),
-          })
-        } catch {
-          // Carrier enrich is best-effort; FamilyModules already has CarrierName.
-        }
-      })
-    )
+    const [first, ...rest] = carrierNums
+    try {
+      const carrier = (await services.carriers.get(first)) as Record<string, unknown> | null
+      byCarrier.set(first, carrierDetailsFromRecord(carrier))
+    } catch (error) {
+      carrierGetUnsupported = isCarrierGetUnsupported(error)
+    }
+
+    if (!carrierGetUnsupported && rest.length > 0) {
+      await Promise.all(
+        rest.map(async (carrierNum) => {
+          try {
+            const carrier = (await services.carriers.get(carrierNum)) as Record<string, unknown> | null
+            byCarrier.set(carrierNum, carrierDetailsFromRecord(carrier))
+          } catch (error) {
+            if (isCarrierGetUnsupported(error)) carrierGetUnsupported = true
+          }
+        })
+      )
+    }
   } catch {
     // Connection/services failure should not block policy sync from FamilyModules rows.
+  }
+
+  const missing = carrierNums.filter((n) => !byCarrier.has(n))
+  if (missing.length === 0) return byCarrier
+
+  try {
+    // GET /carriers/{id} is not implemented on older offices (AFD is 22.1). ElectID lives on the carrier row.
+    const fromQuery = await fetchCarrierDetailsViaShortQuery(practiceId, missing)
+    for (const [carrierNum, details] of fromQuery) byCarrier.set(carrierNum, details)
+  } catch {
+    // Carrier enrich is best-effort; FamilyModules already has CarrierName.
   }
 
   return byCarrier
@@ -379,6 +443,15 @@ export async function syncOpenDentalInsuranceForPatient(params: {
             subscriberDob: data.subscriberDob ?? match.subscriberDob,
             relationshipToPatient: data.relationshipToPatient,
             availityPayerId: data.availityPayerId ?? match.availityPayerId,
+            ...(data.availityPayerId
+              ? {
+                  clearinghousePayerIds: upsertPayerIdMap(
+                    match.clearinghousePayerIds,
+                    'stedi',
+                    data.availityPayerId
+                  ),
+                }
+              : {}),
           },
         })
         upserted.push({

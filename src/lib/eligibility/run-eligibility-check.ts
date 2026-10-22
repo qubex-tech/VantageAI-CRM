@@ -95,12 +95,11 @@ export async function runEligibilityCheck(
   let payerId = getPayerIdForVendor(policy, adapter.vendorKey)
   let resolvedFromName: { payerId: string; name: string } | null = null
   const preferDental = settings.defaultServiceTypeCodes.includes('35')
-  const payerNameLooksDental = /\bdental\b|dentaguard|dentaquest/i.test(policy.payerNameRaw || '')
   const shouldResolvePayer =
     adapter.vendorKey === 'stedi' &&
     adapter.capabilities.payerSearch &&
     Boolean(policy.payerNameRaw?.trim()) &&
-    (!payerId || (preferDental && !payerNameLooksDental))
+    !payerId
   if (shouldResolvePayer) {
     try {
       const match = await resolvePayerIdFromName({
