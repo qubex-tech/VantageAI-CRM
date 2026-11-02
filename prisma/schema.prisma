@@ -47,6 +47,7 @@ model Practice {
   apidazeIntegrations        ApidazeIntegration[]
   pebbleIntegrations         PebbleIntegration[]
   openDentalConnections      OpenDentalConnection[]
+  nexHealthConnections       NexHealthConnection[]
   ehrConnections             EhrConnection[]
   practiceSettings           PracticeSettings?
   integrationAuditLogs       IntegrationAuditLog[]
@@ -905,6 +906,46 @@ model OpenDentalConnection {
   @@index([practiceId])
   @@index([status])
   @@map("open_dental_connections")
+}
+
+/// One NexHealth location linked to a CRM practice. The API key is app-wide (env), not stored here.
+model NexHealthConnection {
+  id                   String    @id @default(uuid())
+  practiceId           String    @unique
+  /// sandbox | production — selects which env API key is used
+  environment          String    @default("sandbox")
+  subdomain            String
+  institutionId        Int?
+  locationId           Int
+  locationName         String?
+  status               String    @default("pending")
+  lastSuccessfulSyncAt DateTime?
+  lastSyncStatus       String?
+  lastSyncError        String?
+  syncReadStatus       String?
+  syncWriteStatus      String?
+  isActive             Boolean   @default(true)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId])
+  @@index([subdomain, locationId])
+  @@index([status])
+  @@map("nexhealth_connections")
+}
+
+/// One webhook endpoint per NexHealth environment (sandbox or production), shared by every practice.
+model NexHealthAppCredential {
+  id                     String   @id @default(uuid())
+  environment            String   @unique
+  webhookEndpointId      String?
+  webhookSecretEncrypted String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@map("nexhealth_app_credentials")
 }
 
 model PracticeSettings {

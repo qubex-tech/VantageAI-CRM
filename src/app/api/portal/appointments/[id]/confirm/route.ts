@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requirePatientSession } from '@/lib/portal-session'
+import { confirmNexhealthAppointment } from '@/lib/integrations/nexhealth/scheduling'
 
 /**
  * POST /api/portal/appointments/[id]/confirm
@@ -36,6 +37,17 @@ export async function POST(
       where: { id: appointmentId },
       data: { status: 'confirmed' },
     })
+
+    if (appointment.calBookingId?.startsWith('nexhealth:')) {
+      try {
+        await confirmNexhealthAppointment({
+          practiceId,
+          calBookingId: appointment.calBookingId,
+        })
+      } catch (error) {
+        console.error('Error confirming NexHealth appointment:', error)
+      }
+    }
 
     // Create audit log
     await prisma.portalAuditLog.create({

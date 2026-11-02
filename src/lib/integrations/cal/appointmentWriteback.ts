@@ -38,7 +38,9 @@ function storedCalBookingAliases(calBookingId: string): string[] {
 
 export function isCalLinkedBooking(calBookingId: string | null | undefined): boolean {
   if (!calBookingId?.trim()) return false
-  return !calBookingId.startsWith('opendental:')
+  if (calBookingId.startsWith('opendental:')) return false
+  if (calBookingId.startsWith('nexhealth:')) return false
+  return true
 }
 
 function isCalBookingAlreadyCancelledError(message: string): boolean {

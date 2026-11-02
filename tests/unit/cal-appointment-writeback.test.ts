@@ -9,6 +9,7 @@ describe('cal appointment writeback', () => {
     expect(isCalLinkedBooking('f88qSwaGht9yLUscvKErDF')).toBe(true)
     expect(isCalLinkedBooking('22134365')).toBe(true)
     expect(isCalLinkedBooking('opendental:apt:123')).toBe(false)
+    expect(isCalLinkedBooking('nexhealth:apt:1822')).toBe(false)
     expect(isCalLinkedBooking(null)).toBe(false)
   })
 

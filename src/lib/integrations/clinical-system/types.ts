@@ -1,4 +1,4 @@
-export const CLINICAL_SYSTEM_TYPES = ['none', 'fhir', 'open_dental'] as const
+export const CLINICAL_SYSTEM_TYPES = ['none', 'fhir', 'open_dental', 'nexhealth'] as const
 
 export type ClinicalSystemType = (typeof CLINICAL_SYSTEM_TYPES)[number]
 
@@ -14,9 +14,10 @@ export type SchedulingMode = (typeof SCHEDULING_MODES)[number]
  * Where availability is read from or appointments are written to.
  *  - 'cal'         -> Cal.com event types + slots
  *  - 'open_dental' -> Open Dental schedule
+ *  - 'nexhealth'   -> NexHealth schedule (patients + appointments across EHRs)
  *  - 'none'        -> disabled for that direction (e.g. read-only availability)
  */
-export const SCHEDULING_SOURCES = ['none', 'cal', 'open_dental', 'ecw'] as const
+export const SCHEDULING_SOURCES = ['none', 'cal', 'open_dental', 'ecw', 'nexhealth'] as const
 
 export type SchedulingSource = (typeof SCHEDULING_SOURCES)[number]
 
@@ -49,6 +50,21 @@ export type OdBookSlotConfig = {
   visitTypes: VisitTypeMapping[]
 }
 
+/** Provider + operatories + length used when reading NexHealth availability. */
+export type NexhealthReadSlotConfig = {
+  providerId: number
+  operatoryIds: number[]
+  lengthMinutes: number
+}
+
+/** Provider + operatories + length + visit types used when booking through NexHealth. */
+export type NexhealthBookSlotConfig = {
+  providerId: number
+  operatoryIds: number[]
+  lengthMinutes: number
+  visitTypes: VisitTypeMapping[]
+}
+
 export type SchedulingSettings = {
   /** @deprecated Use readSource — kept for backward compatibility when read === write */
   mode?: SchedulingMode
@@ -60,6 +76,10 @@ export type SchedulingSettings = {
   odReadSlotConfigs?: OdReadSlotConfig[] | null
   /** Multi-provider Open Dental booking configs with visit-type + NL aliases. */
   odBookSlotConfigs?: OdBookSlotConfig[] | null
+  /** NexHealth providers and operatories used when reading available slots. */
+  nexhealthReadSlotConfigs?: NexhealthReadSlotConfig[] | null
+  /** NexHealth providers, operatories, and visit types used when booking. */
+  nexhealthBookSlotConfigs?: NexhealthBookSlotConfig[] | null
   /** Open Dental provider used when reading available slots (EHR mode). Falls back to defaultProvNum. */
   defaultReadProvNum?: number | null
   /** Primary operatory when reading available slots. Falls back to defaultOperatoryNum. */
@@ -284,12 +304,80 @@ export function resolveOdBookConfigs(settings: SchedulingSettings): OdBookSlotCo
   return [{ provNum, operatoryNums, lengthMinutes, visitTypes: [] }]
 }
 
+function coerceNexhealthReadSlotConfig(raw: unknown): NexhealthReadSlotConfig | null {
+  if (!raw || typeof raw !== 'object') return null
+  const obj = raw as { providerId?: unknown; operatoryIds?: unknown; lengthMinutes?: unknown }
+  const providerId = Number(obj.providerId)
+  const lengthMinutes = Number(obj.lengthMinutes)
+  if (!Number.isInteger(providerId) || providerId <= 0) return null
+  if (!Number.isInteger(lengthMinutes) || lengthMinutes <= 0) return null
+  const operatoryIds = dedupePositiveInts(
+    Array.isArray(obj.operatoryIds) ? obj.operatoryIds.map((n) => Number(n)) : []
+  )
+  if (operatoryIds.length === 0) return null
+  return { providerId, operatoryIds, lengthMinutes }
+}
+
+function coerceNexhealthBookSlotConfig(raw: unknown): NexhealthBookSlotConfig | null {
+  if (!raw || typeof raw !== 'object') return null
+  const obj = raw as {
+    providerId?: unknown
+    operatoryIds?: unknown
+    lengthMinutes?: unknown
+    visitTypes?: unknown
+  }
+  const providerId = Number(obj.providerId)
+  const lengthMinutes = Number(obj.lengthMinutes)
+  if (!Number.isInteger(providerId) || providerId <= 0) return null
+  if (!Number.isInteger(lengthMinutes) || lengthMinutes <= 0) return null
+  const operatoryIds = dedupePositiveInts(
+    Array.isArray(obj.operatoryIds) ? obj.operatoryIds.map((n) => Number(n)) : []
+  )
+  if (operatoryIds.length === 0) return null
+  const visitTypes = Array.isArray(obj.visitTypes)
+    ? obj.visitTypes.map(coerceVisitTypeMapping).filter((v): v is VisitTypeMapping => v !== null)
+    : []
+  return { providerId, operatoryIds, lengthMinutes, visitTypes }
+}
+
+export function resolveNexhealthReadConfigs(settings: SchedulingSettings): NexhealthReadSlotConfig[] {
+  if (!Array.isArray(settings.nexhealthReadSlotConfigs)) return []
+  return settings.nexhealthReadSlotConfigs
+    .map(coerceNexhealthReadSlotConfig)
+    .filter((row): row is NexhealthReadSlotConfig => row !== null)
+}
+
+export function resolveNexhealthBookConfigs(settings: SchedulingSettings): NexhealthBookSlotConfig[] {
+  if (!Array.isArray(settings.nexhealthBookSlotConfigs)) return []
+  return settings.nexhealthBookSlotConfigs
+    .map(coerceNexhealthBookSlotConfig)
+    .filter((row): row is NexhealthBookSlotConfig => row !== null)
+}
+
+export function resolveNexhealthBookConfigForVisitType(
+  settings: SchedulingSettings,
+  visitType: string
+): NexhealthBookSlotConfig | null {
+  const key = normalizeVisitTypeKey(visitType)
+  if (!key) return null
+  for (const config of resolveNexhealthBookConfigs(settings)) {
+    if (config.visitTypes.some((vt) => normalizeVisitTypeKey(vt.visitType) === key)) {
+      return config
+    }
+  }
+  return null
+}
+
 /** Flatten all configured visit-type mappings across booking rows. */
 export function listConfiguredVisitTypeMappings(settings: SchedulingSettings): VisitTypeMapping[] {
   const out: VisitTypeMapping[] = []
   const seen = new Set<string>()
-  for (const config of resolveOdBookConfigs(settings)) {
-    for (const mapping of config.visitTypes) {
+  const rows = [
+    ...resolveOdBookConfigs(settings).map((config) => config.visitTypes),
+    ...resolveNexhealthBookConfigs(settings).map((config) => config.visitTypes),
+  ]
+  for (const visitTypes of rows) {
+    for (const mapping of visitTypes) {
       const key = normalizeVisitTypeKey(mapping.visitType)
       if (!key || seen.has(key)) continue
       seen.add(key)
@@ -452,6 +540,14 @@ export function usesEcwForWrite(settings: SchedulingSettings): boolean {
   return resolveWriteSource(settings) === 'ecw'
 }
 
+export function usesNexhealthForRead(settings: SchedulingSettings): boolean {
+  return resolveReadSource(settings) === 'nexhealth'
+}
+
+export function usesNexhealthForWrite(settings: SchedulingSettings): boolean {
+  return resolveWriteSource(settings) === 'nexhealth'
+}
+
 function dedupePractitionerRefs(refs: string[]): string[] {
   const seen = new Set<string>()
   const out: string[] = []
@@ -517,5 +613,10 @@ export const CLINICAL_SYSTEM_OPTIONS: Array<{
     id: 'open_dental',
     label: 'Open Dental',
     description: 'Open Dental REST API (separate from the FHIR integration stack).',
+  },
+  {
+    id: 'nexhealth',
+    label: 'NexHealth',
+    description: 'NexHealth synchronizer for patient charts and scheduling across EHR systems.',
   },
 ]

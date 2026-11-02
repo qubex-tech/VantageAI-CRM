@@ -1,9 +1,10 @@
 import { syncPatientInsuranceFromEhr } from '@/lib/ehr/syncPatientInsuranceFromEhr'
 import { syncOpenDentalInsuranceForPatient } from '@/lib/integrations/opendental/insuranceSync'
 import { OPEN_DENTAL_EXTERNAL_PREFIX } from '@/lib/integrations/opendental/patientSync'
+import { NEXHEALTH_PATIENT_PREFIX } from '@/lib/integrations/nexhealth/mapping'
 
 export type EhrInsuranceSyncSummary = {
-  source: 'opendental' | 'ecw' | null
+  source: 'opendental' | 'ecw' | 'nexhealth' | null
   status: 'success' | 'skipped' | 'error'
   reason?: string
   message?: string
@@ -23,6 +24,14 @@ export async function syncLatestInsuranceFromEhr(params: {
   const externalEhrId = params.externalEhrId?.trim() || ''
   if (!externalEhrId) {
     return { source: null, status: 'skipped', reason: 'patient_not_linked_to_ehr' }
+  }
+
+  if (externalEhrId.startsWith(NEXHEALTH_PATIENT_PREFIX)) {
+    return {
+      source: 'nexhealth',
+      status: 'skipped',
+      reason: 'nexhealth_insurance_not_supported',
+    }
   }
 
   const source = externalEhrId.startsWith(OPEN_DENTAL_EXTERNAL_PREFIX) ? 'opendental' : 'ecw'

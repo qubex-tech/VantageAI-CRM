@@ -26,6 +26,7 @@ import {
   usesCalForWrite,
   usesEcwForRead,
   usesOpenDentalForRead,
+  usesNexhealthForRead,
   usesOpenDentalForWrite,
   resolveReadSource,
 } from '@/lib/integrations/clinical-system/types'
@@ -1540,6 +1541,22 @@ export async function getAppointmentSlots(
         success: true,
         message: `Found ${slots.length} available slot(s)`,
         data: { slots, timezone, source: 'open_dental' },
+      }
+    }
+
+    if (usesNexhealthForRead(scheduling)) {
+      const slots = await getAgentAvailableSlots(
+        params.clinicId,
+        '',
+        params.dateFrom,
+        params.dateTo,
+        timezone,
+        params.visitTypeName
+      )
+      return {
+        success: true,
+        message: `Found ${slots.length} available slot(s) from NexHealth`,
+        data: { slots, timezone, source: 'nexhealth' },
       }
     }
 

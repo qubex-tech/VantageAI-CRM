@@ -17,6 +17,7 @@ import {
 } from '@/lib/integrations/clinical-system/types'
 import { EhrIntegrationsSettings } from './EhrIntegrationsSettings'
 import { OpenDentalSettings } from './OpenDentalSettings'
+import { NexHealthSettings } from './NexHealthSettings'
 import { SchedulingModeSettings } from './SchedulingModeSettings'
 
 interface ClinicalIntegrationsSettingsProps {
@@ -231,6 +232,7 @@ export function ClinicalIntegrationsSettings({ practiceId }: ClinicalIntegration
           practiceId={activePracticeId}
           openDentalAvailable={clinicalSystem === 'open_dental'}
           ecwAvailable={clinicalSystem === 'fhir'}
+          nexhealthAvailable={clinicalSystem === 'nexhealth'}
         />
       )}
 
@@ -242,11 +244,15 @@ export function ClinicalIntegrationsSettings({ practiceId }: ClinicalIntegration
         <OpenDentalSettings practiceId={activePracticeId} />
       )}
 
+      {activePracticeId && !loading && clinicalSystem === 'nexhealth' && (
+        <NexHealthSettings practiceId={activePracticeId} />
+      )}
+
       {activePracticeId && !loading && clinicalSystem === 'none' && (
         <Card className="border border-dashed border-gray-200">
           <CardContent className="py-8 text-center text-sm text-gray-500">
-            No clinical system selected. Choose FHIR or Open Dental above to configure integration
-            settings.
+            No clinical system selected. Choose FHIR, Open Dental, or NexHealth above to configure
+            integration settings.
           </CardContent>
         </Card>
       )}

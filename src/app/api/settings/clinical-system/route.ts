@@ -26,6 +26,56 @@ const odBookSlotConfigSchema = z.object({
   visitTypes: z.array(visitTypeMappingSchema).default([]),
 })
 
+const nexhealthReadSlotConfigSchema = z.object({
+  providerId: z.number().int().positive(),
+  operatoryIds: z.array(z.number().int().positive()).min(1),
+  lengthMinutes: z.number().int().positive().max(600),
+})
+
+const nexhealthBookSlotConfigSchema = z.object({
+  providerId: z.number().int().positive(),
+  operatoryIds: z.array(z.number().int().positive()).min(1),
+  lengthMinutes: z.number().int().positive().max(600),
+  visitTypes: z.array(visitTypeMappingSchema).default([]),
+})
+
+function rejectDuplicateVisitTypes(
+  bookConfigs: Array<{ visitTypes: Array<{ visitType: string; aliases: string[] }> }>,
+  pathPrefix: string,
+  ctx: z.RefinementCtx
+) {
+  const visitTypeKeys = new Set<string>()
+  for (const [configIndex, config] of bookConfigs.entries()) {
+    for (const [vtIndex, mapping] of config.visitTypes.entries()) {
+      const vtKey = mapping.visitType.trim().toLowerCase()
+      if (visitTypeKeys.has(vtKey)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Visit type "${mapping.visitType}" is assigned to more than one booking row`,
+          path: [pathPrefix, configIndex, 'visitTypes', vtIndex, 'visitType'],
+        })
+      }
+      visitTypeKeys.add(vtKey)
+    }
+  }
+  const aliasKeys = new Set<string>()
+  for (const [configIndex, config] of bookConfigs.entries()) {
+    for (const [vtIndex, mapping] of config.visitTypes.entries()) {
+      for (const [aliasIndex, alias] of mapping.aliases.entries()) {
+        const aliasKey = alias.trim().toLowerCase()
+        if (aliasKeys.has(aliasKey) || visitTypeKeys.has(aliasKey)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Alias "${alias}" collides with another visit type or alias`,
+            path: [pathPrefix, configIndex, 'visitTypes', vtIndex, 'aliases', aliasIndex],
+          })
+        }
+        aliasKeys.add(aliasKey)
+      }
+    }
+  }
+}
+
 const schedulingSchema = z
   .object({
     mode: z.enum(['cal', 'open_dental']).optional(),
@@ -33,6 +83,8 @@ const schedulingSchema = z
     writeSource: z.enum(SCHEDULING_SOURCES).optional(),
     odReadSlotConfigs: z.array(odReadSlotConfigSchema).nullish(),
     odBookSlotConfigs: z.array(odBookSlotConfigSchema).nullish(),
+    nexhealthReadSlotConfigs: z.array(nexhealthReadSlotConfigSchema).nullish(),
+    nexhealthBookSlotConfigs: z.array(nexhealthBookSlotConfigSchema).nullish(),
     defaultReadProvNum: z.number().int().positive().nullish(),
     defaultReadOperatoryNum: z.number().int().positive().nullish(),
     defaultReadOperatoryNums: z.array(z.number().int().positive()).nullish(),
@@ -46,37 +98,8 @@ const schedulingSchema = z
     defaultWritePractitionerRef: z.string().min(1).nullish(),
   })
   .superRefine((data, ctx) => {
-    const bookConfigs = data.odBookSlotConfigs ?? []
-    const visitTypeKeys = new Set<string>()
-    for (const [configIndex, config] of bookConfigs.entries()) {
-      for (const [vtIndex, mapping] of config.visitTypes.entries()) {
-        const vtKey = mapping.visitType.trim().toLowerCase()
-        if (visitTypeKeys.has(vtKey)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: `Visit type "${mapping.visitType}" is assigned to more than one booking row`,
-            path: ['odBookSlotConfigs', configIndex, 'visitTypes', vtIndex, 'visitType'],
-          })
-        }
-        visitTypeKeys.add(vtKey)
-      }
-    }
-    const aliasKeys = new Set<string>()
-    for (const [configIndex, config] of bookConfigs.entries()) {
-      for (const [vtIndex, mapping] of config.visitTypes.entries()) {
-        for (const [aliasIndex, alias] of mapping.aliases.entries()) {
-          const aliasKey = alias.trim().toLowerCase()
-          if (aliasKeys.has(aliasKey) || visitTypeKeys.has(aliasKey)) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: `Alias "${alias}" collides with another visit type or alias`,
-              path: ['odBookSlotConfigs', configIndex, 'visitTypes', vtIndex, 'aliases', aliasIndex],
-            })
-          }
-          aliasKeys.add(aliasKey)
-        }
-      }
-    }
+    rejectDuplicateVisitTypes(data.odBookSlotConfigs ?? [], 'odBookSlotConfigs', ctx)
+    rejectDuplicateVisitTypes(data.nexhealthBookSlotConfigs ?? [], 'nexhealthBookSlotConfigs', ctx)
   })
 
 const settingsSchema = z

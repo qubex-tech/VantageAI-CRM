@@ -5,6 +5,7 @@ import { syncSupabaseUserToPrisma } from '@/lib/sync-supabase-user'
 import { canConfigureAPIs } from '@/lib/permissions'
 import { getEhrSettings } from '@/lib/integrations/ehr/server'
 import { getOpenDentalConnection } from '@/lib/integrations/opendental/factory'
+import { getNexhealthConnection } from '@/lib/integrations/nexhealth/connection'
 import {
   CLINICAL_SYSTEM_TYPES,
   DEFAULT_SCHEDULING_SETTINGS,
@@ -28,8 +29,8 @@ function normalizeSchedulingSettings(raw: SchedulingSettings): SchedulingSetting
   const readSource = resolveReadSource(raw)
   const writeSource = resolveWriteSource(raw)
   const mode: SchedulingSettings['mode'] =
-    readSource === writeSource && readSource !== 'none'
-      ? (readSource as SchedulingSettings['mode'])
+    readSource === writeSource && (readSource === 'cal' || readSource === 'open_dental')
+      ? readSource
       : raw.mode
   return {
     ...raw,
@@ -104,6 +105,12 @@ function parseScheduling(value: unknown): SchedulingSettings | undefined {
     odBookSlotConfigs: Array.isArray(raw.odBookSlotConfigs)
       ? (raw.odBookSlotConfigs as SchedulingSettings['odBookSlotConfigs'])
       : null,
+    nexhealthReadSlotConfigs: Array.isArray(raw.nexhealthReadSlotConfigs)
+      ? (raw.nexhealthReadSlotConfigs as SchedulingSettings['nexhealthReadSlotConfigs'])
+      : null,
+    nexhealthBookSlotConfigs: Array.isArray(raw.nexhealthBookSlotConfigs)
+      ? (raw.nexhealthBookSlotConfigs as SchedulingSettings['nexhealthBookSlotConfigs'])
+      : null,
     defaultReadProvNum: toPositiveInt(raw.defaultReadProvNum),
     defaultReadOperatoryNum: toPositiveInt(raw.defaultReadOperatoryNum),
     defaultReadOperatoryNums: toPositiveIntArray(raw.defaultReadOperatoryNums),
@@ -140,13 +147,17 @@ function parseStoredClinicalSettings(value: unknown): ClinicalIntegrationSetting
 }
 
 export async function inferClinicalSystem(practiceId: string): Promise<ClinicalSystemType> {
-  const [openDental, ehrSettings] = await Promise.all([
+  const [openDental, nexhealth, ehrSettings] = await Promise.all([
     getOpenDentalConnection(practiceId),
+    getNexhealthConnection(practiceId),
     getEhrSettings(practiceId),
   ])
 
   if (openDental?.isActive) {
     return 'open_dental'
+  }
+  if (nexhealth?.isActive) {
+    return 'nexhealth'
   }
   if (ehrSettings?.enabledProviders?.length) {
     return 'fhir'

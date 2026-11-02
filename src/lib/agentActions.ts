@@ -30,6 +30,8 @@ import {
   usesOpenDentalForWrite,
   usesEcwForRead,
   usesEcwForWrite,
+  usesNexhealthForRead,
+  usesNexhealthForWrite,
 } from '@/lib/integrations/clinical-system/types'
 import { getPracticeTimeZone } from '@/lib/practice-timezone'
 import { formatInstantForVoiceLocal } from '@/lib/appointments/voice-context'
@@ -38,6 +40,13 @@ import {
   bookOpenDentalAppointment,
 } from '@/lib/integrations/opendental/scheduling'
 import { getEcwScheduleFromSettings } from '@/lib/integrations/ehr/scheduling'
+import {
+  bookNexhealthAppointment,
+  cancelNexhealthAppointment,
+  ensureNexhealthPatientLinked,
+  getNexhealthOpenSlots,
+} from '@/lib/integrations/nexhealth/scheduling'
+import { NEXHEALTH_PATIENT_PREFIX } from '@/lib/integrations/nexhealth/mapping'
 import { formatOpenDentalLocalDateTime } from '@/lib/integrations/opendental/commlogWriteback'
 import { buildAppointmentExternalId } from '@/lib/integrations/opendental/appointmentSync'
 import { writeBackAppointmentToOpenDental } from '@/lib/integrations/opendental/appointmentWriteback'
@@ -531,6 +540,33 @@ export async function getAvailableSlots(
 
   // When availability is read from Open Dental, return OD open slots instead of Cal.com.
   const scheduling = await getSchedulingSettings(practiceId)
+  if (usesNexhealthForRead(scheduling)) {
+    try {
+      const slots = await getNexhealthOpenSlots({
+        practiceId,
+        scheduling,
+        dateFrom,
+        dateTo,
+        appointmentType,
+        eventTypeId,
+      })
+      return withVoiceLocalTimes(
+        slots.map((slot) => ({
+          time: slot.time,
+          attendeeCount: 0,
+          provNum: slot.provNum,
+          opNum: slot.opNum,
+          visitType: slot.visitType,
+        })),
+        practiceTimeZone
+      )
+    } catch (error) {
+      console.error('Error fetching NexHealth slots:', error)
+      if (error instanceof Error && error.message.includes('configured')) throw error
+      throw new Error('Failed to fetch available appointment slots')
+    }
+  }
+
   if (usesOpenDentalForRead(scheduling)) {
     try {
       const visitType = resolveOdVisitTypeFromAgentInput(scheduling, appointmentType, eventTypeId)
@@ -834,6 +870,31 @@ export async function bookAppointment(
       'Booking into eClinicalWorks is not enabled yet. Use Cal.com or Open Dental as the booking destination, or set booking to None.'
     )
   }
+  if (usesNexhealthForWrite(scheduling)) {
+    const linked = await ensureNexhealthPatientLinked({
+      practiceId,
+      patient,
+      scheduling,
+    })
+    if (!linked.externalEhrId?.startsWith(NEXHEALTH_PATIENT_PREFIX)) {
+      throw new Error(
+        'Patient is not linked to NexHealth. Could not match or create a NexHealth patient for booking.'
+      )
+    }
+    return bookNexhealthAppointment({
+      practiceId,
+      patientId: linked.id,
+      externalEhrId: linked.externalEhrId,
+      startTime,
+      timezone,
+      reason,
+      scheduling,
+      appointmentType,
+      eventTypeId,
+      preferredOpNum,
+    })
+  }
+
   if (usesOpenDentalForWrite(scheduling)) {
     const ensured = await ensureOpenDentalPatientLinkedForScheduling(practiceId, patient, {
       createIfMissing: true,
@@ -960,6 +1021,7 @@ export async function cancelAppointment(
   }
 
   const isOpenDentalLinked = !!appointment.calBookingId?.startsWith('opendental:')
+  const isNexhealthLinked = !!appointment.calBookingId?.startsWith('nexhealth:')
 
   await cancelAppointmentInCal({
     practiceId,
@@ -980,6 +1042,17 @@ export async function cancelAppointment(
       await writeBackAppointmentToOpenDental({ practiceId, appointmentId })
     } catch (error) {
       console.error('Error canceling Open Dental appointment:', error)
+    }
+  }
+
+  if (isNexhealthLinked) {
+    try {
+      await cancelNexhealthAppointment({
+        practiceId,
+        calBookingId: appointment.calBookingId,
+      })
+    } catch (error) {
+      console.error('Error canceling NexHealth appointment:', error)
     }
   }
 

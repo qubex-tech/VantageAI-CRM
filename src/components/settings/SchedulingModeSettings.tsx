@@ -13,6 +13,8 @@ import {
 } from '@/components/ui/select'
 import { Loader2, CalendarClock, X, Plus, ChevronDown, Check } from 'lucide-react'
 import type {
+  NexhealthBookSlotConfig,
+  NexhealthReadSlotConfig,
   OdBookSlotConfig,
   OdOperatoryMatchMode,
   OdReadSlotConfig,
@@ -20,6 +22,7 @@ import type {
   VisitTypeMapping,
 } from '@/lib/integrations/clinical-system/types'
 import { mirrorOdConfigsToLegacyDefaults } from '@/lib/integrations/clinical-system/types'
+import { NexhealthSchedulingFields } from './NexhealthSchedulingFields'
 
 interface SchedulingModeSettingsProps {
   practiceId: string
@@ -27,6 +30,8 @@ interface SchedulingModeSettingsProps {
   openDentalAvailable: boolean
   /** Whether FHIR / eClinicalWorks is configured for this practice. */
   ecwAvailable: boolean
+  /** Whether NexHealth is the selected clinical system. */
+  nexhealthAvailable: boolean
 }
 
 interface EcwPractitionerOption {
@@ -472,11 +477,14 @@ export function SchedulingModeSettings({
   practiceId,
   openDentalAvailable,
   ecwAvailable,
+  nexhealthAvailable,
 }: SchedulingModeSettingsProps) {
   const [readSource, setReadSource] = useState<SchedulingSource>('cal')
   const [writeSource, setWriteSource] = useState<SchedulingSource>('cal')
   const [readConfigs, setReadConfigs] = useState<OdReadSlotConfig[]>([])
   const [bookConfigs, setBookConfigs] = useState<OdBookSlotConfig[]>([])
+  const [nexhealthReadConfigs, setNexhealthReadConfigs] = useState<NexhealthReadSlotConfig[]>([])
+  const [nexhealthBookConfigs, setNexhealthBookConfigs] = useState<NexhealthBookSlotConfig[]>([])
   const [readDraft, setReadDraft] = useState(emptyReadDraft)
   const [bookDraft, setBookDraft] = useState(emptyBookDraft)
   const [defaultReadPractitionerRefs, setDefaultReadPractitionerRefs] = useState<string[]>([])
@@ -496,6 +504,7 @@ export function SchedulingModeSettings({
 
   const needsOpenDentalLists = readSource === 'open_dental' || writeSource === 'open_dental'
   const needsEcwPractitioners = readSource === 'ecw' || writeSource === 'ecw'
+  const needsNexhealth = readSource === 'nexhealth' || writeSource === 'nexhealth'
 
   const withPractice = (path: string) =>
     `${path}${path.includes('?') ? '&' : '?'}practiceId=${encodeURIComponent(practiceId)}`
@@ -524,6 +533,12 @@ export function SchedulingModeSettings({
                 : []
           )
           setDefaultWritePractitionerRef(sched.defaultWritePractitionerRef || NONE)
+          setNexhealthReadConfigs(
+            Array.isArray(sched.nexhealthReadSlotConfigs) ? sched.nexhealthReadSlotConfigs : []
+          )
+          setNexhealthBookConfigs(
+            Array.isArray(sched.nexhealthBookSlotConfigs) ? sched.nexhealthBookSlotConfigs : []
+          )
 
           if (Array.isArray(sched.odReadSlotConfigs) && sched.odReadSlotConfigs.length > 0) {
             setReadConfigs(
@@ -708,6 +723,12 @@ export function SchedulingModeSettings({
               defaultLengthMinutes,
             }
           : {}),
+        ...(readSource === 'nexhealth' || writeSource === 'nexhealth'
+          ? {
+              nexhealthReadSlotConfigs: nexhealthReadConfigs,
+              nexhealthBookSlotConfigs: nexhealthBookConfigs,
+            }
+          : {}),
       }
 
       const scheduling =
@@ -820,6 +841,9 @@ export function SchedulingModeSettings({
                     <SelectItem value="ecw" disabled={!ecwAvailable}>
                       eClinicalWorks (eCW){!ecwAvailable ? ' (requires FHIR / eCW connection)' : ''}
                     </SelectItem>
+                    <SelectItem value="nexhealth" disabled={!nexhealthAvailable}>
+                      NexHealth{!nexhealthAvailable ? ' (requires NexHealth)' : ''}
+                    </SelectItem>
                     <SelectItem value="none">None (disable slot lookup)</SelectItem>
                   </SelectContent>
                 </Select>
@@ -844,6 +868,9 @@ export function SchedulingModeSettings({
                     <SelectItem value="ecw" disabled={!ecwAvailable}>
                       eClinicalWorks (eCW){!ecwAvailable ? ' (read-only until writeback enabled)' : ''}
                     </SelectItem>
+                    <SelectItem value="nexhealth" disabled={!nexhealthAvailable}>
+                      NexHealth{!nexhealthAvailable ? ' (requires NexHealth)' : ''}
+                    </SelectItem>
                     <SelectItem value="none">None (read-only — no booking)</SelectItem>
                   </SelectContent>
                 </Select>
@@ -864,10 +891,30 @@ export function SchedulingModeSettings({
               </p>
             )}
 
+            {!nexhealthAvailable && needsNexhealth && (
+              <p className="text-xs text-amber-700">
+                Set the clinical system to NexHealth above and connect a location before using it for
+                availability or booking.
+              </p>
+            )}
+
+            {needsNexhealth && nexhealthAvailable && (
+              <NexhealthSchedulingFields
+                practiceId={practiceId}
+                showRead={readSource === 'nexhealth'}
+                showWrite={writeSource === 'nexhealth'}
+                readConfigs={nexhealthReadConfigs}
+                bookConfigs={nexhealthBookConfigs}
+                onChangeRead={setNexhealthReadConfigs}
+                onChangeBook={setNexhealthBookConfigs}
+              />
+            )}
+
             {writeSource === 'ecw' && (
               <p className="text-xs text-amber-700">
                 Writing appointments directly into eClinicalWorks is not enabled yet. Use eCW as an
-                availability source and book via Cal.com or Open Dental, or set booking to None.
+                availability source and book via Cal.com, Open Dental, or NexHealth, or set booking
+                to None.
               </p>
             )}
 
@@ -1265,7 +1312,9 @@ export function SchedulingModeSettings({
                   ? 'Open Dental'
                   : readSource === 'ecw'
                     ? 'eClinicalWorks'
-                    : 'Cal.com'}
+                    : readSource === 'nexhealth'
+                      ? 'NexHealth'
+                      : 'Cal.com'}
                 , but booking is disabled for this practice. Agents and staff can share open slots
                 without writing appointments.
               </p>

@@ -145,6 +145,8 @@ export async function middleware(req: NextRequest) {
       '/api/internal/browser-agent/probe',
       // Public marketing lead-capture (getvantage.tech form; CORS + honeypot in the route)
       '/api/leads',
+      // NexHealth webhooks authenticate with an HMAC signature, not a session
+      '/api/integrations/nexhealth/webhook',
     ]
     const isPublicPath = publicPaths.some(path => pathname.startsWith(path))
     

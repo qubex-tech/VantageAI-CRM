@@ -70,6 +70,22 @@ describe('syncLatestInsuranceFromEhr', () => {
     expect(result).toEqual({ source: 'ecw', status: 'success', syncedCount: 1 })
   })
 
+  it('does not send a NexHealth chart down the eCW insurance path', async () => {
+    const result = await syncLatestInsuranceFromEhr({
+      practiceId: 'practice-1',
+      patientId: 'patient-1',
+      externalEhrId: 'nexhealth:415',
+    })
+
+    expect(syncOpenDentalInsuranceForPatient).not.toHaveBeenCalled()
+    expect(syncPatientInsuranceFromEhr).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      source: 'nexhealth',
+      status: 'skipped',
+      reason: 'nexhealth_insurance_not_supported',
+    })
+  })
+
   it('skips the EHR call when the patient is not linked', async () => {
     const result = await syncLatestInsuranceFromEhr({
       practiceId: 'practice-1',
