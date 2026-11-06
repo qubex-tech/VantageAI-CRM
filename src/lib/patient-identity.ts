@@ -168,6 +168,45 @@ export function patientNamesMatch(
   )
 }
 
+/**
+ * A single token such as "Lakisha" is not a last name. parsePatientName copies that
+ * token into both first and last, so callers must check the raw name before matching.
+ */
+export function hasDistinctCallerName(caller: DemographicsInput): boolean {
+  const explicitFirst = caller.firstName?.trim() || ''
+  const explicitLast = caller.lastName?.trim() || ''
+  if (
+    explicitFirst &&
+    explicitLast &&
+    explicitFirst.toLowerCase() !== explicitLast.toLowerCase()
+  ) {
+    return true
+  }
+  const parts = (caller.name || '').trim().split(/\s+/).filter(Boolean)
+  return parts.length >= 2
+}
+
+/**
+ * True when the call itself confirms this chart.
+ * Accepted combinations: first+last+DOB, first+last+phone, or DOB+phone.
+ * A first name alone, or a phone number alone, is not confirmation.
+ */
+export function callIdentityConfirmsPatient(
+  patient: PatientIdentityRow,
+  caller: DemographicsInput & { phone?: string | null }
+): boolean {
+  if (demographicsMatch(patient, caller)) return true
+
+  const statedKey = phoneMatchKey(caller.phone)
+  const phoneMatches = Boolean(
+    statedKey &&
+      (phoneMatchKey(patient.phone) === statedKey || phoneMatchKey(patient.primaryPhone) === statedKey)
+  )
+  if (!phoneMatches) return false
+  if (hasDistinctCallerName(caller) && patientNamesMatch(patient, caller)) return true
+  return patientDobMatches(patient, caller.dateOfBirth)
+}
+
 /** True when first name, last name, and full DOB (year included) all match. */
 export function demographicsMatch(
   patient: PatientIdentityRow,
@@ -411,7 +450,8 @@ function phoneCollisionsForKey(
 
 /**
  * Resolve an existing CRM patient after a Retell call ends.
- * Uses callback/ANI as a phone fallback for matching only (never for identity by itself).
+ * A callback or ANI number is never enough on its own. The caller must confirm the chart
+ * with first and last name plus date of birth, first and last name plus phone, or date of birth plus phone.
  * Matches via Open Dental chart facts when CRM demographics are wrong (e.g. Amin vs Amir).
  * Returns blockCreate when the phone is shared and caller identity does not resolve cleanly.
  */
@@ -452,10 +492,12 @@ export async function resolvePostCallPatientMatch(
 
   if (phoneCollisions.length === 1) {
     const only = phoneCollisions[0]
-    if (demographicsMatch(only, caller)) {
-      return { patient: only, blockCreate: false }
-    }
-    if (!callerHasFullIdentity) {
+    if (
+      callIdentityConfirmsPatient(only, {
+        ...caller,
+        phone: phoneForMatching,
+      })
+    ) {
       return { patient: only, blockCreate: false }
     }
   }

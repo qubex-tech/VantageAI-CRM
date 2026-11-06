@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
+  callIdentityConfirmsPatient,
   resolvePostCallPatientMatch,
   type PatientIdentityRow,
 } from '@/lib/patient-identity'
@@ -153,6 +154,48 @@ describe('resolvePostCallPatientMatch', () => {
     expect(result.blockCreate).toBe(false)
     expect(result.patient?.id).toBe('c3463ef0')
     expect(result.patient?.externalEhrId).toBe('opendental:2274')
+  })
+
+  it('does not attach a single first name to another chart that shares the callback number', async () => {
+    const existing = row({
+      id: 'olivier',
+      name: 'Lakisha K Olivier',
+      firstName: 'Lakisha',
+      lastName: 'Olivier',
+      dateOfBirth: new Date('1983-07-28T00:00:00.000Z'),
+      phone: '4092936317',
+      externalEhrId: 'ehr-olivier',
+    })
+
+    const result = await resolvePostCallPatientMatch(
+      practiceId,
+      [existing],
+      { name: 'Lakisha' },
+      '8662023474'
+    )
+
+    expect(result.patient).toBeNull()
+    expect(result.blockCreate).toBe(false)
+    expect(
+      callIdentityConfirmsPatient(existing, {
+        name: 'Lakisha',
+        phone: '8662023474',
+      })
+    ).toBe(false)
+  })
+
+  it('does not reuse a chart from the phone number alone', async () => {
+    const existing = row({
+      id: 'p1',
+      name: 'Jane Doe',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      phone: '5551234567',
+    })
+
+    const result = await resolvePostCallPatientMatch(practiceId, [existing], {}, '5551234567')
+
+    expect(result.patient).toBeNull()
   })
 
   it('reuses sole phone match when caller did not provide full identity', async () => {

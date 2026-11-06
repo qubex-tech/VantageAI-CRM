@@ -3,6 +3,7 @@ import {
   getRetellEcwWritebackLayerFlags,
   encounterAndNotesAllowedForPatientMode,
   classifyEncounterNotesPatientPath,
+  buildEhrPatientMatchQueries,
 } from '@/lib/integrations/ehr/writeback'
 
 describe('getRetellEcwWritebackLayerFlags', () => {
@@ -107,5 +108,30 @@ describe('classifyEncounterNotesPatientPath', () => {
         patient_type: 'New Patient',
       } as any)
     ).toBe('neutral')
+  })
+})
+
+describe('buildEhrPatientMatchQueries', () => {
+  it('does not search eCW from a first name alone', () => {
+    expect(buildEhrPatientMatchQueries({ fullName: 'Lakisha' })).toEqual([])
+    expect(buildEhrPatientMatchQueries({ fullName: 'Lakisha', phone: '8662023474' })).toEqual([])
+  })
+
+  it('searches when a full name is confirmed by date of birth or phone', () => {
+    expect(
+      buildEhrPatientMatchQueries({
+        fullName: 'Lakisha Olivier',
+        birthDate: '1983-07-28',
+      })
+    ).toEqual([
+      '/Patient?name=Lakisha%20Olivier&birthdate=1983-07-28',
+      '/Patient?family=Olivier&given=Lakisha&birthdate=1983-07-28',
+    ])
+    expect(
+      buildEhrPatientMatchQueries({
+        fullName: 'Lakisha Olivier',
+        phone: '(409) 293-6317',
+      })
+    ).toEqual(['/Patient?name=Lakisha%20Olivier&phone=4092936317'])
   })
 })

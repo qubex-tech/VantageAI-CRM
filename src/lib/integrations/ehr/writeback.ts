@@ -23,6 +23,7 @@ import { randomUUID } from 'crypto'
 import { refreshBackendConnectionIfNeeded } from '@/lib/integrations/ehr/backendTokens'
 import { formatPatientNoteForEhr, isPatientNoteType } from '@/lib/patient-note-types'
 import { extractEcwSecondaryMrn } from '@/lib/integrations/ehr/ecwPatientIds'
+import { callIdentityConfirmsPatient } from '@/lib/patient-identity'
 
 const WRITEBACK_PROVIDER_ID = 'ecw_write'
 const ECW_PATIENT_IDENTIFIER_SYSTEM = 'urn:oid:2.16.840.1.113883.4.391.326070'
@@ -418,46 +419,52 @@ function parseDobToIso(dateText: string | undefined) {
     .padStart(2, '0')}`
 }
 
-async function findEhrPatientMatch(params: {
-  client: FhirClient
+/** Queries that can confirm an eCW patient. A name-only search is intentionally absent. */
+export function buildEhrPatientMatchQueries(params: {
   fullName?: string | null
   birthDate?: string | null
   phone?: string | null
-}): Promise<{ id: string; mrn: string | null } | null> {
-  const { client, fullName, birthDate, phone } = params
-  const name = fullName?.trim() || ''
-  const normalizedPhone = phone ? phone.replace(/\D/g, '') : ''
-  if (!name && !normalizedPhone) return null
-
+}): string[] {
+  const name = params.fullName?.trim() || ''
+  const parts = name.split(/\s+/).filter(Boolean)
+  const hasFullName = parts.length >= 2
+  const birthDate = params.birthDate?.trim() || ''
+  const normalizedPhone = params.phone ? params.phone.replace(/\D/g, '') : ''
   const queries: string[] = []
-  if (name && birthDate) {
+
+  if (hasFullName && birthDate) {
     queries.push(`/Patient?name=${encodeURIComponent(name)}&birthdate=${encodeURIComponent(birthDate)}`)
-    const parts = name.split(/\s+/)
-    if (parts.length >= 2) {
-      const family = parts[parts.length - 1]
-      const given = parts.slice(0, -1).join(' ')
-      queries.push(
-        `/Patient?family=${encodeURIComponent(family)}&given=${encodeURIComponent(
-          given
-        )}&birthdate=${encodeURIComponent(birthDate)}`
-      )
-    }
+    const family = parts[parts.length - 1]
+    const given = parts.slice(0, -1).join(' ')
+    queries.push(
+      `/Patient?family=${encodeURIComponent(family)}&given=${encodeURIComponent(
+        given
+      )}&birthdate=${encodeURIComponent(birthDate)}`
+    )
   }
   if (normalizedPhone && birthDate) {
     queries.push(
       `/Patient?phone=${encodeURIComponent(normalizedPhone)}&birthdate=${encodeURIComponent(birthDate)}`
     )
   }
-  if (name && normalizedPhone) {
+  if (hasFullName && normalizedPhone) {
     queries.push(`/Patient?name=${encodeURIComponent(name)}&phone=${encodeURIComponent(normalizedPhone)}`)
   }
-  if (queries.length === 0 && name) {
-    queries.push(`/Patient?name=${encodeURIComponent(name)}`)
-  }
+  return queries
+}
+
+async function findEhrPatientMatch(params: {
+  client: FhirClient
+  fullName?: string | null
+  birthDate?: string | null
+  phone?: string | null
+}): Promise<{ id: string; mrn: string | null } | null> {
+  const queries = buildEhrPatientMatchQueries(params)
+  if (queries.length === 0) return null
 
   for (const query of queries) {
     try {
-      const result = (await client.request(query)) as any
+      const result = (await params.client.request(query)) as any
       const entry = Array.isArray(result?.entry) ? result.entry[0] : null
       const resource = entry?.resource as { id?: string; identifier?: Array<{ use?: string; value?: string }> } | undefined
       const id = resource?.id
@@ -901,18 +908,24 @@ export async function writeBackRetellCallToEhr(params: {
       patientRecord = await prisma.patient.findUnique({
         where: { id: patientId },
       })
-      if (explicitPatientIdentified && patientRecord?.externalEhrId) {
+      const callerName = resolveExplicitPatientNameForEhrLookup(extractedData)
+      const callerPhone = resolvePatientStatedPhoneForEhrLookup(extractedData)
+      if (
+        patientRecord &&
+        patientRecord.externalEhrId &&
+        callIdentityConfirmsPatient(patientRecord, {
+          name: callerName,
+          dateOfBirth: extractedData.patient_dob,
+          phone: callerPhone,
+        })
+      ) {
         ehrPatientId = patientRecord.externalEhrId
       }
     }
 
-    const lookupBirthDate =
-      parseDobToIso(extractedData.patient_dob) ||
-      (patientRecord?.dateOfBirth && !isPlaceholderDob(patientRecord.dateOfBirth)
-        ? patientRecord.dateOfBirth.toISOString().split('T')[0]
-        : null)
+    const lookupBirthDate = parseDobToIso(extractedData.patient_dob)
     const lookupName = explicitPatientIdentified
-      ? resolveExplicitPatientNameForEhrLookup(extractedData, patientRecord?.name)
+      ? resolveExplicitPatientNameForEhrLookup(extractedData)
       : null
     const lookupPhone = explicitPatientIdentified
       ? resolvePatientStatedPhoneForEhrLookup(extractedData)
