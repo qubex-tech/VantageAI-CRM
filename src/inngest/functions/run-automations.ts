@@ -2,7 +2,13 @@ import { inngest } from '../client'
 import { prisma } from '@/lib/db'
 import { evaluateConditions } from '@/automations/condition-evaluator'
 import { runAction } from '@/automations/action-runner'
-import { delaySecondsFromArgs, splitDelayIntoSleepDurations } from '@/automations/delay'
+import {
+  cancellationDelayReadyAt,
+  delaySecondsFromArgs,
+  secondsUntilInstant,
+  splitDelayIntoSleepDurations,
+  zonedYmd,
+} from '@/automations/delay'
 import { getEvaluateAfterActionCount } from '@/automations/flow-chain'
 import { logAutomationActivity } from '@/lib/patient-activity'
 import { notifyPracticeAutomationRun } from '@/automations/automation-push-notification'
@@ -598,13 +604,44 @@ export const runAutomationsForEvent = inngest.createFunction(
             })
 
             if (action.type === 'delay_seconds') {
-              const delaySeconds = delaySecondsFromArgs(processedArgs)
-              if (delaySeconds > 0) {
-                const chunks = splitDelayIntoSleepDurations(delaySeconds)
+              const configuredDelaySeconds = delaySecondsFromArgs(processedArgs)
+              let waitSeconds = configuredDelaySeconds
+              if (payload.eventName === 'crm/appointment.cancelled' && configuredDelaySeconds > 0) {
+                const startRaw = payload.data?.appointment?.startTime
+                const appointmentStart = startRaw ? new Date(startRaw) : null
+                const discoveredAt = payload.occurredAt ? new Date(payload.occurredAt) : null
+                if (
+                  appointmentStart &&
+                  !Number.isNaN(appointmentStart.getTime()) &&
+                  discoveredAt &&
+                  !Number.isNaN(discoveredAt.getTime())
+                ) {
+                  const { getPracticeTimeZone } = await import('@/lib/practice-timezone')
+                  const timeZone = await getPracticeTimeZone(practiceId)
+                  const readyAt = cancellationDelayReadyAt({
+                    appointmentStart,
+                    timeZone,
+                    delaySeconds: configuredDelaySeconds,
+                    unit: processedArgs.unit,
+                    amount: processedArgs.amount,
+                  })
+                  waitSeconds = secondsUntilInstant(discoveredAt, readyAt)
+                  processedArgs = {
+                    ...processedArgs,
+                    anchoredWaitSeconds: waitSeconds,
+                    appointmentDay: zonedYmd(appointmentStart, timeZone),
+                    delayReadyAt: readyAt.toISOString(),
+                  }
+                }
+              }
+              if (waitSeconds > 0) {
+                const chunks = splitDelayIntoSleepDurations(waitSeconds)
                 for (const [chunkIndex, duration] of chunks.entries()) {
                   await step.sleep(`delay-${run.id}-${index}-${chunkIndex}`, duration)
                 }
+              }
 
+              if (configuredDelaySeconds > 0) {
                 const stillMatches = await step.run(
                   `recheck-after-delay-${rule.id}-${payload.sourceEventId}-${index}`,
                   async () =>
@@ -622,7 +659,13 @@ export const runAutomationsForEvent = inngest.createFunction(
                     status: 'succeeded',
                     result: {
                       action: 'delay_seconds',
-                      seconds: delaySeconds,
+                      seconds: waitSeconds,
+                      ...(typeof processedArgs.appointmentDay === 'string'
+                        ? { appointmentDay: processedArgs.appointmentDay }
+                        : {}),
+                      ...(typeof processedArgs.delayReadyAt === 'string'
+                        ? { readyAt: processedArgs.delayReadyAt, anchoredTo: 'appointment_day' }
+                        : {}),
                       skippedRemaining: true,
                       reason: 'Conditions no longer matched after delay',
                     },

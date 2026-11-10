@@ -97,3 +97,73 @@ export function splitDelayIntoSleepDurations(totalSeconds: number): string[] {
   }
   return chunks
 }
+
+/** Offset (ms) such that `utcInstant + offset` equals the wall clock in `timeZone`. */
+function timeZoneOffsetMs(instant: Date, timeZone: string): number {
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+  const parts = dtf.formatToParts(instant)
+  const get = (type: string) => Number(parts.find((part) => part.type === type)?.value)
+  const asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'))
+  return asUtc - instant.getTime()
+}
+
+/** UTC instant for `YYYY-MM-DD` at 00:00 in `timeZone`. */
+export function zonedMidnight(ymd: string, timeZone: string): Date {
+  const [year, month, day] = ymd.split('-').map(Number)
+  const utcGuess = Date.UTC(year, month - 1, day, 0, 0, 0)
+  const offset1 = timeZoneOffsetMs(new Date(utcGuess), timeZone)
+  let ts = utcGuess - offset1
+  const offset2 = timeZoneOffsetMs(new Date(ts), timeZone)
+  if (offset2 !== offset1) ts = utcGuess - offset2
+  return new Date(ts)
+}
+
+export function zonedYmd(instant: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(instant)
+}
+
+function addCalendarDays(ymd: string, days: number): string {
+  const [year, month, day] = ymd.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10)
+}
+
+/**
+ * When a cancellation delay should finish.
+ * The clock starts at local midnight on the day the visit was scheduled, then
+ * the configured delay runs from that morning. A 14-day delay on a November 3
+ * visit is ready at local midnight on November 17.
+ */
+export function cancellationDelayReadyAt(params: {
+  appointmentStart: Date
+  timeZone: string
+  delaySeconds: number
+  unit?: unknown
+  amount?: unknown
+}): Date {
+  const appointmentDay = zonedYmd(params.appointmentStart, params.timeZone)
+  const amount = Number(params.amount)
+  if (params.unit === 'days' && Number.isFinite(amount) && amount > 0) {
+    return zonedMidnight(addCalendarDays(appointmentDay, Math.floor(amount)), params.timeZone)
+  }
+  const dayStart = zonedMidnight(appointmentDay, params.timeZone)
+  return new Date(dayStart.getTime() + Math.max(0, Math.floor(params.delaySeconds)) * 1000)
+}
+
+/** Whole seconds from `from` until `until`. Zero when the ready time has passed. */
+export function secondsUntilInstant(from: Date, until: Date): number {
+  return Math.max(0, Math.floor((until.getTime() - from.getTime()) / 1000))
+}

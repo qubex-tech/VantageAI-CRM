@@ -85,6 +85,10 @@ const delaySecondsSchema = z.preprocess((raw) => {
   seconds: z.number().int().min(0).max(MAX_DELAY_SECONDS),
   amount: z.number().int().min(0).optional(),
   unit: z.enum(['seconds', 'minutes', 'days']).optional(),
+  /** Set by the runner when a cancellation delay is measured from the visit day. */
+  anchoredWaitSeconds: z.number().int().min(0).optional(),
+  appointmentDay: z.string().optional(),
+  delayReadyAt: z.string().optional(),
 }))
 
 const waitUntilLocalTimeSchema = z.object({
@@ -1015,9 +1019,11 @@ async function delaySeconds(
     status: 'succeeded',
     result: {
       action: 'delay_seconds',
-      seconds: args.seconds,
+      seconds: args.anchoredWaitSeconds ?? args.seconds,
       amount: args.amount,
       unit: args.unit,
+      ...(args.appointmentDay ? { appointmentDay: args.appointmentDay } : {}),
+      ...(args.delayReadyAt ? { readyAt: args.delayReadyAt, anchoredTo: 'appointment_day' } : {}),
       note: 'Actual wait is performed via step.sleep in Inngest',
     },
   }

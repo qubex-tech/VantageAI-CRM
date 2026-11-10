@@ -1655,6 +1655,9 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                       </div>
                       <p className="text-xs text-gray-500">
                         Maximum 30 days. The next step waits this long before running.
+                        {triggerEventName === 'crm/appointment.cancelled'
+                          ? ' For a cancelled appointment, the wait starts at the beginning of the day that visit was scheduled.'
+                          : ''}
                       </p>
                     </>
                   )
