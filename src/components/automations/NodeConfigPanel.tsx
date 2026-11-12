@@ -31,7 +31,10 @@ interface NodeConfigPanelProps {
   onUpdate: (nodeId: string, config: any) => void
   onDelete: (nodeId: string) => void
   triggerEventName?: string // The event name from the trigger node
+  practiceId?: string
 }
+
+const VISIT_TYPE_CONDITION_FIELDS = new Set(['appointment.visitType', 'openSlot.visitType'])
 
 // Patient fields - available for all patient-related events
 const PATIENT_FIELDS: Array<{ value: string; label: string; type: 'string' | 'number' | 'boolean' | 'date' }> = [
@@ -288,12 +291,14 @@ interface MarketingTemplate {
   category: string
 }
 
-export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: NodeConfigPanelProps) {
+export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName, practiceId }: NodeConfigPanelProps) {
   const [config, setConfig] = useState(node.data.config || {})
   const [templates, setTemplates] = useState<MarketingTemplate[]>([])
   const [loadingTemplates, setLoadingTemplates] = useState(false)
   const [patientLists, setPatientLists] = useState<Array<{ id: string; name: string; memberCount: number }>>([])
   const [loadingLists, setLoadingLists] = useState(false)
+  const [visitTypes, setVisitTypes] = useState<string[]>([])
+  const [loadingVisitTypes, setLoadingVisitTypes] = useState(false)
 
   useEffect(() => {
     setConfig(node.data.config || {})
@@ -323,6 +328,11 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
     }
   }, [node.type, config.eventName, config.conditions])
 
+  useEffect(() => {
+    if (node.type !== 'condition') return
+    void fetchVisitTypes()
+  }, [node.type, practiceId])
+
   // Helper to check if selected template is drag-drop
   const selectedTemplate = config.args?.templateId 
     ? templates.find(t => t.id === config.args.templateId)
@@ -339,6 +349,28 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
   const handleDelete = () => {
     if (confirm('Are you sure you want to delete this node?')) {
       onDelete(node.id)
+    }
+  }
+
+  const fetchVisitTypes = async () => {
+    setLoadingVisitTypes(true)
+    try {
+      const params = practiceId ? `?practiceId=${encodeURIComponent(practiceId)}` : ''
+      const response = await fetch(`/api/appointments/visit-types${params}`)
+      if (response.ok) {
+        const data = await response.json()
+        const names = Array.isArray(data.visitTypes)
+          ? data.visitTypes.filter((name: unknown): name is string => typeof name === 'string' && name.trim().length > 0)
+          : []
+        setVisitTypes(names)
+      } else {
+        setVisitTypes([])
+      }
+    } catch (error) {
+      console.error('Error fetching visit types:', error)
+      setVisitTypes([])
+    } finally {
+      setLoadingVisitTypes(false)
     }
   }
 
@@ -737,6 +769,45 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName }: 
                                 ))}
                               </SelectContent>
                             </Select>
+                          ) : VISIT_TYPE_CONDITION_FIELDS.has(condition.field) ? (
+                            (() => {
+                              const saved =
+                                typeof condition.value === 'string' ? condition.value.trim() : ''
+                              const options =
+                                saved && !visitTypes.includes(saved)
+                                  ? [saved, ...visitTypes]
+                                  : visitTypes
+                              return (
+                                <Select
+                                  value={saved}
+                                  onValueChange={(value) => {
+                                    const newConditions = [...(config.conditions || [])]
+                                    newConditions[index] = { ...condition, value }
+                                    handleUpdate({ conditions: newConditions })
+                                  }}
+                                  disabled={loadingVisitTypes || options.length === 0}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue
+                                      placeholder={
+                                        loadingVisitTypes
+                                          ? 'Loading visit types...'
+                                          : options.length === 0
+                                            ? 'No visit types available'
+                                            : 'Select visit type'
+                                      }
+                                    />
+                                  </SelectTrigger>
+                                  <SelectContent className="max-h-72">
+                                    {options.map((visitType) => (
+                                      <SelectItem key={visitType} value={visitType}>
+                                        {visitType}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              )
+                            })()
                           ) : condition.field === 'appointment.status' ? (
                             <Select
                               value={condition.value || ''}

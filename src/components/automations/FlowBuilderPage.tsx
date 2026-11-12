@@ -560,7 +560,8 @@ export function FlowBuilderPage({ practiceId, userId, initialRules = [], initial
 
       {/* Flow Builder */}
       <div className="flex-1 overflow-hidden">
-        <FlowBuilder 
+        <FlowBuilder
+          practiceId={practiceId}
           initialWorkflow={initialWorkflow} 
           onSave={(workflow) => {
             setCurrentWorkflow(workflow)

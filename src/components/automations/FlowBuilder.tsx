@@ -42,6 +42,7 @@ const initialNodes: Node<FlowNodeData>[] = []
 const initialEdges: Edge[] = []
 
 interface FlowBuilderProps {
+  practiceId?: string
   initialWorkflow?: {
     nodes: Node<FlowNodeData>[]
     edges: Edge[]
@@ -51,7 +52,7 @@ interface FlowBuilderProps {
   onWorkflowChange?: (workflow: { nodes: Node<FlowNodeData>[]; edges: Edge[] }) => void
 }
 
-export function FlowBuilder({ initialWorkflow, onSave, onTest, onWorkflowChange }: FlowBuilderProps) {
+export function FlowBuilder({ practiceId, initialWorkflow, onSave, onTest, onWorkflowChange }: FlowBuilderProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState(
     initialWorkflow?.nodes || initialNodes
   )
@@ -271,6 +272,7 @@ export function FlowBuilder({ initialWorkflow, onSave, onTest, onWorkflowChange 
               onUpdate={updateNodeConfig}
               onDelete={deleteNode}
               triggerEventName={triggerNode?.data.config?.eventName}
+              practiceId={practiceId}
             />
           </div>
         )}
