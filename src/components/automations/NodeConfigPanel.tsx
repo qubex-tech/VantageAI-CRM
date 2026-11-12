@@ -25,6 +25,7 @@ import {
   maxAmountForUnit,
   type DelayUnit,
 } from '@/automations/delay'
+import { VisitTypePicker } from './VisitTypePicker'
 
 interface NodeConfigPanelProps {
   node: Node<FlowNodeData>
@@ -770,44 +771,16 @@ export function NodeConfigPanel({ node, onUpdate, onDelete, triggerEventName, pr
                               </SelectContent>
                             </Select>
                           ) : VISIT_TYPE_CONDITION_FIELDS.has(condition.field) ? (
-                            (() => {
-                              const saved =
-                                typeof condition.value === 'string' ? condition.value.trim() : ''
-                              const options =
-                                saved && !visitTypes.includes(saved)
-                                  ? [saved, ...visitTypes]
-                                  : visitTypes
-                              return (
-                                <Select
-                                  value={saved}
-                                  onValueChange={(value) => {
-                                    const newConditions = [...(config.conditions || [])]
-                                    newConditions[index] = { ...condition, value }
-                                    handleUpdate({ conditions: newConditions })
-                                  }}
-                                  disabled={loadingVisitTypes || options.length === 0}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue
-                                      placeholder={
-                                        loadingVisitTypes
-                                          ? 'Loading visit types...'
-                                          : options.length === 0
-                                            ? 'No visit types available'
-                                            : 'Select visit type'
-                                      }
-                                    />
-                                  </SelectTrigger>
-                                  <SelectContent className="max-h-72">
-                                    {options.map((visitType) => (
-                                      <SelectItem key={visitType} value={visitType}>
-                                        {visitType}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              )
-                            })()
+                            <VisitTypePicker
+                              visitTypes={visitTypes}
+                              value={condition.value}
+                              loading={loadingVisitTypes}
+                              onChange={(next) => {
+                                const newConditions = [...(config.conditions || [])]
+                                newConditions[index] = { ...condition, value: next }
+                                handleUpdate({ conditions: newConditions })
+                              }}
+                            />
                           ) : condition.field === 'appointment.status' ? (
                             <Select
                               value={condition.value || ''}

@@ -94,14 +94,26 @@ function evaluateFieldCondition(
     return false
   }
 
+  const selectedValues = Array.isArray(condition.value)
+    ? condition.value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : null
+  const matchesSelectedValue = (candidate: unknown): boolean => {
+    if (!selectedValues || typeof candidate !== 'string') return false
+    const normalized = candidate.trim().toLowerCase()
+    return selectedValues.some((item) => item.trim().toLowerCase() === normalized)
+  }
+
   switch (condition.operator) {
     case 'equals':
+      if (selectedValues) return matchesSelectedValue(fieldValue)
       return valuesEqual(fieldValue, condition.value)
 
     case 'not_equals':
+      if (selectedValues) return !matchesSelectedValue(fieldValue)
       return !valuesEqual(fieldValue, condition.value)
 
     case 'contains':
+      if (selectedValues) return matchesSelectedValue(fieldValue)
       if (typeof fieldValue === 'string' && typeof condition.value === 'string') {
         return fieldValue.toLowerCase().includes(condition.value.toLowerCase())
       }
@@ -111,6 +123,7 @@ function evaluateFieldCondition(
       return false
 
     case 'not_contains':
+      if (selectedValues) return !matchesSelectedValue(fieldValue)
       if (typeof fieldValue === 'string' && typeof condition.value === 'string') {
         return !fieldValue.toLowerCase().includes(condition.value.toLowerCase())
       }
