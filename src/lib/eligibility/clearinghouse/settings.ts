@@ -33,7 +33,7 @@ export async function getPracticeEligibilitySettings(
       settings = await prisma.practiceEligibilitySettings.update({
         where: { practiceId },
         data: {
-          displayFields: LONESTAR_DEFAULT_DISPLAY_FIELDS as Prisma.InputJsonValue,
+          displayFields: LONESTAR_DEFAULT_DISPLAY_FIELDS as unknown as Prisma.InputJsonValue,
         },
       })
     }
@@ -133,7 +133,7 @@ export async function upsertPracticeEligibilitySettings(
     data.displayFields =
       patch.displayFields == null
         ? null
-        : (parseDisplayFieldsConfig(patch.displayFields) as Prisma.InputJsonValue)
+        : (parseDisplayFieldsConfig(patch.displayFields) as unknown as Prisma.InputJsonValue)
   }
 
   const settings = await prisma.practiceEligibilitySettings.update({
