@@ -6,6 +6,7 @@ import { computeInsuranceCompleteness, maskMemberId } from '@/lib/insurance-comp
 import type { ParsedEligibilitySummary } from '@/lib/availity/types'
 import { EligibilityOvPanel } from './EligibilityOvPanel'
 import { InsurancePolicyFormModal } from './InsurancePolicyFormModal'
+import type { EligibilityDisplayFieldsConfig } from '@/lib/eligibility/display-fields'
 import { Shield, Plus, Pencil, Trash2, User, UserCircle, RefreshCw, CheckCircle2 } from 'lucide-react'
 
 type InsurancePolicy = {
@@ -118,6 +119,7 @@ export function InsuranceTab({
   const [checkingPolicyId, setCheckingPolicyId] = useState<string | null>(null)
   const [checkMessage, setCheckMessage] = useState<string | null>(null)
   const [recentChecks, setRecentChecks] = useState<EligibilityCheckSummary[]>([])
+  const [displayConfig, setDisplayConfig] = useState<EligibilityDisplayFieldsConfig | null>(null)
   const [appointmentType, setAppointmentType] = useState('NP')
   const autoSyncAttempted = useRef(false)
 
@@ -135,6 +137,25 @@ export function InsuranceTab({
   useEffect(() => {
     void loadRecentChecks()
   }, [loadRecentChecks, policies])
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadDisplayConfig() {
+      try {
+        const query = practiceId ? `?practiceId=${practiceId}` : ''
+        const res = await fetch(`/api/settings/eligibility${query}`)
+        if (!res.ok) return
+        const data = await res.json()
+        if (!cancelled) setDisplayConfig(data.settings?.displayFields || null)
+      } catch {
+        // non-blocking
+      }
+    }
+    void loadDisplayConfig()
+    return () => {
+      cancelled = true
+    }
+  }, [practiceId])
 
   const syncFromEhr = useCallback(async () => {
     if (!externalEhrId?.trim()) {
@@ -456,8 +477,18 @@ export function InsuranceTab({
                       (c.policy?.payerNameRaw === policy.payerNameRaw &&
                         Boolean(c.parsedSummary?.rheum || c.parsedSummary?.coverageDetail))
                   )
-                  return latest?.parsedSummary?.rheum || latest?.parsedSummary?.coverageDetail ? (
-                    <EligibilityOvPanel compact summary={latest.parsedSummary} />
+                  const summary = latest?.parsedSummary
+                  const hasCapturedBenefits = Boolean(
+                    summary?.displaySnapshot || summary?.rheum || summary?.coverageDetail
+                  )
+                  const canShow =
+                    hasCapturedBenefits || (Boolean(displayConfig) && latest?.status === 'complete')
+                  return canShow && summary ? (
+                    <EligibilityOvPanel
+                      compact
+                      summary={latest.parsedSummary}
+                      displayConfig={displayConfig}
+                    />
                   ) : null
                 })()}
               </li>

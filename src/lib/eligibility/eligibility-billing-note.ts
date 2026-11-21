@@ -3,6 +3,10 @@ import { syncPatientNoteToEhr } from '@/lib/integrations/ehr/patientNoteSync'
 import type { PatientNoteEhrSyncResult } from '@/lib/integrations/ehr/patientNoteSync'
 import type { ParsedEligibilitySummary } from '@/lib/availity'
 import { formatEligibilityNoteContent } from '@/lib/availity'
+import {
+  ehrDisplayFields,
+  formatDisplayFieldLines,
+} from '@/lib/eligibility/display-fields'
 import { formatPatientDob } from '@/lib/mcp/verification-fields'
 import { getPracticeTimeZone } from '@/lib/practice-timezone'
 import { formatUserFacingDateTime } from '@/lib/timezone'
@@ -39,6 +43,11 @@ export function formatEligibilityBillingNote(params: {
     isPrimary?: boolean | null
   } | null
 }): string {
+  const selected = formatDisplayFieldLines(ehrDisplayFields(params.summary.displaySnapshot))
+  if (selected.length > 0) {
+    return formatSelectedFieldsBillingNote(params, selected)
+  }
+
   return formatEligibilityNoteContent({
     summary: params.summary,
     payerNameRaw: params.payerNameRaw || undefined,
@@ -53,6 +62,39 @@ export function formatEligibilityBillingNote(params: {
     planType: params.policy?.planType || undefined,
     isPrimary: params.policy?.isPrimary ?? undefined,
   })
+}
+
+function formatSelectedFieldsBillingNote(
+  params: Parameters<typeof formatEligibilityBillingNote>[0],
+  selectedLines: string[]
+): string {
+  const lines: string[] = [
+    params.sourceLabel
+      ? `Eligibility / Billing Note (${params.sourceLabel})`
+      : 'Eligibility / Billing Note',
+  ]
+  if (params.checkedAt) {
+    lines.push(
+      `Checked: ${formatUserFacingDateTime(params.checkedAt, {
+        timeZone: params.timeZone,
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      })}`
+    )
+  }
+  lines.push(
+    `Status: ${params.summary.eligibilityStatus.charAt(0).toUpperCase()}${params.summary.eligibilityStatus.slice(1)}`
+  )
+  const patientName = params.patient ? patientDisplayName(params.patient) : undefined
+  if (patientName) lines.push(`Patient: ${patientName}`)
+  const dob = formatPatientDob(params.patient?.dateOfBirth)
+  if (dob) lines.push(`Date of birth: ${dob}`)
+  if (params.policy?.memberId) lines.push(`Member ID: ${params.policy.memberId}`)
+  const payer = params.summary.payerName || params.payerNameRaw
+  if (payer) lines.push(`Payer: ${payer}`)
+  lines.push('')
+  lines.push(...selectedLines)
+  return lines.join('\n')
 }
 
 export async function findRelatedEligibilityVisit(params: {

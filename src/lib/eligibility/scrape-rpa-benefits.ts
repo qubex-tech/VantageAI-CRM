@@ -2,6 +2,8 @@ import {
   createEmptyRheumPacket,
   finalizeRheumPacket,
   parseTriStateFlag,
+  REFERRAL_REQUIRED_NEGATIVE,
+  REFERRAL_REQUIRED_POSITIVE,
   type EligibilityFormMode,
   type EligibilityNetworkStatus,
   type RheumEligibilityPacket,
@@ -361,8 +363,8 @@ export function scrapeRheumPacketFromPortalText(
 
   packet.referralRequired = parseTriStateFlag(
     text,
-    /referral\s*(required|needed|yes)|requires?\s+referral/i,
-    /no\s+referral|referral\s*(not required|waived)/i
+    REFERRAL_REQUIRED_POSITIVE,
+    REFERRAL_REQUIRED_NEGATIVE
   )
   packet.authRequired =
     benefitRows.authRequired != null

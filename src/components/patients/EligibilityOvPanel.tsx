@@ -2,6 +2,13 @@
 
 import type { ReactNode } from 'react'
 import type { EligibilityCoverageDetail, ParsedEligibilitySummary } from '@/lib/availity/types'
+import {
+  buildEligibilityDisplaySnapshot,
+  crmDisplayFields,
+  UNKNOWN_DISPLAY_VALUE,
+  type EligibilityDisplayFieldsConfig,
+  type EligibilityDisplaySnapshotField,
+} from '@/lib/eligibility/display-fields'
 import type { RheumEligibilityPacket } from '@/lib/eligibility/rheum-packet'
 
 function Field({
@@ -321,23 +328,47 @@ function CoverageSnapshot({ detail }: { detail: EligibilityCoverageDetail }) {
   )
 }
 
+function SelectedFieldsGrid({ fields }: { fields: EligibilityDisplaySnapshotField[] }) {
+  return (
+    <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+      {fields.map((field) => (
+        <div key={field.id} className="flex flex-col gap-0.5">
+          <dt className="text-xs font-medium text-gray-500">{field.label}</dt>
+          <dd className="text-sm text-gray-900">
+            {field.value && field.value !== UNKNOWN_DISPLAY_VALUE ? (
+              field.value
+            ) : (
+              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700">
+                {UNKNOWN_DISPLAY_VALUE}
+              </span>
+            )}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
 export function EligibilityOvPanel({
   packet,
   eligibilityStatus,
   coverageDetail,
   summary,
+  displayConfig,
   compact,
 }: {
   packet?: RheumEligibilityPacket | null
   eligibilityStatus?: string | null
   coverageDetail?: EligibilityCoverageDetail | null
   summary?: ParsedEligibilitySummary | null
+  displayConfig?: EligibilityDisplayFieldsConfig | null
   compact?: boolean
 }) {
   const rheum = packet || summary?.rheum
   const detail = coverageDetail || summary?.coverageDetail
   const status = eligibilityStatus || summary?.eligibilityStatus
-  if (!rheum && !status && !detail) return null
+  const selectedFields = resolveCrmDisplayFields({ summary, rheum, detail, status, displayConfig })
+  if (!rheum && !status && !detail && selectedFields.length === 0) return null
 
   const unknown = new Set(rheum?.unknownFields || [])
   const badge = sourceBadge(rheum?.source)
@@ -370,7 +401,9 @@ export function EligibilityOvPanel({
         <p className="mb-2 text-xs text-amber-800">{rheum.callRequiredReason}</p>
       )}
 
-      {detail ? (
+      {selectedFields.length > 0 ? (
+        <SelectedFieldsGrid fields={selectedFields} />
+      ) : detail ? (
         <CoverageSnapshot detail={detail} />
       ) : rheum ? (
         <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -437,4 +470,32 @@ export function EligibilityOvPanel({
       )}
     </div>
   )
+}
+
+function resolveCrmDisplayFields(params: {
+  summary?: ParsedEligibilitySummary | null
+  rheum?: RheumEligibilityPacket | null
+  detail?: EligibilityCoverageDetail | null
+  status?: string | null
+  displayConfig?: EligibilityDisplayFieldsConfig | null
+}): EligibilityDisplaySnapshotField[] {
+  const fromStored = crmDisplayFields(params.summary?.displaySnapshot)
+  if (fromStored.length) return fromStored
+  if (!params.displayConfig) return []
+
+  const summary: ParsedEligibilitySummary = params.summary || {
+    eligibilityStatus:
+      params.status === 'active' ||
+      params.status === 'inactive' ||
+      params.status === 'error' ||
+      params.status === 'unknown'
+        ? params.status
+        : 'unknown',
+    benefits: [],
+    validationMessages: [],
+    rawPlanCount: 0,
+    rheum: params.rheum || undefined,
+    coverageDetail: params.detail || undefined,
+  }
+  return crmDisplayFields(buildEligibilityDisplaySnapshot(summary, params.displayConfig))
 }

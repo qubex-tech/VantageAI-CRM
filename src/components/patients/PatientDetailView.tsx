@@ -1013,7 +1013,9 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                           <div className="flex-1 min-w-0">
                             <div className="text-sm font-medium text-gray-900">{entry.title}</div>
                             {entry.description && (
-                              <div className="text-sm text-gray-500 mt-1">{entry.description}</div>
+                              <div className="text-sm text-gray-500 mt-1 whitespace-pre-line">
+                                {entry.description}
+                              </div>
                             )}
                             <div className="text-xs text-gray-400 mt-2">
                               {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true })}
@@ -1086,7 +1088,9 @@ export function PatientDetailView({ patient, users = [], currentUserId = '' }: P
                                   <div className="flex-1 min-w-0">
                                     <div className="text-sm font-medium text-gray-900">{entry.title}</div>
                                     {entry.description && (
-                                      <div className="text-sm text-gray-500 mt-1">{entry.description}</div>
+                                      <div className="text-sm text-gray-500 mt-1 whitespace-pre-line">
+                                        {entry.description}
+                                      </div>
                                     )}
                                     <div className="text-xs text-gray-400 mt-2">
                                       {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true })}

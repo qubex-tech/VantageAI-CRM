@@ -1,6 +1,9 @@
 import {
   createEmptyRheumPacket,
   finalizeRheumPacket,
+  parseTriStateFlag,
+  REFERRAL_REQUIRED_NEGATIVE,
+  REFERRAL_REQUIRED_POSITIVE,
   type EligibilityNetworkStatus,
   type RheumEligibilityPacket,
 } from '@/lib/eligibility/rheum-packet'
@@ -531,6 +534,19 @@ function pickAmount(
   return money(preferred.benefitAmount)
 }
 
+function referralRequiredFromBenefits(benefits: StediBenefitInformation[]): boolean | null {
+  const blob = benefits
+    .flatMap((benefit) => [
+      ...(benefit.additionalInformation || []).map((row) => row.description),
+      benefit.planCoverage,
+      benefit.insuranceType,
+      benefit.name,
+    ])
+    .filter(Boolean)
+    .join(' ')
+  return parseTriStateFlag(blob, REFERRAL_REQUIRED_POSITIVE, REFERRAL_REQUIRED_NEGATIVE)
+}
+
 function authRequired(benefits: StediBenefitInformation[]): boolean | null {
   const withFlag = benefits.find((b) => b.authOrCertIndicator)
   if (!withFlag?.authOrCertIndicator) return null
@@ -569,6 +585,7 @@ export function buildRheumPacketFromStediResponse(
     packet.oop = { max: oop, remaining: oopRemaining }
   }
   packet.authRequired = authRequired(benefits)
+  packet.referralRequired = referralRequiredFromBenefits(benefits)
   packet.verifiedBy = 'Eligibility check'
   return finalizeRheumPacket(packet)
 }

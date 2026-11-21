@@ -23,6 +23,7 @@ import { ClinicalIntegrationsSettings } from './ClinicalIntegrationsSettings'
 import { OutboundCustomerNotificationsSettings } from './OutboundCustomerNotificationsSettings'
 import { OutboundAgentsSettings } from './OutboundAgentsSettings'
 import { AvailitySettings } from './AvailitySettings'
+import { EligibilityDisplayFieldsSettings } from './EligibilityDisplayFieldsSettings'
 import { StediSettings } from './StediSettings'
 import { PreChartTemplateSettings } from './PreChartTemplateSettings'
 import { AriaScribeSettings } from './AriaScribeSettings'
@@ -278,6 +279,7 @@ export function PracticeAPIConfiguration() {
                   practiceId={selectedPracticeId}
                   initialIntegration={stediIntegration}
                 />
+                <EligibilityDisplayFieldsSettings practiceId={selectedPracticeId} />
                 <ResendSettingsWithPracticeId
                   practiceId={selectedPracticeId}
                   initialIntegration={resendIntegration}

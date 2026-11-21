@@ -1,5 +1,12 @@
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { getOrCreateAvailityIntegration } from '@/lib/availity/config'
+import {
+  isLonestarPracticeName,
+  LONESTAR_DEFAULT_DISPLAY_FIELDS,
+  parseDisplayFieldsConfig,
+  type EligibilityDisplayFieldsConfig,
+} from '@/lib/eligibility/display-fields'
 import {
   normalizeServiceTypeCodes,
   primaryServiceTypeCode,
@@ -17,6 +24,21 @@ export async function getPracticeEligibilitySettings(
     settings = await seedPracticeEligibilitySettings(practiceId)
   }
 
+  if (settings.displayFields == null) {
+    const practice = await prisma.practice.findUnique({
+      where: { id: practiceId },
+      select: { name: true },
+    })
+    if (isLonestarPracticeName(practice?.name)) {
+      settings = await prisma.practiceEligibilitySettings.update({
+        where: { practiceId },
+        data: {
+          displayFields: LONESTAR_DEFAULT_DISPLAY_FIELDS as Prisma.InputJsonValue,
+        },
+      })
+    }
+  }
+
   const codes = codesFromSettings(settings)
   return {
     practiceId,
@@ -29,6 +51,7 @@ export async function getPracticeEligibilitySettings(
     defaultProviderOrgName: settings.defaultProviderOrgName,
     defaultServiceType: primaryServiceTypeCode(codes),
     defaultServiceTypeCodes: codes,
+    displayFields: parseDisplayFieldsConfig(settings.displayFields),
   }
 }
 
@@ -77,6 +100,7 @@ export async function upsertPracticeEligibilitySettings(
     defaultProviderOrgName: string | null
     defaultServiceType: string
     defaultServiceTypeCodes: string[]
+    displayFields: EligibilityDisplayFieldsConfig | null
   }>
 ) {
   await getPracticeEligibilitySettings(practiceId)
@@ -104,6 +128,12 @@ export async function upsertPracticeEligibilitySettings(
     )
     data.defaultServiceTypeCodes = codes
     data.defaultServiceType = primaryServiceTypeCode(codes)
+  }
+  if (patch.displayFields !== undefined) {
+    data.displayFields =
+      patch.displayFields == null
+        ? null
+        : (parseDisplayFieldsConfig(patch.displayFields) as Prisma.InputJsonValue)
   }
 
   const settings = await prisma.practiceEligibilitySettings.update({

@@ -1,4 +1,5 @@
 import type { ParsedEligibilitySummary } from '@/lib/availity/types'
+import type { EligibilityDisplayFieldsConfig } from '@/lib/eligibility/display-fields'
 
 export interface CanonicalEligibilityRequest {
   practiceId: string
@@ -67,4 +68,5 @@ export interface PracticeEligibilityConfig {
   defaultProviderOrgName: string | null
   defaultServiceType: string
   defaultServiceTypeCodes: string[]
+  displayFields: EligibilityDisplayFieldsConfig | null
 }

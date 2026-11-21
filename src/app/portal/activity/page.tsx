@@ -197,7 +197,7 @@ export default async function PortalActivityPage() {
                               {getEventTitle(event)}
                             </h3>
                             {getEventDescription(event) && (
-                              <p className="text-sm text-gray-600 mt-1">
+                              <p className="text-sm text-gray-600 mt-1 whitespace-pre-line">
                                 {getEventDescription(event)}
                               </p>
                             )}

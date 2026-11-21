@@ -2,6 +2,8 @@ import { prisma } from '@/lib/db'
 import { initiateInsuranceOutboundCall } from '@/lib/outbound-insurance-call'
 import { runAvailityRpaEligibility } from '@/lib/browser-agent'
 import type { ParsedEligibilitySummary } from '@/lib/availity'
+import { getPracticeEligibilitySettings } from './clearinghouse/settings'
+import { withDisplaySnapshot } from './display-fields'
 import { persistEligibilityBillingNote, formatEligibilityBillingNote } from './eligibility-billing-note'
 import { getPracticeTimeZone } from '@/lib/practice-timezone'
 import { linkVoiceFallbackToCheck } from './finalize-check'
@@ -264,16 +266,20 @@ async function runMedicareTxNonParShortCircuit(params: {
   }
 
   const rheum = buildMedicareTxNonParPacket({ appointmentType: params.appointmentType })
-  const summary: ParsedEligibilitySummary = {
-    eligibilityStatus: 'active',
-    planStatus: 'Medicare TX NON-PAR schedule',
-    payerName: policy.payerNameRaw,
-    planType: 'Medicare',
-    benefits: [],
-    validationMessages: [],
-    rawPlanCount: 0,
-    rheum,
-  }
+  const settings = await getPracticeEligibilitySettings(params.practiceId)
+  const summary: ParsedEligibilitySummary = withDisplaySnapshot(
+    {
+      eligibilityStatus: 'active',
+      planStatus: 'Medicare TX NON-PAR schedule',
+      payerName: policy.payerNameRaw,
+      planType: 'Medicare',
+      benefits: [],
+      validationMessages: [],
+      rawPlanCount: 0,
+      rheum,
+    },
+    settings.displayFields
+  )
 
   const now = new Date()
   const check = await prisma.eligibilityCheck.create({

@@ -5,6 +5,8 @@ import { logPatientActivity } from '@/lib/patient-activity'
 import { getPracticeTimeZone } from '@/lib/practice-timezone'
 import { formatUserFacingDateTime } from '@/lib/timezone'
 import { type ParsedEligibilitySummary } from '@/lib/availity'
+import { getPracticeEligibilitySettings } from '@/lib/eligibility/clearinghouse/settings'
+import { formatEligibilityActivityDescription, withDisplaySnapshot } from '@/lib/eligibility/display-fields'
 import {
   formatEligibilityBillingNote,
   persistEligibilityBillingNote,
@@ -49,6 +51,7 @@ export async function finalizeRpaEligibilityCheck(params: {
   })
   if (!check) throw new Error('Eligibility check not found')
 
+  const settings = await getPracticeEligibilitySettings(check.practiceId)
   if (params.summary.rheum) {
     const appt =
       params.appointmentType ||
@@ -60,6 +63,7 @@ export async function finalizeRpaEligibilityCheck(params: {
       params.summary.rheum = applyCallRequiredFlag(params.summary.rheum, appt)
     }
   }
+  params.summary = withDisplaySnapshot(params.summary, settings.displayFields)
 
   if (params.summary.eligibilityStatus === 'error') {
     await prisma.eligibilityCheck.update({
@@ -134,11 +138,15 @@ export async function finalizeRpaEligibilityCheck(params: {
     patientId: check.patientId,
     type: 'insurance',
     title: 'Insurance eligibility verified (Availity portal)',
-    description: `${params.summary.eligibilityStatus} — ${formatUserFacingDateTime(now, {
-      timeZone: practiceTimeZone,
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    })}`,
+    description: formatEligibilityActivityDescription({
+      eligibilityStatus: params.summary.eligibilityStatus,
+      checkedAtLabel: formatUserFacingDateTime(now, {
+        timeZone: practiceTimeZone,
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }),
+      snapshot: params.summary.displaySnapshot,
+    }),
     metadata: {
       noteId,
       eligibilityCheckId: check.id,
@@ -146,6 +154,7 @@ export async function finalizeRpaEligibilityCheck(params: {
       source: 'availity_rpa',
       browserAgentRunId: params.browserAgentRunId,
       noteType: 'billing',
+      displaySnapshot: params.summary.displaySnapshot,
     },
     userId: automationUserId,
   })

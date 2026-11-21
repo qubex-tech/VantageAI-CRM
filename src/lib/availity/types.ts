@@ -1,3 +1,4 @@
+import type { EligibilityDisplaySnapshot } from '@/lib/eligibility/display-fields'
 import type { RheumEligibilityPacket } from '@/lib/eligibility/rheum-packet'
 
 export type AvailityEnvironment = 'demo' | 'production'
@@ -97,6 +98,8 @@ export interface ParsedEligibilitySummary {
   rheum?: RheumEligibilityPacket
   /** Full clearinghouse 271 snapshot for the insurance UI */
   coverageDetail?: EligibilityCoverageDetail
+  /** Frozen practice-selected benefit fields captured at check time */
+  displaySnapshot?: EligibilityDisplaySnapshot
 }
 
 export interface EligibilityMoneyPair {

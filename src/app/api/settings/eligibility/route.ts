@@ -7,6 +7,15 @@ import {
   listClearinghouseAdapters,
   upsertPracticeEligibilitySettings,
 } from '@/lib/eligibility/clearinghouse'
+import {
+  ELIGIBILITY_DISPLAY_CATALOG,
+  ELIGIBILITY_DISPLAY_FIELD_IDS,
+  parseDisplayFieldsConfig,
+} from '@/lib/eligibility/display-fields'
+
+const displayFieldIdSchema = z.enum(
+  ELIGIBILITY_DISPLAY_FIELD_IDS as unknown as [string, ...string[]]
+)
 
 const eligibilitySettingsSchema = z.object({
   primaryVendorKey: z.string().min(1).optional(),
@@ -18,6 +27,18 @@ const eligibilitySettingsSchema = z.object({
   defaultProviderOrgName: z.string().optional().or(z.literal('')),
   defaultServiceType: z.string().optional(),
   defaultServiceTypeCodes: z.array(z.string()).optional(),
+  displayFields: z
+    .object({
+      fields: z.array(
+        z.object({
+          id: displayFieldIdSchema,
+          crm: z.boolean(),
+          ehr: z.boolean(),
+        })
+      ),
+    })
+    .nullable()
+    .optional(),
 })
 
 function resolvePracticeId(
@@ -38,7 +59,11 @@ export async function GET(req: NextRequest) {
     const user = await requireAuth(req)
     const practiceId = resolvePracticeId(req, user)
     if (!practiceId) {
-      return NextResponse.json({ settings: null, vendors: listClearinghouseAdapters().map(vendorPayload) })
+      return NextResponse.json({
+        settings: null,
+        vendors: listClearinghouseAdapters().map(vendorPayload),
+        catalog: ELIGIBILITY_DISPLAY_CATALOG,
+      })
     }
 
     const settings = await getPracticeEligibilitySettings(practiceId)
@@ -49,7 +74,11 @@ export async function GET(req: NextRequest) {
       }))
     )
 
-    return NextResponse.json({ settings, vendors })
+    return NextResponse.json({
+      settings,
+      vendors,
+      catalog: ELIGIBILITY_DISPLAY_CATALOG,
+    })
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to fetch eligibility settings' },
@@ -86,11 +115,16 @@ export async function POST(req: NextRequest) {
         parsed.defaultProviderOrgName !== undefined
           ? parsed.defaultProviderOrgName || null
           : undefined,
+      displayFields:
+        parsed.displayFields === undefined
+          ? undefined
+          : parseDisplayFieldsConfig(parsed.displayFields),
     })
 
     return NextResponse.json({
       settings: await getPracticeEligibilitySettings(practiceId),
       vendors: listClearinghouseAdapters().map(vendorPayload),
+      catalog: ELIGIBILITY_DISPLAY_CATALOG,
       savedId: settings.id,
     })
   } catch (error) {

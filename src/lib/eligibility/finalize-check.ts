@@ -9,6 +9,8 @@ import {
   type AvailityCoverageRecord,
   type ParsedEligibilitySummary,
 } from '@/lib/availity'
+import { getPracticeEligibilitySettings } from './clearinghouse/settings'
+import { formatEligibilityActivityDescription, withDisplaySnapshot } from './display-fields'
 import {
   formatEligibilityBillingNote,
   persistEligibilityBillingNote,
@@ -60,9 +62,11 @@ export async function finalizeParsedEligibilityCheck(params: {
     throw new Error('Eligibility check not found')
   }
 
-  const summary = { ...params.summary }
+  const settings = await getPracticeEligibilitySettings(check.practiceId)
+  let summary = withDisplaySnapshot({ ...params.summary }, settings.displayFields)
   if (summary.rheum && params.appointmentType) {
     summary.rheum = applyCallRequiredFlag(summary.rheum, params.appointmentType)
+    summary = withDisplaySnapshot(summary, settings.displayFields)
   }
 
   const sourceLabel = params.sourceLabel === undefined ? 'Clearinghouse' : params.sourceLabel
@@ -157,11 +161,15 @@ export async function finalizeParsedEligibilityCheck(params: {
     title: sourceLabel
       ? `Insurance eligibility verified (${sourceLabel})`
       : 'Insurance eligibility verified',
-    description: `${summary.eligibilityStatus} — ${formatUserFacingDateTime(now, {
-      timeZone: practiceTimeZone,
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    })}`,
+    description: formatEligibilityActivityDescription({
+      eligibilityStatus: summary.eligibilityStatus,
+      checkedAtLabel: formatUserFacingDateTime(now, {
+        timeZone: practiceTimeZone,
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }),
+      snapshot: summary.displaySnapshot,
+    }),
     metadata: {
       noteId,
       eligibilityCheckId: check.id,
@@ -169,6 +177,7 @@ export async function finalizeParsedEligibilityCheck(params: {
       source: 'clearinghouse_api',
       vendorKey: check.vendorKey,
       noteType: 'billing',
+      displaySnapshot: summary.displaySnapshot,
     },
     userId: automationUserId,
   })

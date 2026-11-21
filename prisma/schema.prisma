@@ -418,6 +418,8 @@ model PracticeEligibilitySettings {
   defaultProviderOrgName   String?
   defaultServiceType       String   @default("30")
   defaultServiceTypeCodes  String[] @default([])
+  /// Practice-selected benefit fields for Vantage CRM and EHR notes
+  displayFields            Json?
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 

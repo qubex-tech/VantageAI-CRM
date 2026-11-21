@@ -111,6 +111,25 @@ describe('parseStediEligibilityResponse', () => {
     expect(summary.coverageDetail?.copays?.length).toBeGreaterThan(0)
   })
 
+  it('reads referral required from payer benefit notes', () => {
+    const mock = buildMockStediEligibilityResponse()
+    mock.benefitsInformation = [
+      ...(mock.benefitsInformation || []),
+      {
+        code: '1',
+        name: 'Active Coverage',
+        additionalInformation: [
+          {
+            description:
+              "This plan requires that services be performed by or referred by the patient's primary care physician",
+          },
+        ],
+      },
+    ]
+    const summary = parseStediEligibilityResponse(mock)
+    expect(summary.rheum?.referralRequired).toBe(true)
+  })
+
   it('formats the full 271 snapshot including remaining amounts and correspondence', () => {
     const summary = parseStediEligibilityResponse({
       controlNumber: '872057204',

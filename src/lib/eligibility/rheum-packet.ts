@@ -187,6 +187,10 @@ export function formatRheumPacketNoteSection(packet: RheumEligibilityPacket): st
   return lines.join('\n')
 }
 
+export const REFERRAL_REQUIRED_POSITIVE =
+  /referral\s*(required|needed|yes)|requires?\s+referral|requires that services be performed by or referred|referred by the patient'?s primary/i
+export const REFERRAL_REQUIRED_NEGATIVE = /no\s+referral|referral\s*(not required|waived)/i
+
 export function parseTriStateFlag(text: string, positive: RegExp, negative: RegExp): boolean | null {
   if (positive.test(text)) return true
   if (negative.test(text)) return false
