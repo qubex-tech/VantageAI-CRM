@@ -86,6 +86,40 @@ describe('eligibility display fields', () => {
     expect(snapshot?.fields.find((f) => f.id === 'oop')?.value).toBe('$2100.00 remaining')
   })
 
+  it('passes payer auth notes through Referral required when there is no yes/no', () => {
+    const snapshot = buildEligibilityDisplaySnapshot(
+      {
+        ...summary,
+        rheum: {
+          ...summary.rheum!,
+          referralRequired: null,
+          referralNote:
+            'A prior authorization or notification inquiry request may be submitted.',
+        },
+      },
+      LONESTAR_DEFAULT_DISPLAY_FIELDS
+    )
+    expect(snapshot?.fields.find((f) => f.id === 'referral_required')?.value).toBe(
+      'A prior authorization or notification inquiry request may be submitted.'
+    )
+  })
+
+  it('keeps an explicit referral Yes instead of the payer note', () => {
+    const snapshot = buildEligibilityDisplaySnapshot(
+      {
+        ...summary,
+        rheum: {
+          ...summary.rheum!,
+          referralRequired: true,
+          referralNote:
+            'A prior authorization or notification inquiry request may be submitted.',
+        },
+      },
+      LONESTAR_DEFAULT_DISPLAY_FIELDS
+    )
+    expect(snapshot?.fields.find((f) => f.id === 'referral_required')?.value).toBe('Yes')
+  })
+
   it('freezes CRM lines in activity copy', () => {
     const snapshot = buildEligibilityDisplaySnapshot(summary, {
       fields: [

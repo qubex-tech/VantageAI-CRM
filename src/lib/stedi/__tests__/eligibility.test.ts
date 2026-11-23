@@ -130,6 +130,30 @@ describe('parseStediEligibilityResponse', () => {
     expect(summary.rheum?.referralRequired).toBe(true)
   })
 
+  it('keeps authorization notification language for Referral required when there is no yes/no', () => {
+    const mock = buildMockStediEligibilityResponse()
+    mock.benefitsInformation = [
+      ...(mock.benefitsInformation || []),
+      {
+        code: '1',
+        name: 'Active Coverage',
+        authOrCertIndicator: 'Y',
+        additionalInformation: [
+          {
+            description: 'A PRIOR AUTHORIZATION OR NOTIFICATION INQUIRY REQUEST MAY BE SUBMITTED',
+          },
+        ],
+      },
+    ]
+    const summary = parseStediEligibilityResponse(mock)
+    expect(summary.rheum?.referralRequired).toBeNull()
+    expect(summary.rheum?.referralNote).toBe(
+      'A prior authorization or notification inquiry request may be submitted'
+    )
+    expect(summary.rheum?.authRequired).toBe(true)
+    expect(summary.rheum?.unknownFields || []).not.toContain('referralRequired')
+  })
+
   it('formats the full 271 snapshot including remaining amounts and correspondence', () => {
     const summary = parseStediEligibilityResponse({
       controlNumber: '872057204',

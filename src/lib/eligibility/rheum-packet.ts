@@ -42,6 +42,8 @@ export interface RheumEligibilityPacket {
   /** Free-text Limitations row under the selected benefit service. */
   limitations?: string
   referralRequired?: boolean | null
+  /** Payer note when referral/auth is not an explicit yes/no (e.g. notification inquiry). */
+  referralNote?: string
   authRequired?: boolean | null
   precertRequired?: boolean | null
   telehealthAllowed?: boolean | null
@@ -111,7 +113,7 @@ export function listUnknownRheumFields(packet: RheumEligibilityPacket): string[]
   if (!packet.deductible?.total && !packet.deductible?.remaining) unknown.push('deductible')
   if (!packet.coinsurance) unknown.push('coinsurance')
   if (!packet.oop?.max && !packet.oop?.remaining) unknown.push('oop')
-  if (packet.referralRequired == null) unknown.push('referralRequired')
+  if (packet.referralRequired == null && !packet.referralNote) unknown.push('referralRequired')
   if (packet.authRequired == null) unknown.push('authRequired')
   if (packet.telehealthAllowed == null && packet.formMode === 'office_visit') {
     unknown.push('telehealthAllowed')
@@ -160,6 +162,8 @@ export function formatRheumPacketNoteSection(packet: RheumEligibilityPacket): st
   if (packet.limitations) lines.push(`Limitations: ${packet.limitations}`)
   if (packet.referralRequired != null) {
     lines.push(`Referral required: ${packet.referralRequired ? 'Yes' : 'No'}`)
+  } else if (packet.referralNote) {
+    lines.push(`Referral required: ${packet.referralNote}`)
   }
   if (packet.authRequired != null) {
     lines.push(`Prior auth required: ${packet.authRequired ? 'Yes' : 'No'}`)
@@ -190,9 +194,43 @@ export function formatRheumPacketNoteSection(packet: RheumEligibilityPacket): st
 export const REFERRAL_REQUIRED_POSITIVE =
   /referral\s*(required|needed|yes)|requires?\s+referral|requires that services be performed by or referred|referred by the patient'?s primary/i
 export const REFERRAL_REQUIRED_NEGATIVE = /no\s+referral|referral\s*(not required|waived)/i
+const AUTH_OR_NOTIFICATION_NOTE =
+  /prior\s+authorization|prior\s+auth(?:orization)?|notification\s+inquiry|authorization\s+or\s+notification|pre-?certification/i
 
 export function parseTriStateFlag(text: string, positive: RegExp, negative: RegExp): boolean | null {
   if (positive.test(text)) return true
   if (negative.test(text)) return false
   return null
+}
+
+export function normalizePayerNote(value?: string | null): string | undefined {
+  const collapsed = String(value || '').replace(/\s+/g, ' ').trim()
+  if (!collapsed) return undefined
+  const clipped = collapsed.length > 280 ? `${collapsed.slice(0, 277).trim()}...` : collapsed
+  const letters = clipped.replace(/[^A-Za-z]/g, '')
+  if (letters && letters === letters.toUpperCase()) {
+    const lower = clipped.toLowerCase()
+    return lower.charAt(0).toUpperCase() + lower.slice(1)
+  }
+  return clipped
+}
+
+/** Soft payer language to show when referral is not an explicit Yes/No. */
+export function extractReferralOrAuthNote(
+  texts: Array<string | null | undefined> | string
+): string | undefined {
+  const chunks = Array.isArray(texts) ? texts : [texts]
+  for (const chunk of chunks) {
+    if (!chunk?.trim()) continue
+    const pieces = String(chunk).split(/(?<=[.!?])\s+|\n+/)
+    for (const piece of pieces) {
+      const note = normalizePayerNote(piece)
+      if (!note || !AUTH_OR_NOTIFICATION_NOTE.test(note)) continue
+      if (parseTriStateFlag(note, REFERRAL_REQUIRED_POSITIVE, REFERRAL_REQUIRED_NEGATIVE) != null) {
+        continue
+      }
+      return note
+    }
+  }
+  return undefined
 }

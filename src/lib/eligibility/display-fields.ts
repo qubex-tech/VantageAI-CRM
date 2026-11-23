@@ -41,7 +41,8 @@ export const ELIGIBILITY_DISPLAY_CATALOG: EligibilityDisplayFieldOption[] = [
   {
     id: 'referral_required',
     label: 'Referral required',
-    description: 'Whether the plan requires a referral for specialty care',
+    description:
+      'Whether the plan requires a referral. If that is not a yes/no, we show the payer’s authorization note.',
   },
   {
     id: 'copay',
@@ -192,6 +193,10 @@ export function formatYesNo(value?: boolean | null): string | undefined {
   return value ? 'Yes' : 'No'
 }
 
+export function formatReferralDisplay(packet?: RheumEligibilityPacket | null): string | undefined {
+  return formatYesNo(packet?.referralRequired) || packet?.referralNote?.trim() || undefined
+}
+
 export function resolveDisplayFieldValue(
   id: EligibilityDisplayFieldId,
   summary: ParsedEligibilitySummary
@@ -205,7 +210,7 @@ export function resolveDisplayFieldValue(
     case 'plan_type':
       return packet?.planType || summary.planType || UNKNOWN_DISPLAY_VALUE
     case 'referral_required':
-      return formatYesNo(packet?.referralRequired) || UNKNOWN_DISPLAY_VALUE
+      return formatReferralDisplay(packet) || UNKNOWN_DISPLAY_VALUE
     case 'copay':
       return packet?.specialistCopay || UNKNOWN_DISPLAY_VALUE
     case 'deductible':

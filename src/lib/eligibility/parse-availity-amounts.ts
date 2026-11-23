@@ -1,6 +1,7 @@
 import type { AvailityPlan } from '@/lib/availity/types'
 import {
   createEmptyRheumPacket,
+  extractReferralOrAuthNote,
   finalizeRheumPacket,
   parseTriStateFlag,
   REFERRAL_REQUIRED_NEGATIVE,
@@ -195,6 +196,7 @@ export function buildRheumPacketFromAvailityPlans(
     REFERRAL_REQUIRED_POSITIVE,
     REFERRAL_REQUIRED_NEGATIVE
   )
+  packet.referralNote = extractReferralOrAuthNote(blob)
   packet.authRequired = parseTriStateFlag(
     blob,
     /prior\s*auth(orization)?\s*(required|needed|yes)|authorization\s*required/i,

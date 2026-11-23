@@ -1,5 +1,6 @@
 import {
   createEmptyRheumPacket,
+  extractReferralOrAuthNote,
   finalizeRheumPacket,
   parseTriStateFlag,
   REFERRAL_REQUIRED_NEGATIVE,
@@ -366,6 +367,7 @@ export function scrapeRheumPacketFromPortalText(
     REFERRAL_REQUIRED_POSITIVE,
     REFERRAL_REQUIRED_NEGATIVE
   )
+  packet.referralNote = extractReferralOrAuthNote(text)
   packet.authRequired =
     benefitRows.authRequired != null
       ? benefitRows.authRequired

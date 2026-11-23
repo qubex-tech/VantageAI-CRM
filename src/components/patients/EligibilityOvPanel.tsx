@@ -455,7 +455,7 @@ export function EligibilityOvPanel({
           />
           <Field
             label="Referral required"
-            value={yn(rheum.referralRequired)}
+            value={yn(rheum.referralRequired) || rheum.referralNote}
             unknown={unknown.has('referralRequired')}
           />
           <Field

@@ -1,6 +1,7 @@
 import {
   createEmptyRheumPacket,
   finalizeRheumPacket,
+  extractReferralOrAuthNote,
   parseTriStateFlag,
   REFERRAL_REQUIRED_NEGATIVE,
   REFERRAL_REQUIRED_POSITIVE,
@@ -586,6 +587,12 @@ export function buildRheumPacketFromStediResponse(
   }
   packet.authRequired = authRequired(benefits)
   packet.referralRequired = referralRequiredFromBenefits(benefits)
+  packet.referralNote = extractReferralOrAuthNote(
+    benefits.flatMap((benefit) => [
+      ...(benefit.additionalInformation || []).map((row) => row.description),
+      benefit.planCoverage,
+    ])
+  )
   packet.verifiedBy = 'Eligibility check'
   return finalizeRheumPacket(packet)
 }

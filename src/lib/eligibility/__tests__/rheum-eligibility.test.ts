@@ -102,6 +102,10 @@ describe('scrapeRheumPacketFromPortalText', () => {
     expect(packet.planType).toBe('Commercial')
     expect(packet.networkStatus).toBe('onn')
     expect(packet.authRequired).toBe(true)
+    expect(packet.referralRequired).toBeNull()
+    expect(packet.referralNote).toBe(
+      'A prior authorization or notification inquiry request may be submitted'
+    )
     expect(packet.deductible?.total).toBe('$3200')
     expect(packet.deductible?.remaining).toBe('$2553.13')
     expect(packet.deductible?.met).toBe('$646.87')
