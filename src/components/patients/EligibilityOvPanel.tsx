@@ -5,6 +5,7 @@ import type { EligibilityCoverageDetail, ParsedEligibilitySummary } from '@/lib/
 import {
   buildEligibilityDisplaySnapshot,
   crmDisplayFields,
+  crmFieldDisplayValue,
   UNKNOWN_DISPLAY_VALUE,
   type EligibilityDisplayFieldsConfig,
   type EligibilityDisplaySnapshotField,
@@ -331,20 +332,27 @@ function CoverageSnapshot({ detail }: { detail: EligibilityCoverageDetail }) {
 function SelectedFieldsGrid({ fields }: { fields: EligibilityDisplaySnapshotField[] }) {
   return (
     <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-      {fields.map((field) => (
-        <div key={field.id} className="flex flex-col gap-0.5">
-          <dt className="text-xs font-medium text-gray-500">{field.label}</dt>
-          <dd className="text-sm text-gray-900">
-            {field.value && field.value !== UNKNOWN_DISPLAY_VALUE ? (
-              field.value
-            ) : (
-              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700">
-                {UNKNOWN_DISPLAY_VALUE}
-              </span>
-            )}
-          </dd>
-        </div>
-      ))}
+      {fields.map((field) => {
+        const display = crmFieldDisplayValue(field)
+        const [primary, ...rest] = display.split('\n')
+        const extra = rest.join('\n').trim()
+        const isUnknown = !primary || primary === UNKNOWN_DISPLAY_VALUE
+        return (
+          <div key={field.id} className="flex flex-col gap-0.5">
+            <dt className="text-xs font-medium text-gray-500">{field.label}</dt>
+            <dd className="text-sm text-gray-900">
+              {isUnknown ? (
+                <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700">
+                  {UNKNOWN_DISPLAY_VALUE}
+                </span>
+              ) : (
+                primary
+              )}
+              {extra ? <p className="mt-1 text-xs leading-5 text-gray-600">{extra}</p> : null}
+            </dd>
+          </div>
+        )
+      })}
     </dl>
   )
 }
@@ -455,8 +463,11 @@ export function EligibilityOvPanel({
           />
           <Field
             label="Referral required"
-            value={yn(rheum.referralRequired) || rheum.referralNote}
-            unknown={unknown.has('referralRequired')}
+            value={
+              yn(rheum.referralRequired) ||
+              (rheum.referralNote ? `${UNKNOWN_DISPLAY_VALUE}\n${rheum.referralNote}` : undefined)
+            }
+            unknown={rheum.referralRequired == null && !rheum.referralNote}
           />
           <Field
             label="Prior auth required"

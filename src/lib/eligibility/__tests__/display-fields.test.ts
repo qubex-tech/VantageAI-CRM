@@ -99,7 +99,20 @@ describe('eligibility display fields', () => {
       },
       LONESTAR_DEFAULT_DISPLAY_FIELDS
     )
-    expect(snapshot?.fields.find((f) => f.id === 'referral_required')?.value).toBe(
+    const referral = snapshot?.fields.find((f) => f.id === 'referral_required')
+    expect(referral?.value).toBe(
+      'A prior authorization or notification inquiry request may be submitted.'
+    )
+    expect(referral?.crmValue).toBe(
+      'Unknown\nA prior authorization or notification inquiry request may be submitted.'
+    )
+    const description = formatEligibilityActivityDescription({
+      eligibilityStatus: 'active',
+      checkedAtLabel: 'Nov 22, 2026, 7:00 PM',
+      snapshot,
+    })
+    expect(description).toContain('Referral required: Unknown')
+    expect(description).toContain(
       'A prior authorization or notification inquiry request may be submitted.'
     )
   })

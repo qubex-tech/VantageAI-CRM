@@ -15,6 +15,15 @@ const summary: ParsedEligibilitySummary = {
   displaySnapshot: {
     fields: [
       { id: 'plan_status', label: 'Plan status', value: 'Active', crm: true, ehr: true },
+      {
+        id: 'referral_required',
+        label: 'Referral required',
+        value: 'A prior authorization or notification inquiry request may be submitted.',
+        crmValue:
+          'Unknown\nA prior authorization or notification inquiry request may be submitted.',
+        crm: true,
+        ehr: true,
+      },
       { id: 'copay', label: 'Specialist copay', value: '$10', crm: true, ehr: true },
     ],
   },
@@ -44,5 +53,7 @@ describe('EligibilityOvPanel', () => {
     expect(html).toContain('Copays')
     expect(html).toContain('All benefits from payer')
     expect(html).toContain('UHC Group Medicare Advantage')
+    expect(html).toContain('Unknown')
+    expect(html).toContain('A prior authorization or notification inquiry request may be submitted.')
   })
 })

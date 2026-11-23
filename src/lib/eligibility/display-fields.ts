@@ -80,6 +80,8 @@ export interface EligibilityDisplaySnapshotField {
   id: EligibilityDisplayFieldId
   label: string
   value: string
+  /** CRM-only copy when it should keep Yes/No/Unknown plus a payer note. */
+  crmValue?: string
   crm: boolean
   ehr: boolean
 }
@@ -197,6 +199,13 @@ export function formatReferralDisplay(packet?: RheumEligibilityPacket | null): s
   return formatYesNo(packet?.referralRequired) || packet?.referralNote?.trim() || undefined
 }
 
+export function formatReferralCrmDisplay(packet?: RheumEligibilityPacket | null): string {
+  const status = formatYesNo(packet?.referralRequired) || UNKNOWN_DISPLAY_VALUE
+  const note = packet?.referralNote?.trim()
+  if (note && packet?.referralRequired == null) return `${status}\n${note}`
+  return status
+}
+
 export function resolveDisplayFieldValue(
   id: EligibilityDisplayFieldId,
   summary: ParsedEligibilitySummary
@@ -232,13 +241,19 @@ export function buildEligibilityDisplaySnapshot(
   if (selected.length === 0) return null
 
   return {
-    fields: selected.map((field) => ({
-      id: field.id,
-      label: CATALOG_BY_ID.get(field.id)?.label || field.id,
-      value: resolveDisplayFieldValue(field.id, summary),
-      crm: field.crm,
-      ehr: field.ehr,
-    })),
+    fields: selected.map((field) => {
+      const value = resolveDisplayFieldValue(field.id, summary)
+      const crmValue =
+        field.id === 'referral_required' ? formatReferralCrmDisplay(summary.rheum) : undefined
+      return {
+        id: field.id,
+        label: CATALOG_BY_ID.get(field.id)?.label || field.id,
+        value,
+        ...(crmValue && crmValue !== value ? { crmValue } : {}),
+        crm: field.crm,
+        ehr: field.ehr,
+      }
+    }),
   }
 }
 
@@ -269,13 +284,19 @@ export function formatDisplayFieldLines(
   return fields.map((field) => `${field.label}: ${field.value}`)
 }
 
+export function crmFieldDisplayValue(field: EligibilityDisplaySnapshotField): string {
+  return field.crmValue || field.value
+}
+
 export function formatEligibilityActivityDescription(params: {
   eligibilityStatus: string
   checkedAtLabel: string
   snapshot?: EligibilityDisplaySnapshot | null
 }): string {
   const header = `${params.eligibilityStatus} — ${params.checkedAtLabel}`
-  const lines = formatDisplayFieldLines(crmDisplayFields(params.snapshot))
+  const lines = crmDisplayFields(params.snapshot).map(
+    (field) => `${field.label}: ${crmFieldDisplayValue(field)}`
+  )
   return lines.length ? [header, ...lines].join('\n') : header
 }
 
