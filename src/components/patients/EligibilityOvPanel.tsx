@@ -401,11 +401,15 @@ export function EligibilityOvPanel({
         <p className="mb-2 text-xs text-amber-800">{rheum.callRequiredReason}</p>
       )}
 
-      {selectedFields.length > 0 ? (
-        <SelectedFieldsGrid fields={selectedFields} />
-      ) : detail ? (
+      {selectedFields.length > 0 && (
+        <Section title="Key benefits">
+          <SelectedFieldsGrid fields={selectedFields} />
+        </Section>
+      )}
+
+      {detail ? (
         <CoverageSnapshot detail={detail} />
-      ) : rheum ? (
+      ) : rheum && selectedFields.length === 0 ? (
         <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           <Field label="Plan type" value={rheum.planType} unknown={unknown.has('planType')} />
           <Field
@@ -465,9 +469,9 @@ export function EligibilityOvPanel({
             unknown={unknown.has('telehealthAllowed')}
           />
         </dl>
-      ) : (
+      ) : selectedFields.length === 0 ? (
         <p className="text-sm text-gray-600">No structured benefit fields captured yet.</p>
-      )}
+      ) : null}
     </div>
   )
 }

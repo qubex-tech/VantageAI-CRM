@@ -109,8 +109,9 @@ export function EligibilityDisplayFieldsSettings({
           Benefits to capture
         </CardTitle>
         <CardDescription className="text-sm text-gray-500">
-          Choose what this practice sees after an eligibility check, and what we write into the
-          chart. Missing answers show as Unknown.
+          The Insurance tab always keeps the full payer snapshot. Use these toggles for the short
+          summary this practice wants highlighted there, and for what we write into the chart.
+          Missing answers show as Unknown.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -126,7 +127,7 @@ export function EligibilityDisplayFieldsSettings({
                 <thead className="bg-gray-50 text-xs font-medium uppercase tracking-wide text-gray-500">
                   <tr>
                     <th className="px-4 py-2.5">Benefit</th>
-                    <th className="w-36 px-4 py-2.5 text-center">Show in Vantage</th>
+                    <th className="w-40 px-4 py-2.5 text-center">Highlight in Vantage</th>
                     <th className="w-40 px-4 py-2.5 text-center">Write to the chart</th>
                   </tr>
                 </thead>
@@ -147,7 +148,7 @@ export function EligibilityDisplayFieldsSettings({
                           <Switch
                             checked={row.crm}
                             onCheckedChange={(checked) => toggle(field.id, 'crm', checked)}
-                            aria-label={`Show ${field.label} in Vantage`}
+                            aria-label={`Highlight ${field.label} in Vantage`}
                           />
                         </td>
                         <td className="px-4 py-3 text-center">
