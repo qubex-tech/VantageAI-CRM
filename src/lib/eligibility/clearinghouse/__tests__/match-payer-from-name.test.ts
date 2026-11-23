@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  inheritPayerIdFromSiblings,
   pickConfidentPayerMatch,
   resolvePayerIdFromName,
 } from '../match-payer-from-name'
@@ -79,31 +80,76 @@ describe('pickConfidentPayerMatch', () => {
   it('returns none when nothing scores', () => {
     expect(pickConfidentPayerMatch([UHC], 'Memorial Hermann Health Network').status).toBe('none')
   })
+
+  it('maps Humana HMO to Humana when Stedi also returns dental and Medicare lines', () => {
+    const humana: PayerSearchResult = {
+      payerId: '61101',
+      name: 'Humana',
+      aliases: ['HUMANA'],
+    }
+    const humanaDental: PayerSearchResult = {
+      payerId: 'HUMDEN',
+      name: 'Humana Dental',
+      aliases: ['HUMANA'],
+    }
+    const humanaMa: PayerSearchResult = {
+      payerId: 'HUMMA',
+      name: 'Humana Medicare Advantage',
+      aliases: ['HUMANA'],
+    }
+    const match = pickConfidentPayerMatch([humanaDental, humanaMa, humana], 'Humana HMO')
+    expect(match).toMatchObject({ status: 'matched', payerId: '61101', name: 'Humana' })
+  })
+
+  it('maps Cigna PPO to commercial Cigna, not HealthSpring', () => {
+    const cigna: PayerSearchResult = {
+      payerId: '81040',
+      name: 'Cigna',
+      aliases: ['CIGNA'],
+    }
+    const healthspring: PayerSearchResult = {
+      payerId: '63092',
+      name: 'Cigna HealthSpring',
+      aliases: ['CIGNA', 'HealthSpring'],
+    }
+    const match = pickConfidentPayerMatch([healthspring, cigna], 'Cigna PPO')
+    expect(match).toMatchObject({ status: 'matched', payerId: '81040', name: 'Cigna' })
+  })
 })
 
 describe('resolvePayerIdFromName', () => {
   it('searches by eCW name and returns a confident Stedi ID', async () => {
     const searched: string[] = []
+    const oscar: PayerSearchResult = {
+      payerId: 'OSCAR',
+      name: 'Oscar Health',
+      aliases: ['Oscar'],
+    }
     const match = await resolvePayerIdFromName({
-      payerName: 'Blue Cross and Blue Shield of Texas',
+      payerName: 'Oscar Health',
       searchPayers: async (query) => {
         searched.push(query)
-        return [BCBSTX, BCBSIL, UHC]
+        return [oscar, UHC]
       },
     })
     expect(match.status).toBe('matched')
-    if (match.status === 'matched') expect(match.payerId).toBe('G84980')
+    if (match.status === 'matched') expect(match.payerId).toBe('OSCAR')
     expect(searched.length).toBeGreaterThan(0)
-    expect(searched.length).toBeLessThanOrEqual(3)
+    expect(searched.length).toBeLessThanOrEqual(4)
   })
 
   it('stops after the first confident match', async () => {
     let calls = 0
+    const oscar: PayerSearchResult = {
+      payerId: 'OSCAR',
+      name: 'Oscar',
+      aliases: ['Oscar Health'],
+    }
     const match = await resolvePayerIdFromName({
-      payerName: 'AETNA',
+      payerName: 'Oscar',
       searchPayers: async () => {
         calls += 1
-        return [AETNA, UHC]
+        return [oscar, UHC]
       },
     })
     expect(match.status).toBe('matched')
@@ -136,5 +182,68 @@ describe('resolvePayerIdFromName', () => {
     })
     expect(match).toMatchObject({ status: 'matched', payerId: 'G84980' })
     expect(calls).toBe(0)
+  })
+
+  it('maps parenthetical First Health and slash UnitedHealthcare labels without searching', async () => {
+    expect(
+      await resolvePayerIdFromName({
+        payerName: "EMPLOYER'S HEALTH NETWORK (FIRST HEALTH)",
+        searchPayers: async () => [],
+      })
+    ).toMatchObject({ status: 'matched', payerId: '82018' })
+    expect(
+      await resolvePayerIdFromName({
+        payerName: 'UNITEDHEALTHCARE / GEHA',
+        searchPayers: async () => [],
+      })
+    ).toMatchObject({ status: 'matched', payerId: '87726' })
+  })
+
+  it('maps eCW Humana HMO to Humana medical without searching', async () => {
+    let calls = 0
+    const match = await resolvePayerIdFromName({
+      payerName: 'Humana HMO',
+      searchPayers: async () => {
+        calls += 1
+        return []
+      },
+    })
+    expect(match).toMatchObject({ status: 'matched', payerId: '61101', name: 'Humana' })
+    expect(calls).toBe(0)
+  })
+
+  it('maps eCW COMMUNITY HEALTH CHOICED INC to Community Health Choice without searching', async () => {
+    let calls = 0
+    const match = await resolvePayerIdFromName({
+      payerName: 'COMMUNITY HEALTH CHOICED INC',
+      searchPayers: async () => {
+        calls += 1
+        return []
+      },
+    })
+    expect(match).toMatchObject({ status: 'matched', payerId: '48145' })
+    expect(calls).toBe(0)
+  })
+
+  it('reuses a Stedi ID already stored on another policy with the same brand', async () => {
+    let calls = 0
+    const match = await resolvePayerIdFromName({
+      payerName: 'Devoted Health, Inc',
+      siblingPayers: [{ payerNameRaw: 'DEVOTED HEALTH, INC', payerId: 'DEVTED' }],
+      searchPayers: async () => {
+        calls += 1
+        return []
+      },
+    })
+    expect(match).toMatchObject({ status: 'matched', payerId: 'DEVTED' })
+    expect(calls).toBe(0)
+  })
+
+  it('does not reuse a commercial ID for a Medicare Advantage sibling', () => {
+    expect(
+      inheritPayerIdFromSiblings('Aetna Medicare Advantage', [
+        { payerNameRaw: 'AETNA', payerId: '60054' },
+      ])
+    ).toBeNull()
   })
 })

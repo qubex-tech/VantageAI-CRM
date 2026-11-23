@@ -102,10 +102,25 @@ export async function runEligibilityCheck(
     !payerId
   if (shouldResolvePayer) {
     try {
+      const siblingRows = await prisma.insurancePolicy.findMany({
+        where: {
+          practiceId,
+          id: { not: policy.id },
+        },
+        select: { payerNameRaw: true, clearinghousePayerIds: true },
+        take: 2000,
+      })
+      const siblingPayers = siblingRows
+        .map((row) => ({
+          payerNameRaw: row.payerNameRaw,
+          payerId: getPayerIdForVendor(row, adapter.vendorKey),
+        }))
+        .filter((row) => Boolean(row.payerId))
       const match = await resolvePayerIdFromName({
         payerName: policy.payerNameRaw,
         searchPayers: (query) => adapter.searchPayers(practiceId, query),
         preferDental,
+        siblingPayers,
       })
       if (match.status === 'matched') {
         if (match.payerId !== payerId) {
